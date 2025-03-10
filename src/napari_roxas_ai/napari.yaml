@@ -9,7 +9,13 @@ contributions:
     - id: napari-roxas-ai.load_conifer_sample_data
       python_name: napari_roxas_ai:load_conifer_sample_data
       title: Load conifer sample data
+    - id: napari-roxas-ai.make_file_dialog
+      python_name: napari_roxas_ai:FileDialog
+      title: Labels loading widget
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
       display_name: ROXAS AI
       key: unique_id.1
+  widgets:
+    - command: napari-roxas-ai.make_file_dialog
+      display_name: Load label(s)
