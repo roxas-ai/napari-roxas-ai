@@ -2,7 +2,6 @@
 Original code by github user triyan-b https://github.com/triyan-b
 """
 
-import glob
 from pathlib import Path
 
 import cv2
@@ -40,19 +39,11 @@ def line_intersection(line1, line2):
     return None  # Intersection not within the line segments
 
 
-index = 0
-img_files = sorted(glob.glob("CropsForTesting/*_RingTraces.npy"))[
-    index : index + 1
-]
+def measure_rings(path):
+    print(f"measuring rings for file {path}")
 
-# img = cv2.cvtColor(cv2.imread('CropsForTesting/0_A_DualRingBorders.png').astype('float32'), cv2.COLOR_BGR2GRAY)
-# print(img.shape)
-# np.save('CropsForTesting/0_A_DualRingBorders_RingTraces.npy', img)
-# exit(0)
-
-for img_file in img_files:
     # Read and preprocess images
-    path = Path(img_file)
+    path = Path(path)
     print(f"Reading image {path.name}")
     img = np.load(path).astype("float32")
     img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)

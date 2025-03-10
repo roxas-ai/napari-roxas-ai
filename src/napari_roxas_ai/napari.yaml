@@ -12,6 +12,9 @@ contributions:
     - id: napari-roxas-ai.make_file_dialog
       python_name: napari_roxas_ai:FileDialog
       title: Labels loading widget
+    - id: napari-roxas-ai.make_rings_measurements_widget
+      python_name: napari_roxas_ai:RingsMeasurementsWidget
+      title: Rings measurements widget
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
       display_name: ROXAS AI
@@ -19,3 +22,5 @@ contributions:
   widgets:
     - command: napari-roxas-ai.make_file_dialog
       display_name: Load label(s)
+    - command: napari-roxas-ai.make_rings_measurements_widget
+      display_name: Measure rings
