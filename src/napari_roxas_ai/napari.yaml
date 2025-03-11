@@ -15,6 +15,9 @@ contributions:
     - id: napari-roxas-ai.make_rings_measurements_widget
       python_name: napari_roxas_ai:RingsMeasurementsWidget
       title: Rings measurements widget
+    - id: napari-roxas-ai.make_cells_measurements_widget
+      python_name: napari_roxas_ai:CellsMeasurementsWidget
+      title: Cells measurements widget
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
       display_name: ROXAS AI
@@ -24,3 +27,5 @@ contributions:
       display_name: Load label(s)
     - command: napari-roxas-ai.make_rings_measurements_widget
       display_name: Measure rings
+    - command: napari-roxas-ai.make_cells_measurements_widget
+      display_name: Measure cells

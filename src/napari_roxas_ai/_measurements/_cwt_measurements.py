@@ -2,7 +2,6 @@
 Original code by github user triyan-b https://github.com/triyan-b
 """
 
-import glob
 from enum import Enum
 from pathlib import Path
 
@@ -21,20 +20,25 @@ pixels_per_um = 2.2675
 wall_classification_method = (
     WallClassificationMethod.NEAREST_MIN_AREA_RECT_WALL
 )
-index = 5
-img_files = sorted(glob.glob("CropsForTesting/*.png"))[index : index + 1]
-# Angles start from the positive horizontal axis and go clockwise
-tang_angle = 0  # This is the angle measured during ring analysis
-rad_angle = tang_angle - 90
 
-for img_file in img_files:
-    # Read and preprocess images
-    path = Path(img_file)
+
+def measure_cwt(path):
+    print(f"measuring cell wall thickness for file {path}")
+
+    # index = 5
+    # img_files = sorted(glob.glob("CropsForTesting/*.png"))[index : index + 1]
+    # Angles start from the positive horizontal axis and go clockwise
+    tang_angle = 0  # This is the angle measured during ring analysis
+    rad_angle = tang_angle - 90
+
+    path = Path(path)
     print(f"Reading image {path.name}")
-    img = cv2.cvtColor(cv2.imread(img_file), cv2.COLOR_BGR2GRAY)
-    img_orig = cv2.cvtColor(
-        cv2.imread(img_file.replace("png", "jpg")), cv2.COLOR_BGR2GRAY
-    )
+
+    # Read and preprocess images
+    img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY)
+    # img_orig = cv2.cvtColor(
+    #    cv2.imread(path.replace("png", "jpg")), cv2.COLOR_BGR2GRAY
+    # )
     print("Read image with shape", img.shape)
 
     # Skeletonise the binary image to determine cell wall "centres"
@@ -44,7 +48,7 @@ for img_file in img_files:
     dist_orig = cv2.distanceTransform(
         np.uint8(cv2.bitwise_not(img)), cv2.DIST_L2, cv2.DIST_MASK_PRECISE
     )
-    dist = cv2.normalize(dist_orig, 0, 1.0, cv2.NORM_MINMAX)
+    # dist = cv2.normalize(dist_orig, 0, 1.0, cv2.NORM_MINMAX)
 
     # Erode slightly to enable contour detection of cell walls
     eroded = cv2.erode(cv2.bitwise_not(skeleton), np.ones((3, 3)))
@@ -342,7 +346,7 @@ for img_file in img_files:
     print(list(cells.values())[20:25])
 
     # Visualization
-    combined = cv2.addWeighted(img_orig, 0.4, skeleton, 0.6, 0)
+    combined = cv2.addWeighted(img, 0.4, skeleton, 0.6, 0)  # img_orig
     plt.figure(figsize=(12, 6))
     plt.subplot(1, 4, 1)
     plt.title("Original Binary Image")
@@ -369,5 +373,5 @@ for img_file in img_files:
     )
 
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     # plt.savefig(f"{path.stem}_CW_Lumen_Contours.jpg")
