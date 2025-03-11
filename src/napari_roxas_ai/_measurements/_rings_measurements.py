@@ -7,6 +7,7 @@ from pathlib import Path
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 
 
 # Helper function to check intersection between two lines
@@ -42,16 +43,32 @@ def line_intersection(line1, line2):
 def measure_rings(path):
     print(f"measuring rings for file {path}")
 
+    plt.figure(figsize=(12, 6))
+
     # Read and preprocess images
     path = Path(path)
     print(f"Reading image {path.name}")
-    img = np.load(path).astype("float32")
+    # img = np.load(path).astype("float32")
+    with Image.open(path) as img:
+        img = np.array(img)
     img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+    plt.subplot(1, 3, 1)
+    plt.imshow(img)
+
     contours_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     print("Read image with shape", img.shape)
 
+    plt.subplot(1, 3, 2)
+    plt.imshow(contours_img)
+
     # Detect ring borders (Edge detection followed by contour detection)
     img = cv2.Canny(img, 50, 150)
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(img, cmap="gray")
+    # plt.show()
+
     contours, _ = cv2.findContours(
         img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
     )
@@ -95,7 +112,9 @@ def measure_rings(path):
     ring_borders.sort(key=lambda ring: ring["c"])
 
     # Ring measurements
-    for i in range(len(ring_borders) - 1):
+    for i in range(
+        len(ring_borders) - 1
+    ):  # TODO process rings independantly using multiprocessing
         border_a, border_b = ring_borders[i], ring_borders[i + 1]
         upper_contour = border_a["contour"]
         lower_contour = border_b["contour"]
@@ -118,7 +137,7 @@ def measure_rings(path):
             )
             y_b = min(
                 [point[0, 1] for point in lower_contour if point[0, 0] == x]
-            )
+            )  # TODO fix min() iterable argument is empty
             vertical_ring_width += y_b - y_a
 
             # Angled ring width calculation (average angle)
@@ -138,7 +157,9 @@ def measure_rings(path):
                 segment = (
                     lower_contour[j, 0, 0],
                     lower_contour[j, 0, 1],
-                    lower_contour[j + 1, 0, 0],
+                    lower_contour[
+                        j + 1, 0, 0
+                    ],  # TODO fix index 5001 is out of bounds for axis 0 with size 5001
                     lower_contour[j + 1, 0, 1],
                 )
                 if intersection := line_intersection(line, segment):
@@ -152,7 +173,7 @@ def measure_rings(path):
                 )
 
         vertical_ring_width /= img.shape[1]
-        angled_ring_width /= angled_intersections
+        angled_ring_width /= angled_intersections  # TODO prevent zero division
         print(
             f"Ring {i + 1} has average vertical width {vertical_ring_width} pixels and average angled width {angled_ring_width} pixels"
         )
@@ -293,4 +314,4 @@ def measure_rings(path):
     plt.imshow(contours_img)
 
     plt.tight_layout()
-    plt.show()
+    # plt.show()
