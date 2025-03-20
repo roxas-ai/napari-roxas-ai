@@ -30,6 +30,7 @@ dependencies = [
     "magicgui",
     "opencv-contrib-python",
     "qtpy",
+    "rasterio",
     "scikit-image",
 ]
 

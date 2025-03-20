@@ -45,12 +45,13 @@ class CellAnalyzer:
         self.integration_margin = (1 - config["integration_interval"]) / 2
         self.radial_angle = config["tangential_angle"] - 90
 
-    def load_image(self, image_path: Path) -> None:
+    def _load_image(self, image_path: Path) -> None:
         """Load and preprocess the input image."""
         with Image.open(image_path) as img:
             self.cells_array = np.array(img)
 
-        # Apply morphological smoothing
+    def _smooth_image(self) -> None:
+        """Apply morphological smoothing"""
         self.cells_array = cv2.dilate(
             cv2.erode(self.cells_array, self.kernel), self.kernel
         )
@@ -364,7 +365,8 @@ def measure_cells(
         DataFrame containing all measurements
     """
     analyzer = CellAnalyzer(config)
-    analyzer.load_image(input_path)
+    analyzer._load_image(input_path)
+    analyzer._smooth_image()
     lumen_contours, cw_contours = analyzer._find_contours()
     analyzer.analyze_lumina(lumen_contours)
     analyzer.analyze_cell_walls(cw_contours)

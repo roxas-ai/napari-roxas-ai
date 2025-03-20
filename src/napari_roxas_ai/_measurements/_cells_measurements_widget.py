@@ -2,13 +2,19 @@
 This code creates the widget to launch the cell wall thickness-related analysis scripts
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
-from magicgui.widgets import Container, PushButton
+from magicgui.widgets import (
+    Container,
+    FloatSpinBox,
+    PushButton,
+    SpinBox,
+    create_widget,
+)
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog
 
-from ._cwt_measurements import measure_cells
+from ._cwt_measurements import CellAnalyzer
 
 if TYPE_CHECKING:
     import napari
@@ -17,14 +23,26 @@ if TYPE_CHECKING:
 class Worker(QObject):
     finished = Signal()
 
-    def __init__(self, config, input_array, output_file_path):
+    def __init__(
+        self, config: Dict[str, Any], input_array, output_file_path: str
+    ):
         super().__init__()
         self.config = config
         self.input_array = input_array
         self.output_file_path = output_file_path
 
     def run(self):
-        measure_cells(self.config, self.input_array, self.output_file_path)
+        analyzer = CellAnalyzer(self.config)
+        analyzer.cells_array = self.input_array.astype("uint8")
+        analyzer._smooth_image()
+        lumen_contours, cw_contours = analyzer._find_contours()
+        analyzer.analyze_lumina(lumen_contours)
+        analyzer.analyze_cell_walls(cw_contours)
+        analyzer.cluster_cells()
+        analyzer.get_results_df().to_csv(
+            self.output_file_path, index_label="cell_id"
+        )
+
         self.finished.emit()
 
 
@@ -33,31 +51,87 @@ class CellsMeasurementsWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # Create input fields for the following config parameters:
-        # config: Dictionary containing analysis parameters:
-        #         - pixels_per_um: Conversion factor from pixels to micrometers
-        #         - cluster_separation_threshold: Minimum distance between clusters (µm)
-        #         - smoothing_kernel_size: Size of morphological operation kernel
-        #         - integration_interval: Fraction of wall used for thickness measurement
-        #         - tangential_angle : Sample angle (degrees, clockwise)
-
-        # Create a layer selection widget for label layers to use to get the input array
-
-        # Create a button to open a file dialog
-        self._file_dialog_button = PushButton(text="Open File Dialog")
-        self._file_dialog_button.changed.connect(self._open_file_dialog)
-
-        # Append the widgets to the container
-        self.extend([self._file_dialog_button])
-
-    def _open_file_dialog(self):
-        self.output_file_path, _ = QFileDialog.getOpenFileName(
-            parent=None,
-            caption="Select a File",
-            filter="All Files (*);;Comma Separated Variables (*.csv)",
+        # Create input fields for the config parameters
+        self._pixels_per_um = FloatSpinBox(value=2.2675, label="Pixels per µm")
+        self._cluster_separation_threshold = FloatSpinBox(
+            value=3.0, label="Cluster Separation Threshold (µm)"
+        )
+        self._smoothing_kernel_size = SpinBox(
+            value=5, label="Smoothing Kernel Size (1 to disable)"
+        )
+        self._integration_interval = FloatSpinBox(
+            value=0.75, label="Wall Fraction for Thickness Measurement"
+        )
+        self._tangential_angle = FloatSpinBox(
+            value=0.0, label="Sample Angle (degrees, clockwise)"
         )
 
-    def _run_in_thread(self, config, input_array, output_file_path):
+        # Create a layer selection widget for label layers
+        self._input_layer_combo = create_widget(
+            label="Cell Labels", annotation="napari.layers.Labels"
+        )
+
+        # Create a button to open a file dialog
+        self._file_dialog_button = PushButton(text="Select Output File")
+        self._file_dialog_button.changed.connect(self._open_file_dialog)
+
+        # Create a button to launch the analysis
+        self._run_analysis_button = PushButton(text="Run Analysis")
+        self._run_analysis_button.changed.connect(self._run_analysis)
+
+        # Append the widgets to the container
+        self.extend(
+            [
+                self._pixels_per_um,
+                self._cluster_separation_threshold,
+                self._smoothing_kernel_size,
+                self._integration_interval,
+                self._tangential_angle,
+                self._input_layer_combo,
+                self._file_dialog_button,
+                self._run_analysis_button,
+            ]
+        )
+
+        # Initialize output file path
+        self.output_file_path = None
+
+    def _open_file_dialog(self):
+        """Open a file dialog to select the output file path."""
+        self.output_file_path, _ = QFileDialog.getSaveFileName(
+            parent=None,
+            caption="Select Output File",
+            filter="Comma Separated Variables (*.csv);;All Files (*)",
+        )
+
+    def _run_analysis(self):
+        """Run the analysis in a separate thread."""
+        if self.output_file_path is None:
+            raise ValueError("Output file path is not set.")
+
+        # Get the selected label layer
+        self.input_layer = self._input_layer_combo.value
+        if self.input_layer is None:
+            raise ValueError("Input layer is not set.")
+
+        # Create the config dictionary
+        config = {
+            "pixels_per_um": self._pixels_per_um.value,
+            "cluster_separation_threshold": self._cluster_separation_threshold.value,
+            "smoothing_kernel_size": self._smoothing_kernel_size.value,
+            "integration_interval": self._integration_interval.value,
+            "tangential_angle": self._tangential_angle.value,
+        }
+
+        # Run the analysis in a separate thread
+        self._run_in_thread(
+            config, self.input_layer.data, self.output_file_path
+        )
+
+    def _run_in_thread(
+        self, config: Dict[str, Any], input_array, output_file_path: str
+    ):
+        """Run the analysis in a separate thread."""
         self.worker_thread = QThread()
         self.worker = Worker(config, input_array, output_file_path)
         self.worker.moveToThread(self.worker_thread)
