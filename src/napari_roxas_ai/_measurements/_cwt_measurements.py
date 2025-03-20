@@ -1,377 +1,402 @@
 """
-Original code by github user triyan-b https://github.com/triyan-b
+Module for analyzing segmented wood cell images to measure cell wall thickness and related metrics.
+Based on code by github user triyan-b https://github.com/triyan-b
+Refactored and adapted to large images by github user tha-santacruz https://github.com/tha-santacruz
 """
 
-from enum import Enum
 from pathlib import Path
+from typing import Dict, Tuple
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from PIL import Image
+from rasterio import features
 
 
-class WallClassificationMethod(Enum):
-    NEAREST_MIN_AREA_RECT_WALL = (1,)
-    MIN_AREA_RECT_DIAGONALS = 2
+class CellAnalyzer:
+    """Main class for analyzing cell structures in segmented images."""
 
+    def __init__(self, config: Dict):
+        """
+        Initialize analyzer with configuration parameters.
 
-cells = {}
-pixels_per_um = 2.2675
-wall_classification_method = (
-    WallClassificationMethod.NEAREST_MIN_AREA_RECT_WALL
-)
+        Args:
+            config: Dictionary containing analysis parameters:
+                - pixels_per_um: Conversion factor from pixels to micrometers
+                - cluster_separation_threshold: Minimum distance between clusters (µm)
+                - smoothing_kernel_size: Size of morphological operation kernel
+                - integration_interval: Fraction of wall used for thickness measurement
+                - tangential_angle : Sample angle (degrees, clockwise)
+        """
+        self.config = config
+        self.cells: Dict = {}
+        self.cells_array = None
+        self.centroids_map = None
+        self.dist_transform = None
 
+        # Derived parameters
+        self.cluster_separation_px = (
+            config["cluster_separation_threshold"] * config["pixels_per_um"]
+        )
+        self.kernel = np.ones(
+            (config["smoothing_kernel_size"], config["smoothing_kernel_size"])
+        )
+        self.integration_margin = (1 - config["integration_interval"]) / 2
+        self.radial_angle = config["tangential_angle"] - 90
 
-def measure_cwt(path):
-    print(f"measuring cell wall thickness for file {path}")
+    def load_image(self, image_path: Path) -> None:
+        """Load and preprocess the input image."""
+        with Image.open(image_path) as img:
+            self.cells_array = np.array(img)
 
-    # index = 5
-    # img_files = sorted(glob.glob("CropsForTesting/*.png"))[index : index + 1]
-    # Angles start from the positive horizontal axis and go clockwise
-    tang_angle = 0  # This is the angle measured during ring analysis
-    rad_angle = tang_angle - 90
+        # Apply morphological smoothing
+        self.cells_array = cv2.dilate(
+            cv2.erode(self.cells_array, self.kernel), self.kernel
+        )
 
-    path = Path(path)
-    print(f"Reading image {path.name}")
+    def _find_contours(self) -> Tuple[list, list]:
+        """Find lumen and cell wall contours."""
+        # Find lumen contours
+        lumen_contours, _ = cv2.findContours(
+            self.cells_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
 
-    # Read and preprocess images
-    img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY)
-    # img_orig = cv2.cvtColor(
-    #    cv2.imread(path.replace("png", "jpg")), cv2.COLOR_BGR2GRAY
-    # )
-    print("Read image with shape", img.shape)
+        # Find cell wall contours using distance transform
+        _, comps = cv2.distanceTransformWithLabels(
+            cv2.bitwise_not(self.cells_array),
+            cv2.DIST_L2,
+            cv2.DIST_MASK_PRECISE,
+            cv2.DIST_LABEL_CCOMP,
+        )
 
-    # Skeletonise the binary image to determine cell wall "centres"
-    skeleton = cv2.ximgproc.thinning(np.uint8(cv2.bitwise_not(img)))
+        # Extract cell wall contours
+        cw_contours = []
+        for shape, _ in features.shapes(comps):
+            coords = np.array(shape["coordinates"][0]).astype("int32")
+            cw_contours.append(np.expand_dims(coords, 1))
 
-    # Distance transform
-    dist_orig = cv2.distanceTransform(
-        np.uint8(cv2.bitwise_not(img)), cv2.DIST_L2, cv2.DIST_MASK_PRECISE
-    )
-    # dist = cv2.normalize(dist_orig, 0, 1.0, cv2.NORM_MINMAX)
+        return lumen_contours, cw_contours
 
-    # Erode slightly to enable contour detection of cell walls
-    eroded = cv2.erode(cv2.bitwise_not(skeleton), np.ones((3, 3)))
+    def analyze_lumina(self, lumen_contours: list) -> None:
+        """Calculate lumen metrics and initialize cell entries."""
+        for i, contour in enumerate(lumen_contours):
+            cell = {"id": i}
+            M = cv2.moments(contour)
 
-    # Finding initial cell wall contours
-    print("Finding contours")
-    cw_contours, hierarchy = cv2.findContours(
-        eroded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-    print(f"Found {len(cw_contours)} initial CW contours")
-
-    # Finding Lumen contours
-    lumen_contours, hierarchy = cv2.findContours(
-        img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-    print(f"Found {len(lumen_contours)} lumen contours")
-
-    # Draw contours
-    contours_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    # contours_img = cv2.drawContours(contours_img, cw_contours, -1, (0,255,75), 1)
-    # contours_img = cv2.drawContours(contours_img, lumen_contours, -1, (255,0,75), 1)
-
-    # Locate CW centroids and detect "watershed" contours using a flood fill mechanism
-    mask = np.zeros(
-        (skeleton.shape[0] + 2, skeleton.shape[1] + 2), dtype=np.uint8
-    )
-    cwws_contours = []
-    for i, c in enumerate(cw_contours[:]):
-        # https://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html
-        M = cv2.moments(c)
-        if (m00 := M["m00"]) != 0:
-            cx = int(M["m10"] / m00)
-            cy = int(M["m01"] / m00)
-            # Perform flood fill
-            flood = skeleton.copy()
-            cv2.floodFill(flood, mask, (cx, cy), 127)
-            ret, flood = cv2.threshold(flood, 128, 255, cv2.THRESH_TOZERO_INV)
-            dilated = cv2.dilate(flood, np.ones((3, 3)))
-            # Find single contour
-            contours, hierarchy = cv2.findContours(
-                dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
-            )
-            if len(contours) == 1:
-                cwws_contours.append(contours[0])
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                cell.update(
+                    {
+                        "centroid": (cy, cx),
+                        "lumen_area": M["m00"]
+                        / self.config["pixels_per_um"] ** 2,
+                        "lumen_peri": cv2.arcLength(contour, True)
+                        / self.config["pixels_per_um"],
+                    }
+                )
             else:
-                print(f"No unique contour found at index {i}")
-        else:
-            print(i, "CW centroid not found: contour not segmented properly")
-    print(f"Found {len(cwws_contours)} CW (WS) contours")
+                cell.update(
+                    {
+                        "centroid": (np.nan, np.nan),
+                        "lumen_area": np.nan,
+                        "lumen_peri": np.nan,
+                    }
+                )
 
-    # Lumen measurements - this is also where the cells are given an ID
-    for i, c in enumerate(lumen_contours[:]):
-        M = cv2.moments(c)
-        if (m00 := M["m00"]) != 0:
-            cx = int(M["m10"] / m00)
-            cy = int(M["m01"] / m00)
-            cv2.circle(contours_img, (cx, cy), 1, (0, 0, 255), -1)
-            cv2.putText(
-                contours_img,
-                str(i),
-                (cx, cy),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.3,
-                (0, 0, 255),
-                1,
-                cv2.LINE_AA,
+            # Ellipse fitting for orientation metrics
+            if len(contour) >= 5:
+                self._calculate_ellipse_metrics(contour, cell)
+            else:
+                cell.update(
+                    {
+                        "lumen_aoma_rad": np.nan,
+                        "lumen_diam_rad": np.nan,
+                        "lumen_diam_tang": np.nan,
+                    }
+                )
+
+            self.cells[i] = cell
+
+    def _calculate_ellipse_metrics(
+        self, contour: np.ndarray, cell: Dict
+    ) -> None:
+        """Calculate ellipse-based metrics for lumen contours."""
+        ellipse = cv2.fitEllipse(contour)
+        center, axes, angle = ellipse
+        w, h = axes
+
+        # TODO : Figure out what's up with the /2, and remove if appropriate
+        if w >= h:
+            a, b = w / 2, h / 2
+            aoma_rad = angle - self.radial_angle
+        else:
+            a, b = h / 2, w / 2
+            aoma_rad = angle - self.radial_angle - 90
+
+        aoma_tang = aoma_rad + 90
+
+        # Calculate diameters using polar form of ellipse equation
+        lumen_diam_rad = (
+            2
+            * a
+            * b
+            / np.linalg.norm(
+                [
+                    b * np.cos(np.deg2rad(aoma_rad)),
+                    a * np.sin(np.deg2rad(aoma_rad)),
+                ]
             )
-            cells[i] = {
-                "centroid": (cx, cy),
-                "lumen_area": m00 / (pixels_per_um * pixels_per_um),
-                "lumen_peri": cv2.arcLength(c, True) / pixels_per_um,
+        )
+        lumen_diam_tang = (
+            2
+            * a
+            * b
+            / np.linalg.norm(
+                [
+                    b * np.cos(np.deg2rad(aoma_tang)),
+                    a * np.sin(np.deg2rad(aoma_tang)),
+                ]
+            )
+        )
+
+        cell.update(
+            {
+                "lumen_aoma_rad": aoma_rad,
+                "lumen_diam_rad": lumen_diam_rad
+                / self.config["pixels_per_um"],
+                "lumen_diam_tang": lumen_diam_tang
+                / self.config["pixels_per_um"],
             }
-        else:
-            print(
-                i,
-                "Lumen centroid not found: contour not segmented properly near",
-                np.mean(c, axis=0)[0],
-            )
-            continue
-            # print(c)
-        try:
-            ellipse = cv2.fitEllipse(c)
-            center, axes, angle = ellipse
-            # print(centre, axes, angle)
-            center_x, center_y = center
-            w, h = axes
-            if w >= h:
-                a, b = w / 2, h / 2
-                aoma_rad = angle - rad_angle
-            else:
-                a, b = h / 2, w / 2
-                aoma_rad = angle - rad_angle - 90
-            aoma_tang = aoma_rad + 90
-
-            # https://en.wikipedia.org/wiki/Ellipse#Polar_form_relative_to_center
-            lumen_diam_rad = (
-                a
-                * b
-                / (
-                    np.linalg.norm(
-                        [
-                            b * np.cos(np.deg2rad(aoma_rad)),
-                            a * np.sin(np.deg2rad(aoma_rad)),
-                        ]
-                    )
-                )
-            )
-            lumen_diam_tang = (
-                a
-                * b
-                / (
-                    np.linalg.norm(
-                        [
-                            b * np.cos(np.deg2rad(aoma_tang)),
-                            a * np.sin(np.deg2rad(aoma_tang)),
-                        ]
-                    )
-                )
-            )
-            cells[i].update(
-                {
-                    "lumen_aoma_rad": aoma_rad,
-                    "lumen_diam_rad": lumen_diam_rad / pixels_per_um,
-                    "lumen_diam_tang": lumen_diam_tang / pixels_per_um,
-                }
-            )
-
-            cv2.ellipse(contours_img, ellipse, (0, 255, 0), 1)
-            # cv2.line(contours_img, (round(center_x), round(center_y)), (round(center_x + b*np.cos(aoma_rad/180 * np.pi - np.pi/2)), round(center_y + b*np.sin(aoma_rad/180 * np.pi - np.pi/2))), (0, 255, 0))
-            # cv2.ellipse(contours_img, (round(center_x), round(center_y)), (20, 20), 0, 0, angle, (255, 0, 0), 1)
-        except cv2.error as e:
-            print(f"OpenCV error during ellipse fitting or drawing: {e}")
-        except ValueError as e:
-            print(f"Value error during mathematical calculations: {e}")
-        except TypeError as e:
-            print(f"Type error during calculations: {e}")
-        except AttributeError as e:
-            print(f"Attribute error while updating cells: {e}")
-        except IndexError as e:
-            print(f"Index error while accessing cells: {e}")
-    print(f"Found {len(cells)} lumen centroids")
-
-    for i, c in enumerate(cwws_contours[:]):
-        # First, find the cell corresponding to this cell wall. Assumption: lumen centroid is within CW WS contour
-        cell_id = next(
-            (
-                idx
-                for idx, cell in cells.items()
-                if cv2.pointPolygonTest(c, cell["centroid"], measureDist=False)
-                >= 0
-            ),
-            None,
         )
+
+    def analyze_cell_walls(self, cw_contours: list) -> None:
+        """Calculate cell wall metrics."""
+        # Create centroids map for cell identification
+        self.centroids_map = np.full_like(self.cells_array, -1, dtype="int32")
+        for cell_id, data in self.cells.items():
+            if not np.isnan(data["centroid"]).any():
+                self.centroids_map[data["centroid"]] = cell_id
+
+        # Precompute distance transform
+        self.dist_transform = cv2.distanceTransform(
+            cv2.bitwise_not(self.cells_array).astype("uint8"),
+            cv2.DIST_L2,
+            cv2.DIST_MASK_PRECISE,
+        )
+
+        for contour in cw_contours:
+            self._process_cell_wall_contour(contour)
+
+    def _process_cell_wall_contour(self, contour: np.ndarray) -> None:
+        """Process individual cell wall contour."""
+        # Find associated cell through centroid containment
+        cell_id = self._find_contained_cell(contour)
         if cell_id is None:
-            print("Could not find this cell near", np.mean(c, axis=0)[0])
-            continue
+            return
 
-        M = cv2.moments(c)
-        if (m00 := M["m00"]) != 0:
-            cells[cell_id].update(
+        # Calculate basic cell metrics
+        M = cv2.moments(contour)
+        if M["m00"] != 0:
+            self.cells[cell_id].update(
                 {
-                    "cell_area": m00 / (pixels_per_um * pixels_per_um),
-                    "cw_peri": cv2.arcLength(c, True) / pixels_per_um,
+                    "cell_area": M["m00"] / self.config["pixels_per_um"] ** 2,
+                    "cw_peri": cv2.arcLength(contour, True)
+                    / self.config["pixels_per_um"],
                 }
             )
-        else:
-            print(
-                i, "CW (WS) centroid not found: contour not segmented properly"
-            )
 
-        colors = {
-            "North": (100, 0, 0),
-            "East": (0, 100, 0),
-            "South": (100, 0, 100),
-            "West": (100, 100, 0),
-        }
-        rect = cv2.minAreaRect(c)
-        box = np.intp(cv2.boxPoints(rect))
+        # Calculate wall thickness measurements
+        self._measure_wall_thickness(contour, cell_id)
 
-        # Identify corners based on sums and differences
-        sums = box[:, 0] + box[:, 1]  # x + y
-        diffs = box[:, 1] - box[:, 0]  # y - x
+    def _find_contained_cell(self, contour: np.ndarray) -> int:
+        """Find cell ID contained within the wall contour."""
+        x, y, w, h = cv2.boundingRect(contour)
 
-        top_left = box[np.argmin(sums)]  # Smallest sum
-        bottom_right = box[np.argmax(sums)]  # Largest sum
-        top_right = box[np.argmin(diffs)]  # Smallest difference
-        bottom_left = box[np.argmax(diffs)]  # Largest difference
-        # cv2.circle(contours_img, top_left, 1, (255, 255, 0), 2)
+        # Make sure it does not got out of the image (a 1 pixel offset is possible)
+        h = h - 1 if (y + h) > self.cells_array.shape[0] else h
+        w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
-        # Assign contour points to the nearest wall
-        classified_walls = {"North": [], "East": [], "South": [], "West": []}
-        for point_index, point in enumerate(c):
-            point = point[0]  # Extract (x, y)
+        centroids_crop = self.centroids_map[y : y + h, x : x + w]
+        candidates = np.unique(centroids_crop[centroids_crop >= 0])
+        for candidate in candidates:
+            centroid = self.cells[candidate]["centroid"][::-1]  # (x,y) format
+            if cv2.pointPolygonTest(contour, centroid, False) >= 0:
+                return candidate
+        return None
 
-            if (
-                wall_classification_method
-                == WallClassificationMethod.NEAREST_MIN_AREA_RECT_WALL
-            ):
-                # Calculate perpendicular distances from point to walls
-                distances = {
-                    "North": np.linalg.norm(
-                        np.cross(top_right - top_left, top_left - point)
-                    )
-                    / np.linalg.norm(top_right - top_left),
-                    "South": np.linalg.norm(
-                        np.cross(
-                            bottom_right - bottom_left, bottom_left - point
-                        )
-                    )
-                    / np.linalg.norm(bottom_right - bottom_left),
-                    "East": np.linalg.norm(
-                        np.cross(bottom_right - top_right, top_right - point)
-                    )
-                    / np.linalg.norm(bottom_right - top_right),
-                    "West": np.linalg.norm(
-                        np.cross(bottom_left - top_left, top_left - point)
-                    )
-                    / np.linalg.norm(bottom_left - top_left),
-                }
-                closest_wall = min(distances, key=distances.get)
+    def _measure_wall_thickness(
+        self, contour: np.ndarray, cell_id: int
+    ) -> None:
+        """Measure wall thickness in different directions."""
+        # Get bounding box coordinates
+        x, y, w, h = cv2.boundingRect(contour)
 
-            elif (
-                wall_classification_method
-                == WallClassificationMethod.MIN_AREA_RECT_DIAGONALS
-            ):
-                is_above_main_diagonal = (
-                    np.cross(bottom_right - top_left, point - top_left).item()
-                    <= 0
-                )
-                is_above_secondary_diagonal = (
-                    np.cross(
-                        top_right - bottom_left, point - bottom_left
-                    ).item()
-                    <= 0
-                )
-                if is_above_main_diagonal and is_above_secondary_diagonal:
-                    closest_wall = "North"
-                elif (
-                    is_above_main_diagonal and not is_above_secondary_diagonal
-                ):
-                    closest_wall = "East"
-                elif (
-                    not is_above_main_diagonal and is_above_secondary_diagonal
-                ):
-                    closest_wall = "West"
-                else:
-                    closest_wall = "South"
+        # Make sure it does not got out of the image (a 1 pixel offset is possible)
+        h = h - 1 if (y + h) > self.cells_array.shape[0] else h
+        w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
-            assert closest_wall is not None
-            classified_walls[closest_wall].append((point_index, tuple(point)))
+        # Create labeling canvas with edge markers to create distinct 0 zones for labelling
+        canvas = np.ones((h, w), dtype="uint8")
+        canvas[0, w // 2] = 0  # Top center (pith)
+        canvas[h // 2, 0] = 0  # Left center (left)
+        canvas[-1, w // 2] = 0  # Bottom center (bark)
+        canvas[h // 2, -1] = 0  # Right center (right)
 
-        # For each classified wall, maybe reorder the partial contours so it is continuous
-        for wall, points in classified_walls.items():
-            ids = np.array([point[0] for point in points])
-            diffs = np.diff(ids)
-            if (
-                len(diffs) != 0
-                and len(skips := (np.where(diffs >= 3)[0])) == 1
-            ):
-                skip_index = skips[0] + 1
-                reordered_points = points[skip_index:] + points[:skip_index]
-                # print(skip_index, len(c), ids, [point[1] for point in reordered_points])
-            else:
-                reordered_points = points
-            classified_walls[wall] = [point[1] for point in reordered_points]
-
-        # Perform the integrals
-        for wall, points in classified_walls.items():
-            # Visualise wall
-            for point in points:
-                contours_img[point[::-1]] = colors[wall]
-                colors[wall] = tuple(
-                    [min(255, x + 3) if x != 0 else x for x in colors[wall]]
-                )  # gradient to verify continuity
-
-            integration_interval_coeff = 0.75
-            integration_margin_coeff = (1 - integration_interval_coeff) / 2
-            lower_bound = int(integration_margin_coeff * len(points))
-            upper_bound = int((1 - integration_margin_coeff) * len(points))
-            assert lower_bound <= upper_bound
-            integration_acc = 0
-            for point in points[lower_bound:upper_bound]:
-                integration_acc += dist_orig[point[::-1]]
-                # print(point)
-                # contours_img[point[::-1]] = (0, 0, 255) # Visualise integral path
-            integration_acc /= upper_bound - lower_bound + 1
-            cells[cell_id][f"CWT_{wall}"] = integration_acc / pixels_per_um
-
-        # Draw the min area rectangle
-        # color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-        # color = (0, 0, 255)
-        # cv2.drawContours(contours_img, [box], 0, color, 1)
-        # cv2.line(contours_img, box[0], box[2], color, 1)
-
-    print(list(cells.values())[20:25])
-
-    # Visualization
-    combined = cv2.addWeighted(img, 0.4, skeleton, 0.6, 0)  # img_orig
-    plt.figure(figsize=(12, 6))
-    plt.subplot(1, 4, 1)
-    plt.title("Original Binary Image")
-    plt.imshow(img, cmap="gray")
-
-    plt.subplot(1, 4, 2)
-    plt.title("Segmented Walls")
-    plt.imshow(skeleton, cmap="binary_r")
-
-    plt.subplot(1, 4, 3)
-    plt.title("Segmented Walls (overlay)")
-    plt.imshow(combined, cmap="binary_r")
-
-    plt.subplot(1, 4, 4)
-    plt.title("Result")
-    plt.imshow(
-        cv2.addWeighted(
-            contours_img,
-            0.7,
-            cv2.cvtColor(skeleton, cv2.COLOR_GRAY2BGR),
-            0.3,
-            0,
+        # Compute distance transform labels
+        _, labels = cv2.distanceTransformWithLabels(
+            canvas.astype("uint8"),
+            cv2.DIST_L2,
+            cv2.DIST_MASK_PRECISE,
+            cv2.DIST_LABEL_CCOMP,
         )
-    )
 
-    plt.tight_layout()
-    # plt.show()
-    # plt.savefig(f"{path.stem}_CW_Lumen_Contours.jpg")
+        # Original label mapping
+        label_map = {1: "pith", 2: "left", 3: "right", 4: "bark"}
+
+        # Get precise cell wall contour pixels by drawing their filled contour and then finding contours again
+        contour_points = contour.squeeze() - [x, y]
+        mask = np.zeros_like(labels).astype("uint8")
+        drawing = cv2.drawContours(mask, [contour_points], 0, 1, -1)
+        refined_contours, _ = cv2.findContours(
+            drawing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+        )
+
+        # Update the contours pixels coordinates and get corresponding labels. NB: pixel coordinates are given in the positive order (counter-clockwise)
+        contour_points = refined_contours[0].squeeze()
+        contour_labels = labels[contour_points[:, 1], contour_points[:, 0]]
+
+        # Just write nan if we can't find all walls or we have too many (may be error codes in the future)
+        if len(np.unique(contour_labels)) != 4:
+            for name in label_map.values():
+                self.cells[cell_id][f"CWT_{name}"] = np.nan
+            return
+
+        # Check when the labels vector changes value (aka we change wall)
+        value_changes = np.where(np.diff(contour_labels) != 0)[0]
+
+        # If it changes more than 4 times, it means the shape is strange and concave and we need to find another way to process it. We write an nan instead (may be error codes in the future)
+        if len(value_changes) > 4:
+            for name in label_map.values():
+                self.cells[cell_id][f"CWT_{name}"] = np.nan
+            return
+
+        # If one of the wall is split between the contour_pixels_ids' head and tail (aka if the value changes 4 times), we rearrange the tail by placing it before the head
+        n_roll = contour_labels.shape - value_changes[-1] - 1
+        contour_labels = np.roll(contour_labels, n_roll)
+        contour_points = np.roll(
+            contour_points,
+            contour_labels.shape - value_changes[-1] - 1,
+            axis=0,
+        )
+        contour = np.roll(contour, n_roll, axis=0)
+
+        # Now we compute the distances
+        dist_crop = self.dist_transform[y : y + h, x : x + w]
+
+        # And we compute the thickness
+        for label in label_map:
+            # Get wall pixels where the label cooresponds
+            wall_pixel_coords = contour_points[
+                np.where(contour_labels == label)[0], :
+            ]
+
+            # Crop to keep the middle 75%
+            lower_bound = np.ceil(
+                self.integration_margin * wall_pixel_coords.shape[0]
+            ).astype("int32")
+            upper_bound = np.ceil(
+                (1 - self.integration_margin) * wall_pixel_coords.shape[0]
+            ).astype("int32")
+
+            # Write the mean thickness in the cell dict (might be median in the future)
+            avg_dist = dist_crop[
+                wall_pixel_coords[lower_bound:upper_bound, 1],
+                wall_pixel_coords[lower_bound:upper_bound, 0],
+            ].mean()
+            self.cells[cell_id].update(
+                {
+                    f"CWT_{label_map[label]}": avg_dist
+                    * self.config["pixels_per_um"],
+                }
+            )
+
+    def cluster_cells(self) -> None:
+        """Cluster cells based on proximity."""
+        # Threshold distance transform for clustering
+        _, dist_thresh = cv2.threshold(
+            self.dist_transform / self.config["pixels_per_um"],
+            self.config["cluster_separation_threshold"],
+            255,
+            cv2.THRESH_BINARY,
+        )
+
+        # Find connected components
+        _, clusters = cv2.connectedComponents(
+            cv2.bitwise_not(dist_thresh.astype("uint8")), connectivity=8
+        )
+
+        # Assign clusters to cells
+        for cell_id, data in self.cells.items():
+            if not np.isnan(data["centroid"]).any():
+                self.cells[cell_id]["cluster"] = clusters[data["centroid"]]
+            else:
+                self.cells[cell_id]["cluster"] = np.nan
+
+    def get_results_df(self) -> pd.DataFrame:
+        """Return results as pandas DataFrame."""
+        return pd.DataFrame(self.cells).T
+
+
+def measure_cells(
+    config: Dict, input_path: Path, output_path: Path = None
+) -> pd.DataFrame:
+    """
+    Main analysis workflow.
+
+    Args:
+        config: Analysis configuration parameters
+        input_path: Path to input segmentation image
+        output_path: Optional path to save results CSV
+
+    Returns:
+        DataFrame containing all measurements
+    """
+    analyzer = CellAnalyzer(config)
+    analyzer.load_image(input_path)
+    lumen_contours, cw_contours = analyzer._find_contours()
+    analyzer.analyze_lumina(lumen_contours)
+    analyzer.analyze_cell_walls(cw_contours)
+    analyzer.cluster_cells()
+
+    df = analyzer.get_results_df()
+
+    if output_path:
+        df.to_csv(output_path, index_label="cell_id")
+
+    return df
+
+
+if __name__ == "__main__":
+    # Example configuration
+    CONFIG = {
+        "pixels_per_um": 2.2675,
+        "cluster_separation_threshold": 3,  # µm
+        "smoothing_kernel_size": 5,
+        "integration_interval": 0.75,
+        "tangential_angle": 0,  # Assuming vertical orientation
+    }
+
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Analyze wood cell segmentation images"
+    )
+    parser.add_argument(
+        "input", type=Path, help="Path to input segmentation image"
+    )
+    parser.add_argument("-o", "--output", type=Path, help="Output CSV path")
+    args = parser.parse_args()
+
+    measure_cells(CONFIG, args.input, args.output)
