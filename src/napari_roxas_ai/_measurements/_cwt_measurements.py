@@ -5,7 +5,7 @@ Refactored and adapted to large images by github user tha-santacruz https://gith
 """
 
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict
 
 import cv2
 import numpy as np
@@ -48,7 +48,7 @@ class CellAnalyzer:
     def _load_image(self, image_path: Path) -> None:
         """Load and preprocess the input image."""
         with Image.open(image_path) as img:
-            self.cells_array = np.array(img)
+            self.cells_array = np.array(img).astype("uint8")
 
     def _smooth_image(self) -> None:
         """Apply morphological smoothing"""
@@ -56,10 +56,10 @@ class CellAnalyzer:
             cv2.erode(self.cells_array, self.kernel), self.kernel
         )
 
-    def _find_contours(self) -> Tuple[list, list]:
+    def _find_contours(self) -> None:
         """Find lumen and cell wall contours."""
         # Find lumen contours
-        lumen_contours, _ = cv2.findContours(
+        self.lumen_contours, _ = cv2.findContours(
             self.cells_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
@@ -72,16 +72,14 @@ class CellAnalyzer:
         )
 
         # Extract cell wall contours
-        cw_contours = []
+        self.cell_walls_contours = []
         for shape, _ in features.shapes(comps):
             coords = np.array(shape["coordinates"][0]).astype("int32")
-            cw_contours.append(np.expand_dims(coords, 1))
+            self.cell_walls_contours.append(np.expand_dims(coords, 1))
 
-        return lumen_contours, cw_contours
-
-    def analyze_lumina(self, lumen_contours: list) -> None:
+    def _analyze_lumina(self) -> None:
         """Calculate lumen metrics and initialize cell entries."""
-        for i, contour in enumerate(lumen_contours):
+        for i, contour in enumerate(self.lumen_contours):
             cell = {"id": i}
             M = cv2.moments(contour)
 
@@ -172,7 +170,7 @@ class CellAnalyzer:
             }
         )
 
-    def analyze_cell_walls(self, cw_contours: list) -> None:
+    def _analyze_cell_walls(self) -> None:
         """Calculate cell wall metrics."""
         # Create centroids map for cell identification
         self.centroids_map = np.full_like(self.cells_array, -1, dtype="int32")
@@ -187,7 +185,7 @@ class CellAnalyzer:
             cv2.DIST_MASK_PRECISE,
         )
 
-        for contour in cw_contours:
+        for contour in self.cell_walls_contours:
             self._process_cell_wall_contour(contour)
 
     def _process_cell_wall_contour(self, contour: np.ndarray) -> None:
@@ -323,7 +321,7 @@ class CellAnalyzer:
                 }
             )
 
-    def cluster_cells(self) -> None:
+    def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""
         # Threshold distance transform for clustering
         _, dist_thresh = cv2.threshold(
@@ -345,9 +343,22 @@ class CellAnalyzer:
             else:
                 self.cells[cell_id]["cluster"] = np.nan
 
-    def get_results_df(self) -> pd.DataFrame:
+    def _get_results_df(self) -> pd.DataFrame:
         """Return results as pandas DataFrame."""
-        return pd.DataFrame(self.cells).T
+        self.df = pd.DataFrame(self.cells).T
+
+    def _draw_contours(self) -> None:
+        """Draw lumina and cell wall contours on an image"""
+        self.lumen_contours_image = cv2.drawContours(
+            np.zeros_like(self.cells_array), self.lumen_contours, -1, (255), 1
+        )
+        self.cell_walls_contours_image = cv2.drawContours(
+            np.zeros_like(self.cells_array),
+            self.cell_walls_contours,
+            -1,
+            (255),
+            1,
+        )
 
 
 def measure_cells(
@@ -367,17 +378,18 @@ def measure_cells(
     analyzer = CellAnalyzer(config)
     analyzer._load_image(input_path)
     analyzer._smooth_image()
-    lumen_contours, cw_contours = analyzer._find_contours()
-    analyzer.analyze_lumina(lumen_contours)
-    analyzer.analyze_cell_walls(cw_contours)
-    analyzer.cluster_cells()
+    analyzer._find_contours()
+    analyzer._analyze_lumina()
+    analyzer._analyze_cell_walls()
+    analyzer._cluster_cells()
+    analyzer._draw_contours()
 
-    df = analyzer.get_results_df()
+    analyzer._get_results_df()
 
     if output_path:
-        df.to_csv(output_path, index_label="cell_id")
+        analyzer.df.to_csv(output_path, index_label="cell_id")
 
-    return df
+    return analyzer.df
 
 
 if __name__ == "__main__":

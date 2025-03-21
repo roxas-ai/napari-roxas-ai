@@ -1,7 +1,3 @@
-"""
-This code creates the widget to launch the cell wall thickness-related analysis scripts
-"""
-
 from typing import TYPE_CHECKING, Any, Dict
 
 from magicgui.widgets import (
@@ -22,6 +18,7 @@ if TYPE_CHECKING:
 
 class Worker(QObject):
     finished = Signal()
+    result_ready = Signal(object, object)  # Two images to send
 
     def __init__(
         self, config: Dict[str, Any], input_array, output_file_path: str
@@ -35,12 +32,19 @@ class Worker(QObject):
         analyzer = CellAnalyzer(self.config)
         analyzer.cells_array = self.input_array.astype("uint8")
         analyzer._smooth_image()
-        lumen_contours, cw_contours = analyzer._find_contours()
-        analyzer.analyze_lumina(lumen_contours)
-        analyzer.analyze_cell_walls(cw_contours)
-        analyzer.cluster_cells()
-        analyzer.get_results_df().to_csv(
-            self.output_file_path, index_label="cell_id"
+        analyzer._find_contours()
+        analyzer._analyze_lumina()
+        analyzer._analyze_cell_walls()
+        analyzer._cluster_cells()
+        analyzer._get_results_df()
+        analyzer._draw_contours()
+
+        # Save results as CSV
+        analyzer.df.to_csv(self.output_file_path, index_label="cell_id")
+
+        # Emit results to be added as layers
+        self.result_ready.emit(
+            analyzer.lumen_contours_image, analyzer.cell_walls_contours_image
         )
 
         self.finished.emit()
@@ -135,8 +139,17 @@ class CellsMeasurementsWidget(Container):
         self.worker_thread = QThread()
         self.worker = Worker(config, input_array, output_file_path)
         self.worker.moveToThread(self.worker_thread)
+
+        # Connect signals
         self.worker_thread.started.connect(self.worker.run)
+        self.worker.result_ready.connect(self._add_result_layers)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+
         self.worker_thread.start()
+
+    def _add_result_layers(self, lumen_image, walls_image):
+        """Add result images to the viewer."""
+        self._viewer.add_labels(lumen_image, name="Lumen Contours")
+        self._viewer.add_labels(walls_image, name="Cell Wall Contours")
