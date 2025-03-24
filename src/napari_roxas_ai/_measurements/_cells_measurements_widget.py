@@ -41,7 +41,8 @@ class Worker(QObject):
         analyzer._draw_contours()
 
         # Save results as CSV
-        analyzer.df.to_csv(self.output_file_path, index_label="cell_id")
+        if self.output_file_path is not None:
+            analyzer.df.to_csv(self.output_file_path, index_label="cell_id")
 
         # Emit results to be added as layers
         self.result_ready.emit(
@@ -77,7 +78,7 @@ class CellsMeasurementsWidget(Container):
         )
 
         # Create a button to open a file dialog
-        self._file_dialog_button = PushButton(text="Select Output File")
+        self._file_dialog_button = PushButton(text="Output File: None")
         self._file_dialog_button.changed.connect(self._open_file_dialog)
 
         # Create a button to launch the analysis
@@ -108,11 +109,10 @@ class CellsMeasurementsWidget(Container):
             caption="Select Output File",
             filter="Comma Separated Variables (*.csv);;All Files (*)",
         )
+        self._file_dialog_button.text = f"Output File: {self.output_file_path}"
 
     def _run_analysis(self):
         """Run the analysis in a separate thread."""
-        if self.output_file_path is None:
-            raise ValueError("Output file path is not set.")
 
         # Get the selected label layer
         self.input_layer = self._input_layer_combo.value
