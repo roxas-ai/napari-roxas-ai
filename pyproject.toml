@@ -32,6 +32,17 @@ dependencies = [
     "qtpy",
     "rasterio",
     "scikit-image",
+    # Linux (CUDA 12.1)
+    "torch>=2.2.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torchvision>=0.16.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    # Windows (CUDA 12.1)
+    "torch>=2.2.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "torchvision>=0.16.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    # macOS/ARM (CPU-only fallback)
+    "torch ; sys_platform == 'darwin' or platform_machine == 'arm64'",
+    "torchvision ; sys_platform == 'darwin' or platform_machine == 'arm64'",
+    "pytorch-lightning",
+    "segmentation-models-pytorch",
 ]
 
 [project.optional-dependencies]

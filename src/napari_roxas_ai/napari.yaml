@@ -12,6 +12,9 @@ contributions:
     - id: napari-roxas-ai.make_cells_measurements_widget
       python_name: napari_roxas_ai:CellsMeasurementsWidget
       title: Cells measurements widget
+    - id: napari-roxas-ai.make_cells_model_widget
+      python_name: napari_roxas_ai:CellsModelWidget
+      title: Cells segmentation model widget
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
       display_name: ROXAS AI
@@ -19,3 +22,5 @@ contributions:
   widgets:
     - command: napari-roxas-ai.make_cells_measurements_widget
       display_name: Measure cells
+    - command: napari-roxas-ai.make_cells_model_widget
+      display_name: Segment Cells
