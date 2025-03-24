@@ -11,19 +11,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def load_conifer_sample_data():
-    with Image.open(
-        os.path.join(BASE_DIR, "_sample_data/conifer/cells.png")
-    ) as img:
-        cells = np.array(img)
+    with Image.open(os.path.join(BASE_DIR, "conifer/cells.png")) as img:
+        cells = np.divide(np.array(img), 255).astype("uint8")
 
-    with Image.open(
-        os.path.join(BASE_DIR, "_sample_data/conifer/rings.tiff")
-    ) as img:
+    with Image.open(os.path.join(BASE_DIR, "conifer/rings.tiff")) as img:
         rings = np.array(img)
 
-    with Image.open(
-        os.path.join(BASE_DIR, "_sample_data/conifer/thin_section.jpg")
-    ) as img:
+    with Image.open(os.path.join(BASE_DIR, "conifer/thin_section.jpg")) as img:
         thin_section = np.array(img)
 
     return [

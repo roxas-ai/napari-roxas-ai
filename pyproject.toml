@@ -28,7 +28,9 @@ dependencies = [
     "napari[all]",
     "numpy",
     "magicgui",
+    "opencv-contrib-python",
     "qtpy",
+    "rasterio",
     "scikit-image",
 ]
 
