@@ -9,12 +9,6 @@ contributions:
     - id: napari-roxas-ai.load_conifer_sample_data
       python_name: napari_roxas_ai:load_conifer_sample_data
       title: Load conifer sample data
-    - id: napari-roxas-ai.make_file_dialog
-      python_name: napari_roxas_ai:FileDialog
-      title: Labels loading widget
-    - id: napari-roxas-ai.make_rings_measurements_widget
-      python_name: napari_roxas_ai:RingsMeasurementsWidget
-      title: Rings measurements widget
     - id: napari-roxas-ai.make_cells_measurements_widget
       python_name: napari_roxas_ai:CellsMeasurementsWidget
       title: Cells measurements widget
@@ -23,9 +17,5 @@ contributions:
       display_name: ROXAS AI
       key: unique_id.1
   widgets:
-    - command: napari-roxas-ai.make_file_dialog
-      display_name: Load label(s)
-    - command: napari-roxas-ai.make_rings_measurements_widget
-      display_name: Measure rings
     - command: napari-roxas-ai.make_cells_measurements_widget
       display_name: Measure cells

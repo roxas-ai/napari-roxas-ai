@@ -10,6 +10,7 @@ from magicgui.widgets import (
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog
 
+from .._utils import make_binary_labels_colormap
 from ._cwt_measurements import CellAnalyzer
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class Worker(QObject):
 
     def run(self):
         analyzer = CellAnalyzer(self.config)
-        analyzer.cells_array = self.input_array.astype("uint8")
+        analyzer.cells_array = self.input_array.astype("uint8") * 255
         analyzer._smooth_image()
         analyzer._find_contours()
         analyzer._analyze_lumina()
@@ -151,5 +152,13 @@ class CellsMeasurementsWidget(Container):
 
     def _add_result_layers(self, lumen_image, walls_image):
         """Add result images to the viewer."""
-        self._viewer.add_labels(lumen_image, name="Lumen Contours")
-        self._viewer.add_labels(walls_image, name="Cell Wall Contours")
+        self._viewer.add_labels(
+            (lumen_image / 255).astype("uint8"),
+            name="Lumen Contours",
+            colormap=make_binary_labels_colormap(),
+        )
+        self._viewer.add_labels(
+            (walls_image / 255).astype("uint8"),
+            name="Cell Wall Contours",
+            colormap=make_binary_labels_colormap(),
+        )

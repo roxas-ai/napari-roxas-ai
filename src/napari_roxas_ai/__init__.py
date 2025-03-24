@@ -1,11 +1,8 @@
 __version__ = "0.0.1"
-from ._file_dialog_widget import FileDialog
-from ._measurements import CellsMeasurementsWidget, RingsMeasurementsWidget
+from ._measurements import CellsMeasurementsWidget
 from ._sample_data import load_conifer_sample_data
 
 __all__ = (
     "load_conifer_sample_data",
-    "FileDialog",
-    "RingsMeasurementsWidget",
     "CellsMeasurementsWidget",
 )
