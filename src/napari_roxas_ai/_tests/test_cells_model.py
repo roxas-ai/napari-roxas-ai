@@ -1,7 +1,3 @@
-import os
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # remove cuda for tests
-
 import numpy as np
 import torch
 
