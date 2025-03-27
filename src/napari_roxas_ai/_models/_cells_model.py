@@ -14,6 +14,9 @@ class CellsSegmentationModel(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.available_device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
+            self.available_device
+        )
         self.net = smp.Unet(
             encoder_weights=None, classes=2, encoder_name="resnet50"
         ).to(device=self.available_device)
@@ -58,7 +61,12 @@ class CellsSegmentationModel(pl.LightningModule):
                 img1 = transforms.ToTensor()(img1).float()
                 img1 = torch.unsqueeze(img1, 0)
                 img1 = img1.to(device=self.available_device)
-                r = self(img1)
+                with torch.no_grad():
+                    if self.use_autocast:
+                        with torch.autocast(device_type=self.available_device):
+                            r = self(img1)
+                    else:
+                        r = self(img1)
                 processed = (
                     torch.squeeze(r.cpu().detach()).long().numpy()
                 )  # process to masks
