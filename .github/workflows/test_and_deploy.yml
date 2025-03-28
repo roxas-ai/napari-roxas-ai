@@ -44,6 +44,28 @@ jobs:
           git clone --depth 1 https://github.com/pyvista/gl-ci-helpers.git
           powershell gl-ci-helpers/appveyor/install_opengl.ps1
 
+      # opengl for other OS
+      - name: Install OpenGL dependencies (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get install -y libgl1-mesa-glx xvfb
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install freeglut
+          fi
+        shell: bash
+
+      # headless QT for macos
+      - name: Set up headless Qt (Cross-Platform)
+        run: |
+          echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "QT_QPA_FONTDIR=/System/Library/Fonts/Supplemental/" >> $GITHUB_ENV
+            echo "QT_QPA_PLATFORM_PLUGIN_PATH=/usr/local/Cellar/qt/6.*/plugins/platforms/" >> $GITHUB_ENV
+            echo "QT_DEBUG_PLUGINS=1" >> $GITHUB_ENV
+          fi
+        shell: bash
+
       # note: if you need dependencies from conda, considering using
       # setup-miniconda: https://github.com/conda-incubator/setup-miniconda
       # and
