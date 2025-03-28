@@ -44,17 +44,6 @@ jobs:
           git clone --depth 1 https://github.com/pyvista/gl-ci-helpers.git
           powershell gl-ci-helpers/appveyor/install_opengl.ps1
 
-      # opengl for other OS
-      - name: Install OpenGL dependencies (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get install -y libgl1-mesa-glx xvfb
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            brew install freeglut
-          fi
-        shell: bash
-
       # headless QT for macos
       - name: Set up headless Qt (Cross-Platform)
         run: |
