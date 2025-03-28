@@ -25,10 +25,10 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = [
+    "magicgui",
     "napari[all]",
     "numpy",
-    "magicgui",
-    "opencv-contrib-python",
+    "opencv-contrib-python-headless",
     "qtpy",
     "rasterio",
     "scikit-image",
