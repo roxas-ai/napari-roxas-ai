@@ -6,7 +6,9 @@ from magicgui.widgets import (
     PushButton,
     create_widget,
 )
+from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtWidgets import QFileDialog
 
 from .._utils import make_binary_labels_colormap
 from ._cells_model import CellsSegmentationModel
@@ -21,12 +23,13 @@ class Worker(QObject):
     finished = Signal()
     result_ready = Signal(object)  # One images to send
 
-    def __init__(self, input_array):
+    def __init__(self, input_array, output_file_path: str):
         super().__init__()
         self.model_weights_file = (
             f"{module_path}/_weights/conifer_cells_segmentation.pth"
         )
         self.input_array = input_array
+        self.output_file_path = output_file_path
 
     def run(self):
         # Set up model
@@ -35,6 +38,12 @@ class Worker(QObject):
 
         # Perform inference
         predicted_labels = model.infer(self.input_array)
+
+        # Save labels if path is selected
+        if self.output_file_path is not None:
+            Image.fromarray(predicted_labels.astype("uint8")).save(
+                self.output_file_path
+            )
 
         # Emit results to be added as a layer
         self.result_ready.emit(predicted_labels)
@@ -52,6 +61,10 @@ class CellsModelWidget(Container):
             label="Thin Section", annotation="napari.layers.Image"
         )
 
+        # Create a button to open a file dialog
+        self._file_dialog_button = PushButton(text="Output File: None")
+        self._file_dialog_button.changed.connect(self._open_file_dialog)
+
         # Create a button to launch the analysis
         self._run_analysis_button = PushButton(text="Run Model")
         self._run_analysis_button.changed.connect(self._run_analysis)
@@ -60,9 +73,19 @@ class CellsModelWidget(Container):
         self.extend(
             [
                 self._input_layer_combo,
+                self._file_dialog_button,
                 self._run_analysis_button,
             ]
         )
+
+    def _open_file_dialog(self):
+        """Open a file dialog to select the output file path."""
+        self.output_file_path, _ = QFileDialog.getSaveFileName(
+            parent=None,
+            caption="Select Output File",
+            filter="Portable Network Graphics (*.png);;All Files (*)",
+        )
+        self._file_dialog_button.text = f"Output File: {self.output_file_path}"
 
     def _run_analysis(self):
         """Run the analysis in a separate thread."""
@@ -73,12 +96,12 @@ class CellsModelWidget(Container):
             raise ValueError("Input layer is not set.")
 
         # Run the analysis in a separate thread
-        self._run_in_thread(self.input_layer.data)
+        self._run_in_thread(self.input_layer.data, self.output_file_path)
 
-    def _run_in_thread(self, input_array):
+    def _run_in_thread(self, input_array, output_file_path: str):
         """Run the analysis in a separate thread."""
         self.worker_thread = QThread()
-        self.worker = Worker(input_array)
+        self.worker = Worker(input_array, output_file_path)
         self.worker.moveToThread(self.worker_thread)
 
         # Connect signals
