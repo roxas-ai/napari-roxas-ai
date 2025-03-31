@@ -2,6 +2,7 @@ import os
 from typing import TYPE_CHECKING
 
 from magicgui.widgets import (
+    ComboBox,
     Container,
     PushButton,
     create_widget,
@@ -23,13 +24,15 @@ class Worker(QObject):
     finished = Signal()
     result_ready = Signal(object)  # One images to send
 
-    def __init__(self, input_array, output_file_path: str):
+    def __init__(
+        self, input_array, output_file_path: str, model_weights_file: str
+    ):
         super().__init__()
-        self.model_weights_file = (
-            f"{module_path}/_weights/conifer_cells_segmentation.pth"
-        )
         self.input_array = input_array
         self.output_file_path = output_file_path
+        self.model_weights_file = (
+            f"{module_path}/_weights/{model_weights_file}"
+        )
 
     def run(self):
         # Set up model
@@ -61,6 +64,12 @@ class CellsModelWidget(Container):
             label="Thin Section", annotation="napari.layers.Image"
         )
 
+        # Scan weights directory for weight files (currrently no restiction on file names)
+        self._model_weights_file = ComboBox(
+            choices=tuple(os.listdir(f"{module_path}/_weights/")),
+            label="Model Weights",
+        )
+
         # Create a button to open a file dialog
         self._file_dialog_button = PushButton(text="Output File: None")
         self._file_dialog_button.changed.connect(self._open_file_dialog)
@@ -73,10 +82,14 @@ class CellsModelWidget(Container):
         self.extend(
             [
                 self._input_layer_combo,
+                self._model_weights_file,
                 self._file_dialog_button,
                 self._run_analysis_button,
             ]
         )
+
+        # Initialize output file path
+        self.output_file_path = None
 
     def _open_file_dialog(self):
         """Open a file dialog to select the output file path."""
@@ -96,12 +109,18 @@ class CellsModelWidget(Container):
             raise ValueError("Input layer is not set.")
 
         # Run the analysis in a separate thread
-        self._run_in_thread(self.input_layer.data, self.output_file_path)
+        self._run_in_thread(
+            self.input_layer.data,
+            self.output_file_path,
+            self._model_weights_file.value,
+        )
 
-    def _run_in_thread(self, input_array, output_file_path: str):
+    def _run_in_thread(
+        self, input_array, output_file_path: str, model_weights_file: str
+    ):
         """Run the analysis in a separate thread."""
         self.worker_thread = QThread()
-        self.worker = Worker(input_array, output_file_path)
+        self.worker = Worker(input_array, output_file_path, model_weights_file)
         self.worker.moveToThread(self.worker_thread)
 
         # Connect signals
