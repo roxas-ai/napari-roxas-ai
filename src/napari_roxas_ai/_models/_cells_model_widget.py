@@ -103,6 +103,10 @@ class CellsModelWidget(Container):
     def _run_analysis(self):
         """Run the analysis in a separate thread."""
 
+        # Get the selected weights file
+        if self._model_weights_file.value is None:
+            raise ValueError("Model weights file is not set.")
+
         # Get the selected label layer
         self.input_layer = self._input_layer_combo.value
         if self.input_layer is None:
