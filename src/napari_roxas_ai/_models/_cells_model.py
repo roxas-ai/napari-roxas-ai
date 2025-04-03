@@ -38,43 +38,112 @@ class CellsSegmentationModel(pl.LightningModule):
         return out
 
     def infer(self, img):
-        img_pad = np.zeros(
-            (img.shape[0] + 224, img.shape[1] + 224, img.shape[2])
+
+        # Patch size and stride
+        patch_size = 1024
+        stride = 800
+        pad_size = int(
+            (patch_size - stride) / 2
+        )  # Warining : patch_size - stride) / 2 must be an int
+        pad_mode = "reflect"
+
+        # Pad the image in reflect mode to avoid edge effects
+        img_padded = np.pad(
+            img,
+            (
+                (pad_size, pad_size),
+                (pad_size, pad_size),
+                (0, 0),
+            ),
+            mode=pad_mode,
         )
-        label_pad = np.zeros((img.shape[0] + 224, img.shape[1] + 224))
-        img_pad[112:-112, 112:-112] = img
-        for i in range(
-            img_pad.shape[0] // 800 + 1
-        ):  # split image into 1024*1024 chunks
-            for j in range(img_pad.shape[1] // 800 + 1):
-                x, x1, y, y1 = 800 * i, 800 * i + 1024, 800 * j, 800 * j + 1024
-                to_much_x = x1 - img_pad.shape[0]
-                to_much_y = y1 - img_pad.shape[1]
-                if to_much_x > 0:
-                    x = img_pad.shape[0] - 1024
-                    x1 = img_pad.shape[0]
-                if to_much_y > 0:
-                    y = img_pad.shape[1] - 1024
-                    y1 = img_pad.shape[1]
-                input_img = img_pad[x:x1, y:y1].copy()
-                img1 = self.preprocessing_fn(input_img)
-                img1 = transforms.ToTensor()(img1).float()
-                img1 = torch.unsqueeze(img1, 0)
-                img1 = img1.to(device=self.available_device)
+        labels_padded = np.zeros((img_padded.shape[0], img_padded.shape[1]))
+
+        # Process the image in chunks
+        for i in range(img_padded.shape[0] // stride + 1):
+            for j in range(img_padded.shape[1] // stride + 1):
+                x, dx, y, dy = (
+                    stride * i,
+                    stride * i + patch_size,
+                    stride * j,
+                    stride * j + patch_size,
+                )
+                patch = img_padded[x:dx, y:dy].copy()
+
+                # Pad to patch size if smaller
+                if patch.shape[0] < patch_size or patch.shape[1] < patch_size:
+                    patch = np.pad(
+                        patch,
+                        (
+                            (0, max(0, patch_size - patch.shape[0])),
+                            (0, max(0, patch_size - patch.shape[1])),
+                            (0, 0),
+                        ),
+                        mode=pad_mode,
+                    )
+
+                patch = self.preprocessing_fn(patch)
+                patch = transforms.ToTensor()(patch).float()
+                patch = torch.unsqueeze(patch, 0)
+                patch = patch.to(device=self.available_device)
                 with torch.no_grad():
                     if self.use_autocast:
                         with torch.autocast(device_type=self.available_device):
-                            r = self(img1)
+                            pred = self(patch)
                     else:
-                        r = self(img1)
-                processed = (
-                    torch.squeeze(r.cpu().detach()).long().numpy()
-                )  # process to masks
-                labels = skm.label(processed).transpose(
-                    (1, 0)
-                )  # todo why strange transpose
-                result_semseg = (labels.T > 0).astype(int) * 255
-                label_pad[x + 112 : x1 - 112, y + 112 : y1 - 112] = (
-                    result_semseg[112:-112, 112:-112]
-                )
-        return label_pad[112:-112, 112:-112]
+                        pred = self(patch)
+                pred = torch.squeeze(pred.cpu().detach()).long().numpy()
+                patch_labels = skm.label(pred).transpose((1, 0))
+                patch_labels = (patch_labels.T > 0).astype(int) * 255
+
+                update_zone_shape = labels_padded[
+                    x + pad_size : dx - pad_size, y + pad_size : dy - pad_size
+                ].shape
+                labels_padded[
+                    x + pad_size : dx - pad_size, y + pad_size : dy - pad_size
+                ] = patch_labels[
+                    pad_size : update_zone_shape[0] + pad_size,
+                    pad_size : update_zone_shape[1] + pad_size,
+                ]
+
+        return labels_padded[pad_size:-pad_size, pad_size:-pad_size]
+
+
+if __name__ == "__main__":
+    # Path to the sample data
+    import os
+
+    from PIL import Image
+
+    sample_data_dir = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__), "..", "_sample_data", "conifer"
+        )
+    )
+    sample_image_path = os.path.join(sample_data_dir, "thin_section.jpg")
+
+    # Load the sample image
+    print(f"Loading sample image from: {sample_image_path}")
+    with Image.open(sample_image_path) as img:
+        input_image = np.array(img)
+
+    # Initialize the model
+    print("Initializing model...")
+    model = CellsSegmentationModel()
+
+    # Get weights path
+    weights_dir = os.path.join(os.path.dirname(__file__), "_weights")
+    weights_files = [f for f in os.listdir(weights_dir) if f.endswith(".pth")]
+
+    if weights_files:
+        weights_path = os.path.join(weights_dir, weights_files[0])
+        print(f"Loading weights from: {weights_path}")
+        model.load_weights(weights_path)
+    else:
+        print("No weights found. Running with random initialization.")
+
+    # Run inference
+    print("Running inference...")
+    result = model.infer(input_image)
+
+    print("Done!")
