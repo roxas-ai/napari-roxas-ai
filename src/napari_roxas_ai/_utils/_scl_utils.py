@@ -54,7 +54,7 @@ def write_scl(scl_array, file_path):
     scl_array /= 255  # convert to binary
     fwd_diff = np.diff(scl_array)
     horizontal_length = scl_array.shape[1] - 1
-    final_resulst = np.zeros(0)
+    final_result = np.zeros(0)
     cells_per_row = np.zeros(scl_array.shape[0])
 
     line_results = []
