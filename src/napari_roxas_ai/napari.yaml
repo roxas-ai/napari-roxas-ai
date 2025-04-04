@@ -20,8 +20,7 @@ contributions:
 
     - id: napari-roxas-ai.make_cells_model_batch_widget
       python_name: napari_roxas_ai:CellsModelBatchWidget
-      title: Catched cells segmentation model widget
-
+      title: Batch cells segmentation model widget
     - id: napari-roxas-ai.make_cells_vectorization_widget
       python_name: napari_roxas_ai:cells_vectorization_widget
       title: Cell labels vectorization widget
