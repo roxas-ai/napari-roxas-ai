@@ -64,7 +64,7 @@ class CellsModelWidget(Container):
             label="Thin Section", annotation="napari.layers.Image"
         )
 
-        # Scan weights directory for weight files (currrently no restiction on file names)
+        # Scan weights directory for weight files (currently no restriction on file names)
         self._model_weights_file = ComboBox(
             choices=tuple(os.listdir(f"{module_path}/_weights/")),
             label="Model Weights",
