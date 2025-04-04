@@ -44,7 +44,7 @@ class CellsSegmentationModel(pl.LightningModule):
         stride = 800
         pad_size = int(
             (patch_size - stride) / 2
-        )  # Warining : patch_size - stride) / 2 must be an int
+        )  # Warning: (patch_size - stride) / 2 must be an int
         pad_mode = "reflect"
 
         # Pad the image in reflect mode to avoid edge effects
