@@ -20,10 +20,15 @@ contributions:
 
     - id: napari-roxas-ai.make_cells_model_batch_widget
       python_name: napari_roxas_ai:CellsModelBatchWidget
-      title: Batch cells segmentation model widget
+      title: Catched cells segmentation model widget
+
     - id: napari-roxas-ai.make_cells_vectorization_widget
       python_name: napari_roxas_ai:cells_vectorization_widget
       title: Cell labels vectorization widget
+
+    - id: napari-roxas-ai.open_settings_file
+      python_name: napari_roxas_ai:open_settings_file
+      title: Settings
 
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
@@ -42,3 +47,6 @@ contributions:
 
     - command: napari-roxas-ai.make_cells_vectorization_widget
       display_name: Vectorize cells labels
+
+    - command: napari-roxas-ai.open_settings_file
+      display_name: Settings
