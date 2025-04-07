@@ -5,8 +5,11 @@ description = "A plugin that integrates the ROXAS AI analysis methods for quanti
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-  {name = "The WSL Dendrosciences Group"},
-  {email = "roxas@wsl.ch"},
+  {name = "Nicola Antonio Santacroce"},
+  {name = "Marc Katzenmaier"},
+  {name = "Triyan Bhardwaj"},
+  {name = "Georg von Arx"},
+  {name = "The WSL Dendrosciences Group", email = "roxas@wsl.ch"},
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
