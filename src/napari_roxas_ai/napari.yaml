@@ -30,6 +30,15 @@ contributions:
       python_name: napari_roxas_ai:open_settings_file
       title: Settings
 
+    - id: napari-roxas-ai.napari_get_reader
+      python_name: napari_roxas_ai:napari_get_reader
+      title: ROXAS AI File Reader
+
+  readers:
+    - command: napari-roxas-ai.napari_get_reader
+      accepts_directories: true
+      filename_patterns: ["*.cells.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff"]
+
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
       display_name: ROXAS AI
