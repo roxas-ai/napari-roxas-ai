@@ -78,14 +78,10 @@ class SettingsManager:
                     self._settings = json.load(f)
             except json.JSONDecodeError:
                 # If file is corrupted, use default settings
-                self._settings = {}
+                self.reset()
         else:
             # Create default settings if file doesn't exist
-            self._settings = {
-                "example_setting": True,
-                "another_setting": "default_value",
-            }
-            self.save_settings()
+            self.reset()
 
     def save_settings(self):
         """
@@ -135,8 +131,29 @@ class SettingsManager:
         Reset all settings to default values and save to file.
         """
         self._settings = {
-            "example_setting": True,
-            "another_setting": "default_value",
+            "file_content_extensions": [
+                ".scan",
+                ".cells",
+                ".rings",
+                ".metadata",
+            ],
+            "file_type_extensions": [
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".tif",
+                ".tiff",
+                ".csv",
+                ".tsv",
+                ".txt",
+                ".json",
+            ],
+            "excluded_path_words": [
+                "annotated",
+                "Preview",
+                "ReferenceSeries",
+                "ReferenceSeriesLong",
+            ],
         }
         self.save_settings()
 

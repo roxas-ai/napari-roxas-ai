@@ -15,6 +15,7 @@ from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog
 
+from .._settings._settings_manager import SettingsManager
 from .._utils import write_scl
 from ._cells_model import CellsSegmentationModel
 
@@ -23,12 +24,10 @@ if TYPE_CHECKING:
 
 # Settings
 module_path = os.path.abspath(__file__).rsplit("/", 1)[0]
-excluded_path_words = [
-    "annotated",
-    "Preview",
-    "ReferenceSeries",
-    "ReferenceSeriesLong",
-]
+
+# get excluded path words from settings
+settings_manager = SettingsManager()
+excluded_path_words = settings_manager.get("excluded_path_words", [])
 
 
 def save_as_scl(array, filepath):
