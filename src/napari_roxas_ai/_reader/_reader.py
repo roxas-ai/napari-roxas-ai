@@ -66,6 +66,82 @@ def is_supported_file(path: str) -> bool:
     )
 
 
+def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
+    """
+    Read a .cells.png file and return it as a labels layer.
+
+    Parameters
+    ----------
+    path : str
+        Path to the .cells.png file
+
+    Returns
+    -------
+    tuple
+        (data, metadata, layer_type) for the cells image
+    """
+    with Image.open(path) as img:
+        # Convert to numpy array and rescale to 0-1
+        data = np.array(img).astype(float) / 255
+
+    # Create metadata
+    filename = os.path.basename(path)
+    layer_name = os.path.splitext(filename)[0]
+    metadata = {"name": layer_name}
+
+    return data.astype(int), metadata, "labels"
+
+
+def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
+    """
+    Read a .tif or .tiff file and return it as a labels layer.
+
+    Parameters
+    ----------
+    path : str
+        Path to the .tif or .tiff file
+
+    Returns
+    -------
+    tuple
+        (data, metadata, layer_type) for the rings image
+    """
+    with Image.open(path) as img:
+        data = np.array(img)
+
+    # Create metadata
+    filename = os.path.basename(path)
+    layer_name = os.path.splitext(filename)[0]
+    metadata = {"name": layer_name}
+
+    return data, metadata, "labels"
+
+
+def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
+    """
+    Read a .jpg or .jpeg file and return it as an image layer.
+
+    Parameters
+    ----------
+    path : str
+        Path to the .jpg or .jpeg file
+
+    Returns
+    -------
+    tuple
+        (data, metadata, layer_type) for the image
+    """
+    with Image.open(path) as img:
+        data = np.array(img)
+
+    # Create metadata
+    filename = os.path.basename(path)
+    layer_name = os.path.splitext(filename)[0]
+    metadata = {"name": layer_name}
+
+    return data, metadata, "image"
+
+
 def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
     """
     Read supported files and return layer data.
@@ -95,38 +171,11 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
 
         # Process based on file type
         if path.lower().endswith(".cells.png"):
-            # Read cells image as labels
-            with Image.open(path) as img:
-                # Convert to numpy array and rescale to 0-1
-                data = np.array(img).astype(float) / 255
-
-            # Create metadata and add to layers
-            filename = os.path.basename(path)
-            layer_name = os.path.splitext(filename)[0]
-            metadata = {"name": layer_name}
-            layers.append((data.astype(int), metadata, "labels"))
-
+            layers.append(read_cells_file(path))
         elif path.lower().endswith((".tif", ".tiff")):
-            # Read TIFF file directly as labels
-            with Image.open(path) as img:
-                data = np.array(img)
-
-            # Create metadata and add to layers
-            filename = os.path.basename(path)
-            layer_name = os.path.splitext(filename)[0]
-            metadata = {"name": layer_name}
-            layers.append((data, metadata, "labels"))
-
+            layers.append(read_rings_file(path))
         elif path.lower().endswith((".jpg", ".jpeg")):
-            # Read regular image file
-            with Image.open(path) as img:
-                data = np.array(img)
-
-            # Create metadata and add to layers
-            filename = os.path.basename(path)
-            layer_name = os.path.splitext(filename)[0]
-            metadata = {"name": layer_name}
-            layers.append((data, metadata, "image"))
+            layers.append(read_image_file(path))
 
     return layers
 
