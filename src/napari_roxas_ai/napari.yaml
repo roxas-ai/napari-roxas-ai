@@ -26,6 +26,10 @@ contributions:
       python_name: napari_roxas_ai:cells_vectorization_widget
       title: Cell labels vectorization widget
 
+    - id: napari-roxas-ai.make_preparation_widget
+      python_name: napari_roxas_ai:PreparationWidget
+      title: Sample preparation widget
+
     - id: napari-roxas-ai.open_settings_file
       python_name: napari_roxas_ai:open_settings_file
       title: Settings
@@ -56,6 +60,9 @@ contributions:
 
     - command: napari-roxas-ai.make_cells_vectorization_widget
       display_name: Vectorize cells labels
+
+    - command: napari-roxas-ai.make_preparation_widget
+      display_name: Prepare samples
 
     - command: napari-roxas-ai.open_settings_file
       display_name: Settings

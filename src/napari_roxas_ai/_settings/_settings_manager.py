@@ -154,6 +154,19 @@ class SettingsManager:
                 "ReferenceSeries",
                 "ReferenceSeriesLong",
             ],
+            "authorised_sample_types": [
+                "conifer",
+                "angiosperm",
+            ],
+            "default_scale": 0.44100529,  # Default value: 1/2.2675
+            "default_angle": 0.0,  # Default value: 0 degrees
+            # JPEG compression parameters
+            "jpeg_quality": 95,  # JPEG quality (0-100)
+            "jpeg_optimize": True,  # Optimize JPEG files
+            "jpeg_progressive": True,  # Use progressive JPEG format
+            # File extension settings
+            "scan_file_extension": ".scan.jpg",  # Extension for scan files
+            "metadata_file_extension": ".metadata.json",  # Extension for metadata files
         }
         self.save_settings()
 

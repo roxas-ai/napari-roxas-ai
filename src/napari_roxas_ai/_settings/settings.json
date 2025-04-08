@@ -21,5 +21,16 @@
         "Preview",
         "ReferenceSeries",
         "ReferenceSeriesLong"
-    ]
+    ],
+    "authorised_sample_types": [
+        "conifer",
+        "angiosperm"
+    ],
+    "default_scale": 0.44100529,
+    "default_angle": 0.0,
+    "jpeg_quality": 95,
+    "jpeg_optimize": true,
+    "jpeg_progressive": true,
+    "scan_file_extension": ".scan.jpg",
+    "metadata_file_extension": ".metadata.json"
 }
