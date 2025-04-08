@@ -7,7 +7,11 @@ from napari_roxas_ai._sample_data import load_conifer_sample_data
 def test_cell_analyzer():
     # Load sample data (cells image)
     sample_data = load_conifer_sample_data()
-    cells_image, metadata, layer_type = sample_data[2]  # Cells input
+    cells_image, metadata, layer_type = sample_data[
+        [s[1]["name"] == "conifer_sample.cells" for s in sample_data].index(
+            True
+        )
+    ]  # Cells input
 
     # Ensure data is correctly loaded
     assert isinstance(
