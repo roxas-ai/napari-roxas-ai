@@ -9,6 +9,10 @@
         "conifer",
         "angiosperm"
     ],
+    "authorised_sample_geometries": [
+        "linear",
+        "circular"
+    ],
     "default_scale": 0.44100529,
     "default_angle": 0.0,
     "jpeg_quality": 95,

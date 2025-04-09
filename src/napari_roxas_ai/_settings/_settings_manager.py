@@ -142,6 +142,7 @@ class SettingsManager:
                 "conifer",
                 "angiosperm",
             ],
+            "authorised_sample_geometries": ["linear", "circular"],
             "default_scale": 0.44100529,  # Default value: 1/2.2675
             "default_angle": 0.0,  # Default value: 0 degrees
             # JPEG compression parameters

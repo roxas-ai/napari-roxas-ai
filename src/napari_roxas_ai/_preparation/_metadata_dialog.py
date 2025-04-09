@@ -17,7 +17,10 @@ class MetadataDialog(QDialog):
     """Dialog for entering sample metadata."""
 
     def __init__(
-        self, default_metadata: Dict, authorized_sample_types: List[str]
+        self,
+        default_metadata: Dict,
+        authorized_sample_types: List[str],
+        authorized_sample_geometries: List[str],
     ):
         super().__init__()
 
@@ -45,6 +48,23 @@ class MetadataDialog(QDialog):
             self.sample_type.setCurrentIndex(0)
 
         form_layout.addRow("Sample Type:", self.sample_type)
+
+        # Sample geometry dropdown with authorized values
+        self.sample_geometry = QComboBox()
+        # Add authorized sample geometries to the dropdown
+        for sample_geometry in authorized_sample_geometries:
+            self.sample_geometry.addItem(sample_geometry)
+
+        # Set default value if provided and exists in authorized geometries
+        default_geometry = default_metadata.get("sample_geometry", "")
+        default_geo_index = self.sample_geometry.findText(default_geometry)
+        if default_geo_index >= 0:
+            self.sample_geometry.setCurrentIndex(default_geo_index)
+        elif self.sample_geometry.count() > 0:
+            # Default to first option if provided value isn't valid
+            self.sample_geometry.setCurrentIndex(0)
+
+        form_layout.addRow("Sample Geometry:", self.sample_geometry)
 
         # Sample scale
         self.sample_scale = QDoubleSpinBox()
@@ -102,6 +122,7 @@ class MetadataDialog(QDialog):
         return {
             "sample_name": self.sample_name,
             "sample_type": self.sample_type.currentText(),
+            "sample_geometry": self.sample_geometry.currentText(),
             "sample_scale": self.sample_scale.value(),
             "sample_angle": self.sample_angle.value(),
         }

@@ -419,6 +419,15 @@ class PreparationWidget(Container):
             ],  # Default values if not found in settings
         )
 
+        # Get authorized sample geometries from settings
+        self.authorized_sample_geometries = self.settings_manager.get(
+            "authorised_sample_geometries",
+            [
+                "linear",
+                "circular",
+            ],  # Default values if not found in settings
+        )
+
         # Get default scale and angle from settings
         self.default_scale = self.settings_manager.get(
             "default_scale",
@@ -592,13 +601,20 @@ class PreparationWidget(Container):
                 if self.authorized_sample_types
                 else "conifer"
             ),  # Use first authorized type
+            "sample_geometry": (
+                self.authorized_sample_geometries[0]
+                if self.authorized_sample_geometries
+                else "linear"
+            ),  # Use first authorized geometry
             "sample_scale": self.default_scale,  # Use default scale from settings
             "sample_angle": self.default_angle,  # Use default angle from settings
         }
 
         # Show dialog to get metadata
         self.metadata_dialog = MetadataDialog(
-            default_metadata, self.authorized_sample_types
+            default_metadata,
+            self.authorized_sample_types,
+            self.authorized_sample_geometries,
         )
         result = self.metadata_dialog.exec_()
 
