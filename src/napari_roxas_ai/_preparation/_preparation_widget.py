@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import shutil
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from magicgui.widgets import (
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
     import napari
 
 # Common image extensions
-IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"]
+IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"]
 
 Image.MAX_IMAGE_PIXELS = (
     None  # disables the decompressionbomb warning for large images
@@ -223,8 +224,57 @@ class Worker(QObject):
         Copy image file and ensure it's a jpg format with preserved metadata.
         Returns a dictionary with image metadata to be included in the JSON file.
         """
+        # Check if source file is already a JPEG
+        is_jpeg = source_path.lower().endswith((".jpg", ".jpeg"))
+
         try:
-            # Open the source image
+            # If it's already a JPEG, just copy the file to preserve quality
+            if is_jpeg:
+                # Use shutil.copy2 which preserves file metadata
+                shutil.copy2(source_path, target_path)
+
+                # Still extract metadata for the JSON file
+                with Image.open(target_path) as img:
+                    img_metadata = {
+                        "original_format": img.format,
+                        "original_size": [img.width, img.height],
+                        "original_mode": img.mode,
+                        "scan_format": img.format,
+                        "scan_size": [img.width, img.height],
+                        "scan_mode": img.mode,
+                    }
+
+                    # Extract EXIF data if available
+                    if hasattr(img, "_getexif") and img._getexif() is not None:
+                        exif_dict = {
+                            ExifTags.TAGS.get(tag_id, tag_id): value
+                            for tag_id, value in img._getexif().items()
+                            if tag_id in ExifTags.TAGS
+                        }
+                        img_metadata["original_exif"] = exif_dict
+                        img_metadata["scan_exif"] = exif_dict
+                    else:
+                        img_metadata["original_exif"] = None
+                        img_metadata["scan_exif"] = None
+
+                    # Extract other image info
+                    image_info = {}
+                    for key, value in img.info.items():
+                        if (
+                            key != "exif"
+                            and key != "icc_profile"
+                            and isinstance(
+                                value, (str, int, float, bool, tuple, list)
+                            )
+                        ):
+                            image_info[key] = value
+
+                    img_metadata["original_info"] = image_info
+                    img_metadata["scan_info"] = image_info
+
+                return img_metadata
+
+            # For non-JPEG files, proceed with conversion
             with Image.open(source_path) as img:
                 # Store image information for metadata - using "original_" prefix
                 img_metadata = {
@@ -338,7 +388,7 @@ class Worker(QObject):
                 return img_metadata
 
         except (OSError, ValueError, Image.UnidentifiedImageError) as e:
-            print(f"Error converting {source_path} to JPG: {e}")
+            print(f"Error processing {source_path}: {e}")
             return None  # No metadata available
 
     def _save_metadata(self, metadata: Dict, metadata_path: str):
