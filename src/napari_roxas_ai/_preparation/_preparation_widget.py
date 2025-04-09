@@ -47,6 +47,7 @@ class Worker(QObject):
         same_directory: bool = False,
         scan_file_prefix: str = ".scan",
         metadata_file_extension: str = ".metadata.json",
+        roxas_file_extensions: List[str] = None,
     ):
         super().__init__()
         self.source_directory = source_directory
@@ -65,6 +66,7 @@ class Worker(QObject):
         self.same_directory = same_directory
         self.scan_file_prefix = scan_file_prefix
         self.metadata_file_extension = metadata_file_extension
+        self.roxas_file_extensions = roxas_file_extensions or []
 
     def run(self):
         """Process all image files from source to target directory."""
@@ -80,6 +82,25 @@ class Worker(QObject):
                     recursive=True,
                 )
             )
+
+        # Filter out files that already have ROXAS extensions
+        if self.roxas_file_extensions:
+            filtered_files = []
+            for file_path in self.all_files:
+                file_name = os.path.basename(file_path)
+                skip_file = False
+
+                # Check if the file name contains any ROXAS extension
+                for ext in self.roxas_file_extensions:
+                    if ext in file_name:
+                        skip_file = True
+                        print(f"Skipping already processed file: {file_path}")
+                        break
+
+                if not skip_file:
+                    filtered_files.append(file_path)
+
+            self.all_files = filtered_files
 
         # Sort files for consistent processing
         self.all_files = sorted(self.all_files)
@@ -339,6 +360,11 @@ class PreparationWidget(Container):
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
+        # Get ROXAS file extensions to avoid processing files that have already been prepared
+        self.roxas_file_extensions = self.settings_manager.get(
+            "roxas_file_extensions", []
+        )
+
         # Source directory selector
         self._source_dialog_button = PushButton(text="Source Directory: None")
         self._source_dialog_button.changed.connect(self._open_source_dialog)
@@ -547,6 +573,7 @@ class PreparationWidget(Container):
             self.same_directory,
             self.scan_file_prefix,
             self.metadata_file_extension,
+            self.roxas_file_extensions,
         )
         self.worker.moveToThread(self.worker_thread)
 

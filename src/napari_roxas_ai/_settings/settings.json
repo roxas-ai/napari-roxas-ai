@@ -33,5 +33,11 @@
     "rings_file_extension": [
         ".rings",
         ".tif"
+    ],
+    "roxas_file_extensions": [
+        ".scan",
+        ".cells",
+        ".rings",
+        ".metadata"
     ]
 }

@@ -166,6 +166,12 @@ class SettingsManager:
                 ".rings",
                 ".tif",
             ],  # Parts of rings file extension
+            "roxas_file_extensions": [
+                ".scan",
+                ".cells",
+                ".rings",
+                ".metadata",
+            ],  # roxas file extensions
         }
         self.save_settings()
 
