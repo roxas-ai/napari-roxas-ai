@@ -131,23 +131,6 @@ class SettingsManager:
         Reset all settings to default values and save to file.
         """
         self._settings = {
-            "file_content_extensions": [
-                ".scan",
-                ".cells",
-                ".rings",
-                ".metadata",
-            ],
-            "file_type_extensions": [
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".tif",
-                ".tiff",
-                ".csv",
-                ".tsv",
-                ".txt",
-                ".json",
-            ],
             "excluded_path_words": [
                 "annotated",
                 "Preview",
