@@ -154,6 +154,7 @@ class SettingsManager:
                 "ReferenceSeries",
                 "ReferenceSeriesLong",
             ],
+            # Metadata settings
             "authorised_sample_types": [
                 "conifer",
                 "angiosperm",
@@ -167,6 +168,8 @@ class SettingsManager:
             # File extension settings
             "scan_file_extension": ".scan.jpg",  # Extension for scan files
             "metadata_file_extension": ".metadata.json",  # Extension for metadata files
+            "cells_file_extension": ".cells.png",  # Extension for cells files
+            "rings_file_extension": ".rings.tiff",  # Extension for rings files
         }
         self.save_settings()
 
