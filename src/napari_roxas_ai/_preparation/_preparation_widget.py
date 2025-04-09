@@ -67,6 +67,9 @@ class Worker(QObject):
         self.scan_file_prefix = scan_file_prefix
         self.metadata_file_extension = metadata_file_extension
         self.roxas_file_extensions = roxas_file_extensions or []
+        self._current_img_metadata = (
+            None  # Add a temporary cache for image metadata
+        )
 
     def run(self):
         """Process all image files from source to target directory."""
@@ -151,8 +154,12 @@ class Worker(QObject):
             target_dir, f"{base_name}{self.metadata_file_extension}"
         )
 
-        # Copy the image without conversion
+        # Copy the image without conversion - store the metadata for later use
         img_metadata = self._copy_image(file_path, new_image_path)
+
+        # Store the image metadata in a temporary attribute to avoid needing to read the
+        # file again during set_metadata(), which would fail if the file is removed
+        self._current_img_metadata = img_metadata
 
         # If source and target are the same, remove the original file if different
         if self.same_directory and file_path != new_image_path:
@@ -200,7 +207,6 @@ class Worker(QObject):
         rel_path = file_path[len(self.source_directory) + 1 :]
         dir_path = os.path.dirname(rel_path)
         base_name = metadata["sample_name"]
-        _, file_ext = os.path.splitext(os.path.basename(rel_path))
 
         # Create target path for metadata file using settings-defined extension
         target_dir = os.path.join(self.target_directory, dir_path)
@@ -208,13 +214,9 @@ class Worker(QObject):
             target_dir, f"{base_name}{self.metadata_file_extension}"
         )
 
-        # Create new image path to extract metadata from
-        new_image_path = os.path.join(
-            target_dir, f"{base_name}{self.scan_file_prefix}{file_ext}"
-        )
-
-        # Extract image metadata (copy if not already done)
-        img_metadata = self._copy_image(file_path, new_image_path)
+        # Use the cached image metadata instead of trying to read the file again
+        # which would fail if the file was already removed in _process_next_file
+        img_metadata = self._current_img_metadata
 
         # Include image metadata in the user-provided metadata
         if img_metadata:
@@ -241,6 +243,9 @@ class Worker(QObject):
             self.default_metadata["sample_angle"] = metadata.get(
                 "sample_angle", self.default_angle
             )
+
+        # Clean up the temporary metadata
+        self._current_img_metadata = None
 
         # Move to next file
         self.current_file_index += 1
