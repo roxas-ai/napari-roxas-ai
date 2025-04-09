@@ -41,7 +41,7 @@ contributions:
   readers:
     - command: napari-roxas-ai.napari_get_reader
       accepts_directories: true
-      filename_patterns: ["*.cells.png", ".scan.jpg", ".rings.tif"] # Can't be read from the settings file, so hardcoded here
+      filename_patterns: ["*.cells.png", "*.scan.jpg", "*.rings.tif"] # Can't be read from the settings file, so hardcoded here
 
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data

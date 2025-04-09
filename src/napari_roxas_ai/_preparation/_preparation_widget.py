@@ -431,7 +431,7 @@ class PreparationWidget(Container):
         # Get default scale and angle from settings
         self.default_scale = self.settings_manager.get(
             "default_scale",
-            0.44100529,  # Default value if not found in settings (1/2.2675)
+            2.2675,  # Default value if not found in settings (pixels/μm)
         )
         self.default_angle = self.settings_manager.get(
             "default_angle", 0.0  # Default value if not found in settings

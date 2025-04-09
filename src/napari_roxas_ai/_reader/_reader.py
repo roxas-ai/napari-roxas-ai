@@ -142,7 +142,7 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     # Try to get sample scale from metadata file
     json_metadata = get_metadata_from_json(path)
     if json_metadata and "sample_scale" in json_metadata:
-        scale_value = float(json_metadata["sample_scale"])
+        scale_value = 1 / float(json_metadata["sample_scale"])
         metadata["scale"] = [scale_value, scale_value]
 
     return data.astype(int), metadata, "labels"
@@ -173,7 +173,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     # Try to get sample scale from metadata file
     json_metadata = get_metadata_from_json(path)
     if json_metadata and "sample_scale" in json_metadata:
-        scale_value = float(json_metadata["sample_scale"])
+        scale_value = 1 / float(json_metadata["sample_scale"])
         metadata["scale"] = [scale_value, scale_value]
 
     return data, metadata, "labels"
@@ -204,7 +204,7 @@ def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
     # Try to get sample scale from metadata file
     json_metadata = get_metadata_from_json(path)
     if json_metadata and "sample_scale" in json_metadata:
-        scale_value = float(json_metadata["sample_scale"])
+        scale_value = 1 / float(json_metadata["sample_scale"])
         metadata["scale"] = [scale_value, scale_value]
 
     return data, metadata, "image"

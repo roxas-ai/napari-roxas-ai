@@ -13,7 +13,7 @@
         "linear",
         "circular"
     ],
-    "default_scale": 0.44100529,
+    "default_scale": 2.2675,
     "default_angle": 0.0,
     "jpeg_quality": 95,
     "jpeg_optimize": true,

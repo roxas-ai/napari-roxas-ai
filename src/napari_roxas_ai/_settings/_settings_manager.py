@@ -143,7 +143,7 @@ class SettingsManager:
                 "angiosperm",
             ],
             "authorised_sample_geometries": ["linear", "circular"],
-            "default_scale": 0.44100529,  # Default value: 1/2.2675
+            "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
             "default_angle": 0.0,  # Default value: 0 degrees
             # JPEG compression parameters
             "jpeg_quality": 95,  # JPEG quality (0-100)

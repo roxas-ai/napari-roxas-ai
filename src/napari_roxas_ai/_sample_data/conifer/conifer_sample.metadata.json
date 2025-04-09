@@ -1,8 +1,9 @@
 {
     "sample_name": "conifer_sample",
     "sample_type": "conifer",
-    "sample_scale": 0.4410143329658214,
+    "sample_scale": 2.2675,
     "sample_angle": 0,
+    "sample_geometry": "linear",
     "scan_format": "JPEG",
     "scan_size": [500, 2500],
     "scan_mode": "RGB",

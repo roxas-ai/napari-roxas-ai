@@ -66,7 +66,7 @@ class MetadataDialog(QDialog):
 
         form_layout.addRow("Sample Geometry:", self.sample_geometry)
 
-        # Sample scale
+        # Sample scale - updated to pixels/μm units
         self.sample_scale = QDoubleSpinBox()
         self.sample_scale.setRange(0.01, 100.0)
         self.sample_scale.setSingleStep(
@@ -76,9 +76,9 @@ class MetadataDialog(QDialog):
             8
         )  # More decimals to display the exact value
         self.sample_scale.setValue(
-            default_metadata.get("sample_scale", 0.44100529)
+            default_metadata.get("sample_scale", 2.2675)
         )
-        form_layout.addRow("Scale (μm/pixel):", self.sample_scale)
+        form_layout.addRow("Scale (pixels/μm):", self.sample_scale)
 
         # Sample angle
         self.sample_angle = QDoubleSpinBox()
