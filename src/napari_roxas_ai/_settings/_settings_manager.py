@@ -152,7 +152,7 @@ class SettingsManager:
             "scan_file_extension": ".scan.jpg",  # Extension for scan files
             "metadata_file_extension": ".metadata.json",  # Extension for metadata files
             "cells_file_extension": ".cells.png",  # Extension for cells files
-            "rings_file_extension": ".rings.tiff",  # Extension for rings files
+            "rings_file_extension": ".rings.tif",  # Extension for rings files
         }
         self.save_settings()
 

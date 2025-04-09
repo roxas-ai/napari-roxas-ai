@@ -8,6 +8,9 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+# Import SettingsManager to get file extensions
+from napari_roxas_ai._settings import SettingsManager
+
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
 
@@ -63,20 +66,24 @@ def is_supported_file(path: str) -> bool:
     """
     path_lower = path.lower()
 
+    # Get file extensions from settings
+    settings = SettingsManager()
+    cells_ext = settings.get("cells_file_extension", ".cells.png")
+    rings_ext = settings.get("rings_file_extension", ".rings.tif")
+    scan_ext = settings.get("scan_file_extension", ".scan.jpg")
+
     # Check for all supported file types with a single endswith call
-    return path_lower.endswith(
-        (".cells.png", ".jpg", ".jpeg", ".tif", ".tiff")
-    )
+    return path_lower.endswith((cells_ext, rings_ext, scan_ext))
 
 
 def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
-    Read a .cells.png file and return it as a labels layer.
+    Read a cells file and return it as a labels layer.
 
     Parameters
     ----------
     path : str
-        Path to the .cells.png file
+        Path to the cells file
 
     Returns
     -------
@@ -97,12 +104,12 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
 
 def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
-    Read a .tif or .tiff file and return it as a labels layer.
+    Read a rings file and return it as a labels layer.
 
     Parameters
     ----------
     path : str
-        Path to the .tif or .tiff file
+        Path to the rings file
 
     Returns
     -------
@@ -122,12 +129,12 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
 
 def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
-    Read a .jpg or .jpeg file and return it as an image layer.
+    Read a scan file and return it as an image layer.
 
     Parameters
     ----------
     path : str
-        Path to the .jpg or .jpeg file
+        Path to the scan file
 
     Returns
     -------
@@ -166,6 +173,12 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
     # Initialize return list
     layers = []
 
+    # Get file extensions from settings
+    settings = SettingsManager()
+    cells_ext = settings.get("cells_file_extension", ".cells.png")
+    rings_ext = settings.get("rings_file_extension", ".rings.tif")
+    scan_ext = settings.get("scan_file_extension", ".scan.jpg")
+
     # Process each path
     for path in paths:
         # Skip unsupported files
@@ -173,11 +186,11 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
             continue
 
         # Process based on file type
-        if path.lower().endswith(".cells.png"):
+        if path.lower().endswith(cells_ext):
             layers.append(read_cells_file(path))
-        elif path.lower().endswith((".tif", ".tiff")):
+        elif path.lower().endswith(rings_ext):
             layers.append(read_rings_file(path))
-        elif path.lower().endswith((".jpg", ".jpeg")):
+        elif path.lower().endswith(scan_ext):
             layers.append(read_image_file(path))
 
     return layers
@@ -185,7 +198,7 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
 
 def read_directory(path: str) -> List[Tuple[Any, dict, str]]:
     """
-    Read all supported files from a directory.
+    Read all supported files from a directory and its subdirectories.
 
     Parameters
     ----------
@@ -197,12 +210,15 @@ def read_directory(path: str) -> List[Tuple[Any, dict, str]]:
     list of tuples
         List of (data, metadata, layer_type) tuples
     """
-    # Get all files in the directory
-    files = [
-        os.path.join(path, f)
-        for f in os.listdir(path)
-        if os.path.isfile(os.path.join(path, f))
-    ]
+    # List to store all found files
+    files = []
+
+    # Walk through the directory and its subdirectories
+    for root, _, filenames in os.walk(path):
+        for filename in filenames:
+            file_path = os.path.join(root, filename)
+            if os.path.isfile(file_path):
+                files.append(file_path)
 
     # Use the existing read_files function to process the files
     return read_files(files)
