@@ -42,7 +42,7 @@ class Worker(QObject):
         default_metadata: Optional[Dict] = None,
         apply_to_all: bool = False,
         authorized_sample_types: List[str] = None,
-        default_scale: float = 0.44100529,
+        default_scale: float = 2.2675,
         default_angle: float = 0.0,
         same_directory: bool = False,
         jpeg_quality: int = 95,
