@@ -2,8 +2,9 @@
 Reader plugin for ROXAS AI-specific file formats.
 """
 
+import json
 import os
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -76,6 +77,45 @@ def is_supported_file(path: str) -> bool:
     return path_lower.endswith((cells_ext, rings_ext, scan_ext))
 
 
+def get_metadata_from_json(file_path: str) -> Optional[Dict]:
+    """
+    Read metadata from the corresponding json file.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the image file
+
+    Returns
+    -------
+    dict or None
+        Metadata dictionary if found, None otherwise
+    """
+    # Get file extensions from settings
+    settings = SettingsManager()
+    metadata_ext = settings.get("metadata_file_extension", ".metadata.json")
+
+    # Construct the path to the metadata file
+    base_name = os.path.splitext(file_path)[0]
+    # Remove any existing file extension suffix (like .cells, .rings, .scan)
+    for suffix in [".cells", ".rings", ".scan"]:
+        if base_name.lower().endswith(suffix):
+            base_name = base_name[: -len(suffix)]
+            break
+
+    metadata_path = f"{base_name}{metadata_ext}"
+
+    # Check if the metadata file exists
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            print(f"Error reading metadata from {metadata_path}")
+
+    return None
+
+
 def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
     Read a cells file and return it as a labels layer.
@@ -98,6 +138,12 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     filename = os.path.basename(path)
     layer_name = os.path.splitext(filename)[0]
     metadata = {"name": layer_name}
+
+    # Try to get sample scale from metadata file
+    json_metadata = get_metadata_from_json(path)
+    if json_metadata and "sample_scale" in json_metadata:
+        scale_value = float(json_metadata["sample_scale"])
+        metadata["scale"] = [scale_value, scale_value]
 
     return data.astype(int), metadata, "labels"
 
@@ -124,6 +170,12 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     layer_name = os.path.splitext(filename)[0]
     metadata = {"name": layer_name}
 
+    # Try to get sample scale from metadata file
+    json_metadata = get_metadata_from_json(path)
+    if json_metadata and "sample_scale" in json_metadata:
+        scale_value = float(json_metadata["sample_scale"])
+        metadata["scale"] = [scale_value, scale_value]
+
     return data, metadata, "labels"
 
 
@@ -148,6 +200,12 @@ def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
     filename = os.path.basename(path)
     layer_name = os.path.splitext(filename)[0]
     metadata = {"name": layer_name}
+
+    # Try to get sample scale from metadata file
+    json_metadata = get_metadata_from_json(path)
+    if json_metadata and "sample_scale" in json_metadata:
+        scale_value = float(json_metadata["sample_scale"])
+        metadata["scale"] = [scale_value, scale_value]
 
     return data, metadata, "image"
 
