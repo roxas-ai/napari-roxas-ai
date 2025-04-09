@@ -191,6 +191,18 @@ class Worker(QObject):
             target_dir, f"{base_name}{self.metadata_file_extension}"
         )
 
+        # Create new image path to extract metadata from
+        new_image_path = os.path.join(
+            target_dir, f"{base_name}{self.scan_file_extension}"
+        )
+
+        # Extract image metadata (copy/convert if not already done)
+        img_metadata = self._copy_and_convert_image(file_path, new_image_path)
+
+        # Include image metadata in the user-provided metadata
+        if img_metadata:
+            metadata.update(img_metadata)
+
         # Save the metadata file
         self._save_metadata(metadata, metadata_path)
 
@@ -202,6 +214,9 @@ class Worker(QObject):
             # Maintain field order by explicitly copying each field except sample_name
             self.default_metadata["sample_type"] = metadata.get(
                 "sample_type", ""
+            )
+            self.default_metadata["sample_geometry"] = metadata.get(
+                "sample_geometry", ""
             )
             self.default_metadata["sample_scale"] = metadata.get(
                 "sample_scale", self.default_scale
@@ -228,53 +243,7 @@ class Worker(QObject):
         is_jpeg = source_path.lower().endswith((".jpg", ".jpeg"))
 
         try:
-            # If it's already a JPEG, just copy the file to preserve quality
-            if is_jpeg:
-                # Use shutil.copy2 which preserves file metadata
-                shutil.copy2(source_path, target_path)
-
-                # Still extract metadata for the JSON file
-                with Image.open(target_path) as img:
-                    img_metadata = {
-                        "original_format": img.format,
-                        "original_size": [img.width, img.height],
-                        "original_mode": img.mode,
-                        "scan_format": img.format,
-                        "scan_size": [img.width, img.height],
-                        "scan_mode": img.mode,
-                    }
-
-                    # Extract EXIF data if available
-                    if hasattr(img, "_getexif") and img._getexif() is not None:
-                        exif_dict = {
-                            ExifTags.TAGS.get(tag_id, tag_id): value
-                            for tag_id, value in img._getexif().items()
-                            if tag_id in ExifTags.TAGS
-                        }
-                        img_metadata["original_exif"] = exif_dict
-                        img_metadata["scan_exif"] = exif_dict
-                    else:
-                        img_metadata["original_exif"] = None
-                        img_metadata["scan_exif"] = None
-
-                    # Extract other image info
-                    image_info = {}
-                    for key, value in img.info.items():
-                        if (
-                            key != "exif"
-                            and key != "icc_profile"
-                            and isinstance(
-                                value, (str, int, float, bool, tuple, list)
-                            )
-                        ):
-                            image_info[key] = value
-
-                    img_metadata["original_info"] = image_info
-                    img_metadata["scan_info"] = image_info
-
-                return img_metadata
-
-            # For non-JPEG files, proceed with conversion
+            # Extract metadata from the original image first
             with Image.open(source_path) as img:
                 # Store image information for metadata - using "original_" prefix
                 img_metadata = {
@@ -312,78 +281,110 @@ class Worker(QObject):
 
                 img_metadata["original_info"] = image_info
 
-                # Convert to RGB mode (needed for JPG which doesn't support alpha channels)
-                if img.mode in ("RGBA", "LA") or (
-                    img.mode == "P" and "transparency" in img.info
-                ):
-                    # Image has transparency - convert to RGB with white background
-                    background = Image.new("RGB", img.size, (255, 255, 255))
-                    background.paste(
-                        img,
-                        mask=img.split()[3] if img.mode == "RGBA" else None,
-                    )
-                    rgb_img = background
+                # If it's already a JPEG, just copy the file to preserve quality
+                if is_jpeg:
+                    # Use shutil.copy2 which preserves file metadata
+                    shutil.copy2(source_path, target_path)
+
+                    # Now set the scan metadata to be the same as original for JPEGs
+                    img_metadata["scan_format"] = img.format
+                    img_metadata["scan_size"] = [img.width, img.height]
+                    img_metadata["scan_mode"] = img.mode
+                    img_metadata["scan_exif"] = img_metadata["original_exif"]
+
+                    # Extract scan info (should be the same as original for JPEGs)
+                    with Image.open(target_path) as scan_img:
+                        scan_info = {}
+                        for key, value in scan_img.info.items():
+                            if (
+                                key != "exif"
+                                and key != "icc_profile"
+                                and isinstance(
+                                    value, (str, int, float, bool, tuple, list)
+                                )
+                            ):
+                                scan_info[key] = value
+
+                        img_metadata["scan_info"] = scan_info
+
+                # For non-JPEG files, proceed with conversion
                 else:
-                    # Image is already RGB or can be converted without handling transparency
-                    rgb_img = img.convert("RGB")
+                    # Convert to RGB mode (needed for JPG which doesn't support alpha channels)
+                    if img.mode in ("RGBA", "LA") or (
+                        img.mode == "P" and "transparency" in img.info
+                    ):
+                        # Image has transparency - convert to RGB with white background
+                        background = Image.new(
+                            "RGB", img.size, (255, 255, 255)
+                        )
+                        background.paste(
+                            img,
+                            mask=(
+                                img.split()[3] if img.mode == "RGBA" else None
+                            ),
+                        )
+                        rgb_img = background
+                    else:
+                        # Image is already RGB or can be converted without handling transparency
+                        rgb_img = img.convert("RGB")
 
-                # Set up parameters for saving using settings
-                save_kwargs = {
-                    "quality": self.jpeg_quality,
-                    "optimize": self.jpeg_optimize,
-                    "progressive": self.jpeg_progressive,
-                }
+                    # Set up parameters for saving using settings
+                    save_kwargs = {
+                        "quality": self.jpeg_quality,
+                        "optimize": self.jpeg_optimize,
+                        "progressive": self.jpeg_progressive,
+                    }
 
-                # Preserve EXIF data if available
-                if exif_data is not None:
-                    try:
-                        save_kwargs["exif"] = exif_data
-                    except (KeyError, ValueError, TypeError) as exif_error:
-                        print(
-                            f"Warning: Could not preserve EXIF data: {exif_error}"
+                    # Preserve EXIF data if available
+                    if exif_data is not None:
+                        try:
+                            save_kwargs["exif"] = exif_data
+                        except (KeyError, ValueError, TypeError) as exif_error:
+                            print(
+                                f"Warning: Could not preserve EXIF data: {exif_error}"
+                            )
+
+                    # Save with high quality settings
+                    rgb_img.save(target_path, "JPEG", **save_kwargs)
+
+                    # Now extract metadata from the saved scan file
+                    with Image.open(target_path) as scan_img:
+                        # Add scan metadata fields
+                        img_metadata.update(
+                            {
+                                "scan_format": "JPEG",  # Always JPEG for the scan file
+                                "scan_size": [scan_img.width, scan_img.height],
+                                "scan_mode": scan_img.mode,
+                            }
                         )
 
-                # Save with high quality settings
-                rgb_img.save(target_path, "JPEG", **save_kwargs)
-
-                # Now extract metadata from the saved scan file
-                with Image.open(target_path) as scan_img:
-                    # Add scan metadata fields
-                    img_metadata.update(
-                        {
-                            "scan_format": "JPEG",  # Always JPEG for the scan file
-                            "scan_size": [scan_img.width, scan_img.height],
-                            "scan_mode": scan_img.mode,
-                        }
-                    )
-
-                    # Extract scan EXIF data if available
-                    if (
-                        hasattr(scan_img, "_getexif")
-                        and scan_img._getexif() is not None
-                    ):
-                        scan_exif_dict = {
-                            ExifTags.TAGS.get(tag_id, tag_id): value
-                            for tag_id, value in scan_img._getexif().items()
-                            if tag_id in ExifTags.TAGS
-                        }
-                        img_metadata["scan_exif"] = scan_exif_dict
-                    else:
-                        img_metadata["scan_exif"] = None
-
-                    # Extract other scan image info
-                    scan_info = {}
-                    for key, value in scan_img.info.items():
+                        # Extract scan EXIF data if available
                         if (
-                            key != "exif"
-                            and key != "icc_profile"
-                            and isinstance(
-                                value, (str, int, float, bool, tuple, list)
-                            )
+                            hasattr(scan_img, "_getexif")
+                            and scan_img._getexif() is not None
                         ):
-                            scan_info[key] = value
+                            scan_exif_dict = {
+                                ExifTags.TAGS.get(tag_id, tag_id): value
+                                for tag_id, value in scan_img._getexif().items()
+                                if tag_id in ExifTags.TAGS
+                            }
+                            img_metadata["scan_exif"] = scan_exif_dict
+                        else:
+                            img_metadata["scan_exif"] = None
 
-                    img_metadata["scan_info"] = scan_info
+                        # Extract other scan image info
+                        scan_info = {}
+                        for key, value in scan_img.info.items():
+                            if (
+                                key != "exif"
+                                and key != "icc_profile"
+                                and isinstance(
+                                    value, (str, int, float, bool, tuple, list)
+                                )
+                            ):
+                                scan_info[key] = value
+
+                        img_metadata["scan_info"] = scan_info
 
                 return img_metadata
 
