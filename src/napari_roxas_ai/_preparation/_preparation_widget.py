@@ -45,10 +45,7 @@ class Worker(QObject):
         default_scale: float = 2.2675,
         default_angle: float = 0.0,
         same_directory: bool = False,
-        jpeg_quality: int = 95,
-        jpeg_optimize: bool = True,
-        jpeg_progressive: bool = True,
-        scan_file_extension: str = ".scan.jpg",
+        scan_file_prefix: str = ".scan",
         metadata_file_extension: str = ".metadata.json",
     ):
         super().__init__()
@@ -66,10 +63,7 @@ class Worker(QObject):
         self.default_scale = default_scale
         self.default_angle = default_angle
         self.same_directory = same_directory
-        self.jpeg_quality = jpeg_quality
-        self.jpeg_optimize = jpeg_optimize
-        self.jpeg_progressive = jpeg_progressive
-        self.scan_file_extension = scan_file_extension
+        self.scan_file_prefix = scan_file_prefix
         self.metadata_file_extension = metadata_file_extension
 
     def run(self):
@@ -121,7 +115,8 @@ class Worker(QObject):
 
         # Get directory and filename
         dir_path = os.path.dirname(rel_path)
-        base_name = os.path.splitext(os.path.basename(rel_path))[0]
+        file_name = os.path.basename(rel_path)
+        base_name, file_ext = os.path.splitext(file_name)
 
         # Create target directory structure
         target_dir = os.path.join(self.target_directory, dir_path)
@@ -129,14 +124,14 @@ class Worker(QObject):
 
         # Create new file paths using settings-defined extensions
         new_image_path = os.path.join(
-            target_dir, f"{base_name}{self.scan_file_extension}"
+            target_dir, f"{base_name}{self.scan_file_prefix}{file_ext}"
         )
         metadata_path = os.path.join(
             target_dir, f"{base_name}{self.metadata_file_extension}"
         )
 
-        # Copy and convert the image
-        img_metadata = self._copy_and_convert_image(file_path, new_image_path)
+        # Copy the image without conversion
+        img_metadata = self._copy_image(file_path, new_image_path)
 
         # If source and target are the same, remove the original file if different
         if self.same_directory and file_path != new_image_path:
@@ -184,6 +179,7 @@ class Worker(QObject):
         rel_path = file_path[len(self.source_directory) + 1 :]
         dir_path = os.path.dirname(rel_path)
         base_name = metadata["sample_name"]
+        _, file_ext = os.path.splitext(os.path.basename(rel_path))
 
         # Create target path for metadata file using settings-defined extension
         target_dir = os.path.join(self.target_directory, dir_path)
@@ -193,11 +189,11 @@ class Worker(QObject):
 
         # Create new image path to extract metadata from
         new_image_path = os.path.join(
-            target_dir, f"{base_name}{self.scan_file_extension}"
+            target_dir, f"{base_name}{self.scan_file_prefix}{file_ext}"
         )
 
-        # Extract image metadata (copy/convert if not already done)
-        img_metadata = self._copy_and_convert_image(file_path, new_image_path)
+        # Extract image metadata (copy if not already done)
+        img_metadata = self._copy_image(file_path, new_image_path)
 
         # Include image metadata in the user-provided metadata
         if img_metadata:
@@ -234,41 +230,34 @@ class Worker(QObject):
         self.should_stop = True
         self.abort_signal.emit()
 
-    def _copy_and_convert_image(self, source_path: str, target_path: str):
+    def _copy_image(self, source_path: str, target_path: str):
         """
-        Copy image file and ensure it's a jpg format with preserved metadata.
+        Copy image file without conversion, maintaining original format.
         Returns a dictionary with image metadata to be included in the JSON file.
         """
-        # Check if source file is already a JPEG
-        is_jpeg = source_path.lower().endswith((".jpg", ".jpeg"))
-
         try:
-            # Extract metadata from the original image first
+            # Extract metadata from the image
             with Image.open(source_path) as img:
-                # Store image information for metadata - using "original_" prefix
+                # Store scan image information for metadata
                 img_metadata = {
-                    "original_format": img.format,
-                    "original_size": [img.width, img.height],
-                    "original_mode": img.mode,
+                    "scan_format": img.format,
+                    "scan_size": [img.width, img.height],
+                    "scan_mode": img.mode,
                 }
 
                 # Extract and preserve EXIF data if available
-                exif_data = None
-                image_info = {}
-
-                # Try to extract EXIF data
                 if hasattr(img, "_getexif") and img._getexif() is not None:
                     exif_dict = {
                         ExifTags.TAGS.get(tag_id, tag_id): value
                         for tag_id, value in img._getexif().items()
                         if tag_id in ExifTags.TAGS
                     }
-                    img_metadata["original_exif"] = exif_dict
-                    exif_data = img.info.get("exif")
+                    img_metadata["scan_exif"] = exif_dict
                 else:
-                    img_metadata["original_exif"] = None
+                    img_metadata["scan_exif"] = None
 
                 # Extract other image info
+                scan_info = {}
                 for key, value in img.info.items():
                     if (
                         key != "exif"
@@ -277,114 +266,12 @@ class Worker(QObject):
                             value, (str, int, float, bool, tuple, list)
                         )
                     ):
-                        image_info[key] = value
+                        scan_info[key] = value
 
-                img_metadata["original_info"] = image_info
+                img_metadata["scan_info"] = scan_info
 
-                # If it's already a JPEG, just copy the file to preserve quality
-                if is_jpeg:
-                    # Use shutil.copy2 which preserves file metadata
-                    shutil.copy2(source_path, target_path)
-
-                    # Now set the scan metadata to be the same as original for JPEGs
-                    img_metadata["scan_format"] = img.format
-                    img_metadata["scan_size"] = [img.width, img.height]
-                    img_metadata["scan_mode"] = img.mode
-                    img_metadata["scan_exif"] = img_metadata["original_exif"]
-
-                    # Extract scan info (should be the same as original for JPEGs)
-                    with Image.open(target_path) as scan_img:
-                        scan_info = {}
-                        for key, value in scan_img.info.items():
-                            if (
-                                key != "exif"
-                                and key != "icc_profile"
-                                and isinstance(
-                                    value, (str, int, float, bool, tuple, list)
-                                )
-                            ):
-                                scan_info[key] = value
-
-                        img_metadata["scan_info"] = scan_info
-
-                # For non-JPEG files, proceed with conversion
-                else:
-                    # Convert to RGB mode (needed for JPG which doesn't support alpha channels)
-                    if img.mode in ("RGBA", "LA") or (
-                        img.mode == "P" and "transparency" in img.info
-                    ):
-                        # Image has transparency - convert to RGB with white background
-                        background = Image.new(
-                            "RGB", img.size, (255, 255, 255)
-                        )
-                        background.paste(
-                            img,
-                            mask=(
-                                img.split()[3] if img.mode == "RGBA" else None
-                            ),
-                        )
-                        rgb_img = background
-                    else:
-                        # Image is already RGB or can be converted without handling transparency
-                        rgb_img = img.convert("RGB")
-
-                    # Set up parameters for saving using settings
-                    save_kwargs = {
-                        "quality": self.jpeg_quality,
-                        "optimize": self.jpeg_optimize,
-                        "progressive": self.jpeg_progressive,
-                    }
-
-                    # Preserve EXIF data if available
-                    if exif_data is not None:
-                        try:
-                            save_kwargs["exif"] = exif_data
-                        except (KeyError, ValueError, TypeError) as exif_error:
-                            print(
-                                f"Warning: Could not preserve EXIF data: {exif_error}"
-                            )
-
-                    # Save with high quality settings
-                    rgb_img.save(target_path, "JPEG", **save_kwargs)
-
-                    # Now extract metadata from the saved scan file
-                    with Image.open(target_path) as scan_img:
-                        # Add scan metadata fields
-                        img_metadata.update(
-                            {
-                                "scan_format": "JPEG",  # Always JPEG for the scan file
-                                "scan_size": [scan_img.width, scan_img.height],
-                                "scan_mode": scan_img.mode,
-                            }
-                        )
-
-                        # Extract scan EXIF data if available
-                        if (
-                            hasattr(scan_img, "_getexif")
-                            and scan_img._getexif() is not None
-                        ):
-                            scan_exif_dict = {
-                                ExifTags.TAGS.get(tag_id, tag_id): value
-                                for tag_id, value in scan_img._getexif().items()
-                                if tag_id in ExifTags.TAGS
-                            }
-                            img_metadata["scan_exif"] = scan_exif_dict
-                        else:
-                            img_metadata["scan_exif"] = None
-
-                        # Extract other scan image info
-                        scan_info = {}
-                        for key, value in scan_img.info.items():
-                            if (
-                                key != "exif"
-                                and key != "icc_profile"
-                                and isinstance(
-                                    value, (str, int, float, bool, tuple, list)
-                                )
-                            ):
-                                scan_info[key] = value
-
-                        img_metadata["scan_info"] = scan_info
+                # Copy the file to the target location
+                shutil.copy2(source_path, target_path)
 
                 return img_metadata
 
@@ -438,18 +325,14 @@ class PreparationWidget(Container):
             "default_angle", 0.0  # Default value if not found in settings
         )
 
-        # Get JPEG parameters from settings
-        self.jpeg_quality = self.settings_manager.get("jpeg_quality", 95)
-        self.jpeg_optimize = self.settings_manager.get("jpeg_optimize", True)
-        self.jpeg_progressive = self.settings_manager.get(
-            "jpeg_progressive", True
-        )
-
         # Get file extension settings
-        scan_file_extension_parts = self.settings_manager.get(
+        scan_file_extension = self.settings_manager.get(
             "scan_file_extension", [".scan", ".jpg"]
         )
-        self.scan_file_extension = "".join(scan_file_extension_parts)
+        # Just take the first element (prefix) from the scan_file_extension
+        self.scan_file_prefix = (
+            scan_file_extension[0] if scan_file_extension else ".scan"
+        )
 
         metadata_file_extension_parts = self.settings_manager.get(
             "metadata_file_extension", [".metadata", ".json"]
@@ -560,7 +443,7 @@ class PreparationWidget(Container):
             confirm.setWindowTitle("Warning: Source Modification")
             confirm.setText("The source and project directories are the same.")
             confirm.setInformativeText(
-                "Original image files will be replaced with .scan.jpg files. This operation cannot be undone."
+                f"Original image files will be replaced with {self.scan_file_prefix}* files. This operation cannot be undone."
             )
             confirm.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
             confirm.setDefaultButton(QMessageBox.Cancel)
@@ -662,10 +545,7 @@ class PreparationWidget(Container):
             self.default_scale,
             self.default_angle,
             self.same_directory,
-            self.jpeg_quality,
-            self.jpeg_optimize,
-            self.jpeg_progressive,
-            self.scan_file_extension,
+            self.scan_file_prefix,
             self.metadata_file_extension,
         )
         self.worker.moveToThread(self.worker_thread)
