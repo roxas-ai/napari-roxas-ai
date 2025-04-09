@@ -18,8 +18,20 @@
     "jpeg_quality": 95,
     "jpeg_optimize": true,
     "jpeg_progressive": true,
-    "scan_file_extension": ".scan.jpg",
-    "metadata_file_extension": ".metadata.json",
-    "cells_file_extension": ".cells.png",
-    "rings_file_extension": ".rings.tif"
+    "scan_file_extension": [
+        ".scan",
+        ".jpg"
+    ],
+    "metadata_file_extension": [
+        ".metadata",
+        ".json"
+    ],
+    "cells_file_extension": [
+        ".cells",
+        ".png"
+    ],
+    "rings_file_extension": [
+        ".rings",
+        ".tif"
+    ]
 }

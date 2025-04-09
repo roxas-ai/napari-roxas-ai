@@ -445,12 +445,15 @@ class PreparationWidget(Container):
         )
 
         # Get file extension settings
-        self.scan_file_extension = self.settings_manager.get(
-            "scan_file_extension", ".scan.jpg"
+        scan_file_extension_parts = self.settings_manager.get(
+            "scan_file_extension", [".scan", ".jpg"]
         )
-        self.metadata_file_extension = self.settings_manager.get(
-            "metadata_file_extension", ".metadata.json"
+        self.scan_file_extension = "".join(scan_file_extension_parts)
+
+        metadata_file_extension_parts = self.settings_manager.get(
+            "metadata_file_extension", [".metadata", ".json"]
         )
+        self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
         # Source directory selector
         self._source_dialog_button = PushButton(text="Source Directory: None")

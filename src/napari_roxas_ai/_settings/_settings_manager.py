@@ -150,10 +150,22 @@ class SettingsManager:
             "jpeg_optimize": True,  # Optimize JPEG files
             "jpeg_progressive": True,  # Use progressive JPEG format
             # File extension settings
-            "scan_file_extension": ".scan.jpg",  # Extension for scan files
-            "metadata_file_extension": ".metadata.json",  # Extension for metadata files
-            "cells_file_extension": ".cells.png",  # Extension for cells files
-            "rings_file_extension": ".rings.tif",  # Extension for rings files
+            "scan_file_extension": [
+                ".scan",
+                ".jpg",
+            ],  # Parts of scan file extension
+            "metadata_file_extension": [
+                ".metadata",
+                ".json",
+            ],  # Parts of metadata file extension
+            "cells_file_extension": [
+                ".cells",
+                ".png",
+            ],  # Parts of cells file extension
+            "rings_file_extension": [
+                ".rings",
+                ".tif",
+            ],  # Parts of rings file extension
         }
         self.save_settings()
 

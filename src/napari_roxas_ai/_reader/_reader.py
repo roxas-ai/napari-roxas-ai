@@ -69,9 +69,14 @@ def is_supported_file(path: str) -> bool:
 
     # Get file extensions from settings
     settings = SettingsManager()
-    cells_ext = settings.get("cells_file_extension", ".cells.png")
-    rings_ext = settings.get("rings_file_extension", ".rings.tif")
-    scan_ext = settings.get("scan_file_extension", ".scan.jpg")
+    # Get file extension settings and join the parts
+    scan_ext = "".join(settings.get("scan_file_extension", [".scan", ".jpg"]))
+    cells_ext = "".join(
+        settings.get("cells_file_extension", [".cells", ".png"])
+    )
+    rings_ext = "".join(
+        settings.get("rings_file_extension", [".rings", ".tif"])
+    )
 
     # Check for all supported file types with a single endswith call
     return path_lower.endswith((cells_ext, rings_ext, scan_ext))
@@ -93,7 +98,9 @@ def get_metadata_from_json(file_path: str) -> Optional[Dict]:
     """
     # Get file extensions from settings
     settings = SettingsManager()
-    metadata_ext = settings.get("metadata_file_extension", ".metadata.json")
+    metadata_ext = "".join(
+        settings.get("metadata_file_extension", [".rings", ".tif"])
+    )
 
     # Construct the path to the metadata file
     base_name = os.path.splitext(file_path)[0]
@@ -233,9 +240,14 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
 
     # Get file extensions from settings
     settings = SettingsManager()
-    cells_ext = settings.get("cells_file_extension", ".cells.png")
-    rings_ext = settings.get("rings_file_extension", ".rings.tif")
-    scan_ext = settings.get("scan_file_extension", ".scan.jpg")
+    # Get file extension settings and join the parts
+    scan_ext = "".join(settings.get("scan_file_extension", [".scan", ".jpg"]))
+    cells_ext = "".join(
+        settings.get("cells_file_extension", [".cells", ".png"])
+    )
+    rings_ext = "".join(
+        settings.get("rings_file_extension", [".rings", ".tif"])
+    )
 
     # Process each path
     for path in paths:
