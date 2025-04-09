@@ -8,6 +8,9 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+# Disable DecompressionBomb warnings for large images
+Image.MAX_IMAGE_PIXELS = None
+
 
 def napari_get_reader(path: Union[str, List[str]]) -> Optional[Callable]:
     """

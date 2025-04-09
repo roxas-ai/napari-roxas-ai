@@ -22,6 +22,9 @@ from ._cells_model import CellsSegmentationModel
 if TYPE_CHECKING:
     import napari
 
+# Disable DecompressionBomb warnings for large images
+Image.MAX_IMAGE_PIXELS = None
+
 # Settings
 module_path = os.path.abspath(__file__).rsplit("/", 1)[0]
 
