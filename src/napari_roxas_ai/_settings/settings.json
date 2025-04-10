@@ -39,5 +39,14 @@
         ".cells",
         ".rings",
         ".metadata"
+    ],
+    "image_file_extensions": [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".tif",
+        ".tiff",
+        ".bmp",
+        ".jp2"
     ]
 }

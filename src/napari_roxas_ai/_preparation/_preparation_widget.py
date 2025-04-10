@@ -19,9 +19,6 @@ from ._metadata_dialog import MetadataDialog
 if TYPE_CHECKING:
     import napari
 
-# Common image extensions
-IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"]
-
 Image.MAX_IMAGE_PIXELS = (
     None  # disables the decompressionbomb warning for large images
 )
@@ -48,6 +45,7 @@ class Worker(QObject):
         scan_file_prefix: str = ".scan",
         metadata_file_extension: str = ".metadata.json",
         roxas_file_extensions: List[str] = None,
+        image_file_extensions: List[str] = None,
     ):
         super().__init__()
         self.source_directory = source_directory
@@ -67,6 +65,7 @@ class Worker(QObject):
         self.scan_file_prefix = scan_file_prefix
         self.metadata_file_extension = metadata_file_extension
         self.roxas_file_extensions = roxas_file_extensions or []
+        self.image_file_extensions = image_file_extensions or []
         self._current_img_metadata = (
             None  # Add a temporary cache for image metadata
         )
@@ -75,7 +74,8 @@ class Worker(QObject):
         """Process all image files from source to target directory."""
         # Get all image files in source directory
         self.all_files = []
-        for ext in IMAGE_EXTENSIONS:
+
+        for ext in self.image_file_extensions:
             self.all_files.extend(
                 glob.glob(f"{self.source_directory}/**/*{ext}", recursive=True)
             )
@@ -370,6 +370,20 @@ class PreparationWidget(Container):
             "roxas_file_extensions", []
         )
 
+        # Get supported image file extensions
+        self.image_file_extensions = self.settings_manager.get(
+            "image_file_extensions",
+            [
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".tif",
+                ".tiff",
+                ".bmp",
+                ".jp2",
+            ],
+        )
+
         # Source directory selector
         self._source_dialog_button = PushButton(text="Source Directory: None")
         self._source_dialog_button.changed.connect(self._open_source_dialog)
@@ -579,6 +593,7 @@ class PreparationWidget(Container):
             self.scan_file_prefix,
             self.metadata_file_extension,
             self.roxas_file_extensions,
+            self.image_file_extensions,
         )
         self.worker.moveToThread(self.worker_thread)
 

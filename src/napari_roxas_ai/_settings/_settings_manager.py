@@ -172,6 +172,15 @@ class SettingsManager:
                 ".rings",
                 ".metadata",
             ],  # roxas file extensions
+            "image_file_extensions": [
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".tif",
+                ".tiff",
+                ".bmp",
+                ".jp2",
+            ],  # Supported image file extensions
         }
         self.save_settings()
 
