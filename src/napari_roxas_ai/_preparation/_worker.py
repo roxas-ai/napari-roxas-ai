@@ -311,6 +311,9 @@ class Worker(QObject):
         Returns:
             Dict: Complete metadata dictionary
         """
+        # Extract metadata file prefix (without the file extension)
+        metadata_file_prefix = self.metadata_file_extension.split(".json")[0]
+
         metadata = {
             # Start with sample_name to maintain field order
             "sample_name": base_name,
@@ -323,6 +326,8 @@ class Worker(QObject):
             "sample_angle": default_data.get(
                 "sample_angle", self.default_angle
             ),
+            # Add the sample_files field with the prefixes including dots
+            "sample_files": [self.scan_file_prefix, metadata_file_prefix],
         }
 
         # Include image metadata if available

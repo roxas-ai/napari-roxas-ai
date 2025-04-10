@@ -12,6 +12,8 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
+from .._settings._settings_manager import SettingsManager
+
 
 class MetadataDialog(QDialog):
     """Dialog for entering sample metadata."""
@@ -119,13 +121,36 @@ class MetadataDialog(QDialog):
 
     def get_metadata(self) -> Dict:
         """Get the metadata values from the dialog."""
-        return {
+        metadata = {
             "sample_name": self.sample_name,
             "sample_type": self.sample_type.currentText(),
             "sample_geometry": self.sample_geometry.currentText(),
             "sample_scale": self.sample_scale.value(),
             "sample_angle": self.sample_angle.value(),
         }
+
+        # Add the sample_files field using the same prefixes as the preparation widget
+        # Get the settings for file prefixes
+        settings_manager = SettingsManager()
+        scan_file_extension = settings_manager.get(
+            "scan_file_extension", [".scan", ".jpg"]
+        )
+        scan_prefix = (
+            scan_file_extension[0] if scan_file_extension else ".scan"
+        )
+
+        metadata_file_extension_parts = settings_manager.get(
+            "metadata_file_extension", [".metadata", ".json"]
+        )
+        metadata_prefix = (
+            metadata_file_extension_parts[0]
+            if metadata_file_extension_parts
+            else ".metadata"
+        )
+
+        metadata["sample_files"] = [scan_prefix, metadata_prefix]
+
+        return metadata
 
     def apply_to_all(self) -> bool:
         """Check if the user wants to apply these settings to all files."""

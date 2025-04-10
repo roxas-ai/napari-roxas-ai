@@ -130,6 +130,10 @@ class TestPreparationWorker:
                 "sample_geometry": "linear",
                 "sample_scale": 2.2675,
                 "sample_angle": 0,
+                "sample_files": [
+                    ".scan",  # Keeping the dot
+                    ".metadata",  # Keeping the dot
+                ],
             }
             if img_metadata:
                 metadata.update(img_metadata)
@@ -186,6 +190,7 @@ class TestPreparationWorker:
                 "sample_geometry": "linear",
                 "sample_scale": 2.2675,
                 "sample_angle": 0,
+                "sample_files": [".scan", ".metadata"],
                 "scan_format": "JPEG",
                 "scan_size": [100, 100],
             }
@@ -321,6 +326,10 @@ class TestPreparationWorker:
                 "sample_geometry": worker.default_metadata["sample_geometry"],
                 "sample_scale": worker.default_metadata["sample_scale"],
                 "sample_angle": worker.default_metadata["sample_angle"],
+                "sample_files": [
+                    ".scan",  # Keeping the dot
+                    ".metadata",  # Keeping the dot
+                ],
             }
 
             # Save metadata
@@ -374,6 +383,10 @@ class TestPreparationWorker:
             "sample_geometry": "linear",
             "sample_scale": 2.2675,
             "sample_angle": 0,
+            "sample_files": [
+                ".scan",  # Keeping the dot
+                ".metadata",  # Keeping the dot
+            ],
         }
 
         # Save metadata

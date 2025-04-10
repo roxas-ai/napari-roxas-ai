@@ -441,6 +441,9 @@ class PreparationWidget(Container):
         Args:
             filename: Base filename (without extension) for the current file
         """
+        # Extract metadata file prefix (without the file extension)
+        metadata_file_prefix = self.metadata_file_extension.split(".json")[0]
+
         # Create default metadata with sample name and defaults
         default_metadata = {
             "sample_name": filename,
@@ -456,6 +459,7 @@ class PreparationWidget(Container):
             ),
             "sample_scale": self.default_scale,
             "sample_angle": self.default_angle,
+            "sample_files": [self.scan_file_prefix, metadata_file_prefix],
         }
 
         # Show dialog to get metadata
