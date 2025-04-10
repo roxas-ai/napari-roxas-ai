@@ -5,9 +5,11 @@ import shutil
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from magicgui.widgets import (
+    CheckBox,
     Container,
     ProgressBar,
     PushButton,
+    Select,
 )
 from PIL import ExifTags, Image
 from qtpy.QtCore import QObject, QThread, Signal
@@ -128,6 +130,7 @@ class Worker(QObject):
         metadata_file_extension: str = ".metadata.json",
         roxas_file_extensions: List[str] = None,
         image_file_extensions: List[str] = None,
+        selected_files: Optional[List[str]] = None,
     ):
         """Initialize the worker with necessary parameters."""
         super().__init__()
@@ -152,6 +155,11 @@ class Worker(QObject):
         self.roxas_file_extensions = roxas_file_extensions or []
         self.image_file_extensions = image_file_extensions or []
 
+        # File selection
+        self.selected_files = (
+            selected_files  # Paths of specific files to process
+        )
+
         # Processing state
         self.should_stop = False
         self.current_file_index = 0
@@ -169,24 +177,36 @@ class Worker(QObject):
         This is the main entry point for the worker thread.
         """
         # Find all image files in source directory
-        self.all_files = []
+        all_source_files = []
 
         # Gather all files with supported image extensions
         for ext in self.image_file_extensions:
-            self.all_files.extend(
+            all_source_files.extend(
                 glob.glob(f"{self.source_directory}/**/*{ext}", recursive=True)
             )
-            self.all_files.extend(
+            all_source_files.extend(
                 glob.glob(
                     f"{self.source_directory}/**/*{ext.upper()}",
                     recursive=True,
                 )
             )
 
+        # Filter based on selected files if provided
+        if self.selected_files and len(self.selected_files) > 0:
+            # Create a set of absolute paths for fast lookup
+            selected_paths = {os.path.abspath(f) for f in self.selected_files}
+            # Only include files that are in the selected paths
+            filtered_files = [
+                f
+                for f in all_source_files
+                if os.path.abspath(f) in selected_paths
+            ]
+            all_source_files = filtered_files
+
         # Filter out files that already have ROXAS extensions
         if self.roxas_file_extensions:
             filtered_files = []
-            for file_path in self.all_files:
+            for file_path in all_source_files:
                 file_name = os.path.basename(file_path)
                 skip_file = False
 
@@ -201,6 +221,8 @@ class Worker(QObject):
                     filtered_files.append(file_path)
 
             self.all_files = filtered_files
+        else:
+            self.all_files = all_source_files
 
         # Sort files for consistent processing
         self.all_files = sorted(self.all_files)
@@ -556,6 +578,8 @@ class PreparationWidget(Container):
         self.worker_thread = None
         self.metadata_dialog = None
         self.same_directory = False
+        self.source_files = []  # List of files in the source directory
+        self.selected_files = []  # List of files selected by the user
 
     def _load_settings(self):
         """Load settings from the settings manager."""
@@ -615,6 +639,27 @@ class PreparationWidget(Container):
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
 
+        # File selection controls
+        self._handpick_files_checkbox = CheckBox(
+            value=False, label="Handpick files from source directory"
+        )
+        self._handpick_files_checkbox.changed.connect(
+            self._toggle_file_selection
+        )
+
+        # File selection container (initially hidden)
+        self._file_selection_container = Container(
+            widgets=[], labels=False, layout="vertical", visible=False
+        )
+
+        # Reverse selection button (initially hidden)
+        self._reverse_selection_button = PushButton(
+            text="Reverse Selection", visible=False
+        )
+        self._reverse_selection_button.changed.connect(
+            self._reverse_file_selection
+        )
+
         # Progress bar (initially hidden)
         self._progress_bar = ProgressBar(
             value=0, min=0, max=100, visible=False, label="Processing Progress"
@@ -633,6 +678,9 @@ class PreparationWidget(Container):
             [
                 self._source_dialog_button,
                 self._project_dialog_button,
+                self._handpick_files_checkbox,
+                self._file_selection_container,
+                self._reverse_selection_button,
                 self._start_button,
                 self._cancel_button,
                 self._progress_bar,
@@ -640,7 +688,7 @@ class PreparationWidget(Container):
         )
 
     def _open_source_dialog(self):
-        """Open file dialog to select source directory."""
+        """Open file dialog to select source directory and refresh file list."""
         self.source_directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Source Directory with Images",
@@ -656,6 +704,150 @@ class PreparationWidget(Container):
                 self._project_dialog_button.text = (
                     f"Project Directory: {self.project_directory}"
                 )
+
+            # Reset file selection when source directory changes
+            self._refresh_file_list()
+
+    def _refresh_file_list(self):
+        """Refresh the list of files from the source directory."""
+        # Reset selected files list
+        self.selected_files = []
+
+        # Get all image files in source directory
+        self.source_files = []
+
+        if self.source_directory:
+            # Gather all files with supported image extensions
+            for ext in self.image_file_extensions:
+                self.source_files.extend(
+                    glob.glob(
+                        f"{self.source_directory}/**/*{ext}", recursive=True
+                    )
+                )
+                self.source_files.extend(
+                    glob.glob(
+                        f"{self.source_directory}/**/*{ext.upper()}",
+                        recursive=True,
+                    )
+                )
+
+            # Filter out files that already have ROXAS extensions
+            if self.roxas_file_extensions:
+                filtered_files = []
+                for file_path in self.source_files:
+                    file_name = os.path.basename(file_path)
+                    skip_file = False
+
+                    # Check if the file name contains any ROXAS extension
+                    for ext in self.roxas_file_extensions:
+                        if ext in file_name:
+                            skip_file = True
+                            break
+
+                    if not skip_file:
+                        filtered_files.append(file_path)
+
+                self.source_files = filtered_files
+
+        # Sort files for consistent display
+        self.source_files = sorted(self.source_files)
+
+        # Update the file selection widget if it's visible
+        if self._handpick_files_checkbox.value:
+            self._update_file_selection_widget()
+
+    def _update_file_selection_widget(self):
+        """Update the file selection widget with current source files."""
+        # Clear the container
+        self._file_selection_container.clear()
+
+        # Create a new file selection widget
+        if self.source_files:
+            # Convert absolute paths to display names (relative to source directory)
+            display_names = []
+            self._path_mapping = {}  # Map display names to absolute paths
+
+            for file_path in self.source_files:
+                # Use relative path if possible, otherwise use base name
+                try:
+                    rel_path = os.path.relpath(
+                        file_path, self.source_directory
+                    )
+                    display_names.append(rel_path)
+                    self._path_mapping[rel_path] = file_path
+                except ValueError:
+                    base_name = os.path.basename(file_path)
+                    display_names.append(base_name)
+                    self._path_mapping[base_name] = file_path
+
+            # Create a proper select widget with multiple selection
+            self._file_select_widget = Select(
+                choices=display_names,
+                allow_multiple=True,
+                label="Select Files to Process",
+            )
+
+            # Add the widget to the container
+            self._file_selection_container.append(self._file_select_widget)
+
+            # Make container and reverse button visible
+            self._file_selection_container.visible = True
+            self._reverse_selection_button.visible = True
+        else:
+            # Hide container and reverse button if no files
+            self._file_selection_container.visible = False
+            self._reverse_selection_button.visible = False
+
+    def _toggle_file_selection(self):
+        """Toggle the file selection interface."""
+        if self._handpick_files_checkbox.value:
+            # Turn on file selection mode
+            self._update_file_selection_widget()
+        else:
+            # Turn off file selection mode
+            self._file_selection_container.visible = False
+            self._reverse_selection_button.visible = False
+            # Reset file selection
+            self.selected_files = []
+
+    def _reverse_file_selection(self):
+        """Reverse the current file selection."""
+        if hasattr(self, "_file_select_widget"):
+            # Get currently selected files
+            current_selection = set(self._file_select_widget.value)
+
+            # Create a new selection with all files except the current selection
+            all_display_names = set(self._file_select_widget.choices)
+            new_selection = list(all_display_names - current_selection)
+
+            # Update the widget
+            self._file_select_widget.value = new_selection
+
+    def _get_selected_file_paths(self) -> List[str]:
+        """
+        Get the absolute paths of selected files.
+
+        If no files are specifically selected (handpick mode off),
+        returns an empty list, which means "use all files".
+        """
+        if not self._handpick_files_checkbox.value:
+            # If handpick mode is off, return empty list to indicate "all files"
+            return []
+
+        # If handpick mode is on but nothing is selected, return empty list
+        if (
+            not hasattr(self, "_file_select_widget")
+            or not self._file_select_widget.value
+        ):
+            return []
+
+        # Convert selected display names back to absolute paths using our mapping
+        selected_paths = []
+        for display_name in self._file_select_widget.value:
+            if display_name in self._path_mapping:
+                selected_paths.append(self._path_mapping[display_name])
+
+        return selected_paths
 
     def _open_project_dialog(self):
         """Open file dialog to select project directory."""
@@ -683,6 +875,9 @@ class PreparationWidget(Container):
         if self.same_directory and not self._confirm_same_directory():
             return
 
+        # Get selected files if in handpick mode
+        selected_files = self._get_selected_file_paths()
+
         # Update UI for processing
         self._update_ui_for_processing(True)
 
@@ -692,6 +887,7 @@ class PreparationWidget(Container):
             self.project_directory,
             None,  # No default metadata initially
             False,  # Not applying to all initially
+            selected_files,
         )
 
     def _validate_inputs(self) -> bool:
@@ -705,6 +901,17 @@ class PreparationWidget(Container):
         if not self.project_directory:
             QMessageBox.warning(
                 None, "Warning", "Please select a project directory."
+            )
+            return False
+
+        # If handpick mode is on but no files are selected, show a warning
+        if (
+            self._handpick_files_checkbox.value
+            and hasattr(self, "_file_select_widget")
+            and not self._file_select_widget.value
+        ):
+            QMessageBox.warning(
+                None, "Warning", "No files selected for processing."
             )
             return False
 
@@ -827,6 +1034,7 @@ class PreparationWidget(Container):
         target_directory: str,
         default_metadata: Optional[Dict] = None,
         apply_to_all: bool = False,
+        selected_files: Optional[List[str]] = None,
     ):
         """
         Run the processing in a separate thread.
@@ -836,6 +1044,7 @@ class PreparationWidget(Container):
             target_directory: Directory to save processed files
             default_metadata: Optional default metadata to use
             apply_to_all: Whether to apply default metadata to all files
+            selected_files: Optional list of specific files to process
         """
         # Create thread and worker
         self.worker_thread = QThread()
@@ -852,6 +1061,7 @@ class PreparationWidget(Container):
             self.metadata_file_extension,
             self.roxas_file_extensions,
             self.image_file_extensions,
+            selected_files,
         )
         self.worker.moveToThread(self.worker_thread)
 
