@@ -2,7 +2,6 @@ import json
 import os
 import shutil
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,13 +20,6 @@ def create_test_image(path, size=(100, 100), color=(73, 109, 137)):
     img = Image.new("RGB", size, color=color)
     img.save(path)
     return path
-
-
-# Sample data path
-@pytest.fixture
-def sample_data_path():
-    """Get the path to the sample data directory."""
-    return Path(__file__).parent.parent / "_sample_data"
 
 
 # Fixture for temporary directories
