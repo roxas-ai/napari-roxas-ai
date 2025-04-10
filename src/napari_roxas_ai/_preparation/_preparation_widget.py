@@ -88,7 +88,7 @@ class PreparationWidget(Container):
         scan_file_extension = self.settings_manager.get(
             "scan_file_extension", [".scan", ".jpg"]
         )
-        self.scan_file_prefix = (
+        self.scan_content_extension = (  # Changed from scan_file_prefix
             scan_file_extension[0] if scan_file_extension else ".scan"
         )
 
@@ -405,7 +405,7 @@ class PreparationWidget(Container):
         confirm.setWindowTitle("Warning: Source Modification")
         confirm.setText("The source and project directories are the same.")
         confirm.setInformativeText(
-            f"Original image files will be replaced with {self.scan_file_prefix}* files. "
+            f"Original image files will be replaced with {self.scan_content_extension}* files. "  # Changed from scan_file_prefix
             "This operation cannot be undone."
         )
         confirm.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
@@ -441,8 +441,10 @@ class PreparationWidget(Container):
         Args:
             filename: Base filename (without extension) for the current file
         """
-        # Extract metadata file prefix (without the file extension)
-        metadata_file_prefix = self.metadata_file_extension.split(".json")[0]
+        # Extract metadata content extension (without the file extension)
+        metadata_content_extension = self.metadata_file_extension.split(
+            ".json"
+        )[0]
 
         # Create default metadata with sample name and defaults
         default_metadata = {
@@ -459,7 +461,10 @@ class PreparationWidget(Container):
             ),
             "sample_scale": self.default_scale,
             "sample_angle": self.default_angle,
-            "sample_files": [self.scan_file_prefix, metadata_file_prefix],
+            "sample_files": [
+                self.scan_content_extension,  # Changed from scan_file_prefix
+                metadata_content_extension,
+            ],
         }
 
         # Show dialog to get metadata
@@ -542,7 +547,7 @@ class PreparationWidget(Container):
             self.default_scale,
             self.default_angle,
             self.same_directory,
-            self.scan_file_prefix,
+            self.scan_content_extension,  # Changed from scan_file_prefix
             self.metadata_file_extension,
             self.roxas_file_extensions,
             self.image_file_extensions,

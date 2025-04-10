@@ -35,7 +35,7 @@ class Worker(QObject):
         default_scale: float = 2.2675,
         default_angle: float = 0.0,
         same_directory: bool = False,
-        scan_file_prefix: str = ".scan",
+        scan_content_extension: str = ".scan",  # Changed from scan_file_prefix
         metadata_file_extension: str = ".metadata.json",
         roxas_file_extensions: List[str] = None,
         image_file_extensions: List[str] = None,
@@ -59,7 +59,9 @@ class Worker(QObject):
 
         # File handling settings
         self.same_directory = same_directory
-        self.scan_file_prefix = scan_file_prefix
+        self.scan_content_extension = (
+            scan_content_extension  # Changed from scan_file_prefix
+        )
         self.metadata_file_extension = metadata_file_extension
         self.roxas_file_extensions = roxas_file_extensions or []
         self.image_file_extensions = image_file_extensions or []
@@ -180,7 +182,8 @@ class Worker(QObject):
 
         # Define output paths
         new_image_path = os.path.join(
-            target_dir, f"{base_name}{self.scan_file_prefix}{file_ext}"
+            target_dir,
+            f"{base_name}{self.scan_content_extension}{file_ext}",  # Changed from scan_file_prefix
         )
         metadata_path = os.path.join(
             target_dir, f"{base_name}{self.metadata_file_extension}"
@@ -280,7 +283,8 @@ class Worker(QObject):
         # Create paths
         target_dir = os.path.join(self.target_directory, dir_path)
         new_image_path = os.path.join(
-            target_dir, f"{base_name}{self.scan_file_prefix}{file_ext}"
+            target_dir,
+            f"{base_name}{self.scan_content_extension}{file_ext}",  # Changed from scan_file_prefix
         )
         metadata_path = os.path.join(
             target_dir, f"{base_name}{self.metadata_file_extension}"
@@ -311,8 +315,10 @@ class Worker(QObject):
         Returns:
             Dict: Complete metadata dictionary
         """
-        # Extract metadata file prefix (without the file extension)
-        metadata_file_prefix = self.metadata_file_extension.split(".json")[0]
+        # Extract metadata content extension (without the file extension)
+        metadata_content_extension = self.metadata_file_extension.split(
+            ".json"
+        )[0]
 
         metadata = {
             # Start with sample_name to maintain field order
@@ -326,8 +332,11 @@ class Worker(QObject):
             "sample_angle": default_data.get(
                 "sample_angle", self.default_angle
             ),
-            # Add the sample_files field with the prefixes including dots
-            "sample_files": [self.scan_file_prefix, metadata_file_prefix],
+            # Add the sample_files field with content extensions
+            "sample_files": [
+                self.scan_content_extension,  # Changed from scan_file_prefix
+                metadata_content_extension,
+            ],
         }
 
         # Include image metadata if available

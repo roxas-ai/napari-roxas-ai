@@ -90,7 +90,7 @@ class TestPreparationWorker:
         worker = Worker(
             source_directory=source_dir,
             target_directory=project_dir,
-            scan_file_prefix=".scan",
+            scan_content_extension=".scan",  # Changed from scan_file_prefix
             metadata_file_extension=".metadata.json",
             roxas_file_extensions=[],
             image_file_extensions=[".jpg", ".png", ".tif", ".tiff"],
@@ -114,7 +114,8 @@ class TestPreparationWorker:
 
             # Define output paths
             new_image_path = os.path.join(
-                target_dir, f"{base_name}{worker.scan_file_prefix}{file_ext}"
+                target_dir,
+                f"{base_name}{worker.scan_content_extension}{file_ext}",
             )
             metadata_path = os.path.join(
                 target_dir, f"{base_name}{worker.metadata_file_extension}"
@@ -131,8 +132,8 @@ class TestPreparationWorker:
                 "sample_scale": 2.2675,
                 "sample_angle": 0,
                 "sample_files": [
-                    ".scan",  # Keeping the dot
-                    ".metadata",  # Keeping the dot
+                    ".scan",  # Content extension for scan files
+                    ".metadata",  # Content extension for metadata files
                 ],
             }
             if img_metadata:
@@ -240,7 +241,7 @@ class TestPreparationWorker:
         worker = Worker(
             source_directory=source_dir,
             target_directory=project_dir,
-            scan_file_prefix=".scan",
+            scan_content_extension=".scan",  # Changed from scan_file_prefix
             metadata_file_extension=".metadata.json",
             roxas_file_extensions=[".scan"],
             image_file_extensions=[".jpg", ".png", ".tif", ".tiff"],
@@ -290,7 +291,7 @@ class TestPreparationWorker:
         worker = Worker(
             source_directory=source_dir,
             target_directory=project_dir,
-            scan_file_prefix=".scan",
+            scan_content_extension=".scan",  # Changed from scan_file_prefix
             metadata_file_extension=".metadata.json",
             image_file_extensions=[".jpg"],
         )
@@ -359,21 +360,13 @@ class TestPreparationWorker:
         file2 = create_test_image(os.path.join(source_dir, "select2.jpg"))
         file3 = create_test_image(os.path.join(source_dir, "select3.jpg"))
 
-        # Instead of relying on the worker's file selection mechanism,
-        # let's directly test file processing with selected files
-
-        # Create target paths
-        file1_basename = os.path.basename(file1)
-        file2_basename = os.path.basename(file2)
-        file3_basename = os.path.basename(file3)
-
-        file1_name = os.path.splitext(file1_basename)[0]
+        # Process just the first file manually (simulating selection)
+        file1_name = os.path.splitext(os.path.basename(file1))[0]
         processed_file1 = os.path.join(project_dir, f"{file1_name}.scan.jpg")
         metadata_file1 = os.path.join(
             project_dir, f"{file1_name}.metadata.json"
         )
 
-        # Process just the first file manually (simulating selection)
         shutil.copy2(file1, processed_file1)
 
         # Create simple metadata
@@ -403,8 +396,8 @@ class TestPreparationWorker:
 
         # Check that files 2 and 3 weren't processed (since they weren't selected)
         for _file_path, basename in [
-            (file2, file2_basename),
-            (file3, file3_basename),
+            (file2, os.path.basename(file2)),
+            (file3, os.path.basename(file3)),
         ]:
             name = os.path.splitext(basename)[0]
             processed_path = os.path.join(project_dir, f"{name}.scan.jpg")

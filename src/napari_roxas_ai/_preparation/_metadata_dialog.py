@@ -129,26 +129,29 @@ class MetadataDialog(QDialog):
             "sample_angle": self.sample_angle.value(),
         }
 
-        # Add the sample_files field using the same prefixes as the preparation widget
-        # Get the settings for file prefixes
+        # Add the sample_files field using content extensions
+        # Get the settings for file extensions
         settings_manager = SettingsManager()
         scan_file_extension = settings_manager.get(
             "scan_file_extension", [".scan", ".jpg"]
         )
-        scan_prefix = (
+        scan_content_extension = (
             scan_file_extension[0] if scan_file_extension else ".scan"
         )
 
         metadata_file_extension_parts = settings_manager.get(
             "metadata_file_extension", [".metadata", ".json"]
         )
-        metadata_prefix = (
+        metadata_content_extension = (
             metadata_file_extension_parts[0]
             if metadata_file_extension_parts
             else ".metadata"
         )
 
-        metadata["sample_files"] = [scan_prefix, metadata_prefix]
+        metadata["sample_files"] = [
+            scan_content_extension,
+            metadata_content_extension,
+        ]
 
         return metadata
 
