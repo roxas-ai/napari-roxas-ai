@@ -5,48 +5,52 @@
         "ReferenceSeries",
         "ReferenceSeriesLong"
     ],
-    "authorised_sample_types": [
-        "conifer",
-        "angiosperm"
-    ],
-    "authorised_sample_geometries": [
-        "linear",
-        "circular"
-    ],
-    "default_scale": 2.2675,
-    "default_angle": 0.0,
-    "jpeg_quality": 95,
-    "jpeg_optimize": true,
-    "jpeg_progressive": true,
-    "scan_file_extension": [
-        ".scan",
-        ".jpg"
-    ],
-    "metadata_file_extension": [
-        ".metadata",
-        ".json"
-    ],
-    "cells_file_extension": [
-        ".cells",
-        ".png"
-    ],
-    "rings_file_extension": [
-        ".rings",
-        ".tif"
-    ],
-    "roxas_file_extensions": [
-        ".scan",
-        ".cells",
-        ".rings",
-        ".metadata"
-    ],
-    "image_file_extensions": [
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".tif",
-        ".tiff",
-        ".bmp",
-        ".jp2"
-    ]
+    "samples_metadata": {
+        "authorised_sample_types": [
+            "conifer",
+            "angiosperm"
+        ],
+        "authorised_sample_geometries": [
+            "linear",
+            "circular"
+        ],
+        "default_scale": 2.2675,
+        "default_angle": 0.0,
+        "jpeg_quality": 95,
+        "jpeg_optimize": true,
+        "jpeg_progressive": true
+    },
+    "file_extensions": {
+        "scan_file_extension": [
+            ".scan",
+            ".jpg"
+        ],
+        "metadata_file_extension": [
+            ".metadata",
+            ".json"
+        ],
+        "cells_file_extension": [
+            ".cells",
+            ".png"
+        ],
+        "rings_file_extension": [
+            ".rings",
+            ".tif"
+        ],
+        "roxas_file_extensions": [
+            ".scan",
+            ".cells",
+            ".rings",
+            ".metadata"
+        ],
+        "image_file_extensions": [
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".tif",
+            ".tiff",
+            ".bmp",
+            ".jp2"
+        ]
+    }
 }

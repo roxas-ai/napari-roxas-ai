@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
@@ -20,11 +20,25 @@ class MetadataDialog(QDialog):
 
     def __init__(
         self,
-        default_metadata: Dict,
-        authorized_sample_types: List[str],
-        authorized_sample_geometries: List[str],
+        default_metadata=None,
+        authorized_sample_types=None,
+        authorized_sample_geometries=None,
     ):
         super().__init__()
+
+        settings = SettingsManager()
+
+        if authorized_sample_types is None:
+            authorized_sample_types = settings.get(
+                "samples_metadata.authorised_sample_types",
+                ["conifer", "angiosperm"],
+            )
+
+        if authorized_sample_geometries is None:
+            authorized_sample_geometries = settings.get(
+                "samples_metadata.authorised_sample_geometries",
+                ["linear", "circular"],
+            )
 
         self.setWindowTitle("Sample Metadata")
 

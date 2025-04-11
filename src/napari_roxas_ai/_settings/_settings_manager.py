@@ -20,11 +20,11 @@ class SettingsManager:
         # Get the settings manager instance
         settings = SettingsManager()
 
-        # Get a setting value
-        value = settings.get('setting_name', default_value)
+        # Get a setting value (supports dot notation for nested settings)
+        value = settings.get('samples_metadata.default_scale', default_value)
 
-        # Set a setting value
-        settings.set('setting_name', new_value)
+        # Set a setting value (supports dot notation for nested settings)
+        settings.set('samples_metadata.default_scale', new_value)
     """
 
     # Class variables for Singleton implementation
@@ -95,6 +95,7 @@ class SettingsManager:
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get a setting value by key.
+        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
 
         Args:
             key: The setting key to retrieve
@@ -103,17 +104,49 @@ class SettingsManager:
         Returns:
             The setting value or the default if key doesn't exist
         """
-        return self._settings.get(key, default)
+        if "." not in key:
+            return self._settings.get(key, default)
+
+        # Handle nested keys
+        keys = key.split(".")
+        current = self._settings
+
+        for k in keys[:-1]:
+            if k not in current:
+                return default
+            current = current[k]
+
+        if not isinstance(current, dict) or keys[-1] not in current:
+            return default
+
+        return current.get(keys[-1], default)
 
     def set(self, key: str, value: Any):
         """
         Set a setting value and save to file.
+        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
 
         Args:
             key: The setting key to set
             value: The value to assign to the setting
         """
-        self._settings[key] = value
+        if "." not in key:
+            self._settings[key] = value
+            self.save_settings()
+            return
+
+        # Handle nested keys
+        keys = key.split(".")
+        current = self._settings
+
+        # Navigate to the correct nested dictionary
+        for k in keys[:-1]:
+            if k not in current:
+                current[k] = {}
+            current = current[k]
+
+        # Set the value
+        current[keys[-1]] = value
         self.save_settings()
 
     def update(self, settings_dict: Dict[str, Any]):
@@ -137,50 +170,54 @@ class SettingsManager:
                 "ReferenceSeries",
                 "ReferenceSeriesLong",
             ],
-            # Metadata settings
-            "authorised_sample_types": [
-                "conifer",
-                "angiosperm",
-            ],
-            "authorised_sample_geometries": ["linear", "circular"],
-            "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
-            "default_angle": 0.0,  # Default value: 0 degrees
-            # JPEG compression parameters
-            "jpeg_quality": 95,  # JPEG quality (0-100)
-            "jpeg_optimize": True,  # Optimize JPEG files
-            "jpeg_progressive": True,  # Use progressive JPEG format
-            # File extension settings
-            "scan_file_extension": [
-                ".scan",
-                ".jpg",
-            ],  # Parts of scan file extension
-            "metadata_file_extension": [
-                ".metadata",
-                ".json",
-            ],  # Parts of metadata file extension
-            "cells_file_extension": [
-                ".cells",
-                ".png",
-            ],  # Parts of cells file extension
-            "rings_file_extension": [
-                ".rings",
-                ".tif",
-            ],  # Parts of rings file extension
-            "roxas_file_extensions": [
-                ".scan",
-                ".cells",
-                ".rings",
-                ".metadata",
-            ],  # roxas file extensions
-            "image_file_extensions": [
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".tif",
-                ".tiff",
-                ".bmp",
-                ".jp2",
-            ],  # Supported image file extensions
+            # Metadata settings grouped
+            "samples_metadata": {
+                "authorised_sample_types": [
+                    "conifer",
+                    "angiosperm",
+                ],
+                "authorised_sample_geometries": ["linear", "circular"],
+                "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
+                "default_angle": 0.0,  # Default value: 0 degrees
+                # JPEG compression parameters
+                "jpeg_quality": 95,  # JPEG quality (0-100)
+                "jpeg_optimize": True,  # Optimize JPEG files
+                "jpeg_progressive": True,  # Use progressive JPEG format
+            },
+            # File extension settings grouped
+            "file_extensions": {
+                "scan_file_extension": [
+                    ".scan",
+                    ".jpg",
+                ],  # Parts of scan file extension
+                "metadata_file_extension": [
+                    ".metadata",
+                    ".json",
+                ],  # Parts of metadata file extension
+                "cells_file_extension": [
+                    ".cells",
+                    ".png",
+                ],  # Parts of cells file extension
+                "rings_file_extension": [
+                    ".rings",
+                    ".tif",
+                ],  # Parts of rings file extension
+                "roxas_file_extensions": [
+                    ".scan",
+                    ".cells",
+                    ".rings",
+                    ".metadata",
+                ],  # roxas file extensions
+                "image_file_extensions": [
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".tif",
+                    ".tiff",
+                    ".bmp",
+                    ".jp2",
+                ],  # Supported image file extensions
+            },
         }
         self.save_settings()
 

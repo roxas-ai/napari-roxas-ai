@@ -4,7 +4,7 @@ Reader plugin for ROXAS AI-specific file formats.
 
 import json
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -82,45 +82,48 @@ def is_supported_file(path: str) -> bool:
     return path_lower.endswith((cells_ext, rings_ext, scan_ext))
 
 
-def get_metadata_from_json(file_path: str) -> Optional[Dict]:
+def get_metadata_from_json(path):
     """
-    Read metadata from the corresponding json file.
+    Get metadata from a JSON file.
 
     Parameters
     ----------
-    file_path : str
-        Path to the image file
+    path : str
+        Path to the image file associated with the JSON metadata file
 
     Returns
     -------
     dict or None
-        Metadata dictionary if found, None otherwise
+        Metadata from JSON file, or None if no JSON metadata file exists
     """
-    # Get file extensions from settings
+
+    # Use the new nested structure for settings
     settings = SettingsManager()
-    metadata_ext = "".join(
-        settings.get("metadata_file_extension", [".rings", ".tif"])
+    metadata_file_extension_parts = settings.get(
+        "file_extensions.metadata_file_extension", [".metadata", ".json"]
     )
+    metadata_file_extension = "".join(metadata_file_extension_parts)
 
-    # Construct the path to the metadata file
-    base_name = os.path.splitext(file_path)[0]
-    # Remove any existing file extension suffix (like .cells, .rings, .scan)
-    for suffix in [".cells", ".rings", ".scan"]:
-        if base_name.lower().endswith(suffix):
-            base_name = base_name[: -len(suffix)]
-            break
+    # Get the base path without extension
+    base_path = os.path.splitext(path)[0]
 
-    metadata_path = f"{base_name}{metadata_ext}"
+    # Check if this is already a metadata file and avoid processing it
+    if path.endswith(metadata_file_extension):
+        return None
 
-    # Check if the metadata file exists
-    if os.path.exists(metadata_path):
-        try:
-            with open(metadata_path) as f:
-                return json.load(f)
-        except (OSError, json.JSONDecodeError):
-            print(f"Error reading metadata from {metadata_path}")
+    # Check if metadata file exists
+    metadata_path = f"{base_path}{metadata_file_extension}"
 
-    return None
+    if not os.path.exists(metadata_path):
+        return None
+
+    # Load metadata from JSON file
+    try:
+        with open(metadata_path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        print(f"Error: Could not parse JSON metadata file: {metadata_path}")
+        return None
 
 
 def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
@@ -186,20 +189,35 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     return data, metadata, "labels"
 
 
-def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
+def read_image_file(path):
     """
-    Read a scan file and return it as an image layer.
+    Read an image file and return it as a napari layer.
 
     Parameters
     ----------
     path : str
-        Path to the scan file
+        Path to the image file
 
     Returns
     -------
-    tuple
-        (data, metadata, layer_type) for the image
+    napari.layers.Image
+        Image layer for napari
     """
+
+    # Skip non-image files
+    settings = SettingsManager()
+    image_file_extensions = settings.get(
+        "file_extensions.image_file_extensions",
+        [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"],
+    )
+
+    file_ext = os.path.splitext(path)[1].lower()
+    if file_ext not in image_file_extensions:
+        return None
+
+    # Get metadata from associated JSON file
+    json_metadata = get_metadata_from_json(path)
+
     with Image.open(path) as img:
         data = np.array(img)
 
@@ -209,7 +227,6 @@ def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
     metadata = {"name": layer_name}
 
     # Try to get sample scale from metadata file
-    json_metadata = get_metadata_from_json(path)
     if json_metadata and "sample_scale" in json_metadata:
         scale_value = 1 / float(json_metadata["sample_scale"])
         metadata["scale"] = [scale_value, scale_value]

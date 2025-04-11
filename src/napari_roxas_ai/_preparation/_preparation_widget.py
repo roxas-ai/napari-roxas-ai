@@ -69,42 +69,44 @@ class PreparationWidget(Container):
 
         # Get authorized sample types and geometries
         self.authorized_sample_types = self.settings_manager.get(
-            "authorised_sample_types",
+            "samples_metadata.authorised_sample_types",
             ["conifer", "angiosperm"],
         )
         self.authorized_sample_geometries = self.settings_manager.get(
-            "authorised_sample_geometries",
+            "samples_metadata.authorised_sample_geometries",
             ["linear", "circular"],
         )
 
         # Get default scale and angle
         self.default_scale = self.settings_manager.get(
-            "default_scale",
+            "samples_metadata.default_scale",
             2.2675,  # Default value in pixels/μm
         )
-        self.default_angle = self.settings_manager.get("default_angle", 0.0)
+        self.default_angle = self.settings_manager.get(
+            "samples_metadata.default_angle", 0.0
+        )
 
         # Get file extension settings
         scan_file_extension = self.settings_manager.get(
-            "scan_file_extension", [".scan", ".jpg"]
+            "file_extensions.scan_file_extension", [".scan", ".jpg"]
         )
-        self.scan_content_extension = (  # Changed from scan_file_prefix
+        self.scan_content_extension = (
             scan_file_extension[0] if scan_file_extension else ".scan"
         )
 
         metadata_file_extension_parts = self.settings_manager.get(
-            "metadata_file_extension", [".metadata", ".json"]
+            "file_extensions.metadata_file_extension", [".metadata", ".json"]
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
         # Get ROXAS file extensions to avoid processing already prepared files
         self.roxas_file_extensions = self.settings_manager.get(
-            "roxas_file_extensions", []
+            "file_extensions.roxas_file_extensions", []
         )
 
         # Get supported image file extensions
         self.image_file_extensions = self.settings_manager.get(
-            "image_file_extensions",
+            "file_extensions.image_file_extensions",
             [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"],
         )
 
@@ -405,7 +407,7 @@ class PreparationWidget(Container):
         confirm.setWindowTitle("Warning: Source Modification")
         confirm.setText("The source and project directories are the same.")
         confirm.setInformativeText(
-            f"Original image files will be replaced with {self.scan_content_extension}* files. "  # Changed from scan_file_prefix
+            f"Original image files will be replaced with {self.scan_content_extension}* files. "
             "This operation cannot be undone."
         )
         confirm.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
@@ -462,7 +464,7 @@ class PreparationWidget(Container):
             "sample_scale": self.default_scale,
             "sample_angle": self.default_angle,
             "sample_files": [
-                self.scan_content_extension,  # Changed from scan_file_prefix
+                self.scan_content_extension,
                 metadata_content_extension,
             ],
         }
@@ -547,7 +549,7 @@ class PreparationWidget(Container):
             self.default_scale,
             self.default_angle,
             self.same_directory,
-            self.scan_content_extension,  # Changed from scan_file_prefix
+            self.scan_content_extension,
             self.metadata_file_extension,
             self.roxas_file_extensions,
             self.image_file_extensions,
