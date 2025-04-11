@@ -30,14 +30,12 @@ class MetadataDialog(QDialog):
 
         if authorized_sample_types is None:
             authorized_sample_types = settings.get(
-                "samples_metadata.authorised_sample_types",
-                ["conifer", "angiosperm"],
+                "samples_metadata.authorised_sample_types"
             )
 
         if authorized_sample_geometries is None:
             authorized_sample_geometries = settings.get(
-                "samples_metadata.authorised_sample_geometries",
-                ["linear", "circular"],
+                "samples_metadata.authorised_sample_geometries"
             )
 
         self.setWindowTitle("Sample Metadata")
@@ -91,16 +89,14 @@ class MetadataDialog(QDialog):
         self.sample_scale.setDecimals(
             8
         )  # More decimals to display the exact value
-        self.sample_scale.setValue(
-            default_metadata.get("sample_scale", 2.2675)
-        )
+        self.sample_scale.setValue(default_metadata.get("sample_scale"))
         form_layout.addRow("Scale (pixels/μm):", self.sample_scale)
 
         # Sample angle
         self.sample_angle = QDoubleSpinBox()
         self.sample_angle.setRange(-180.0, 180.0)
         self.sample_angle.setSingleStep(0.1)
-        self.sample_angle.setValue(default_metadata.get("sample_angle", 0.0))
+        self.sample_angle.setValue(default_metadata.get("sample_angle"))
         self.sample_angle.setDecimals(1)
         form_layout.addRow("Angle (degrees):", self.sample_angle)
 
@@ -147,19 +143,19 @@ class MetadataDialog(QDialog):
         # Get the settings for file extensions
         settings_manager = SettingsManager()
         scan_file_extension = settings_manager.get(
-            "scan_file_extension", [".scan", ".jpg"]
+            "file_extensions.scan_file_extension"
         )
         scan_content_extension = (
-            scan_file_extension[0] if scan_file_extension else ".scan"
+            scan_file_extension[0] if scan_file_extension else None
         )
 
         metadata_file_extension_parts = settings_manager.get(
-            "metadata_file_extension", [".metadata", ".json"]
+            "file_extensions.metadata_file_extension"
         )
         metadata_content_extension = (
             metadata_file_extension_parts[0]
             if metadata_file_extension_parts
-            else ".metadata"
+            else None
         )
 
         metadata["sample_files"] = [
