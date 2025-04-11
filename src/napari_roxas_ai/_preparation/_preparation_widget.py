@@ -69,45 +69,41 @@ class PreparationWidget(Container):
 
         # Get authorized sample types and geometries
         self.authorized_sample_types = self.settings_manager.get(
-            "samples_metadata.authorised_sample_types",
-            ["conifer", "angiosperm"],
+            "samples_metadata.authorised_sample_types"
         )
         self.authorized_sample_geometries = self.settings_manager.get(
-            "samples_metadata.authorised_sample_geometries",
-            ["linear", "circular"],
+            "samples_metadata.authorised_sample_geometries"
         )
 
         # Get default scale and angle
         self.default_scale = self.settings_manager.get(
-            "samples_metadata.default_scale",
-            2.2675,  # Default value in pixels/μm
+            "samples_metadata.default_scale"
         )
         self.default_angle = self.settings_manager.get(
-            "samples_metadata.default_angle", 0.0
+            "samples_metadata.default_angle"
         )
 
         # Get file extension settings
         scan_file_extension = self.settings_manager.get(
-            "file_extensions.scan_file_extension", [".scan", ".jpg"]
+            "file_extensions.scan_file_extension"
         )
         self.scan_content_extension = (
-            scan_file_extension[0] if scan_file_extension else ".scan"
+            scan_file_extension[0] if scan_file_extension else None
         )
 
         metadata_file_extension_parts = self.settings_manager.get(
-            "file_extensions.metadata_file_extension", [".metadata", ".json"]
+            "file_extensions.metadata_file_extension"
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
         # Get ROXAS file extensions to avoid processing already prepared files
         self.roxas_file_extensions = self.settings_manager.get(
-            "file_extensions.roxas_file_extensions", []
+            "file_extensions.roxas_file_extensions"
         )
 
         # Get supported image file extensions
         self.image_file_extensions = self.settings_manager.get(
-            "file_extensions.image_file_extensions",
-            [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"],
+            "file_extensions.image_file_extensions"
         )
 
     def _create_ui_components(self):
@@ -454,12 +450,12 @@ class PreparationWidget(Container):
             "sample_type": (
                 self.authorized_sample_types[0]
                 if self.authorized_sample_types
-                else "conifer"
+                else ""
             ),
             "sample_geometry": (
                 self.authorized_sample_geometries[0]
                 if self.authorized_sample_geometries
-                else "linear"
+                else ""
             ),
             "sample_scale": self.default_scale,
             "sample_angle": self.default_angle,

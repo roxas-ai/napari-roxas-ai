@@ -32,11 +32,11 @@ class Worker(QObject):
         default_metadata: Optional[Dict] = None,
         apply_to_all: bool = False,
         authorized_sample_types: List[str] = None,
-        default_scale: float = 2.2675,
-        default_angle: float = 0.0,
+        default_scale: float = None,
+        default_angle: float = None,
         same_directory: bool = False,
-        scan_content_extension: str = ".scan",  # Changed from scan_file_prefix
-        metadata_file_extension: str = ".metadata.json",
+        scan_content_extension: str = None,
+        metadata_file_extension: str = None,
         roxas_file_extensions: List[str] = None,
         image_file_extensions: List[str] = None,
         selected_files: Optional[List[str]] = None,
@@ -50,26 +50,19 @@ class Worker(QObject):
         # Metadata and processing settings
         self.default_metadata = default_metadata
         self.apply_to_all = apply_to_all
-        self.authorized_sample_types = authorized_sample_types or [
-            "conifer",
-            "angiosperm",
-        ]
+        self.authorized_sample_types = authorized_sample_types or []
         self.default_scale = default_scale
         self.default_angle = default_angle
 
         # File handling settings
         self.same_directory = same_directory
-        self.scan_content_extension = (
-            scan_content_extension  # Changed from scan_file_prefix
-        )
+        self.scan_content_extension = scan_content_extension
         self.metadata_file_extension = metadata_file_extension
         self.roxas_file_extensions = roxas_file_extensions or []
         self.image_file_extensions = image_file_extensions or []
 
         # File selection
-        self.selected_files = (
-            selected_files  # Paths of specific files to process
-        )
+        self.selected_files = selected_files
 
         # Processing state
         self.should_stop = False
@@ -183,7 +176,7 @@ class Worker(QObject):
         # Define output paths
         new_image_path = os.path.join(
             target_dir,
-            f"{base_name}{self.scan_content_extension}{file_ext}",  # Changed from scan_file_prefix
+            f"{base_name}{self.scan_content_extension}{file_ext}",
         )
         metadata_path = os.path.join(
             target_dir, f"{base_name}{self.metadata_file_extension}"
@@ -284,7 +277,7 @@ class Worker(QObject):
         target_dir = os.path.join(self.target_directory, dir_path)
         new_image_path = os.path.join(
             target_dir,
-            f"{base_name}{self.scan_content_extension}{file_ext}",  # Changed from scan_file_prefix
+            f"{base_name}{self.scan_content_extension}{file_ext}",
         )
         metadata_path = os.path.join(
             target_dir, f"{base_name}{self.metadata_file_extension}"
@@ -334,7 +327,7 @@ class Worker(QObject):
             ),
             # Add the sample_files field with content extensions
             "sample_files": [
-                self.scan_content_extension,  # Changed from scan_file_prefix
+                self.scan_content_extension,
                 metadata_content_extension,
             ],
         }
