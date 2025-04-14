@@ -62,38 +62,97 @@ def mock_viewer():
     return viewer
 
 
+# Mock SettingsManager for testing
+@pytest.fixture
+def mock_settings_manager():
+    """Create a mock settings manager with test values."""
+    with patch(
+        "napari_roxas_ai._settings._settings_manager.SettingsManager"
+    ) as MockSettings:
+        settings_instance = MagicMock()
+        MockSettings.return_value = settings_instance
+
+        # Configure the mock settings with test values
+        settings_instance.get.side_effect = lambda key, default=None: {
+            "samples_metadata.authorised_sample_types": [
+                "conifer",
+                "angiosperm",
+            ],
+            "samples_metadata.authorised_sample_geometries": [
+                "linear",
+                "circular",
+            ],
+            "samples_metadata.default_scale": 2.2675,
+            "samples_metadata.default_angle": 0.0,
+            "file_extensions.scan_file_extension": [".scan"],
+            "file_extensions.metadata_file_extension": [".metadata", ".json"],
+            "file_extensions.roxas_file_extensions": [".scan"],
+            "file_extensions.image_file_extensions": [
+                ".jpg",
+                ".png",
+                ".tif",
+                ".tiff",
+            ],
+        }.get(key, default)
+
+        yield settings_instance
+
+
 # Create a PreparationWidget with mocked UI interactions
 @pytest.fixture
-def prep_widget(mock_viewer):
+def prep_widget(mock_viewer, mock_settings_manager):
     """Create a preparation widget with a mock viewer."""
-    with patch(
-        "napari_roxas_ai._preparation._preparation_widget.SettingsManager"
-    ):
-        widget = PreparationWidget(mock_viewer)
-        # Mock the methods and attributes that we'll use in tests
-        widget._file_selection_container = MagicMock()
-        widget._reverse_selection_button = MagicMock()
-        widget._run_in_thread = MagicMock()
-        widget._cancel_processing = MagicMock()
-        return widget
+    widget = PreparationWidget(mock_viewer)
+    # Mock the methods and attributes that we'll use in tests
+    widget._file_selection_container = MagicMock()
+    widget._reverse_selection_button = MagicMock()
+    widget._run_in_thread = MagicMock()
+    widget._cancel_processing = MagicMock()
+    return widget
 
 
 class TestPreparationWorker:
     """Tests for the Worker class that handles file processing."""
 
-    def test_basic_file_copying(self, temp_dirs, source_with_images):
+    @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
+    def test_basic_file_copying(
+        self, mock_settings, temp_dirs, source_with_images
+    ):
         """Test that files are copied correctly with appropriate renaming."""
         source_dir, img_paths = source_with_images
         project_dir, _ = temp_dirs
+
+        # Setup mock settings
+        settings_instance = MagicMock()
+        mock_settings.return_value = settings_instance
+        settings_instance.get.side_effect = lambda key, default=None: {
+            "samples_metadata.authorised_sample_types": [
+                "conifer",
+                "angiosperm",
+            ],
+            "samples_metadata.authorised_sample_geometries": [
+                "linear",
+                "circular",
+            ],
+            "samples_metadata.default_scale": 2.2675,
+            "samples_metadata.default_angle": 0.0,
+        }.get(key, default)
 
         # Create and run worker with explicit test parameters
         worker = Worker(
             source_directory=source_dir,
             target_directory=project_dir,
-            scan_content_extension=".scan",  # Changed from scan_file_prefix
+            default_metadata=None,
+            apply_to_all=False,
+            authorized_sample_types=["conifer", "angiosperm"],
+            default_scale=2.2675,
+            default_angle=0.0,
+            same_directory=False,
+            scan_content_extension=".scan",
             metadata_file_extension=".metadata.json",
-            roxas_file_extensions=[],
+            roxas_file_extensions=[".scan"],
             image_file_extensions=[".jpg", ".png", ".tif", ".tiff"],
+            selected_files=None,
         )
 
         # Initialize worker to populate the all_files list
@@ -127,10 +186,10 @@ class TestPreparationWorker:
             # Create and save metadata
             metadata = {
                 "sample_name": base_name,
-                "sample_type": "conifer",
+                "sample_type": worker.authorized_sample_types[0],
                 "sample_geometry": "linear",
-                "sample_scale": 2.2675,
-                "sample_angle": 0,
+                "sample_scale": worker.default_scale,
+                "sample_angle": worker.default_angle,
                 "sample_files": [
                     ".scan",  # Content extension for scan files
                     ".metadata",  # Content extension for metadata files
@@ -153,12 +212,24 @@ class TestPreparationWorker:
             with open(metadata_path) as f:
                 saved_metadata = json.load(f)
                 assert saved_metadata["sample_name"] == base_name
-                assert saved_metadata["sample_type"] == "conifer"
+                assert (
+                    saved_metadata["sample_type"]
+                    == worker.authorized_sample_types[0]
+                )
                 assert "scan_size" in saved_metadata
 
-    def test_same_directory_processing(self, temp_dirs):
+    @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
+    def test_same_directory_processing(self, mock_settings, temp_dirs):
         """Test that processing in same directory replaces original files."""
         source_dir, _ = temp_dirs
+
+        # Setup mock settings
+        settings_instance = MagicMock()
+        mock_settings.return_value = settings_instance
+        settings_instance.get.side_effect = lambda key, default=None: {
+            "samples_metadata.default_scale": 2.2675,
+            "samples_metadata.default_angle": 0.0,
+        }.get(key, default)
 
         # Create test images directly in source dir
         img_paths = []
@@ -184,13 +255,13 @@ class TestPreparationWorker:
             # Copy the file
             shutil.copy2(img_path, new_image_path)
 
-            # Create simple metadata
+            # Create simple metadata - using values from mock settings
             metadata = {
                 "sample_name": base_name,
                 "sample_type": "conifer",
                 "sample_geometry": "linear",
-                "sample_scale": 2.2675,
-                "sample_angle": 0,
+                "sample_scale": 2.2675,  # From mock settings
+                "sample_angle": 0.0,  # From mock settings
                 "sample_files": [".scan", ".metadata"],
                 "scan_format": "JPEG",
                 "scan_size": [100, 100],
@@ -226,9 +297,14 @@ class TestPreparationWorker:
                 metadata_name in processed_files
             ), f"Metadata file not found: {metadata_name}"
 
-    def test_skip_processed_files(self, temp_dirs):
+    @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
+    def test_skip_processed_files(self, mock_settings, temp_dirs):
         """Test that files with ROXAS extensions are skipped."""
         source_dir, project_dir = temp_dirs
+
+        # Setup mock settings
+        settings_instance = MagicMock()
+        mock_settings.return_value = settings_instance
 
         # Create regular and processed test images
         regular_img = create_test_image(
@@ -241,10 +317,17 @@ class TestPreparationWorker:
         worker = Worker(
             source_directory=source_dir,
             target_directory=project_dir,
-            scan_content_extension=".scan",  # Changed from scan_file_prefix
+            default_metadata=None,
+            apply_to_all=False,
+            authorized_sample_types=["conifer", "angiosperm"],
+            default_scale=2.2675,
+            default_angle=0.0,
+            same_directory=False,
+            scan_content_extension=".scan",
             metadata_file_extension=".metadata.json",
             roxas_file_extensions=[".scan"],
             image_file_extensions=[".jpg", ".png", ".tif", ".tiff"],
+            selected_files=None,
         )
 
         # Run the worker setup to get all_files populated correctly
@@ -271,9 +354,14 @@ class TestPreparationWorker:
             target_img_path
         ), "Regular image wasn't processed"
 
-    def test_apply_to_all_metadata(self, temp_dirs):
+    @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
+    def test_apply_to_all_metadata(self, mock_settings, temp_dirs):
         """Test that metadata can be applied to all files."""
         source_dir, project_dir = temp_dirs
+
+        # Setup mock settings
+        settings_instance = MagicMock()
+        mock_settings.return_value = settings_instance
 
         # Create three test images
         img_paths = []
@@ -291,12 +379,20 @@ class TestPreparationWorker:
         worker = Worker(
             source_directory=source_dir,
             target_directory=project_dir,
-            scan_content_extension=".scan",  # Changed from scan_file_prefix
+            default_metadata=None,
+            apply_to_all=True,
+            authorized_sample_types=["conifer", "angiosperm"],
+            default_scale=2.2675,
+            default_angle=0.0,
+            same_directory=False,
+            scan_content_extension=".scan",
             metadata_file_extension=".metadata.json",
+            roxas_file_extensions=[".scan"],
             image_file_extensions=[".jpg"],
+            selected_files=None,
         )
 
-        # Set default metadata directly
+        # Set default metadata directly - now using test values instead of hardcoded defaults
         worker.default_metadata = {
             "sample_type": "angiosperm",
             "sample_geometry": "circular",
@@ -351,9 +447,18 @@ class TestPreparationWorker:
                 assert metadata["sample_scale"] == 3.14
                 assert metadata["sample_angle"] == 45.0
 
-    def test_selected_files_only(self, temp_dirs):
+    @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
+    def test_selected_files_only(self, mock_settings, temp_dirs):
         """Test that only selected files are processed."""
         source_dir, project_dir = temp_dirs
+
+        # Setup mock settings
+        settings_instance = MagicMock()
+        mock_settings.return_value = settings_instance
+        settings_instance.get.side_effect = lambda key, default=None: {
+            "samples_metadata.default_scale": 2.2675,
+            "samples_metadata.default_angle": 0.0,
+        }.get(key, default)
 
         # Create multiple test images
         file1 = create_test_image(os.path.join(source_dir, "select1.jpg"))
@@ -374,8 +479,8 @@ class TestPreparationWorker:
             "sample_name": file1_name,
             "sample_type": "conifer",
             "sample_geometry": "linear",
-            "sample_scale": 2.2675,
-            "sample_angle": 0,
+            "sample_scale": 2.2675,  # From mock settings
+            "sample_angle": 0.0,  # From mock settings
             "sample_files": [
                 ".scan",  # Keeping the dot
                 ".metadata",  # Keeping the dot
