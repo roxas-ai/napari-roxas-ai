@@ -3,6 +3,7 @@
     "sample_type": "conifer",
     "sample_scale": 2.2675,
     "sample_angle": 0,
+    "sample_outmost_year": 2022,
     "sample_geometry": "linear",
     "scan_format": "JPEG",
     "scan_size": [500, 2500],

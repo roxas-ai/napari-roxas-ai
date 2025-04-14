@@ -83,6 +83,11 @@ class PreparationWidget(Container):
             "samples_metadata.default_angle"
         )
 
+        # Get default outmost year
+        self.default_outmost_year = self.settings_manager.get(
+            "samples_metadata.default_outmost_year"
+        )
+
         # Get file extension settings
         scan_file_extension = self.settings_manager.get(
             "file_extensions.scan_file_extension"
@@ -459,6 +464,7 @@ class PreparationWidget(Container):
             ),
             "sample_scale": self.default_scale,
             "sample_angle": self.default_angle,
+            "sample_outmost_year": self.default_outmost_year,
             "sample_files": [
                 self.scan_content_extension,
                 metadata_content_extension,
@@ -544,6 +550,7 @@ class PreparationWidget(Container):
             self.authorized_sample_types,
             self.default_scale,
             self.default_angle,
+            self.default_outmost_year,
             self.same_directory,
             self.scan_content_extension,
             self.metadata_file_extension,

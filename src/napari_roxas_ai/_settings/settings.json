@@ -16,6 +16,7 @@
         ],
         "default_scale": 2.2675,
         "default_angle": 0.0,
+        "default_outmost_year": 0,
         "jpeg_quality": 95,
         "jpeg_optimize": true,
         "jpeg_progressive": true

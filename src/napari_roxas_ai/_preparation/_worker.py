@@ -34,6 +34,7 @@ class Worker(QObject):
         authorized_sample_types: List[str] = None,
         default_scale: float = None,
         default_angle: float = None,
+        default_outmost_year: Optional[int] = None,
         same_directory: bool = False,
         scan_content_extension: str = None,
         metadata_file_extension: str = None,
@@ -53,6 +54,7 @@ class Worker(QObject):
         self.authorized_sample_types = authorized_sample_types or []
         self.default_scale = default_scale
         self.default_angle = default_angle
+        self.default_outmost_year = default_outmost_year
 
         # File handling settings
         self.same_directory = same_directory
@@ -325,6 +327,9 @@ class Worker(QObject):
             "sample_angle": default_data.get(
                 "sample_angle", self.default_angle
             ),
+            "sample_outmost_year": default_data.get(
+                "sample_outmost_year", self.default_outmost_year
+            ),
             # Add the sample_files field with content extensions
             "sample_files": [
                 self.scan_content_extension,
@@ -381,6 +386,9 @@ class Worker(QObject):
                 ),
                 "sample_angle": metadata.get(
                     "sample_angle", self.default_angle
+                ),
+                "sample_outmost_year": metadata.get(
+                    "sample_outmost_year", self.default_outmost_year
                 ),
             }
 

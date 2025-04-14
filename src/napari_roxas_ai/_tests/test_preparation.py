@@ -84,6 +84,7 @@ def mock_settings_manager():
             ],
             "samples_metadata.default_scale": 2.2675,
             "samples_metadata.default_angle": 0.0,
+            "samples_metadata.default_outmost_year": 2022,
             "file_extensions.scan_file_extension": [".scan"],
             "file_extensions.metadata_file_extension": [".metadata", ".json"],
             "file_extensions.roxas_file_extensions": [".scan"],
@@ -136,6 +137,7 @@ class TestPreparationWorker:
             ],
             "samples_metadata.default_scale": 2.2675,
             "samples_metadata.default_angle": 0.0,
+            "samples_metadata.default_outmost_year": 2022,
         }.get(key, default)
 
         # Create and run worker with explicit test parameters
@@ -147,6 +149,7 @@ class TestPreparationWorker:
             authorized_sample_types=["conifer", "angiosperm"],
             default_scale=2.2675,
             default_angle=0.0,
+            default_outmost_year=2022,
             same_directory=False,
             scan_content_extension=".scan",
             metadata_file_extension=".metadata.json",
@@ -190,6 +193,7 @@ class TestPreparationWorker:
                 "sample_geometry": "linear",
                 "sample_scale": worker.default_scale,
                 "sample_angle": worker.default_angle,
+                "sample_outmost_year": worker.default_outmost_year,
                 "sample_files": [
                     ".scan",  # Content extension for scan files
                     ".metadata",  # Content extension for metadata files
@@ -216,6 +220,7 @@ class TestPreparationWorker:
                     saved_metadata["sample_type"]
                     == worker.authorized_sample_types[0]
                 )
+                assert saved_metadata["sample_outmost_year"] == 2022
                 assert "scan_size" in saved_metadata
 
     @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
@@ -229,6 +234,7 @@ class TestPreparationWorker:
         settings_instance.get.side_effect = lambda key, default=None: {
             "samples_metadata.default_scale": 2.2675,
             "samples_metadata.default_angle": 0.0,
+            "samples_metadata.default_outmost_year": 2022,
         }.get(key, default)
 
         # Create test images directly in source dir
@@ -262,6 +268,7 @@ class TestPreparationWorker:
                 "sample_geometry": "linear",
                 "sample_scale": 2.2675,  # From mock settings
                 "sample_angle": 0.0,  # From mock settings
+                "sample_outmost_year": 2022,  # From mock settings
                 "sample_files": [".scan", ".metadata"],
                 "scan_format": "JPEG",
                 "scan_size": [100, 100],
@@ -305,6 +312,11 @@ class TestPreparationWorker:
         # Setup mock settings
         settings_instance = MagicMock()
         mock_settings.return_value = settings_instance
+        settings_instance.get.side_effect = lambda key, default=None: {
+            "samples_metadata.default_scale": 2.2675,
+            "samples_metadata.default_angle": 0.0,
+            "samples_metadata.default_outmost_year": 2022,
+        }.get(key, default)
 
         # Create regular and processed test images
         regular_img = create_test_image(
@@ -322,6 +334,7 @@ class TestPreparationWorker:
             authorized_sample_types=["conifer", "angiosperm"],
             default_scale=2.2675,
             default_angle=0.0,
+            default_outmost_year=2022,
             same_directory=False,
             scan_content_extension=".scan",
             metadata_file_extension=".metadata.json",
@@ -384,6 +397,7 @@ class TestPreparationWorker:
             authorized_sample_types=["conifer", "angiosperm"],
             default_scale=2.2675,
             default_angle=0.0,
+            default_outmost_year=2022,
             same_directory=False,
             scan_content_extension=".scan",
             metadata_file_extension=".metadata.json",
@@ -398,6 +412,7 @@ class TestPreparationWorker:
             "sample_geometry": "circular",
             "sample_scale": 3.14,
             "sample_angle": 45.0,
+            "sample_outmost_year": 1995,
         }
         worker.apply_to_all = True
 
@@ -423,6 +438,9 @@ class TestPreparationWorker:
                 "sample_geometry": worker.default_metadata["sample_geometry"],
                 "sample_scale": worker.default_metadata["sample_scale"],
                 "sample_angle": worker.default_metadata["sample_angle"],
+                "sample_outmost_year": worker.default_metadata[
+                    "sample_outmost_year"
+                ],
                 "sample_files": [
                     ".scan",  # Keeping the dot
                     ".metadata",  # Keeping the dot
@@ -446,6 +464,7 @@ class TestPreparationWorker:
                 assert metadata["sample_geometry"] == "circular"
                 assert metadata["sample_scale"] == 3.14
                 assert metadata["sample_angle"] == 45.0
+                assert metadata["sample_outmost_year"] == 1995
 
     @patch("napari_roxas_ai._settings._settings_manager.SettingsManager")
     def test_selected_files_only(self, mock_settings, temp_dirs):
@@ -458,6 +477,7 @@ class TestPreparationWorker:
         settings_instance.get.side_effect = lambda key, default=None: {
             "samples_metadata.default_scale": 2.2675,
             "samples_metadata.default_angle": 0.0,
+            "samples_metadata.default_outmost_year": 2022,
         }.get(key, default)
 
         # Create multiple test images
@@ -481,6 +501,7 @@ class TestPreparationWorker:
             "sample_geometry": "linear",
             "sample_scale": 2.2675,  # From mock settings
             "sample_angle": 0.0,  # From mock settings
+            "sample_outmost_year": 2022,  # From mock settings
             "sample_files": [
                 ".scan",  # Keeping the dot
                 ".metadata",  # Keeping the dot
