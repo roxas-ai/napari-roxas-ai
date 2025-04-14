@@ -70,16 +70,15 @@ def is_supported_file(path: str) -> bool:
     # Get file extensions from settings
     settings = SettingsManager()
     # Get file extension settings and join the parts
-    scan_ext = "".join(settings.get("scan_file_extension", [".scan", ".jpg"]))
-    cells_ext = "".join(
-        settings.get("cells_file_extension", [".cells", ".png"])
-    )
-    rings_ext = "".join(
-        settings.get("rings_file_extension", [".rings", ".tif"])
-    )
+    scan_content_ext = settings.get("file_extensions.scan_file_extension")[0]
+    cells_content_ext = settings.get("file_extensions.cells_file_extension")[0]
+    rings_content_ext = settings.get("file_extensions.rings_file_extension")[0]
 
     # Check for all supported file types with a single endswith call
-    return path_lower.endswith((cells_ext, rings_ext, scan_ext))
+    return any(
+        ext in path_lower
+        for ext in [scan_content_ext, cells_content_ext, rings_content_ext]
+    )
 
 
 def get_metadata_from_json(path):
@@ -100,21 +99,17 @@ def get_metadata_from_json(path):
     # Use the new nested structure for settings
     settings = SettingsManager()
     metadata_file_extension_parts = settings.get(
-        "file_extensions.metadata_file_extension", [".metadata", ".json"]
+        "file_extensions.metadata_file_extension"
     )
     metadata_file_extension = "".join(metadata_file_extension_parts)
 
-    # Get the base path without extension
-    base_path = os.path.splitext(path)[0]
-
-    # Check if this is already a metadata file and avoid processing it
-    if path.endswith(metadata_file_extension):
-        return None
-
     # Check if metadata file exists
-    metadata_path = f"{base_path}{metadata_file_extension}"
+    metadata_path = "".join(path.split(".")[:-2]) + metadata_file_extension
 
     if not os.path.exists(metadata_path):
+        print(
+            f"Error: Could not find metadata file: {metadata_path} for {path}"
+        )
         return None
 
     # Load metadata from JSON file
@@ -140,9 +135,16 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     tuple
         (data, metadata, layer_type) for the cells image
     """
+    # Open the image file
     with Image.open(path) as img:
-        # Convert to numpy array and rescale to 0-1
-        data = np.array(img).astype(float) / 255
+        # Convert to numpy array
+        data = np.array(img).astype(float)
+
+    # Normalize the data to 0-1 range (except if there is a single value)
+    if np.max(data) - np.min(data) > 0:
+        data = (data - np.min(data)) / (np.max(data) - np.min(data))
+    else:
+        data = np.zeros_like(data)
 
     # Create metadata
     filename = os.path.basename(path)
@@ -208,7 +210,6 @@ def read_image_file(path):
     settings = SettingsManager()
     image_file_extensions = settings.get(
         "file_extensions.image_file_extensions",
-        [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"],
     )
 
     file_ext = os.path.splitext(path)[1].lower()
@@ -258,13 +259,10 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
     # Get file extensions from settings
     settings = SettingsManager()
     # Get file extension settings and join the parts
-    scan_ext = "".join(settings.get("scan_file_extension", [".scan", ".jpg"]))
-    cells_ext = "".join(
-        settings.get("cells_file_extension", [".cells", ".png"])
-    )
-    rings_ext = "".join(
-        settings.get("rings_file_extension", [".rings", ".tif"])
-    )
+    # Get file extension settings and join the parts
+    scan_content_ext = settings.get("file_extensions.scan_file_extension")[0]
+    cells_content_ext = settings.get("file_extensions.cells_file_extension")[0]
+    rings_content_ext = settings.get("file_extensions.rings_file_extension")[0]
 
     # Process each path
     for path in paths:
@@ -273,11 +271,11 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
             continue
 
         # Process based on file type
-        if path.lower().endswith(cells_ext):
+        if cells_content_ext in path.lower():
             layers.append(read_cells_file(path))
-        elif path.lower().endswith(rings_ext):
+        elif rings_content_ext in path.lower():
             layers.append(read_rings_file(path))
-        elif path.lower().endswith(scan_ext):
+        elif scan_content_ext in path.lower():
             layers.append(read_image_file(path))
 
     return layers
