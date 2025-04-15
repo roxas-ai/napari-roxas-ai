@@ -93,8 +93,8 @@ class MetadataDialog(QDialog):
         # Sample files information (read-only)
         if "sample_files" in default_metadata:
             sample_files_text = ", ".join(default_metadata["sample_files"])
-            sample_files_label = QLabel(sample_files_text)
-            form_layout.addRow("Sample Files:", sample_files_label)
+            self.sample_files = QLabel(sample_files_text)
+            form_layout.addRow("Sample Files:", self.sample_files)
 
         # Apply to all checkbox
         self.apply_to_all_checkbox = QCheckBox("Apply to all remaining files")
@@ -125,6 +125,7 @@ class MetadataDialog(QDialog):
             "sample_scale": self.sample_scale.value(),
             "sample_angle": self.sample_angle.value(),
             "sample_outmost_year": self.sample_outmost_year.value(),
+            "sample_files": self.sample_files.text(),
         }
 
     def apply_to_all(self) -> bool:
