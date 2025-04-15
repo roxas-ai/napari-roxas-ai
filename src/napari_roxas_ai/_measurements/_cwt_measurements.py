@@ -13,6 +13,9 @@ import pandas as pd
 from PIL import Image
 from rasterio import features
 
+# Disable DecompressionBomb warnings for large images
+Image.MAX_IMAGE_PIXELS = None
+
 
 class CellAnalyzer:
     """Main class for analyzing cell structures in segmented images."""
