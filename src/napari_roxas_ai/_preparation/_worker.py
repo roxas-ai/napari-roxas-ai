@@ -2,7 +2,7 @@ import glob
 import json
 import os
 import shutil
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from PIL import ExifTags, Image
 from qtpy.QtCore import QObject, Signal
@@ -424,11 +424,27 @@ class Worker(QObject):
 
                 # Extract and preserve EXIF data if available
                 if hasattr(img, "_getexif") and img._getexif() is not None:
-                    exif_dict = {
-                        ExifTags.TAGS.get(tag_id, tag_id): value
-                        for tag_id, value in img._getexif().items()
-                        if tag_id in ExifTags.TAGS
-                    }
+                    exif_dict = {}
+                    for tag_id, value in img._getexif().items():
+                        tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                        # Convert bytes to string or skip if not serializable
+                        if isinstance(value, bytes):
+                            try:
+                                # Try to decode bytes as UTF-8
+                                exif_dict[tag_name] = value.decode(
+                                    "utf-8", errors="replace"
+                                )
+                            except (UnicodeDecodeError, AttributeError):
+                                # If decoding fails, convert to hex string
+                                exif_dict[tag_name] = f"0x{value.hex()}"
+                        elif isinstance(
+                            value, (str, int, float, bool, list, tuple, dict)
+                        ):
+                            exif_dict[tag_name] = value
+                        else:
+                            # Skip non-serializable types
+                            exif_dict[tag_name] = str(value)
+
                     img_metadata["scan_exif"] = exif_dict
                 else:
                     img_metadata["scan_exif"] = None
@@ -465,10 +481,38 @@ class Worker(QObject):
             metadata_path: Path to save the JSON file
         """
         try:
+            # Ensure all data is JSON serializable
+            sanitized_metadata = self._sanitize_for_json(metadata)
+
             with open(metadata_path, "w") as f:
-                json.dump(metadata, f, indent=4)
+                json.dump(sanitized_metadata, f, indent=4)
         except (OSError, TypeError) as e:
             print(f"Error saving metadata to {metadata_path}: {e}")
+
+    def _sanitize_for_json(self, obj: Any) -> Any:
+        """
+        Recursively convert an object to a JSON-serializable format.
+
+        Args:
+            obj: Object to sanitize
+
+        Returns:
+            JSON-serializable version of the object
+        """
+        if isinstance(obj, dict):
+            return {k: self._sanitize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._sanitize_for_json(item) for item in obj]
+        elif isinstance(obj, bytes):
+            try:
+                return obj.decode("utf-8", errors="replace")
+            except UnicodeDecodeError:
+                return f"0x{obj.hex()}"
+        elif isinstance(obj, (str, int, float, bool, type(None))):
+            return obj
+        else:
+            # Convert other types to string
+            return str(obj)
 
     def stop(self):
         """Stop the processing."""
