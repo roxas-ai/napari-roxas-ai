@@ -96,6 +96,9 @@ class PreparationWidget(Container):
             scan_file_extension[0] if scan_file_extension else None
         )
 
+        # Store the scan extension for filtering
+        self.scan_filter_extension = self.scan_content_extension
+
         metadata_file_extension_parts = self.settings_manager.get(
             "file_extensions.metadata_file_extension"
         )
@@ -122,6 +125,15 @@ class PreparationWidget(Container):
             text="Project Directory: None"
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
+
+        # File exclusion checkbox
+        self._exclude_processed_checkbox = CheckBox(
+            value=True,
+            label=f"Exclude already processed files (with {self.scan_filter_extension} extension)",
+        )
+        self._exclude_processed_checkbox.changed.connect(
+            self._refresh_file_list
+        )
 
         # File selection controls
         self._handpick_files_checkbox = CheckBox(
@@ -162,6 +174,7 @@ class PreparationWidget(Container):
             [
                 self._source_dialog_button,
                 self._project_dialog_button,
+                self._exclude_processed_checkbox,
                 self._handpick_files_checkbox,
                 self._file_selection_container,
                 self._reverse_selection_button,
@@ -215,21 +228,18 @@ class PreparationWidget(Container):
                     )
                 )
 
-            # Filter out files that already have ROXAS extensions
-            if self.roxas_file_extensions:
+            # Filter out files that have the scan extension if the checkbox is checked
+            if (
+                self.scan_filter_extension
+                and self._exclude_processed_checkbox.value
+            ):
                 filtered_files = []
                 for file_path in self.source_files:
                     file_name = os.path.basename(file_path)
-                    skip_file = False
-
-                    # Check if the file name contains any ROXAS extension
-                    for ext in self.roxas_file_extensions:
-                        if ext in file_name:
-                            skip_file = True
-                            break
-
-                    if not skip_file:
+                    if self.scan_filter_extension not in file_name:
                         filtered_files.append(file_path)
+                    else:
+                        print(f"Skipping already processed file: {file_path}")
 
                 self.source_files = filtered_files
 
@@ -542,6 +552,12 @@ class PreparationWidget(Container):
         """
         # Create thread and worker
         self.worker_thread = QThread()
+
+        # Determine which files to filter out in the worker
+        filter_extensions = None
+        if self._exclude_processed_checkbox.value:
+            filter_extensions = [self.scan_filter_extension]
+
         self.worker = Worker(
             source_directory,
             target_directory,
@@ -554,7 +570,7 @@ class PreparationWidget(Container):
             self.same_directory,
             self.scan_content_extension,
             self.metadata_file_extension,
-            self.roxas_file_extensions,
+            filter_extensions,  # Using consistent variable name
             self.image_file_extensions,
             selected_files,
         )

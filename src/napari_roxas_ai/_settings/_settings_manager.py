@@ -173,7 +173,7 @@ class SettingsManager:
                 "authorised_sample_geometries": ["linear", "circular"],
                 "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
                 "default_angle": 0.0,  # Default value: 0 degrees
-                "default_outmost_year": 0,  # Default value: 0 years
+                "default_outmost_year": 0,  # Default value: 0 years # "default_outmost_complete_ring": 9999
             },
             # File extension settings
             "file_extensions": {

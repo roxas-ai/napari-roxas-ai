@@ -38,7 +38,9 @@ class Worker(QObject):
         same_directory: bool = False,
         scan_content_extension: str = None,
         metadata_file_extension: str = None,
-        roxas_file_extensions: List[str] = None,
+        filter_extensions: List[
+            str
+        ] = None,  # Renamed from roxas_file_extensions
         image_file_extensions: List[str] = None,
         selected_files: Optional[List[str]] = None,
     ):
@@ -60,7 +62,9 @@ class Worker(QObject):
         self.same_directory = same_directory
         self.scan_content_extension = scan_content_extension
         self.metadata_file_extension = metadata_file_extension
-        self.roxas_file_extensions = roxas_file_extensions or []
+        self.filter_extensions = (
+            filter_extensions or []
+        )  # Renamed from roxas_file_extensions
         self.image_file_extensions = image_file_extensions or []
 
         # File selection
@@ -109,15 +113,19 @@ class Worker(QObject):
             ]
             all_source_files = filtered_files
 
-        # Filter out files that already have ROXAS extensions
-        if self.roxas_file_extensions:
+        # Filter out files that have the specified extensions
+        if self.filter_extensions:  # Renamed from roxas_file_extensions
             filtered_files = []
             for file_path in all_source_files:
                 file_name = os.path.basename(file_path)
                 skip_file = False
 
-                # Check if the file name contains any ROXAS extension
-                for ext in self.roxas_file_extensions:
+                # Check if the file name contains any of the filter extensions
+                for (
+                    ext
+                ) in (
+                    self.filter_extensions
+                ):  # Renamed from roxas_file_extensions
                     if ext in file_name:
                         skip_file = True
                         print(f"Skipping already processed file: {file_path}")
@@ -170,6 +178,17 @@ class Worker(QObject):
         dir_path = os.path.dirname(rel_path)
         file_name = os.path.basename(rel_path)
         base_name, file_ext = os.path.splitext(file_name)
+
+        # Check if base_name already ends with scan_content_extension
+        # and remove it to avoid adding it twice
+        if self.scan_content_extension and base_name.endswith(
+            self.scan_content_extension
+        ):
+            # Remove the scan_content_extension from the base_name
+            base_name = base_name[: -len(self.scan_content_extension)]
+            print(
+                f"Removed existing scan extension from filename: {base_name}"
+            )
 
         # Create target directory structure
         target_dir = os.path.join(self.target_directory, dir_path)
