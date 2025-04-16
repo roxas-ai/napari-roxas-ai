@@ -164,13 +164,7 @@ class SettingsManager:
         Reset all settings to default values and save to file.
         """
         self._settings = {
-            "excluded_path_words": [
-                "annotated",
-                "Preview",
-                "ReferenceSeries",
-                "ReferenceSeriesLong",
-            ],
-            # Metadata settings grouped
+            # Metadata settings (user prompt)
             "samples_metadata": {
                 "authorised_sample_types": [
                     "conifer",
@@ -180,12 +174,8 @@ class SettingsManager:
                 "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
                 "default_angle": 0.0,  # Default value: 0 degrees
                 "default_outmost_year": 0,  # Default value: 0 years
-                # JPEG compression parameters
-                "jpeg_quality": 95,  # JPEG quality (0-100)
-                "jpeg_optimize": True,  # Optimize JPEG files
-                "jpeg_progressive": True,  # Use progressive JPEG format
             },
-            # File extension settings grouped
+            # File extension settings
             "file_extensions": {
                 "scan_file_extension": [
                     ".scan",
@@ -203,6 +193,10 @@ class SettingsManager:
                     ".rings",
                     ".tif",
                 ],  # Parts of rings file extension
+                "crossdating_file_extension": [
+                    ".crossdating",
+                    ".rwl",
+                ],  # Parts of tucson file extension
                 "roxas_file_extensions": [
                     ".scan",
                     ".cells",
@@ -218,6 +212,17 @@ class SettingsManager:
                     ".bmp",
                     ".jp2",
                 ],  # Supported image file extensions
+                "tucson_file_extensions": [
+                    ".rwl",
+                    ".tuc",
+                    ".txt",
+                ],  # Supported tucson file extensions
+            },
+            # Image processing settings
+            "JPEG_compression": {
+                "quality": 95,  # Default JPEG quality
+                "optimize": True,  # Default optimize flag
+                "progressive": False,  # Default progressive flag
             },
         }
         self.save_settings()

@@ -1,10 +1,4 @@
 {
-    "excluded_path_words": [
-        "annotated",
-        "Preview",
-        "ReferenceSeries",
-        "ReferenceSeriesLong"
-    ],
     "samples_metadata": {
         "authorised_sample_types": [
             "conifer",
@@ -16,10 +10,7 @@
         ],
         "default_scale": 2.2675,
         "default_angle": 0.0,
-        "default_outmost_year": 0,
-        "jpeg_quality": 95,
-        "jpeg_optimize": true,
-        "jpeg_progressive": true
+        "default_outmost_year": 0
     },
     "file_extensions": {
         "scan_file_extension": [
@@ -38,6 +29,10 @@
             ".rings",
             ".tif"
         ],
+        "crossdating_file_extension": [
+            ".crossdating",
+            ".rwl"
+        ],
         "roxas_file_extensions": [
             ".scan",
             ".cells",
@@ -52,6 +47,16 @@
             ".tiff",
             ".bmp",
             ".jp2"
+        ],
+        "tucson_file_extensions": [
+            ".rwl",
+            ".tuc",
+            ".txt"
         ]
+    },
+    "JPEG_compression": {
+        "quality": 95,
+        "optimize": true,
+        "progressive": false
     }
 }
