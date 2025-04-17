@@ -47,12 +47,12 @@
                 "required": true
             },
             {
-                "id": "sample_outmost_year",
-                "label": "Sample Outmost Year",
+                "id": "sample_outmost_complete_ring_year",
+                "label": "Sample Outmost Complete Ring Year",
                 "widget_type": "QSpinBox",
-                "default": 0,
+                "default": 9999,
                 "min": -10000,
-                "max": 3000,
+                "max": 9999,
                 "special_value_text": "Not set",
                 "required": false
             }

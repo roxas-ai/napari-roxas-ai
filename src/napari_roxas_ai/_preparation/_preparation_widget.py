@@ -63,27 +63,6 @@ class PreparationWidget(Container):
         # Initialize settings manager
         self.settings_manager = SettingsManager()
 
-        # Get authorized sample types and geometries
-        self.authorized_sample_types = self.settings_manager.get(
-            "samples_metadata.authorised_sample_types"
-        )
-        self.authorized_sample_geometries = self.settings_manager.get(
-            "samples_metadata.authorised_sample_geometries"
-        )
-
-        # Get default scale and angle
-        self.default_scale = self.settings_manager.get(
-            "samples_metadata.default_scale"
-        )
-        self.default_angle = self.settings_manager.get(
-            "samples_metadata.default_angle"
-        )
-
-        # Get default outmost year
-        self.default_outmost_year = self.settings_manager.get(
-            "samples_metadata.default_outmost_year"
-        )
-
         # Get file extension settings
         scan_file_extension = self.settings_manager.get(
             "file_extensions.scan_file_extension"
@@ -100,7 +79,7 @@ class PreparationWidget(Container):
         # Get supported image file extensions
         self.image_file_extensions = self.settings_manager.get(
             "file_extensions.image_file_extensions"
-        ) or [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
+        )
 
     def _create_ui_components(self):
         """Create and configure UI components."""
