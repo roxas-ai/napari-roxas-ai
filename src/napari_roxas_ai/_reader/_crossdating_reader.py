@@ -21,7 +21,9 @@ def read_crossdating_file(path: str) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        DataFrame containing the crossdating data
+        DataFrame containing the crossdating data.
+        The DataFrame has tree-ring series as columns (or index depending on format),
+        and years as the other dimension.
 
     Raises
     ------
@@ -191,7 +193,6 @@ def read_raw_tucson_file(
             raise ValueError("Could not detect end-of-line value in the file")
 
         # Read the file
-        df = pd.DataFrame()
         series_dict = {}  # Use a dictionary to collect data for each series
 
         with open(path) as file:
@@ -238,16 +239,27 @@ def read_raw_tucson_file(
                             series_id
                         ].combine_first(current_line_series)
 
-                    # We don't need to track current_series_id as it's not used
-
                 except ValueError as e:
                     raise ValueError(
                         f"Error processing line {line_num}: {str(e)}"
                     ) from e
 
-        # Convert all series to a DataFrame
+        # Convert all series to a DataFrame - addressing the FutureWarning
         if series_dict:
-            df = pd.DataFrame(series_dict)
+            # Create DataFrame only if we have non-empty data
+            # Filter out any empty series to avoid the FutureWarning
+            non_empty_series = {
+                k: v for k, v in series_dict.items() if not v.empty
+            }
+
+            if non_empty_series:
+                df = pd.DataFrame(non_empty_series)
+            else:
+                df = (
+                    pd.DataFrame()
+                )  # Create an empty DataFrame if all series are empty
+        else:
+            df = pd.DataFrame()  # Create an empty DataFrame if no series
 
         if df.empty:
             raise ValueError("No valid data found in the file")

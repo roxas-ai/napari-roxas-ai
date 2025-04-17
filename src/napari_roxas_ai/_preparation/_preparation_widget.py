@@ -20,6 +20,7 @@ from qtpy.QtWidgets import (
 )
 
 from .._settings._settings_manager import SettingsManager
+from ._crossdating_handler import process_crossdating_files
 from ._metadata_dialog import MetadataDialog
 from ._worker import Worker
 
@@ -76,9 +77,20 @@ class PreparationWidget(Container):
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
+        # Get crossdating file extension
+        crossdating_file_extension = self.settings_manager.get(
+            "file_extensions.crossdating_file_extension"
+        )
+        self.crossdating_file_extension = "".join(crossdating_file_extension)
+
         # Get supported image file extensions
         self.image_file_extensions = self.settings_manager.get(
             "file_extensions.image_file_extensions"
+        )
+
+        # Get supported text file extensions for crossdating
+        self.text_file_extensions = self.settings_manager.get(
+            "file_extensions.text_file_extensions"
         )
 
     def _create_ui_components(self):
@@ -89,7 +101,7 @@ class PreparationWidget(Container):
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
 
-        # Overwrite files checkbox (new)
+        # Overwrite files checkbox
         self._overwrite_files_checkbox = CheckBox(
             value=True,
             label="Overwrite original files (replace instead of copy)",
@@ -130,9 +142,22 @@ class PreparationWidget(Container):
             value=0, min=0, max=100, visible=False, label="Processing Progress"
         )
 
-        # Start/Cancel button
-        self._action_button = PushButton(text="Start Processing")
-        self._action_button.changed.connect(self._toggle_processing)
+        # Image processing button
+        self._image_action_button = PushButton(
+            text="Start Processing Image Files"
+        )
+        self._image_action_button.changed.connect(
+            self._toggle_image_processing
+        )
+
+        # Crossdating processing button
+        self._crossdating_action_button = PushButton(
+            text="Start Processing Crossdating Files"
+        )
+        self._crossdating_action_button.changed.connect(
+            self._process_crossdating_files
+        )
+
         self._is_processing = False
 
         # Append all widgets to the container
@@ -144,7 +169,8 @@ class PreparationWidget(Container):
                 self._handpick_files_checkbox,
                 self._file_selection_container,
                 self._reverse_selection_button,
-                self._action_button,
+                self._image_action_button,
+                self._crossdating_action_button,
                 self._progress_bar,
             ]
         )
@@ -294,15 +320,15 @@ class PreparationWidget(Container):
 
         return selected_paths
 
-    def _toggle_processing(self):
-        """Toggle between starting and canceling processing."""
+    def _toggle_image_processing(self):
+        """Toggle between starting and canceling image processing."""
         if not self._is_processing:
-            self._start_processing()
+            self._start_image_processing()
         else:
             self._cancel_processing()
 
-    def _start_processing(self):
-        """Start the file processing in a separate thread."""
+    def _start_image_processing(self):
+        """Start the image file processing in a separate thread."""
         # Validate inputs
         if not self._validate_inputs():
             return
@@ -319,6 +345,33 @@ class PreparationWidget(Container):
             selected_files,
             self._process_processed_checkbox.value,
         )
+
+    def _process_crossdating_files(self):
+        """Handle the selection and processing of crossdating files."""
+        if not self.project_directory:
+            QMessageBox.warning(
+                None, "Warning", "Please select a project directory."
+            )
+            return
+
+        # Process crossdating files
+        result_df = process_crossdating_files(
+            project_directory=self.project_directory,
+            crossdating_file_extension=self.crossdating_file_extension,
+            text_file_extensions=self.text_file_extensions,
+        )
+
+        # Result_df will be None if user canceled or if there was an error
+        if result_df is not None:
+            crossdating_file_path = os.path.join(
+                self.project_directory,
+                f"rings_series{self.crossdating_file_extension}",
+            )
+            QMessageBox.information(
+                None,
+                "Crossdating Files Processed",
+                f"Crossdating data has been processed and saved to:\n{crossdating_file_path}",
+            )
 
     def _validate_inputs(self) -> bool:
         """Validate user inputs before processing."""
@@ -353,7 +406,7 @@ class PreparationWidget(Container):
         self._is_processing = is_processing
 
         if is_processing:
-            self._action_button.text = "Cancel"
+            self._image_action_button.text = "Cancel Processing"
             self._progress_bar.visible = True
             self._progress_bar.value = 0
             self._project_dialog_button.enabled = False
@@ -361,14 +414,16 @@ class PreparationWidget(Container):
             self._handpick_files_checkbox.enabled = False
             self._file_selection_container.enabled = False
             self._reverse_selection_button.enabled = False
+            self._crossdating_action_button.enabled = False
         else:
-            self._action_button.text = "Start Processing"
+            self._image_action_button.text = "Start Processing Image Files"
             self._progress_bar.visible = False
             self._project_dialog_button.enabled = True
             self._process_processed_checkbox.enabled = True
             self._handpick_files_checkbox.enabled = True
             self._file_selection_container.enabled = True
             self._reverse_selection_button.enabled = True
+            self._crossdating_action_button.enabled = True
 
     def _cancel_processing(self):
         """Cancel the current processing job."""
