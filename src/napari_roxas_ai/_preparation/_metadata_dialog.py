@@ -1,4 +1,8 @@
-from typing import Any, Dict, List
+"""
+Dialog for entering sample metadata.
+"""
+
+from typing import Any, Dict, Optional, Tuple
 
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -7,132 +11,235 @@ from qtpy.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
-    QLabel,
+    QLineEdit,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
+
+from .._settings._settings_manager import SettingsManager
 
 
 class MetadataDialog(QDialog):
-    """Dialog for entering sample metadata."""
+    """
+    Dialog for entering sample metadata.
 
-    def __init__(
-        self,
-        default_metadata: Dict[str, Any],
-        authorized_sample_types: List[str],
-        authorized_sample_geometries: List[str],
-    ):
+    This dialog allows the user to edit metadata for a sample and
+    optionally apply the same metadata to all remaining samples.
+    """
+
+    def __init__(self, filename: str, parent: Optional[QWidget] = None):
         """
         Initialize the metadata dialog.
 
         Args:
-            default_metadata: Initial values for metadata fields
-            authorized_sample_types: List of authorized sample types
-            authorized_sample_geometries: List of authorized sample geometries
+            filename: Base filename for the sample (without extension)
+            parent: Parent widget
         """
-        super().__init__()
+        super().__init__(parent)
 
         self.setWindowTitle("Sample Metadata")
-        self.setMinimumWidth(400)
+        self.resize(400, 300)
 
-        # Create the main layout
-        main_layout = QVBoxLayout()
-        self.setLayout(main_layout)
+        # Store the filename
+        self.filename = filename
 
-        # Create form layout for metadata fields
+        # Load settings
+        self._load_settings()
+
+        # Create layout and widgets
+        self._create_ui()
+
+    def _load_settings(self):
+        """Load settings from the settings manager."""
+        # Initialize settings manager
+        self.settings_manager = SettingsManager()
+
+        # Get metadata field definitions
+        self.metadata_fields = (
+            self.settings_manager.get("samples_metadata.fields") or []
+        )
+
+        # Get file extensions
+        scan_file_extension = self.settings_manager.get(
+            "file_extensions.scan_file_extension"
+        )
+        self.scan_content_extension = (
+            scan_file_extension[0] if scan_file_extension else ".scan"
+        )
+
+        metadata_file_extension_parts = self.settings_manager.get(
+            "file_extensions.metadata_file_extension"
+        )
+        self.metadata_file_extension = (
+            "".join(metadata_file_extension_parts)
+            if metadata_file_extension_parts
+            else ".metadata.json"
+        )
+
+    def _create_ui(self):
+        """Create the UI elements dynamically based on settings."""
+        # Main layout
+        layout = QVBoxLayout(self)
+
+        # Form layout for metadata fields
         form_layout = QFormLayout()
 
-        # Sample name field - as non-editable QLabel
-        self.sample_name = QLabel(default_metadata.get("sample_name", ""))
-        form_layout.addRow("Sample Name:", self.sample_name)
+        # Dictionary to store all created widgets
+        self.widgets = {}
 
-        # Sample type dropdown
-        self.sample_type = QComboBox()
-        self.sample_type.addItems(authorized_sample_types)
-        if default_metadata.get("sample_type") in authorized_sample_types:
-            self.sample_type.setCurrentText(
-                default_metadata.get("sample_type")
-            )
-        form_layout.addRow("Sample Type:", self.sample_type)
-
-        # Sample geometry dropdown
-        self.sample_geometry = QComboBox()
-        self.sample_geometry.addItems(authorized_sample_geometries)
-        if (
-            default_metadata.get("sample_geometry")
-            in authorized_sample_geometries
-        ):
-            self.sample_geometry.setCurrentText(
-                default_metadata.get("sample_geometry")
-            )
-        form_layout.addRow("Sample Geometry:", self.sample_geometry)
-
-        # Sample scale field
-        self.sample_scale = QDoubleSpinBox()
-        self.sample_scale.setDecimals(6)
-        self.sample_scale.setRange(0.000001, 1000.0)
-        self.sample_scale.setValue(default_metadata.get("sample_scale", 1.0))
-        form_layout.addRow("Sample Scale (pixels/μm):", self.sample_scale)
-
-        # Sample angle field
-        self.sample_angle = QDoubleSpinBox()
-        self.sample_angle.setRange(-360.0, 360.0)
-        self.sample_angle.setValue(default_metadata.get("sample_angle", 0.0))
-        form_layout.addRow("Sample Angle (°):", self.sample_angle)
-
-        # Outmost year field
-        self.sample_outmost_year = QSpinBox()
-        self.sample_outmost_year.setRange(
-            -10000, 3000
-        )  # Allow for ancient samples
-        self.sample_outmost_year.setValue(
-            default_metadata.get("sample_outmost_year") or 0
-        )
-        form_layout.addRow("Sample Outmost Year:", self.sample_outmost_year)
-
-        # Sample files information (read-only)
-        if "sample_files" in default_metadata:
-            sample_files_text = ", ".join(default_metadata["sample_files"])
-            self.sample_files = QLabel(sample_files_text)
-            form_layout.addRow("Sample Files:", self.sample_files)
-
-        # Apply to all checkbox
-        self.apply_to_all_checkbox = QCheckBox("Apply to all remaining files")
-        form_layout.addRow("", self.apply_to_all_checkbox)
+        # Create widgets dynamically based on metadata field definitions
+        for field_def in self.metadata_fields:
+            widget = self._create_widget_from_definition(field_def)
+            if widget:
+                form_layout.addRow(f"{field_def['label']}:", widget)
+                self.widgets[field_def["id"]] = {
+                    "widget": widget,
+                    "definition": field_def,
+                }
 
         # Add form layout to main layout
-        main_layout.addLayout(form_layout)
+        layout.addLayout(form_layout)
 
-        # Add dialog buttons
-        button_box = QDialogButtonBox(
+        # "Apply to all" checkbox
+        self.apply_to_all_checkbox = QCheckBox(
+            "Apply to all remaining samples"
+        )
+        layout.addWidget(self.apply_to_all_checkbox)
+
+        # Dialog buttons
+        self.button_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        main_layout.addWidget(button_box)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def _create_widget_from_definition(
+        self, field_def: Dict[str, Any]
+    ) -> Optional[QWidget]:
         """
-        Get the metadata from the dialog fields.
+        Create a widget based on field definition from settings.
 
-        Returns:
-            Dict: Dictionary containing the metadata values
-        """
-        return {
-            "sample_name": self.sample_name.text(),
-            "sample_type": self.sample_type.currentText(),
-            "sample_geometry": self.sample_geometry.currentText(),
-            "sample_scale": self.sample_scale.value(),
-            "sample_angle": self.sample_angle.value(),
-            "sample_outmost_year": self.sample_outmost_year.value(),
-            "sample_files": self.sample_files.text(),
-        }
-
-    def apply_to_all(self) -> bool:
-        """
-        Check if the 'apply to all' checkbox is selected.
+        Args:
+            field_def: Dictionary with widget definition
 
         Returns:
-            bool: True if the checkbox is checked, False otherwise
+            Created widget or None if widget type is not supported
         """
-        return self.apply_to_all_checkbox.isChecked()
+        widget_type = field_def.get("widget_type")
+        widget_id = field_def.get("id")
+
+        if widget_type == "QLineEdit":
+            widget = QLineEdit()
+            if field_def.get("read_only", False):
+                widget.setReadOnly(True)
+
+            # Set default value for sample_name
+            if widget_id == "sample_name":
+                widget.setText(self.filename)
+
+            return widget
+
+        elif widget_type == "QComboBox":
+            widget = QComboBox()
+
+            # Get items directly from field definition
+            items = field_def.get("items", [])
+            if items:
+                widget.addItems(items)
+
+            # Set editability
+            if field_def.get("editable", False):
+                widget.setEditable(True)
+
+            return widget
+
+        elif widget_type == "QDoubleSpinBox":
+            widget = QDoubleSpinBox()
+
+            # Configure range, step, and precision
+            if "min" in field_def:
+                widget.setMinimum(field_def["min"])
+            if "max" in field_def:
+                widget.setMaximum(field_def["max"])
+            if "step" in field_def:
+                widget.setSingleStep(field_def["step"])
+            if "decimals" in field_def:
+                widget.setDecimals(field_def["decimals"])
+
+            # Set default value directly from definition
+            if "default" in field_def:
+                widget.setValue(field_def["default"])
+
+            return widget
+
+        elif widget_type == "QSpinBox":
+            widget = QSpinBox()
+
+            # Configure range
+            if "min" in field_def:
+                widget.setMinimum(field_def["min"])
+            if "max" in field_def:
+                widget.setMaximum(field_def["max"])
+
+            # Set special value text if specified
+            if "special_value_text" in field_def:
+                widget.setSpecialValueText(field_def["special_value_text"])
+
+            # Set default value directly from definition
+            if "default" in field_def:
+                widget.setValue(field_def["default"])
+
+            return widget
+
+        return None
+
+    def get_result(self) -> Tuple[Dict, bool]:
+        """
+        Get the metadata and apply_to_all flag from the dialog.
+
+        Returns:
+            Tuple[Dict, bool]: (metadata_dict, apply_to_all_flag)
+        """
+        # Build metadata dictionary with values from all widgets
+        metadata = {}
+
+        for field_id, widget_data in self.widgets.items():
+            widget = widget_data["widget"]
+            field_def = widget_data["definition"]
+
+            # Get value based on widget type
+            value = None
+            widget_type = field_def.get("widget_type")
+
+            if widget_type == "QLineEdit":
+                value = widget.text()
+            elif widget_type == "QComboBox":
+                value = widget.currentText()
+            elif widget_type == "QDoubleSpinBox" or widget_type == "QSpinBox":
+                value = widget.value()
+                # Don't include if it's a special value and not required
+                if (
+                    widget_type == "QSpinBox"
+                    and "special_value_text" in field_def
+                    and value == widget.minimum()
+                    and not field_def.get("required", True)
+                ):
+                    continue
+
+            # Add to metadata
+            metadata[field_id] = value
+
+        # Metadata that is not in the form
+
+        # Add sample_files field with content extensions
+        metadata["sample_files"] = [
+            self.scan_content_extension,
+            self.metadata_file_extension.split(".json")[0],
+        ]
+
+        # Get apply_to_all flag
+        apply_to_all = self.apply_to_all_checkbox.isChecked()
+
+        return metadata, apply_to_all

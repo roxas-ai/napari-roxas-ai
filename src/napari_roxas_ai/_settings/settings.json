@@ -1,25 +1,62 @@
 {
-    "excluded_path_words": [
-        "annotated",
-        "Preview",
-        "ReferenceSeries",
-        "ReferenceSeriesLong"
-    ],
     "samples_metadata": {
-        "authorised_sample_types": [
-            "conifer",
-            "angiosperm"
-        ],
-        "authorised_sample_geometries": [
-            "linear",
-            "circular"
-        ],
-        "default_scale": 2.2675,
-        "default_angle": 0.0,
-        "default_outmost_year": 0,
-        "jpeg_quality": 95,
-        "jpeg_optimize": true,
-        "jpeg_progressive": true
+        "fields": [
+            {
+                "id": "sample_name",
+                "label": "Sample Name",
+                "widget_type": "QLineEdit",
+                "read_only": true,
+                "required": true
+            },
+            {
+                "id": "sample_type",
+                "label": "Sample Type",
+                "widget_type": "QComboBox",
+                "items": ["conifer", "angiosperm"],
+                "editable": true,
+                "required": true
+            },
+            {
+                "id": "sample_geometry",
+                "label": "Sample Geometry",
+                "widget_type": "QComboBox",
+                "items": ["linear", "circular"],
+                "editable": true,
+                "required": true
+            },
+            {
+                "id": "sample_scale",
+                "label": "Sample Scale",
+                "widget_type": "QDoubleSpinBox",
+                "default": 2.2675,
+                "min": 0.001,
+                "max": 1000.0,
+                "step": 0.01,
+                "decimals": 4,
+                "required": true
+            },
+            {
+                "id": "sample_angle",
+                "label": "Sample Angle",
+                "widget_type": "QDoubleSpinBox",
+                "default": 0.0,
+                "min": -360.0,
+                "max": 360.0,
+                "step": 0.1,
+                "decimals": 2,
+                "required": true
+            },
+            {
+                "id": "sample_outmost_complete_ring_year",
+                "label": "Sample Outmost Complete Ring Year",
+                "widget_type": "QSpinBox",
+                "default": 9999,
+                "min": -10000,
+                "max": 9999,
+                "special_value_text": "Not set",
+                "required": false
+            }
+        ]
     },
     "file_extensions": {
         "scan_file_extension": [
@@ -38,6 +75,10 @@
             ".rings",
             ".tif"
         ],
+        "crossdating_file_extension": [
+            ".crossdating",
+            ".txt"
+        ],
         "roxas_file_extensions": [
             ".scan",
             ".cells",
@@ -52,6 +93,18 @@
             ".tiff",
             ".bmp",
             ".jp2"
+        ],
+        "text_file_extensions": [
+            ".rwl",
+            ".tuc",
+            ".txt",
+            ".csv",
+            ".tsv"
         ]
+    },
+    "JPEG_compression": {
+        "quality": 95,
+        "optimize": true,
+        "progressive": false
     }
 }

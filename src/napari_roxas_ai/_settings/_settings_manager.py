@@ -164,28 +164,67 @@ class SettingsManager:
         Reset all settings to default values and save to file.
         """
         self._settings = {
-            "excluded_path_words": [
-                "annotated",
-                "Preview",
-                "ReferenceSeries",
-                "ReferenceSeriesLong",
-            ],
-            # Metadata settings grouped
+            # Metadata settings with fields for UI
             "samples_metadata": {
-                "authorised_sample_types": [
-                    "conifer",
-                    "angiosperm",
-                ],
-                "authorised_sample_geometries": ["linear", "circular"],
-                "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
-                "default_angle": 0.0,  # Default value: 0 degrees
-                "default_outmost_year": 0,  # Default value: 0 years
-                # JPEG compression parameters
-                "jpeg_quality": 95,  # JPEG quality (0-100)
-                "jpeg_optimize": True,  # Optimize JPEG files
-                "jpeg_progressive": True,  # Use progressive JPEG format
+                "fields": [
+                    {
+                        "id": "sample_name",
+                        "label": "Sample Name",
+                        "widget_type": "QLineEdit",
+                        "read_only": True,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_type",
+                        "label": "Sample Type",
+                        "widget_type": "QComboBox",
+                        "items": ["conifer", "angiosperm"],
+                        "editable": True,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_geometry",
+                        "label": "Sample Geometry",
+                        "widget_type": "QComboBox",
+                        "items": ["linear", "circular"],
+                        "editable": True,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_scale",
+                        "label": "Sample Scale",
+                        "widget_type": "QDoubleSpinBox",
+                        "default": 2.2675,
+                        "min": 0.001,
+                        "max": 1000.0,
+                        "step": 0.01,
+                        "decimals": 4,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_angle",
+                        "label": "Sample Angle",
+                        "widget_type": "QDoubleSpinBox",
+                        "default": 0.0,
+                        "min": -360.0,
+                        "max": 360.0,
+                        "step": 0.1,
+                        "decimals": 2,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_outmost_complete_ring_year",
+                        "label": "Sample Outmost Complete Ring Year",
+                        "widget_type": "QSpinBox",
+                        "default": 9999,
+                        "min": -10000,
+                        "max": 9999,
+                        "special_value_text": "Not set",
+                        "required": False,
+                    },
+                ]
             },
-            # File extension settings grouped
+            # File extension settings
             "file_extensions": {
                 "scan_file_extension": [
                     ".scan",
@@ -203,6 +242,10 @@ class SettingsManager:
                     ".rings",
                     ".tif",
                 ],  # Parts of rings file extension
+                "crossdating_file_extension": [
+                    ".crossdating",
+                    ".txt",
+                ],  # Parts of tucson file extension
                 "roxas_file_extensions": [
                     ".scan",
                     ".cells",
@@ -218,6 +261,19 @@ class SettingsManager:
                     ".bmp",
                     ".jp2",
                 ],  # Supported image file extensions
+                "text_file_extensions": [
+                    ".rwl",  # for tucson files
+                    ".tuc",  # for tucson files
+                    ".txt",
+                    ".csv",
+                    ".tsv",
+                ],  # Supported text file extensions
+            },
+            # Image processing settings
+            "JPEG_compression": {
+                "quality": 95,  # Default JPEG quality
+                "optimize": True,  # Default optimize flag
+                "progressive": False,  # Default progressive flag
             },
         }
         self.save_settings()
