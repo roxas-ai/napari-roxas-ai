@@ -2,7 +2,7 @@
 Dialog for entering sample metadata.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -50,39 +50,14 @@ class MetadataDialog(QDialog):
         # Create layout and widgets
         self._create_ui()
 
-        # Apply default values
-        self._apply_defaults()
-
     def _load_settings(self):
         """Load settings from the settings manager."""
         # Initialize settings manager
         self.settings_manager = SettingsManager()
 
-        # Get authorized sample types and geometries
-        self.sample_types = (
-            self.settings_manager.get(
-                "samples_metadata.authorised_sample_types"
-            )
-            or []
-        )
-        self.sample_geometries = (
-            self.settings_manager.get(
-                "samples_metadata.authorised_sample_geometries"
-            )
-            or []
-        )
-
-        # Get default scale and angle
-        self.default_scale = (
-            self.settings_manager.get("samples_metadata.default_scale") or 1.0
-        )
-        self.default_angle = (
-            self.settings_manager.get("samples_metadata.default_angle") or 0.0
-        )
-
-        # Get default outmost year
-        self.default_outmost_year = self.settings_manager.get(
-            "samples_metadata.default_outmost_year"
+        # Get metadata field definitions
+        self.metadata_fields = (
+            self.settings_manager.get("samples_metadata.fields") or []
         )
 
         # Get file extensions
@@ -97,63 +72,31 @@ class MetadataDialog(QDialog):
             "file_extensions.metadata_file_extension"
         )
         self.metadata_file_extension = (
-            "".join(metadata_file_extension_parts) or ".metadata.json"
+            "".join(metadata_file_extension_parts)
+            if metadata_file_extension_parts
+            else ".metadata.json"
         )
 
     def _create_ui(self):
-        """Create the UI elements."""
+        """Create the UI elements dynamically based on settings."""
         # Main layout
         layout = QVBoxLayout(self)
 
         # Form layout for metadata fields
         form_layout = QFormLayout()
 
-        # Sample name (read-only)
-        self.sample_name_edit = QLineEdit()
-        self.sample_name_edit.setReadOnly(True)
-        form_layout.addRow("Sample Name:", self.sample_name_edit)
+        # Dictionary to store all created widgets
+        self.widgets = {}
 
-        # Sample type (combo box)
-        self.sample_type_combo = QComboBox()
-        if self.sample_types:
-            self.sample_type_combo.addItems(self.sample_types)
-        else:
-            self.sample_type_combo.setEditable(True)
-        form_layout.addRow("Sample Type:", self.sample_type_combo)
-
-        # Sample geometry (combo box)
-        self.sample_geometry_combo = QComboBox()
-        if self.sample_geometries:
-            self.sample_geometry_combo.addItems(self.sample_geometries)
-        else:
-            self.sample_geometry_combo.setEditable(True)
-        form_layout.addRow("Sample Geometry:", self.sample_geometry_combo)
-
-        # Sample scale (double spin box)
-        self.sample_scale_spin = QDoubleSpinBox()
-        self.sample_scale_spin.setRange(0.001, 1000.0)
-        self.sample_scale_spin.setSingleStep(0.01)
-        self.sample_scale_spin.setDecimals(4)
-        form_layout.addRow("Sample Scale:", self.sample_scale_spin)
-
-        # Sample angle (double spin box)
-        self.sample_angle_spin = QDoubleSpinBox()
-        self.sample_angle_spin.setRange(-360.0, 360.0)
-        self.sample_angle_spin.setSingleStep(0.1)
-        self.sample_angle_spin.setDecimals(2)
-        form_layout.addRow("Sample Angle:", self.sample_angle_spin)
-
-        # Sample outmost year (spin box)
-        self.sample_outmost_year_spin = QSpinBox()
-        self.sample_outmost_year_spin.setRange(
-            -10000, 3000
-        )  # Wide range for historical data
-        self.sample_outmost_year_spin.setSpecialValueText(
-            "Not set"
-        )  # Display "Not set" for value 0
-        form_layout.addRow(
-            "Sample Outmost Year:", self.sample_outmost_year_spin
-        )
+        # Create widgets dynamically based on metadata field definitions
+        for field_def in self.metadata_fields:
+            widget = self._create_widget_from_definition(field_def)
+            if widget:
+                form_layout.addRow(f"{field_def['label']}:", widget)
+                self.widgets[field_def["id"]] = {
+                    "widget": widget,
+                    "definition": field_def,
+                }
 
         # Add form layout to main layout
         layout.addLayout(form_layout)
@@ -172,39 +115,85 @@ class MetadataDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
 
-    def _apply_defaults(self):
-        """Apply default values to the widgets."""
-        # Sample name
-        self.sample_name_edit.setText(self.filename)
+    def _create_widget_from_definition(
+        self, field_def: Dict[str, Any]
+    ) -> Optional[QWidget]:
+        """
+        Create a widget based on field definition from settings.
 
-        # Sample type
-        if self.sample_types:
-            self.sample_type_combo.setCurrentIndex(0)
-        elif self.sample_type_combo.isEditable():
-            self.sample_type_combo.setEditText("")
+        Args:
+            field_def: Dictionary with widget definition
 
-        # Sample geometry
-        if self.sample_geometries:
-            self.sample_geometry_combo.setCurrentIndex(0)
-        elif self.sample_geometry_combo.isEditable():
-            self.sample_geometry_combo.setEditText("")
+        Returns:
+            Created widget or None if widget type is not supported
+        """
+        widget_type = field_def.get("widget_type")
+        widget_id = field_def.get("id")
 
-        # Sample scale
-        self.sample_scale_spin.setValue(self.default_scale)
+        if widget_type == "QLineEdit":
+            widget = QLineEdit()
+            if field_def.get("read_only", False):
+                widget.setReadOnly(True)
 
-        # Sample angle
-        self.sample_angle_spin.setValue(self.default_angle)
+            # Set default value for sample_name
+            if widget_id == "sample_name":
+                widget.setText(self.filename)
 
-        # Sample outmost year
-        if (
-            self.default_outmost_year is not None
-            and self.default_outmost_year != 0
-        ):
-            self.sample_outmost_year_spin.setValue(self.default_outmost_year)
-        else:
-            self.sample_outmost_year_spin.setValue(
-                0
-            )  # Will display as "Not set"
+            return widget
+
+        elif widget_type == "QComboBox":
+            widget = QComboBox()
+
+            # Get items directly from field definition
+            items = field_def.get("items", [])
+            if items:
+                widget.addItems(items)
+
+            # Set editability
+            if field_def.get("editable", False):
+                widget.setEditable(True)
+
+            return widget
+
+        elif widget_type == "QDoubleSpinBox":
+            widget = QDoubleSpinBox()
+
+            # Configure range, step, and precision
+            if "min" in field_def:
+                widget.setMinimum(field_def["min"])
+            if "max" in field_def:
+                widget.setMaximum(field_def["max"])
+            if "step" in field_def:
+                widget.setSingleStep(field_def["step"])
+            if "decimals" in field_def:
+                widget.setDecimals(field_def["decimals"])
+
+            # Set default value directly from definition
+            if "default" in field_def:
+                widget.setValue(field_def["default"])
+
+            return widget
+
+        elif widget_type == "QSpinBox":
+            widget = QSpinBox()
+
+            # Configure range
+            if "min" in field_def:
+                widget.setMinimum(field_def["min"])
+            if "max" in field_def:
+                widget.setMaximum(field_def["max"])
+
+            # Set special value text if specified
+            if "special_value_text" in field_def:
+                widget.setSpecialValueText(field_def["special_value_text"])
+
+            # Set default value directly from definition
+            if "default" in field_def:
+                widget.setValue(field_def["default"])
+
+            return widget
+
+        return None
 
     def get_result(self) -> Tuple[Dict, bool]:
         """
@@ -213,25 +202,42 @@ class MetadataDialog(QDialog):
         Returns:
             Tuple[Dict, bool]: (metadata_dict, apply_to_all_flag)
         """
-        # Build metadata dictionary with all sample_ fields
-        metadata = {
-            "sample_name": self.sample_name_edit.text(),
-            "sample_type": self.sample_type_combo.currentText(),
-            "sample_geometry": self.sample_geometry_combo.currentText(),
-            "sample_scale": self.sample_scale_spin.value(),
-            "sample_angle": self.sample_angle_spin.value(),
-            # Add the sample_files field with content extensions
-            "sample_files": [
-                self.scan_content_extension,
-                self.metadata_file_extension.split(".json")[0],
-            ],
-        }
+        # Build metadata dictionary with values from all widgets
+        metadata = {}
 
-        # Only include outmost year if it's set (not zero)
-        if self.sample_outmost_year_spin.value() != 0:
-            metadata["sample_outmost_year"] = (
-                self.sample_outmost_year_spin.value()
-            )
+        for field_id, widget_data in self.widgets.items():
+            widget = widget_data["widget"]
+            field_def = widget_data["definition"]
+
+            # Get value based on widget type
+            value = None
+            widget_type = field_def.get("widget_type")
+
+            if widget_type == "QLineEdit":
+                value = widget.text()
+            elif widget_type == "QComboBox":
+                value = widget.currentText()
+            elif widget_type == "QDoubleSpinBox" or widget_type == "QSpinBox":
+                value = widget.value()
+                # Don't include if it's a special value and not required
+                if (
+                    widget_type == "QSpinBox"
+                    and "special_value_text" in field_def
+                    and value == widget.minimum()
+                    and not field_def.get("required", True)
+                ):
+                    continue
+
+            # Add to metadata
+            metadata[field_id] = value
+
+        # Metadata that is not in the form
+
+        # Add sample_files field with content extensions
+        metadata["sample_files"] = [
+            self.scan_content_extension,
+            self.metadata_file_extension.split(".json")[0],
+        ]
 
         # Get apply_to_all flag
         apply_to_all = self.apply_to_all_checkbox.isChecked()

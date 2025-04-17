@@ -164,16 +164,65 @@ class SettingsManager:
         Reset all settings to default values and save to file.
         """
         self._settings = {
-            # Metadata settings (user prompt)
+            # Metadata settings with fields for UI
             "samples_metadata": {
-                "authorised_sample_types": [
-                    "conifer",
-                    "angiosperm",
-                ],
-                "authorised_sample_geometries": ["linear", "circular"],
-                "default_scale": 2.2675,  # Default value: 2.2675 pixels/μm
-                "default_angle": 0.0,  # Default value: 0 degrees
-                "default_outmost_year": 0,  # Default value: 0 years # "default_outmost_complete_ring": 9999
+                "fields": [
+                    {
+                        "id": "sample_name",
+                        "label": "Sample Name",
+                        "widget_type": "QLineEdit",
+                        "read_only": True,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_type",
+                        "label": "Sample Type",
+                        "widget_type": "QComboBox",
+                        "items": ["conifer", "angiosperm"],
+                        "editable": True,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_geometry",
+                        "label": "Sample Geometry",
+                        "widget_type": "QComboBox",
+                        "items": ["linear", "circular"],
+                        "editable": True,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_scale",
+                        "label": "Sample Scale",
+                        "widget_type": "QDoubleSpinBox",
+                        "default": 2.2675,
+                        "min": 0.001,
+                        "max": 1000.0,
+                        "step": 0.01,
+                        "decimals": 4,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_angle",
+                        "label": "Sample Angle",
+                        "widget_type": "QDoubleSpinBox",
+                        "default": 0.0,
+                        "min": -360.0,
+                        "max": 360.0,
+                        "step": 0.1,
+                        "decimals": 2,
+                        "required": True,
+                    },
+                    {
+                        "id": "sample_outmost_year",
+                        "label": "Sample Outmost Year",
+                        "widget_type": "QSpinBox",
+                        "default": 0,
+                        "min": -10000,
+                        "max": 3000,
+                        "special_value_text": "Not set",
+                        "required": False,
+                    },
+                ]
             },
             # File extension settings
             "file_extensions": {
