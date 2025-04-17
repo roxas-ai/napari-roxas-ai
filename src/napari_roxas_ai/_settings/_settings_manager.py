@@ -244,7 +244,7 @@ class SettingsManager:
                 ],  # Parts of rings file extension
                 "crossdating_file_extension": [
                     ".crossdating",
-                    ".rwl",
+                    ".txt",
                 ],  # Parts of tucson file extension
                 "roxas_file_extensions": [
                     ".scan",
@@ -261,11 +261,13 @@ class SettingsManager:
                     ".bmp",
                     ".jp2",
                 ],  # Supported image file extensions
-                "tucson_file_extensions": [
-                    ".rwl",
-                    ".tuc",
+                "text_file_extensions": [
+                    ".rwl",  # for tucson files
+                    ".tuc",  # for tucson files
                     ".txt",
-                ],  # Supported tucson file extensions
+                    ".csv",
+                    ".tsv",
+                ],  # Supported text file extensions
             },
             # Image processing settings
             "JPEG_compression": {

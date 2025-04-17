@@ -77,7 +77,7 @@
         ],
         "crossdating_file_extension": [
             ".crossdating",
-            ".rwl"
+            ".txt"
         ],
         "roxas_file_extensions": [
             ".scan",
@@ -94,10 +94,12 @@
             ".bmp",
             ".jp2"
         ],
-        "tucson_file_extensions": [
+        "text_file_extensions": [
             ".rwl",
             ".tuc",
-            ".txt"
+            ".txt",
+            ".csv",
+            ".tsv"
         ]
     },
     "JPEG_compression": {
