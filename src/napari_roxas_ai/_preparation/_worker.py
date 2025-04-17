@@ -180,7 +180,6 @@ class Worker(QObject):
         base_name, file_ext = os.path.splitext(file_name)
 
         # Check if base_name already ends with scan_content_extension
-        # and remove it to avoid adding it twice
         if self.scan_content_extension and base_name.endswith(
             self.scan_content_extension
         ):
@@ -203,13 +202,30 @@ class Worker(QObject):
             target_dir, f"{base_name}{self.metadata_file_extension}"
         )
 
+        # For same directory mode, create a temporary path to avoid file-in-use issues
+        if os.path.normpath(file_path) == os.path.normpath(new_image_path):
+            temp_dir = os.path.join(self.target_directory, ".temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_image_path = os.path.join(
+                temp_dir, f"{base_name}_temp{file_ext}"
+            )
+            needs_temp_processing = True
+        else:
+            temp_image_path = new_image_path
+            needs_temp_processing = False
+
         # Check if the target file already exists
         if os.path.exists(new_image_path) and not self.same_directory:
             # If we have a global policy, apply it
             if self.overwrite_all:
                 # Copy and extract metadata, overwriting existing file
                 self._copy_and_handle_file(
-                    file_path, new_image_path, metadata_path, base_name
+                    file_path,
+                    temp_image_path,
+                    metadata_path,
+                    base_name,
+                    needs_temp_processing,
+                    new_image_path,
                 )
             elif self.keep_all:
                 # Skip this file, move to next one
@@ -225,29 +241,57 @@ class Worker(QObject):
         else:
             # No conflict or same directory mode, proceed normally
             self._copy_and_handle_file(
-                file_path, new_image_path, metadata_path, base_name
+                file_path,
+                temp_image_path,
+                metadata_path,
+                base_name,
+                needs_temp_processing,
+                new_image_path,
             )
 
     def _copy_and_handle_file(
-        self, file_path, new_image_path, metadata_path, base_name
+        self,
+        file_path,
+        temp_image_path,
+        metadata_path,
+        base_name,
+        needs_temp_processing=False,
+        final_image_path=None,
     ):
         """
         Copy the file, extract metadata, and handle subsequent processing.
 
         Args:
             file_path: Source file path
-            new_image_path: Destination file path
+            temp_image_path: Temporary destination file path
             metadata_path: Path for metadata file
             base_name: Base name of the file (without extension)
+            needs_temp_processing: Whether file needs temporary processing
+            final_image_path: Final path for the file after processing
         """
         # Copy the image and extract metadata
-        img_metadata = self._copy_image(file_path, new_image_path)
+        img_metadata = self._copy_image(file_path, temp_image_path)
 
         # Cache metadata for use in set_metadata if needed
         self._current_img_metadata = img_metadata
 
-        # Handle same directory mode - remove original file if different from target
-        if self.same_directory and file_path != new_image_path:
+        # If using temporary file, move it to the final location
+        if needs_temp_processing and final_image_path:
+            # If in same directory mode, delete the original first
+            if self.same_directory:
+                try:
+                    os.remove(file_path)
+                    print(f"Removed original file: {file_path}")
+                except (PermissionError, OSError) as e:
+                    print(f"Error removing original file {file_path}: {e}")
+
+            # Move temp file to final location
+            try:
+                shutil.move(temp_image_path, final_image_path)
+            except (PermissionError, OSError) as e:
+                print(f"Error moving temporary file to final location: {e}")
+        # Otherwise handle same directory mode normally
+        elif self.same_directory and file_path != temp_image_path:
             try:
                 os.remove(file_path)
                 print(f"Removed original file: {file_path}")
@@ -269,6 +313,80 @@ class Worker(QObject):
             # Request metadata from user via dialog
             self.metadata_request.emit(base_name)
             # Processing will continue when metadata is provided via set_metadata
+
+    def _copy_image(
+        self, source_path: str, target_path: str
+    ) -> Optional[Dict]:
+        """
+        Copy image file without conversion, maintaining original format.
+
+        Args:
+            source_path: Path to source image file
+            target_path: Path to destination image file
+
+        Returns:
+            Dict: Image metadata or None if processing failed
+        """
+        try:
+            # Extract metadata from the image
+            with Image.open(source_path) as img:
+                # Store scan image information for metadata
+                img_metadata = {
+                    "scan_format": img.format,
+                    "scan_size": [img.width, img.height],
+                    "scan_mode": img.mode,
+                }
+
+                # Extract and preserve EXIF data if available
+                if hasattr(img, "_getexif") and img._getexif() is not None:
+                    exif_dict = {}
+                    for tag_id, value in img._getexif().items():
+                        tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                        # Convert bytes to string or skip if not serializable
+                        if isinstance(value, bytes):
+                            try:
+                                # Try to decode bytes as UTF-8
+                                exif_dict[tag_name] = value.decode(
+                                    "utf-8", errors="replace"
+                                )
+                            except (UnicodeDecodeError, AttributeError):
+                                # If decoding fails, convert to hex string
+                                exif_dict[tag_name] = f"0x{value.hex()}"
+                        elif isinstance(
+                            value, (str, int, float, bool, list, tuple, dict)
+                        ):
+                            exif_dict[tag_name] = value
+                        else:
+                            # Skip non-serializable types
+                            exif_dict[tag_name] = str(value)
+
+                    img_metadata["scan_exif"] = exif_dict
+                else:
+                    img_metadata["scan_exif"] = None
+
+                # Extract other image info (excluding binary data)
+                scan_info = {}
+                for key, value in img.info.items():
+                    if (
+                        key != "exif"
+                        and key != "icc_profile"
+                        and isinstance(
+                            value, (str, int, float, bool, tuple, list)
+                        )
+                    ):
+                        scan_info[key] = value
+
+                img_metadata["scan_info"] = scan_info
+
+                # Copy the file to the target location
+                # Even if source and target are same path, we'll copy to ensure clean processing
+                shutil.copy2(source_path, target_path)
+
+                return img_metadata
+
+        except (OSError, ValueError, Image.UnidentifiedImageError) as e:
+            print(f"Error processing {source_path}: {e}")
+            return None  # No metadata available
 
     def set_overwrite_choice(self, overwrite: bool, apply_to_all: bool):
         """
@@ -417,79 +535,6 @@ class Worker(QObject):
         # Move to next file
         self.current_file_index += 1
         self._process_next_file()
-
-    def _copy_image(
-        self, source_path: str, target_path: str
-    ) -> Optional[Dict]:
-        """
-        Copy image file without conversion, maintaining original format.
-
-        Args:
-            source_path: Path to source image file
-            target_path: Path to destination image file
-
-        Returns:
-            Dict: Image metadata or None if processing failed
-        """
-        try:
-            # Extract metadata from the image
-            with Image.open(source_path) as img:
-                # Store scan image information for metadata
-                img_metadata = {
-                    "scan_format": img.format,
-                    "scan_size": [img.width, img.height],
-                    "scan_mode": img.mode,
-                }
-
-                # Extract and preserve EXIF data if available
-                if hasattr(img, "_getexif") and img._getexif() is not None:
-                    exif_dict = {}
-                    for tag_id, value in img._getexif().items():
-                        tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                        # Convert bytes to string or skip if not serializable
-                        if isinstance(value, bytes):
-                            try:
-                                # Try to decode bytes as UTF-8
-                                exif_dict[tag_name] = value.decode(
-                                    "utf-8", errors="replace"
-                                )
-                            except (UnicodeDecodeError, AttributeError):
-                                # If decoding fails, convert to hex string
-                                exif_dict[tag_name] = f"0x{value.hex()}"
-                        elif isinstance(
-                            value, (str, int, float, bool, list, tuple, dict)
-                        ):
-                            exif_dict[tag_name] = value
-                        else:
-                            # Skip non-serializable types
-                            exif_dict[tag_name] = str(value)
-
-                    img_metadata["scan_exif"] = exif_dict
-                else:
-                    img_metadata["scan_exif"] = None
-
-                # Extract other image info (excluding binary data)
-                scan_info = {}
-                for key, value in img.info.items():
-                    if (
-                        key != "exif"
-                        and key != "icc_profile"
-                        and isinstance(
-                            value, (str, int, float, bool, tuple, list)
-                        )
-                    ):
-                        scan_info[key] = value
-
-                img_metadata["scan_info"] = scan_info
-
-                # Copy the file to the target location
-                shutil.copy2(source_path, target_path)
-
-                return img_metadata
-
-        except (OSError, ValueError, Image.UnidentifiedImageError) as e:
-            print(f"Error processing {source_path}: {e}")
-            return None  # No metadata available
 
     def _save_metadata(self, metadata: Dict, metadata_path: str):
         """

@@ -116,15 +116,13 @@ class PreparationWidget(Container):
 
     def _create_ui_components(self):
         """Create and configure UI components."""
-        # Source directory selector
-        self._source_dialog_button = PushButton(text="Source Directory: None")
-        self._source_dialog_button.changed.connect(self._open_source_dialog)
-
-        # Project directory selector
-        self._project_dialog_button = PushButton(
-            text="Project Directory: None"
+        # Directory selector (replaces separate source/project selectors)
+        self._directory_dialog_button = PushButton(
+            text="Select Working Directory"
         )
-        self._project_dialog_button.changed.connect(self._open_project_dialog)
+        self._directory_dialog_button.changed.connect(
+            self._open_directory_dialog
+        )
 
         # File exclusion checkbox
         self._exclude_processed_checkbox = CheckBox(
@@ -172,8 +170,7 @@ class PreparationWidget(Container):
         # Append all widgets to the container
         self.extend(
             [
-                self._source_dialog_button,
-                self._project_dialog_button,
+                self._directory_dialog_button,
                 self._exclude_processed_checkbox,
                 self._handpick_files_checkbox,
                 self._file_selection_container,
@@ -184,25 +181,26 @@ class PreparationWidget(Container):
             ]
         )
 
-    def _open_source_dialog(self):
-        """Open file dialog to select source directory and refresh file list."""
-        self.source_directory = QFileDialog.getExistingDirectory(
+    def _open_directory_dialog(self):
+        """Open file dialog to select working directory for both source and project."""
+        directory = QFileDialog.getExistingDirectory(
             parent=None,
-            caption="Select Source Directory with Images",
+            caption="Select Working Directory",
         )
-        if self.source_directory:
-            self._source_dialog_button.text = (
-                f"Source Directory: {self.source_directory}"
+        if directory:
+            # Assign to both source and project directories
+            # We maintain separate variables for future flexibility even though they currently have the same value
+            self.source_directory = directory
+            # We're explicitly setting project_directory to the same value as source_directory
+            # These are kept as separate variables to allow for different source/target functionality in the future
+            self.project_directory = directory
+
+            # Update button text to show the selected directory
+            self._directory_dialog_button.text = (
+                f"Working Directory: {directory}"
             )
 
-            # If project directory is not defined yet, set it to the source directory
-            if not self.project_directory:
-                self.project_directory = self.source_directory
-                self._project_dialog_button.text = (
-                    f"Project Directory: {self.project_directory}"
-                )
-
-            # Reset file selection when source directory changes
+            # Reset file selection when directory changes
             self._refresh_file_list()
 
     def _refresh_file_list(self):
@@ -343,17 +341,6 @@ class PreparationWidget(Container):
 
         return selected_paths
 
-    def _open_project_dialog(self):
-        """Open file dialog to select project directory."""
-        self.project_directory = QFileDialog.getExistingDirectory(
-            parent=None,
-            caption="Select Project Directory",
-        )
-        if self.project_directory:
-            self._project_dialog_button.text = (
-                f"Project Directory: {self.project_directory}"
-            )
-
     def _start_processing(self):
         """Start the file processing in a separate thread."""
         # Validate inputs
@@ -388,13 +375,7 @@ class PreparationWidget(Container):
         """Validate user inputs before processing."""
         if not self.source_directory:
             QMessageBox.warning(
-                None, "Warning", "Please select a source directory."
-            )
-            return False
-
-        if not self.project_directory:
-            QMessageBox.warning(
-                None, "Warning", "Please select a project directory."
+                None, "Warning", "Please select a working directory."
             )
             return False
 
