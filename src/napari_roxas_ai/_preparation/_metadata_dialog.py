@@ -1,4 +1,8 @@
-from typing import Any, Dict, List
+"""
+Dialog for entering sample metadata.
+"""
+
+from typing import Dict, Optional, Tuple
 
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -7,132 +11,229 @@ from qtpy.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
-    QLabel,
+    QLineEdit,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
+
+from .._settings._settings_manager import SettingsManager
 
 
 class MetadataDialog(QDialog):
-    """Dialog for entering sample metadata."""
+    """
+    Dialog for entering sample metadata.
 
-    def __init__(
-        self,
-        default_metadata: Dict[str, Any],
-        authorized_sample_types: List[str],
-        authorized_sample_geometries: List[str],
-    ):
+    This dialog allows the user to edit metadata for a sample and
+    optionally apply the same metadata to all remaining samples.
+    """
+
+    def __init__(self, filename: str, parent: Optional[QWidget] = None):
         """
         Initialize the metadata dialog.
 
         Args:
-            default_metadata: Initial values for metadata fields
-            authorized_sample_types: List of authorized sample types
-            authorized_sample_geometries: List of authorized sample geometries
+            filename: Base filename for the sample (without extension)
+            parent: Parent widget
         """
-        super().__init__()
+        super().__init__(parent)
 
         self.setWindowTitle("Sample Metadata")
-        self.setMinimumWidth(400)
+        self.resize(400, 300)
 
-        # Create the main layout
-        main_layout = QVBoxLayout()
-        self.setLayout(main_layout)
+        # Store the filename
+        self.filename = filename
 
-        # Create form layout for metadata fields
+        # Load settings
+        self._load_settings()
+
+        # Create layout and widgets
+        self._create_ui()
+
+        # Apply default values
+        self._apply_defaults()
+
+    def _load_settings(self):
+        """Load settings from the settings manager."""
+        # Initialize settings manager
+        self.settings_manager = SettingsManager()
+
+        # Get authorized sample types and geometries
+        self.sample_types = (
+            self.settings_manager.get(
+                "samples_metadata.authorised_sample_types"
+            )
+            or []
+        )
+        self.sample_geometries = (
+            self.settings_manager.get(
+                "samples_metadata.authorised_sample_geometries"
+            )
+            or []
+        )
+
+        # Get default scale and angle
+        self.default_scale = (
+            self.settings_manager.get("samples_metadata.default_scale") or 1.0
+        )
+        self.default_angle = (
+            self.settings_manager.get("samples_metadata.default_angle") or 0.0
+        )
+
+        # Get default outmost year
+        self.default_outmost_year = self.settings_manager.get(
+            "samples_metadata.default_outmost_year"
+        )
+
+        # Get file extensions
+        scan_file_extension = self.settings_manager.get(
+            "file_extensions.scan_file_extension"
+        )
+        self.scan_content_extension = (
+            scan_file_extension[0] if scan_file_extension else ".scan"
+        )
+
+        metadata_file_extension_parts = self.settings_manager.get(
+            "file_extensions.metadata_file_extension"
+        )
+        self.metadata_file_extension = (
+            "".join(metadata_file_extension_parts) or ".metadata.json"
+        )
+
+    def _create_ui(self):
+        """Create the UI elements."""
+        # Main layout
+        layout = QVBoxLayout(self)
+
+        # Form layout for metadata fields
         form_layout = QFormLayout()
 
-        # Sample name field - as non-editable QLabel
-        self.sample_name = QLabel(default_metadata.get("sample_name", ""))
-        form_layout.addRow("Sample Name:", self.sample_name)
+        # Sample name (read-only)
+        self.sample_name_edit = QLineEdit()
+        self.sample_name_edit.setReadOnly(True)
+        form_layout.addRow("Sample Name:", self.sample_name_edit)
 
-        # Sample type dropdown
-        self.sample_type = QComboBox()
-        self.sample_type.addItems(authorized_sample_types)
-        if default_metadata.get("sample_type") in authorized_sample_types:
-            self.sample_type.setCurrentText(
-                default_metadata.get("sample_type")
-            )
-        form_layout.addRow("Sample Type:", self.sample_type)
+        # Sample type (combo box)
+        self.sample_type_combo = QComboBox()
+        if self.sample_types:
+            self.sample_type_combo.addItems(self.sample_types)
+        else:
+            self.sample_type_combo.setEditable(True)
+        form_layout.addRow("Sample Type:", self.sample_type_combo)
 
-        # Sample geometry dropdown
-        self.sample_geometry = QComboBox()
-        self.sample_geometry.addItems(authorized_sample_geometries)
-        if (
-            default_metadata.get("sample_geometry")
-            in authorized_sample_geometries
-        ):
-            self.sample_geometry.setCurrentText(
-                default_metadata.get("sample_geometry")
-            )
-        form_layout.addRow("Sample Geometry:", self.sample_geometry)
+        # Sample geometry (combo box)
+        self.sample_geometry_combo = QComboBox()
+        if self.sample_geometries:
+            self.sample_geometry_combo.addItems(self.sample_geometries)
+        else:
+            self.sample_geometry_combo.setEditable(True)
+        form_layout.addRow("Sample Geometry:", self.sample_geometry_combo)
 
-        # Sample scale field
-        self.sample_scale = QDoubleSpinBox()
-        self.sample_scale.setDecimals(6)
-        self.sample_scale.setRange(0.000001, 1000.0)
-        self.sample_scale.setValue(default_metadata.get("sample_scale", 1.0))
-        form_layout.addRow("Sample Scale (pixels/μm):", self.sample_scale)
+        # Sample scale (double spin box)
+        self.sample_scale_spin = QDoubleSpinBox()
+        self.sample_scale_spin.setRange(0.001, 1000.0)
+        self.sample_scale_spin.setSingleStep(0.01)
+        self.sample_scale_spin.setDecimals(4)
+        form_layout.addRow("Sample Scale:", self.sample_scale_spin)
 
-        # Sample angle field
-        self.sample_angle = QDoubleSpinBox()
-        self.sample_angle.setRange(-360.0, 360.0)
-        self.sample_angle.setValue(default_metadata.get("sample_angle", 0.0))
-        form_layout.addRow("Sample Angle (°):", self.sample_angle)
+        # Sample angle (double spin box)
+        self.sample_angle_spin = QDoubleSpinBox()
+        self.sample_angle_spin.setRange(-360.0, 360.0)
+        self.sample_angle_spin.setSingleStep(0.1)
+        self.sample_angle_spin.setDecimals(2)
+        form_layout.addRow("Sample Angle:", self.sample_angle_spin)
 
-        # Outmost year field
-        self.sample_outmost_year = QSpinBox()
-        self.sample_outmost_year.setRange(
+        # Sample outmost year (spin box)
+        self.sample_outmost_year_spin = QSpinBox()
+        self.sample_outmost_year_spin.setRange(
             -10000, 3000
-        )  # Allow for ancient samples
-        self.sample_outmost_year.setValue(
-            default_metadata.get("sample_outmost_year") or 0
+        )  # Wide range for historical data
+        self.sample_outmost_year_spin.setSpecialValueText(
+            "Not set"
+        )  # Display "Not set" for value 0
+        form_layout.addRow(
+            "Sample Outmost Year:", self.sample_outmost_year_spin
         )
-        form_layout.addRow("Sample Outmost Year:", self.sample_outmost_year)
-
-        # Sample files information (read-only)
-        if "sample_files" in default_metadata:
-            sample_files_text = ", ".join(default_metadata["sample_files"])
-            self.sample_files = QLabel(sample_files_text)
-            form_layout.addRow("Sample Files:", self.sample_files)
-
-        # Apply to all checkbox
-        self.apply_to_all_checkbox = QCheckBox("Apply to all remaining files")
-        form_layout.addRow("", self.apply_to_all_checkbox)
 
         # Add form layout to main layout
-        main_layout.addLayout(form_layout)
+        layout.addLayout(form_layout)
 
-        # Add dialog buttons
-        button_box = QDialogButtonBox(
+        # "Apply to all" checkbox
+        self.apply_to_all_checkbox = QCheckBox(
+            "Apply to all remaining samples"
+        )
+        layout.addWidget(self.apply_to_all_checkbox)
+
+        # Dialog buttons
+        self.button_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        main_layout.addWidget(button_box)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def _apply_defaults(self):
+        """Apply default values to the widgets."""
+        # Sample name
+        self.sample_name_edit.setText(self.filename)
+
+        # Sample type
+        if self.sample_types:
+            self.sample_type_combo.setCurrentIndex(0)
+        elif self.sample_type_combo.isEditable():
+            self.sample_type_combo.setEditText("")
+
+        # Sample geometry
+        if self.sample_geometries:
+            self.sample_geometry_combo.setCurrentIndex(0)
+        elif self.sample_geometry_combo.isEditable():
+            self.sample_geometry_combo.setEditText("")
+
+        # Sample scale
+        self.sample_scale_spin.setValue(self.default_scale)
+
+        # Sample angle
+        self.sample_angle_spin.setValue(self.default_angle)
+
+        # Sample outmost year
+        if (
+            self.default_outmost_year is not None
+            and self.default_outmost_year != 0
+        ):
+            self.sample_outmost_year_spin.setValue(self.default_outmost_year)
+        else:
+            self.sample_outmost_year_spin.setValue(
+                0
+            )  # Will display as "Not set"
+
+    def get_result(self) -> Tuple[Dict, bool]:
         """
-        Get the metadata from the dialog fields.
+        Get the metadata and apply_to_all flag from the dialog.
 
         Returns:
-            Dict: Dictionary containing the metadata values
+            Tuple[Dict, bool]: (metadata_dict, apply_to_all_flag)
         """
-        return {
-            "sample_name": self.sample_name.text(),
-            "sample_type": self.sample_type.currentText(),
-            "sample_geometry": self.sample_geometry.currentText(),
-            "sample_scale": self.sample_scale.value(),
-            "sample_angle": self.sample_angle.value(),
-            "sample_outmost_year": self.sample_outmost_year.value(),
-            "sample_files": self.sample_files.text(),
+        # Build metadata dictionary with all sample_ fields
+        metadata = {
+            "sample_name": self.sample_name_edit.text(),
+            "sample_type": self.sample_type_combo.currentText(),
+            "sample_geometry": self.sample_geometry_combo.currentText(),
+            "sample_scale": self.sample_scale_spin.value(),
+            "sample_angle": self.sample_angle_spin.value(),
+            # Add the sample_files field with content extensions
+            "sample_files": [
+                self.scan_content_extension,
+                self.metadata_file_extension.split(".json")[0],
+            ],
         }
 
-    def apply_to_all(self) -> bool:
-        """
-        Check if the 'apply to all' checkbox is selected.
+        # Only include outmost year if it's set (not zero)
+        if self.sample_outmost_year_spin.value() != 0:
+            metadata["sample_outmost_year"] = (
+                self.sample_outmost_year_spin.value()
+            )
 
-        Returns:
-            bool: True if the checkbox is checked, False otherwise
-        """
-        return self.apply_to_all_checkbox.isChecked()
+        # Get apply_to_all flag
+        apply_to_all = self.apply_to_all_checkbox.isChecked()
+
+        return metadata, apply_to_all

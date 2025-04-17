@@ -1,6 +1,10 @@
+"""
+Widget for preparing sample images and metadata for ROXAS analysis.
+"""
+
 import glob
 import os
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from magicgui.widgets import (
     CheckBox,
@@ -9,7 +13,6 @@ from magicgui.widgets import (
     PushButton,
     Select,
 )
-from PIL import Image
 from qtpy.QtCore import QThread
 from qtpy.QtWidgets import (
     QFileDialog,
@@ -17,15 +20,11 @@ from qtpy.QtWidgets import (
 )
 
 from .._settings._settings_manager import SettingsManager
-from ._file_overwrite_dialog import FileOverwriteDialog
 from ._metadata_dialog import MetadataDialog
 from ._worker import Worker
 
 if TYPE_CHECKING:
     import napari
-
-# Disable PIL's decompression bomb warning for large images
-Image.MAX_IMAGE_PIXELS = None
 
 
 class PreparationWidget(Container):
@@ -53,13 +52,10 @@ class PreparationWidget(Container):
         self._create_ui_components()
 
         # Initialize state variables
-        self.source_directory = None
         self.project_directory = None
         self.worker = None
         self.worker_thread = None
-        self.metadata_dialog = None
-        self.same_directory = False
-        self.source_files = []  # List of files in the source directory
+        self.source_files = []  # List of files in the project directory
         self.selected_files = []  # List of files selected by the user
 
     def _load_settings(self):
@@ -93,49 +89,45 @@ class PreparationWidget(Container):
             "file_extensions.scan_file_extension"
         )
         self.scan_content_extension = (
-            scan_file_extension[0] if scan_file_extension else None
+            scan_file_extension[0] if scan_file_extension else ".scan"
         )
-
-        # Store the scan extension for filtering
-        self.scan_filter_extension = self.scan_content_extension
 
         metadata_file_extension_parts = self.settings_manager.get(
             "file_extensions.metadata_file_extension"
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
-        # Get ROXAS file extensions to avoid processing already prepared files
-        self.roxas_file_extensions = self.settings_manager.get(
-            "file_extensions.roxas_file_extensions"
-        )
-
         # Get supported image file extensions
         self.image_file_extensions = self.settings_manager.get(
             "file_extensions.image_file_extensions"
-        )
+        ) or [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
 
     def _create_ui_components(self):
         """Create and configure UI components."""
-        # Directory selector (replaces separate source/project selectors)
-        self._directory_dialog_button = PushButton(
-            text="Select Working Directory"
+        # Project directory selector
+        self._project_dialog_button = PushButton(
+            text="Select Project Directory"
         )
-        self._directory_dialog_button.changed.connect(
-            self._open_directory_dialog
+        self._project_dialog_button.changed.connect(self._open_project_dialog)
+
+        # Overwrite files checkbox (new)
+        self._overwrite_files_checkbox = CheckBox(
+            value=True,
+            label="Overwrite original files (replace instead of copy)",
         )
 
-        # File exclusion checkbox
-        self._exclude_processed_checkbox = CheckBox(
-            value=True,
-            label=f"Exclude already processed files (with {self.scan_filter_extension} extension)",
+        # Process already processed files checkbox
+        self._process_processed_checkbox = CheckBox(
+            value=False,
+            label=f"Process already processed files (with {self.scan_content_extension} extension)",
         )
-        self._exclude_processed_checkbox.changed.connect(
+        self._process_processed_checkbox.changed.connect(
             self._refresh_file_list
         )
 
         # File selection controls
         self._handpick_files_checkbox = CheckBox(
-            value=False, label="Handpick files from source directory"
+            value=False, label="Manually select files to process"
         )
         self._handpick_files_checkbox.changed.connect(
             self._toggle_file_selection
@@ -159,86 +151,68 @@ class PreparationWidget(Container):
             value=0, min=0, max=100, visible=False, label="Processing Progress"
         )
 
-        # Start button
-        self._start_button = PushButton(text="Start Processing")
-        self._start_button.changed.connect(self._start_processing)
-
-        # Cancel button (initially hidden)
-        self._cancel_button = PushButton(text="Cancel", visible=False)
-        self._cancel_button.changed.connect(self._cancel_processing)
+        # Start/Cancel button
+        self._action_button = PushButton(text="Start Processing")
+        self._action_button.changed.connect(self._toggle_processing)
+        self._is_processing = False
 
         # Append all widgets to the container
         self.extend(
             [
-                self._directory_dialog_button,
-                self._exclude_processed_checkbox,
+                self._project_dialog_button,
+                self._overwrite_files_checkbox,
+                self._process_processed_checkbox,
                 self._handpick_files_checkbox,
                 self._file_selection_container,
                 self._reverse_selection_button,
-                self._start_button,
-                self._cancel_button,
+                self._action_button,
                 self._progress_bar,
             ]
         )
 
-    def _open_directory_dialog(self):
-        """Open file dialog to select working directory for both source and project."""
+    def _open_project_dialog(self):
+        """Open file dialog to select project directory and refresh file list."""
         directory = QFileDialog.getExistingDirectory(
             parent=None,
-            caption="Select Working Directory",
+            caption="Select Project Directory",
         )
         if directory:
-            # Assign to both source and project directories
-            # We maintain separate variables for future flexibility even though they currently have the same value
-            self.source_directory = directory
-            # We're explicitly setting project_directory to the same value as source_directory
-            # These are kept as separate variables to allow for different source/target functionality in the future
             self.project_directory = directory
-
-            # Update button text to show the selected directory
-            self._directory_dialog_button.text = (
-                f"Working Directory: {directory}"
+            self._project_dialog_button.text = (
+                f"Project Directory: {directory}"
             )
-
-            # Reset file selection when directory changes
             self._refresh_file_list()
 
     def _refresh_file_list(self):
-        """Refresh the list of files from the source directory."""
+        """Refresh the list of files from the project directory."""
         # Reset selected files list
         self.selected_files = []
 
-        # Get all image files in source directory
+        # Get all image files in project directory
         self.source_files = []
 
-        if self.source_directory:
+        if self.project_directory and os.path.exists(self.project_directory):
             # Gather all files with supported image extensions
             for ext in self.image_file_extensions:
                 self.source_files.extend(
                     glob.glob(
-                        f"{self.source_directory}/**/*{ext}", recursive=True
+                        f"{self.project_directory}/**/*{ext}", recursive=True
                     )
                 )
                 self.source_files.extend(
                     glob.glob(
-                        f"{self.source_directory}/**/*{ext.upper()}",
+                        f"{self.project_directory}/**/*{ext.upper()}",
                         recursive=True,
                     )
                 )
 
-            # Filter out files that have the scan extension if the checkbox is checked
-            if (
-                self.scan_filter_extension
-                and self._exclude_processed_checkbox.value
-            ):
+            # Filter based on whether to include already processed files
+            if not self._process_processed_checkbox.value:
                 filtered_files = []
                 for file_path in self.source_files:
-                    file_name = os.path.basename(file_path)
-                    if self.scan_filter_extension not in file_name:
+                    basename = os.path.basename(file_path)
+                    if self.scan_content_extension not in basename:
                         filtered_files.append(file_path)
-                    else:
-                        print(f"Skipping already processed file: {file_path}")
-
                 self.source_files = filtered_files
 
         # Sort files for consistent display
@@ -255,7 +229,7 @@ class PreparationWidget(Container):
 
         # Create a new file selection widget
         if self.source_files:
-            # Convert absolute paths to display names (relative to source directory)
+            # Convert absolute paths to display names (relative to project directory)
             display_names = []
             self._path_mapping = {}  # Map display names to absolute paths
 
@@ -263,16 +237,16 @@ class PreparationWidget(Container):
                 # Use relative path if possible, otherwise use base name
                 try:
                     rel_path = os.path.relpath(
-                        file_path, self.source_directory
+                        file_path, self.project_directory
                     )
                     display_names.append(rel_path)
                     self._path_mapping[rel_path] = file_path
                 except ValueError:
-                    base_name = os.path.basename(file_path)
-                    display_names.append(base_name)
-                    self._path_mapping[base_name] = file_path
+                    basename = os.path.basename(file_path)
+                    display_names.append(basename)
+                    self._path_mapping[basename] = file_path
 
-            # Create a proper select widget with multiple selection
+            # Create a select widget with multiple selection
             self._file_select_widget = Select(
                 choices=display_names,
                 allow_multiple=True,
@@ -341,41 +315,37 @@ class PreparationWidget(Container):
 
         return selected_paths
 
+    def _toggle_processing(self):
+        """Toggle between starting and canceling processing."""
+        if not self._is_processing:
+            self._start_processing()
+        else:
+            self._cancel_processing()
+
     def _start_processing(self):
         """Start the file processing in a separate thread."""
         # Validate inputs
         if not self._validate_inputs():
             return
 
-        # Check if source and project are the same directory
-        self.same_directory = os.path.normpath(
-            self.source_directory
-        ) == os.path.normpath(self.project_directory)
-
-        # Show warning for same directory mode
-        if self.same_directory and not self._confirm_same_directory():
-            return
+        # Update UI for processing
+        self._update_ui_for_processing(True)
 
         # Get selected files if in handpick mode
         selected_files = self._get_selected_file_paths()
 
-        # Update UI for processing
-        self._update_ui_for_processing(True)
-
         # Start processing in a separate thread
         self._run_in_thread(
-            self.source_directory,
             self.project_directory,
-            None,  # No default metadata initially
-            False,  # Not applying to all initially
             selected_files,
+            self._process_processed_checkbox.value,
         )
 
     def _validate_inputs(self) -> bool:
         """Validate user inputs before processing."""
-        if not self.source_directory:
+        if not self.project_directory:
             QMessageBox.warning(
-                None, "Warning", "Please select a working directory."
+                None, "Warning", "Please select a project directory."
             )
             return False
 
@@ -390,32 +360,36 @@ class PreparationWidget(Container):
             )
             return False
 
+        # Check if there are any files to process
+        if not self.source_files:
+            QMessageBox.warning(
+                None, "Warning", "No image files found to process."
+            )
+            return False
+
         return True
-
-    def _confirm_same_directory(self) -> bool:
-        """Show confirmation dialog for same-directory mode."""
-        confirm = QMessageBox()
-        confirm.setIcon(QMessageBox.Warning)
-        confirm.setWindowTitle("Warning: Source Modification")
-        confirm.setText("The source and project directories are the same.")
-        confirm.setInformativeText(
-            f"Original image files will be replaced with {self.scan_content_extension}* files. "
-            "This operation cannot be undone."
-        )
-        confirm.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
-        confirm.setDefaultButton(QMessageBox.Cancel)
-
-        result = confirm.exec_()
-        return result == QMessageBox.Ok
 
     def _update_ui_for_processing(self, is_processing: bool):
         """Update UI elements based on processing state."""
-        self._start_button.visible = not is_processing
-        self._cancel_button.visible = is_processing
-        self._progress_bar.visible = is_processing
+        self._is_processing = is_processing
 
         if is_processing:
+            self._action_button.text = "Cancel"
+            self._progress_bar.visible = True
             self._progress_bar.value = 0
+            self._project_dialog_button.enabled = False
+            self._process_processed_checkbox.enabled = False
+            self._handpick_files_checkbox.enabled = False
+            self._file_selection_container.enabled = False
+            self._reverse_selection_button.enabled = False
+        else:
+            self._action_button.text = "Start Processing"
+            self._progress_bar.visible = False
+            self._project_dialog_button.enabled = True
+            self._process_processed_checkbox.enabled = True
+            self._handpick_files_checkbox.enabled = True
+            self._file_selection_container.enabled = True
+            self._reverse_selection_button.enabled = True
 
     def _cancel_processing(self):
         """Cancel the current processing job."""
@@ -435,45 +409,13 @@ class PreparationWidget(Container):
         Args:
             filename: Base filename (without extension) for the current file
         """
-        # Extract metadata content extension (without the file extension)
-        metadata_content_extension = self.metadata_file_extension.split(
-            ".json"
-        )[0]
-
-        # Create default metadata with sample name and defaults
-        default_metadata = {
-            "sample_name": filename,
-            "sample_type": (
-                self.authorized_sample_types[0]
-                if self.authorized_sample_types
-                else ""
-            ),
-            "sample_geometry": (
-                self.authorized_sample_geometries[0]
-                if self.authorized_sample_geometries
-                else ""
-            ),
-            "sample_scale": self.default_scale,
-            "sample_angle": self.default_angle,
-            "sample_outmost_year": self.default_outmost_year,
-            "sample_files": [
-                self.scan_content_extension,
-                metadata_content_extension,
-            ],
-        }
-
         # Show dialog to get metadata
-        self.metadata_dialog = MetadataDialog(
-            default_metadata,
-            self.authorized_sample_types,
-            self.authorized_sample_geometries,
-        )
-        result = self.metadata_dialog.exec_()
+        metadata_dialog = MetadataDialog(filename)
+        result = metadata_dialog.exec_()
 
         if result:
-            # User confirmed the dialog
-            metadata = self.metadata_dialog.get_metadata()
-            apply_to_all = self.metadata_dialog.apply_to_all()
+            # User confirmed the dialog - get metadata and apply_to_all flag
+            metadata, apply_to_all = metadata_dialog.get_result()
 
             # Send metadata back to worker
             self.worker.set_metadata(metadata, apply_to_all)
@@ -481,79 +423,42 @@ class PreparationWidget(Container):
             # User cancelled - stop processing
             self._cancel_processing()
 
-    def _request_overwrite_confirmation(self, filename):
-        """
-        Show dialog to confirm file overwrite.
-
-        Args:
-            filename: Path of the file that would be overwritten
-        """
-        # Create and show the overwrite dialog
-        dialog = FileOverwriteDialog(filename)
-        result = dialog.exec_()
-
-        if result:
-            # User made a choice
-            overwrite = dialog.should_overwrite()
-            apply_to_all = dialog.apply_to_all()
-
-            # Send the choice back to worker
-            self.worker.set_overwrite_choice(overwrite, apply_to_all)
-        else:
-            # Dialog was canceled - stop processing
-            self._cancel_processing()
-
     def _processing_finished(self):
         """Handle the completion of processing."""
         # Reset UI
         self._update_ui_for_processing(False)
 
-        # Show completion message
-        QMessageBox.information(
-            None, "Complete", "File processing completed successfully."
-        )
+        # Show completion message if not canceled
+        if not (self.worker and self.worker.should_stop):
+            QMessageBox.information(
+                None, "Complete", "File processing completed successfully."
+            )
 
     def _run_in_thread(
         self,
-        source_directory: str,
-        target_directory: str,
-        default_metadata: Optional[Dict] = None,
-        apply_to_all: bool = False,
+        project_directory: str,
         selected_files: Optional[List[str]] = None,
+        process_processed: bool = False,
     ):
         """
         Run the processing in a separate thread.
 
         Args:
-            source_directory: Directory containing source images
-            target_directory: Directory to save processed files
-            default_metadata: Optional default metadata to use
-            apply_to_all: Whether to apply default metadata to all files
+            project_directory: Directory to process
             selected_files: Optional list of specific files to process
+            process_processed: Whether to process files that are already processed
         """
         # Create thread and worker
         self.worker_thread = QThread()
 
-        # Determine which files to filter out in the worker
-        filter_extensions = None
-        if self._exclude_processed_checkbox.value:
-            filter_extensions = [self.scan_filter_extension]
-
         self.worker = Worker(
-            source_directory,
-            target_directory,
-            default_metadata,
-            apply_to_all,
-            self.authorized_sample_types,
-            self.default_scale,
-            self.default_angle,
-            self.default_outmost_year,
-            self.same_directory,
-            self.scan_content_extension,
-            self.metadata_file_extension,
-            filter_extensions,  # Using consistent variable name
-            self.image_file_extensions,
-            selected_files,
+            project_directory=project_directory,
+            scan_content_extension=self.scan_content_extension,
+            metadata_file_extension=self.metadata_file_extension,
+            image_file_extensions=self.image_file_extensions,
+            selected_files=selected_files,
+            process_processed=process_processed,
+            overwrite_files=self._overwrite_files_checkbox.value,
         )
         self.worker.moveToThread(self.worker_thread)
 
@@ -565,9 +470,6 @@ class PreparationWidget(Container):
         self.worker_thread.finished.connect(self._processing_finished)
         self.worker.progress.connect(self._update_progress)
         self.worker.metadata_request.connect(self._request_metadata)
-        self.worker.overwrite_request.connect(
-            self._request_overwrite_confirmation
-        )
 
         # Start the thread
         self.worker_thread.start()
