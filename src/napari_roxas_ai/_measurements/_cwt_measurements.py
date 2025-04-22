@@ -348,7 +348,7 @@ class CellAnalyzer:
 
     def _get_results_df(self) -> pd.DataFrame:
         """Return results as pandas DataFrame."""
-        self.df = pd.DataFrame(self.cells).T
+        self.df = pd.DataFrame(self.cells).T.set_index("id")
 
     def _draw_contours(self) -> None:
         """Draw lumina and cell wall contours on an image"""
@@ -390,7 +390,7 @@ def measure_cells(
     analyzer._get_results_df()
 
     if output_path:
-        analyzer.df.to_csv(output_path, index_label="cell_id")
+        analyzer.df.to_csv(output_path)
 
     return analyzer.df
 

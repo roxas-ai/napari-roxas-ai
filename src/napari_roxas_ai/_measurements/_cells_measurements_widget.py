@@ -42,7 +42,7 @@ class Worker(QObject):
 
         # Save results as CSV
         if self.output_file_path is not None:
-            analyzer.df.to_csv(self.output_file_path, index_label="cell_id")
+            analyzer.df.to_csv(self.output_file_path, sep="\t")
 
         # Emit results to be added as layers
         self.result_ready.emit(
