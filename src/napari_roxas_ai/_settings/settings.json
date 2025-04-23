@@ -116,6 +116,10 @@
             ".tsv"
         ]
     },
+    "tables": {
+        "index_column": "id",
+        "separator": "\t"
+    },
     "JPEG_compression": {
         "quality": 95,
         "optimize": true,

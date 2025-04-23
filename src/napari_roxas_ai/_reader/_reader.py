@@ -189,7 +189,9 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     )
     if os.path.exists(cells_table_path):
         metadata["features"] = pd.read_csv(
-            cells_table_path, sep="\t", index_col="id"
+            cells_table_path,
+            sep=settings.get("tables.separator"),
+            index_col=settings.get("tables.index_column"),
         )
 
     return data.astype(int), metadata, "labels"
@@ -232,7 +234,9 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     )
     if os.path.exists(rings_table_path):
         metadata["features"] = pd.read_csv(
-            rings_table_path, sep="\t", index_col="id"
+            rings_table_path,
+            sep=settings.get("tables.separator"),
+            index_col=settings.get("tables.index_column"),
         )
 
     return data, metadata, "labels"

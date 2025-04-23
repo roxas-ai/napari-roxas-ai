@@ -277,6 +277,11 @@ class SettingsManager:
                     ".tsv",
                 ],  # Supported text file extensions
             },
+            # Tabular data settings
+            "tables": {
+                "index_column": "id",
+                "separator": "\t",
+            },
             # Image processing settings
             "JPEG_compression": {
                 "quality": 95,  # Default JPEG quality
