@@ -156,7 +156,7 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     Returns
     -------
     tuple
-        (data, metadata, layer_type) for the cells image
+        (data, add_kwargs, layer_type) for the cells image
     """
     # Open the image file
     with Image.open(path) as img:
@@ -169,16 +169,16 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     else:
         data = np.zeros_like(data)
 
-    # Create metadata
+    # Create add_kwargs
     filename = os.path.basename(path)
     layer_name = os.path.splitext(filename)[0]
-    metadata = {"name": layer_name}
+    add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
     json_metadata = get_metadata_from_json(path)
     if json_metadata and "sample_scale" in json_metadata:
         scale_value = 1 / float(json_metadata["sample_scale"])
-        metadata["scale"] = [scale_value, scale_value]
+        add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get tablular data associated with the cells
     cells_table_file_extension = "".join(
@@ -188,13 +188,25 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         "".join(path.split(".")[:-2]) + cells_table_file_extension
     )
     if os.path.exists(cells_table_path):
-        metadata["features"] = pd.read_csv(
+        add_kwargs["features"] = pd.read_csv(
             cells_table_path,
             sep=settings.get("tables.separator"),
             index_col=settings.get("tables.index_column"),
         )
 
-    return data.astype(int), metadata, "labels"
+    # Try to get sample metadata and cells metadata from metadata file
+    add_kwargs["metadata"] = {}
+    if json_metadata:
+        metadata_keys = [
+            key
+            for key in json_metadata
+            if key.startswith(("sample_", "cells_"))
+        ]
+        add_kwargs["metadata"].update(
+            {key: json_metadata[key] for key in metadata_keys}
+        )
+
+    return data.astype(int), add_kwargs, "labels"
 
 
 def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
@@ -209,21 +221,21 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     Returns
     -------
     tuple
-        (data, metadata, layer_type) for the rings image
+        (data, add_kwargs, layer_type) for the rings image
     """
     with Image.open(path) as img:
         data = np.array(img)
 
-    # Create metadata
+    # Create add_kwargs
     filename = os.path.basename(path)
     layer_name = os.path.splitext(filename)[0]
-    metadata = {"name": layer_name}
+    add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
     json_metadata = get_metadata_from_json(path)
     if json_metadata and "sample_scale" in json_metadata:
         scale_value = 1 / float(json_metadata["sample_scale"])
-        metadata["scale"] = [scale_value, scale_value]
+        add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get tablular data associated with the rings
     rings_table_file_extension = "".join(
@@ -233,13 +245,25 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         "".join(path.split(".")[:-2]) + rings_table_file_extension
     )
     if os.path.exists(rings_table_path):
-        metadata["features"] = pd.read_csv(
+        add_kwargs["features"] = pd.read_csv(
             rings_table_path,
             sep=settings.get("tables.separator"),
             index_col=settings.get("tables.index_column"),
         )
 
-    return data, metadata, "labels"
+    # Try to get sample metadata and rings metadata from metadata file
+    add_kwargs["metadata"] = {}
+    if json_metadata:
+        metadata_keys = [
+            key
+            for key in json_metadata
+            if key.startswith(("sample_", "rings_"))
+        ]
+        add_kwargs["metadata"].update(
+            {key: json_metadata[key] for key in metadata_keys}
+        )
+
+    return data, add_kwargs, "labels"
 
 
 def read_image_file(path):
@@ -272,17 +296,29 @@ def read_image_file(path):
     with Image.open(path) as img:
         data = np.array(img)
 
-    # Create metadata
+    # Create add_kwargs
     filename = os.path.basename(path)
     layer_name = os.path.splitext(filename)[0]
-    metadata = {"name": layer_name}
+    add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
     if json_metadata and "sample_scale" in json_metadata:
         scale_value = 1 / float(json_metadata["sample_scale"])
-        metadata["scale"] = [scale_value, scale_value]
+        add_kwargs["scale"] = [scale_value, scale_value]
 
-    return data, metadata, "image"
+    # Try to get sample metadata and scan metadata from metadata file
+    add_kwargs["metadata"] = {}
+    if json_metadata:
+        metadata_keys = [
+            key
+            for key in json_metadata
+            if key.startswith(("sample_", "scan_"))
+        ]
+        add_kwargs["metadata"].update(
+            {key: json_metadata[key] for key in metadata_keys}
+        )
+
+    return data, add_kwargs, "image"
 
 
 def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
@@ -297,7 +333,7 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
     Returns
     -------
     list of tuples
-        List of (data, metadata, layer_type) tuples
+        List of (data, add_kwargs, layer_type) tuples
     """
     # Ensure paths is a list
     if isinstance(paths, str):
@@ -341,7 +377,7 @@ def read_directory(path: str) -> List[Tuple[Any, dict, str]]:
     Returns
     -------
     list of tuples
-        List of (data, metadata, layer_type) tuples
+        List of (data, add_kwargs, layer_type) tuples
     """
     # List to store all found files
     files = []
