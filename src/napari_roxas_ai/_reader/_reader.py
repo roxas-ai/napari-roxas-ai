@@ -15,6 +15,9 @@ from napari_roxas_ai._settings import SettingsManager
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
 
+# Get file extensions from settings
+settings = SettingsManager()
+
 
 def napari_get_reader(path: Union[str, List[str]]) -> Optional[Callable]:
     """
@@ -67,8 +70,6 @@ def is_supported_file(path: str) -> bool:
     """
     path_lower = path.lower()
 
-    # Get file extensions from settings
-    settings = SettingsManager()
     # Get file extension settings and join the parts
     scan_content_ext = settings.get("file_extensions.scan_file_extension")[0]
     cells_content_ext = settings.get("file_extensions.cells_file_extension")[0]
@@ -97,7 +98,6 @@ def get_metadata_from_json(path):
     """
 
     # Use the new nested structure for settings
-    settings = SettingsManager()
     metadata_file_extension_parts = settings.get(
         "file_extensions.metadata_file_extension"
     )
@@ -207,7 +207,6 @@ def read_image_file(path):
     """
 
     # Skip non-image files
-    settings = SettingsManager()
     image_file_extensions = settings.get(
         "file_extensions.image_file_extensions",
     )
@@ -256,8 +255,6 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
     # Initialize return list
     layers = []
 
-    # Get file extensions from settings
-    settings = SettingsManager()
     # Get file extension settings and join the parts
     # Get file extension settings and join the parts
     scan_content_ext = settings.get("file_extensions.scan_file_extension")[0]
