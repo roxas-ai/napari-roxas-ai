@@ -77,9 +77,17 @@
             ".cells",
             ".png"
         ],
+        "cells_table_file_extension": [
+            ".cells_table",
+            ".txt"
+        ],
         "rings_file_extension": [
             ".rings",
             ".tif"
+        ],
+        "rings_table_file_extension": [
+            ".rings_table",
+            ".txt"
         ],
         "crossdating_file_extension": [
             ".crossdating",
