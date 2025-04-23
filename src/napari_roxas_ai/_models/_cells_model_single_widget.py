@@ -57,7 +57,7 @@ class Worker(QObject):
         self.finished.emit()
 
 
-class CellsModelWidget(Container):
+class CellsModelSingleWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
