@@ -75,10 +75,32 @@ def is_supported_file(path: str) -> bool:
     cells_content_ext = settings.get("file_extensions.cells_file_extension")[0]
     rings_content_ext = settings.get("file_extensions.rings_file_extension")[0]
 
+    cells_table_content_ext = settings.get(
+        "file_extensions.cells_table_file_extension"
+    )[0]
+    rings_table_content_ext = settings.get(
+        "file_extensions.rings_table_file_extension"
+    )[0]
+
     # Check for all supported file types with a single endswith call
-    return any(
-        ext in path_lower
-        for ext in [scan_content_ext, cells_content_ext, rings_content_ext]
+    return all(
+        (
+            any(
+                ext in path_lower
+                for ext in [
+                    scan_content_ext,
+                    cells_content_ext,
+                    rings_content_ext,
+                ]
+            ),
+            all(
+                ext not in path_lower
+                for ext in [
+                    cells_table_content_ext,
+                    rings_table_content_ext,
+                ]
+            ),
+        )
     )
 
 
