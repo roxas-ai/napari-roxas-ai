@@ -66,6 +66,11 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
     # Update the existing metadata with the new filtered metadata
     existing_metadata.update(filtered_metadata)
 
+    # Update the sample name in the metadata
+    existing_metadata.update(
+        {"sample_name": os.path.basename(path).split(".")[0]}
+    )
+
     # Write the updated metadata to the file
     with open(path, "w") as f:
         json.dump(existing_metadata, f, indent=4)
@@ -123,8 +128,11 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     Returns
     -------
-    [path] : A list containing the string path to the saved file.
+    written_file_paths : A list containing the string path to the saved file.
     """
+
+    written_file_paths = []
+
     dirname = os.path.dirname(path)
     basename = os.path.basename(path).split(".")[0]
     sample_path = os.path.join(dirname, basename)
@@ -135,6 +143,7 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
     update_metadata_file(metadata_file_path, meta["metadata"], "scan_")
+    written_file_paths.append(metadata_file_path)
 
     # Save the image data
     scan_file_extension = "".join(
@@ -142,12 +151,13 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     )
     scan_file_path = f"{sample_path}{scan_file_extension}"
     save_image(scan_file_path, data, rescale=False)
+    written_file_paths.append(scan_file_path)
 
     # return path to any file(s) that were successfully written
-    return [scan_file_path, metadata_file_path]
+    return written_file_paths
 
 
-def write_cells_file(path: str, data: Any, meta: dict) -> str:
+def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     """Writes a cells file.
 
     Parameters
@@ -162,8 +172,10 @@ def write_cells_file(path: str, data: Any, meta: dict) -> str:
 
     Returns
     -------
-    [path] : A list containing the string path to the saved file.
+    written_file_paths : A list containing the string path to the saved file.
     """
+
+    written_file_paths = []
 
     dirname = os.path.dirname(path)
     basename = os.path.basename(path).split(".")[0]
@@ -175,18 +187,20 @@ def write_cells_file(path: str, data: Any, meta: dict) -> str:
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
     update_metadata_file(metadata_file_path, meta["metadata"], "cells_")
+    written_file_paths.append(metadata_file_path)
 
     # Save the tabular data
     if not meta["features"].empty:
-        cells_tablefile_extension = "".join(
+        cells_table_file_extension = "".join(
             settings.get("file_extensions.cells_table_file_extension")
         )
-        cells_tablefile_path = f"{sample_path}{cells_tablefile_extension}"
+        cells_table_file_path = f"{sample_path}{cells_table_file_extension}"
         meta["features"].to_csv(
-            cells_tablefile_path,
+            cells_table_file_path,
             sep=settings.get("tables.separator"),
             index_label=settings.get("tables.index_column"),
         )
+        written_file_paths.append(cells_table_file_path)
 
     # Save the image data
     cells_file_extension = "".join(
@@ -194,12 +208,13 @@ def write_cells_file(path: str, data: Any, meta: dict) -> str:
     )
     cells_file_path = f"{sample_path}{cells_file_extension}"
     save_image(cells_file_path, data, rescale=True)
+    written_file_paths.append(cells_file_path)
 
     # return path to any file(s) that were successfully written
-    return [cells_file_path, metadata_file_path]
+    return written_file_paths
 
 
-def write_rings_file(path: str, data: Any, meta: dict) -> str:
+def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     """Writes a rings file.
 
     Parameters
@@ -214,8 +229,11 @@ def write_rings_file(path: str, data: Any, meta: dict) -> str:
 
     Returns
     -------
-    [path] : A list containing the string path to the saved file.
+    written_file_paths : A list containing the string path to the saved file.
     """
+
+    written_file_paths = []
+
     dirname = os.path.dirname(path)
     basename = os.path.basename(path).split(".")[0]
     sample_path = os.path.join(dirname, basename)
@@ -226,18 +244,20 @@ def write_rings_file(path: str, data: Any, meta: dict) -> str:
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
     update_metadata_file(metadata_file_path, meta["metadata"], "rings_")
+    written_file_paths.append(metadata_file_path)
 
     # Save the tabular data
     if not meta["features"].empty:
-        rings_tablefile_extension = "".join(
+        rings_table_file_extension = "".join(
             settings.get("file_extensions.rings_table_file_extension")
         )
-        rings_tablefile_path = f"{sample_path}{rings_tablefile_extension}"
+        rings_table_file_path = f"{sample_path}{rings_table_file_extension}"
         meta["features"].to_csv(
-            rings_tablefile_path,
+            rings_table_file_path,
             sep=settings.get("tables.separator"),
             index_label=settings.get("tables.index_column"),
         )
+        written_file_paths.append(rings_table_file_path)
 
     # Save the image data
     rings_file_extension = "".join(
@@ -245,9 +265,10 @@ def write_rings_file(path: str, data: Any, meta: dict) -> str:
     )
     rings_file_path = f"{sample_path}{rings_file_extension}"
     save_image(rings_file_path, data, rescale=True)
+    written_file_paths.append(rings_file_path)
 
     # return path to any file(s) that were successfully written
-    return [rings_file_path, metadata_file_path]
+    return written_file_paths
 
 
 def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
@@ -265,9 +286,12 @@ def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
 
     Returns
     -------
-    [path] : A list containing the string path to the saved file.
+    written_file_paths : A list containing the string path to the saved file.
     """
 
+    written_file_paths = []
+
+    # Get the layer name from the metadata
     layer_name = meta["name"]
 
     # Get file extension settings and join the parts
@@ -276,15 +300,15 @@ def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
     rings_content_ext = settings.get("file_extensions.rings_file_extension")[0]
 
     if layer_name.endswith(scan_content_ext):
-        write_scan_file(path, data, meta)
+        written_file_paths += write_scan_file(path, data, meta)
     elif layer_name.endswith(cells_content_ext):
-        write_cells_file(path, data, meta)
+        written_file_paths += write_cells_file(path, data, meta)
     elif layer_name.endswith(rings_content_ext):
-        write_rings_file(path, data, meta)
+        written_file_paths += write_rings_file(path, data, meta)
     else:
-        return None
+        written_file_paths += None
     # return path to any file(s) that were successfully written
-    return [path]
+    return written_file_paths
 
 
 def write_multiple_layers(path: str, data: list[FullLayerData]) -> list[str]:
@@ -293,7 +317,7 @@ def write_multiple_layers(path: str, data: list[FullLayerData]) -> list[str]:
     Parameters
     ----------
     path : str
-        A string path indicating where to save the data file(s).
+        A string path indicating where to save the data file(s), and their basename.
     data : A list of layer tuples.
         Tuples contain three elements: (data, meta, layer_type)
         `data` is the layer data
@@ -303,10 +327,15 @@ def write_multiple_layers(path: str, data: list[FullLayerData]) -> list[str]:
 
     Returns
     -------
-    [path] : A list containing (potentially multiple) string paths to the saved file(s).
+    written_file_paths : A list containing (potentially multiple) string paths to the saved file(s).
     """
 
-    # implement your writer logic here ...
+    written_file_paths = []
+
+    for layer_data, layer_meta, _ in data:
+        written_file_paths += write_single_layer(path, layer_data, layer_meta)
+
+    written_file_paths = list(set(written_file_paths))
 
     # return path to any file(s) that were successfully written
-    return [path]
+    return written_file_paths

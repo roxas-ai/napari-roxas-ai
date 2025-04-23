@@ -59,17 +59,17 @@ contributions:
     - command: napari-roxas-ai.write_single_layer
       layer_types: ["image"]
       filename_extensions: []
-      display_name: Save to File
+      display_name: Save File with Basename
 
     - command: napari-roxas-ai.write_single_layer
       layer_types: ["labels"]
       filename_extensions: []
-      display_name: Save to File
+      display_name: Save File with Basename
 
     - command: napari-roxas-ai.write_multiple_layers
       layer_types: ["image*","labels*"]
       filename_extensions: []
-      display_name: Save to Folder
+      display_name: Save Multiple Files with Basename
 
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
