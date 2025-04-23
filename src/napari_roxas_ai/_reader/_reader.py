@@ -7,6 +7,7 @@ import os
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 from PIL import Image
 
 # Import SettingsManager to get file extensions
@@ -179,6 +180,18 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         scale_value = 1 / float(json_metadata["sample_scale"])
         metadata["scale"] = [scale_value, scale_value]
 
+    # Try to get tablular data associated with the cells
+    cells_table_file_extension = "".join(
+        settings.get("file_extensions.cells_table_file_extension")
+    )
+    cells_table_path = (
+        "".join(path.split(".")[:-2]) + cells_table_file_extension
+    )
+    if os.path.exists(cells_table_path):
+        metadata["features"] = pd.read_csv(
+            cells_table_path, sep="\t", index_col="id"
+        )
+
     return data.astype(int), metadata, "labels"
 
 
@@ -209,6 +222,18 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     if json_metadata and "sample_scale" in json_metadata:
         scale_value = 1 / float(json_metadata["sample_scale"])
         metadata["scale"] = [scale_value, scale_value]
+
+    # Try to get tablular data associated with the rings
+    rings_table_file_extension = "".join(
+        settings.get("file_extensions.rings_table_file_extension")
+    )
+    rings_table_path = (
+        "".join(path.split(".")[:-2]) + rings_table_file_extension
+    )
+    if os.path.exists(rings_table_path):
+        metadata["features"] = pd.read_csv(
+            rings_table_path, sep="\t", index_col="id"
+        )
 
     return data, metadata, "labels"
 
