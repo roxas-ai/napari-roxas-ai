@@ -105,7 +105,7 @@ def is_supported_file(path: str) -> bool:
     )
 
 
-def get_metadata_from_json(path):
+def get_metadata_from_file(path):
     """
     Get metadata from a JSON file.
 
@@ -175,9 +175,9 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
-    json_metadata = get_metadata_from_json(path)
-    if json_metadata and "sample_scale" in json_metadata:
-        scale_value = 1 / float(json_metadata["sample_scale"])
+    metadata = get_metadata_from_file(path)
+    if metadata and "sample_scale" in metadata:
+        scale_value = 1 / float(metadata["sample_scale"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get tablular data associated with the cells
@@ -196,14 +196,12 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
 
     # Try to get sample metadata and cells metadata from metadata file
     add_kwargs["metadata"] = {}
-    if json_metadata:
+    if metadata:
         metadata_keys = [
-            key
-            for key in json_metadata
-            if key.startswith(("sample_", "cells_"))
+            key for key in metadata if key.startswith(("sample_", "cells_"))
         ]
         add_kwargs["metadata"].update(
-            {key: json_metadata[key] for key in metadata_keys}
+            {key: metadata[key] for key in metadata_keys}
         )
 
     return data.astype(int), add_kwargs, "labels"
@@ -232,9 +230,9 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
-    json_metadata = get_metadata_from_json(path)
-    if json_metadata and "sample_scale" in json_metadata:
-        scale_value = 1 / float(json_metadata["sample_scale"])
+    metadata = get_metadata_from_file(path)
+    if metadata and "sample_scale" in metadata:
+        scale_value = 1 / float(metadata["sample_scale"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get tablular data associated with the rings
@@ -253,14 +251,12 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
 
     # Try to get sample metadata and rings metadata from metadata file
     add_kwargs["metadata"] = {}
-    if json_metadata:
+    if metadata:
         metadata_keys = [
-            key
-            for key in json_metadata
-            if key.startswith(("sample_", "rings_"))
+            key for key in metadata if key.startswith(("sample_", "rings_"))
         ]
         add_kwargs["metadata"].update(
-            {key: json_metadata[key] for key in metadata_keys}
+            {key: metadata[key] for key in metadata_keys}
         )
 
     return data, add_kwargs, "labels"
@@ -291,7 +287,7 @@ def read_image_file(path):
         return None
 
     # Get metadata from associated JSON file
-    json_metadata = get_metadata_from_json(path)
+    metadata = get_metadata_from_file(path)
 
     with Image.open(path) as img:
         data = np.array(img)
@@ -302,20 +298,18 @@ def read_image_file(path):
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
-    if json_metadata and "sample_scale" in json_metadata:
-        scale_value = 1 / float(json_metadata["sample_scale"])
+    if metadata and "sample_scale" in metadata:
+        scale_value = 1 / float(metadata["sample_scale"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get sample metadata and scan metadata from metadata file
     add_kwargs["metadata"] = {}
-    if json_metadata:
+    if metadata:
         metadata_keys = [
-            key
-            for key in json_metadata
-            if key.startswith(("sample_", "scan_"))
+            key for key in metadata if key.startswith(("sample_", "scan_"))
         ]
         add_kwargs["metadata"].update(
-            {key: json_metadata[key] for key in metadata_keys}
+            {key: metadata[key] for key in metadata_keys}
         )
 
     return data, add_kwargs, "image"
