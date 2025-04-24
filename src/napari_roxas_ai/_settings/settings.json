@@ -3,30 +3,36 @@
         "fields": [
             {
                 "id": "sample_name",
-                "label": "Sample Name",
+                "label": "Name",
                 "widget_type": "QLineEdit",
                 "read_only": true,
                 "required": true
             },
             {
                 "id": "sample_type",
-                "label": "Sample Type",
+                "label": "Type",
                 "widget_type": "QComboBox",
-                "items": ["conifer", "angiosperm"],
+                "items": [
+                    "conifer",
+                    "angiosperm"
+                ],
                 "editable": true,
                 "required": true
             },
             {
                 "id": "sample_geometry",
-                "label": "Sample Geometry",
+                "label": "Geometry",
                 "widget_type": "QComboBox",
-                "items": ["linear", "circular"],
+                "items": [
+                    "linear",
+                    "circular"
+                ],
                 "editable": true,
                 "required": true
             },
             {
                 "id": "sample_scale",
-                "label": "Sample Scale",
+                "label": "Scale (px/\u00b5m)",
                 "widget_type": "QDoubleSpinBox",
                 "default": 2.2675,
                 "min": 0.001,
@@ -37,7 +43,7 @@
             },
             {
                 "id": "sample_angle",
-                "label": "Sample Angle",
+                "label": "Angle",
                 "widget_type": "QDoubleSpinBox",
                 "default": 0.0,
                 "min": -360.0,
@@ -48,7 +54,7 @@
             },
             {
                 "id": "sample_outmost_complete_ring_year",
-                "label": "Sample Outmost Complete Ring Year",
+                "label": "Outmost Complete Ring Year",
                 "widget_type": "QSpinBox",
                 "default": 9999,
                 "min": -10000,
@@ -71,9 +77,17 @@
             ".cells",
             ".png"
         ],
+        "cells_table_file_extension": [
+            ".cells_table",
+            ".txt"
+        ],
         "rings_file_extension": [
             ".rings",
             ".tif"
+        ],
+        "rings_table_file_extension": [
+            ".rings_table",
+            ".txt"
         ],
         "crossdating_file_extension": [
             ".crossdating",
@@ -101,6 +115,10 @@
             ".csv",
             ".tsv"
         ]
+    },
+    "tables": {
+        "index_column": "id",
+        "separator": "\t"
     },
     "JPEG_compression": {
         "quality": 95,

@@ -484,42 +484,59 @@ class TestCrossdatingHandler:
             index=["2000", "2001", "2002"],
         )
 
-        # Save test data to real files
-        df1.to_csv(file1, sep="\t")
-        df2.to_csv(file2, sep="\t")
-
-        # Create a merged DataFrame to return from our patched function
-        merged_df = pd.DataFrame(
-            {
-                "Series1": [100, 200, 300],
-                "Series2": [150, 250, 350],
-                "Series3": [400, 500, 600],
-                "Series4": [450, 550, 650],
-            },
-            index=["2000", "2001", "2002"],
+        target_df = pd.DataFrame(
+            {"Series5": [700, 800, 900]}, index=["2000", "2001", "2002"]
         )
 
-        # Mock the merge_crossdating_files function to bypass reading files
+        # Save test data to files - we don't need to do this since we're mocking the read function
+        df1.to_csv(file1, sep="\t")
+        df2.to_csv(file2, sep="\t")
+        target_df.to_csv(target_file, sep="\t")
+
+        # Define expected column set for verification
+        expected_columns = {
+            "Series1",
+            "Series2",
+            "Series3",
+            "Series4",
+            "Series5",
+        }
+
+        # Mock the _try_read_dataframe function to return our test data
         with patch(
-            "napari_roxas_ai._preparation._crossdating_handler.merge_crossdating_files",
-            return_value=merged_df,
-        ):
-            # Call the merge function through our patched version
+            "napari_roxas_ai._preparation._crossdating_handler._try_read_dataframe"
+        ) as mock_read:
+            # Configure the mock to return different DataFrames for different input files
+            def side_effect(filepath):
+                if filepath == str(file1):
+                    return True, df1
+                elif filepath == str(file2):
+                    return True, df2
+                elif filepath == str(target_file):
+                    return True, target_df
+                else:
+                    return False, None
+
+            mock_read.side_effect = side_effect
+
+            # Call the merge function
             result = merge_crossdating_files(
                 source_files=[str(file1), str(file2)],
                 target_file=str(target_file),
             )
 
-            # Check result using our mocked response
+            # Check result
             assert result is not None
             assert isinstance(result, pd.DataFrame)
-            assert list(result.columns) == [
-                "Series1",
-                "Series2",
-                "Series3",
-                "Series4",
-            ]
+            assert set(result.columns) == expected_columns
             assert len(result) == 3
+            # Check that each series from each dataframe is present in the merged result
+            for series in df1.columns:
+                assert series in result.columns
+            for series in df2.columns:
+                assert series in result.columns
+            for series in target_df.columns:
+                assert series in result.columns
 
 
 if __name__ == "__main__":

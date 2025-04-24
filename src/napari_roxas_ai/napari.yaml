@@ -6,16 +6,18 @@ visibility: public
 categories: ["Annotation", "Segmentation", "Acquisition"]
 contributions:
   commands:
+    # Sample data contributions
     - id: napari-roxas-ai.load_conifer_sample_data
       python_name: napari_roxas_ai:load_conifer_sample_data
       title: Load conifer sample data
 
+    # Widgets contributions
     - id: napari-roxas-ai.make_cells_measurements_widget
       python_name: napari_roxas_ai:CellsMeasurementsWidget
       title: Cells measurements widget
 
-    - id: napari-roxas-ai.make_cells_model_widget
-      python_name: napari_roxas_ai:CellsModelWidget
+    - id: napari-roxas-ai.make_cells_model_single_widget
+      python_name: napari_roxas_ai:CellsModelSingleWidget
       title: Cells segmentation model widget
 
     - id: napari-roxas-ai.make_cells_model_batch_widget
@@ -34,14 +36,40 @@ contributions:
       python_name: napari_roxas_ai:open_settings_file
       title: Settings
 
+    # Readers contributions
     - id: napari-roxas-ai.napari_get_reader
       python_name: napari_roxas_ai:napari_get_reader
       title: ROXAS AI File Reader
+
+    # Writers contributions
+    - id: napari-roxas-ai.write_multiple_layers
+      python_name: napari_roxas_ai._writer:write_multiple_layers
+      title: Save multi-layer data with ROXAS AI
+
+    - id: napari-roxas-ai.write_single_layer
+      python_name: napari_roxas_ai._writer:write_single_layer
+      title: Save layer data with ROXAS AI
 
   readers:
     - command: napari-roxas-ai.napari_get_reader
       accepts_directories: true
       filename_patterns: ["*.cells*", "*.scan*", "*.rings*"] # Can't be read from the settings file, so hardcoded here
+
+  writers:
+    - command: napari-roxas-ai.write_single_layer
+      layer_types: ["image"]
+      filename_extensions: []
+      display_name: Save File with Basename
+
+    - command: napari-roxas-ai.write_single_layer
+      layer_types: ["labels"]
+      filename_extensions: []
+      display_name: Save File with Basename
+
+    - command: napari-roxas-ai.write_multiple_layers
+      layer_types: ["image*","labels*"]
+      filename_extensions: []
+      display_name: Save Multiple Files with Basename
 
   sample_data:
     - command: napari-roxas-ai.load_conifer_sample_data
@@ -52,7 +80,7 @@ contributions:
     - command: napari-roxas-ai.make_preparation_widget
       display_name: Prepare samples
 
-    - command: napari-roxas-ai.make_cells_model_widget
+    - command: napari-roxas-ai.make_cells_model_single_widget
       display_name: Segment cells (single image)
 
     - command: napari-roxas-ai.make_cells_model_batch_widget

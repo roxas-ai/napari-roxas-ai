@@ -1,7 +1,7 @@
 from ._cells_model_batch_widget import CellsModelBatchWidget
-from ._cells_model_widget import CellsModelWidget
+from ._cells_model_single_widget import CellsModelSingleWidget
 
 __all__ = (
-    "CellsModelWidget",
+    "CellsModelSingleWidget",
     "CellsModelBatchWidget",
 )

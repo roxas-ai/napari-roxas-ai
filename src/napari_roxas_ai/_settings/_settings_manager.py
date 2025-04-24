@@ -169,14 +169,14 @@ class SettingsManager:
                 "fields": [
                     {
                         "id": "sample_name",
-                        "label": "Sample Name",
+                        "label": "Name",
                         "widget_type": "QLineEdit",
                         "read_only": True,
                         "required": True,
                     },
                     {
                         "id": "sample_type",
-                        "label": "Sample Type",
+                        "label": "Type",
                         "widget_type": "QComboBox",
                         "items": ["conifer", "angiosperm"],
                         "editable": True,
@@ -184,7 +184,7 @@ class SettingsManager:
                     },
                     {
                         "id": "sample_geometry",
-                        "label": "Sample Geometry",
+                        "label": "Geometry",
                         "widget_type": "QComboBox",
                         "items": ["linear", "circular"],
                         "editable": True,
@@ -192,7 +192,7 @@ class SettingsManager:
                     },
                     {
                         "id": "sample_scale",
-                        "label": "Sample Scale",
+                        "label": "Scale (px/µm)",
                         "widget_type": "QDoubleSpinBox",
                         "default": 2.2675,
                         "min": 0.001,
@@ -203,7 +203,7 @@ class SettingsManager:
                     },
                     {
                         "id": "sample_angle",
-                        "label": "Sample Angle",
+                        "label": "Angle",
                         "widget_type": "QDoubleSpinBox",
                         "default": 0.0,
                         "min": -360.0,
@@ -214,7 +214,7 @@ class SettingsManager:
                     },
                     {
                         "id": "sample_outmost_complete_ring_year",
-                        "label": "Sample Outmost Complete Ring Year",
+                        "label": "Outmost Complete Ring Year",
                         "widget_type": "QSpinBox",
                         "default": 9999,
                         "min": -10000,
@@ -238,10 +238,18 @@ class SettingsManager:
                     ".cells",
                     ".png",
                 ],  # Parts of cells file extension
+                "cells_table_file_extension": [
+                    ".cells_table",
+                    ".txt",
+                ],  # And those of the cells table
                 "rings_file_extension": [
                     ".rings",
                     ".tif",
                 ],  # Parts of rings file extension
+                "rings_table_file_extension": [
+                    ".rings_table",
+                    ".txt",
+                ],  # And those of the rings table
                 "crossdating_file_extension": [
                     ".crossdating",
                     ".txt",
@@ -268,6 +276,11 @@ class SettingsManager:
                     ".csv",
                     ".tsv",
                 ],  # Supported text file extensions
+            },
+            # Tabular data settings
+            "tables": {
+                "index_column": "id",
+                "separator": "\t",
             },
             # Image processing settings
             "JPEG_compression": {

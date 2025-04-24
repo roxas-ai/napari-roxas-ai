@@ -242,14 +242,6 @@ def _try_read_dataframe(filepath: str) -> Tuple[bool, Optional[pd.DataFrame]]:
     if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
         return False, None
 
-    # First try to read with tab separator
-    try:
-        df = pd.read_csv(filepath, sep="\t", index_col=0)
-        if not df.empty:
-            return True, df
-    except (ValueError, pd.errors.ParserError, pd.errors.EmptyDataError):
-        pass
-
     # Then try with the more flexible reader
     try:
         df = read_crossdating_file(filepath)
