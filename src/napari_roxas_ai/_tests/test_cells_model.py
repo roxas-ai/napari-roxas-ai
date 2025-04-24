@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from napari_roxas_ai._models._cells_model import CellsSegmentationModel
+from napari_roxas_ai._segmentation._cells_model import CellsSegmentationModel
 
 
 def test_cells_segmentation_model():

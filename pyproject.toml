@@ -45,7 +45,7 @@ dependencies = [
     "torch ; sys_platform == 'darwin' or platform_machine == 'arm64'",
     "torchvision ; sys_platform == 'darwin' or platform_machine == 'arm64'",
     "pytorch-lightning",
-    "segmentation-models-pytorch",
+    "segmentation-models-pytorch==0.4.0",
 ]
 
 [project.optional-dependencies]
