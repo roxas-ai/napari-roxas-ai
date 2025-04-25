@@ -28,6 +28,10 @@ contributions:
       python_name: napari_roxas_ai:SingleSampleSegmentationWidget
       title: Single sample segmentation widget
 
+    - id: napari-roxas-ai.make_batch_sample_segmentation_widget
+      python_name: napari_roxas_ai:BatchSampleSegmentationWidget
+      title: Batch sample segmentation widget
+
     - id: napari-roxas-ai.make_cells_vectorization_widget
       python_name: napari_roxas_ai:cells_vectorization_widget
       title: Cell labels vectorization widget
@@ -92,6 +96,9 @@ contributions:
 
     - command: napari-roxas-ai.make_single_sample_segmentation_widget
       display_name: Segment sample (cells & rings)
+
+    - command: napari-roxas-ai.make_batch_sample_segmentation_widget
+      display_name: Batch segment samples (cells & rings)
 
     - command: napari-roxas-ai.make_cells_measurements_widget
       display_name: Measure cells

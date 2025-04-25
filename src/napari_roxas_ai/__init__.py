@@ -5,6 +5,7 @@ from ._preparation import PreparationWidget
 from ._reader import napari_get_reader
 from ._sample_data import load_conifer_sample_data
 from ._segmentation import (
+    BatchSampleSegmentationWidget,
     CellsModelBatchWidget,
     CellsModelSingleWidget,
     SingleSampleSegmentationWidget,
@@ -17,6 +18,7 @@ __all__ = (
     "CellsModelSingleWidget",
     "CellsModelBatchWidget",
     "SingleSampleSegmentationWidget",
+    "BatchSampleSegmentationWidget",
     "PreparationWidget",
     "cells_vectorization_widget",
     "load_conifer_sample_data",
