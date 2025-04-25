@@ -11,6 +11,7 @@ from magicgui.widgets import (
     PushButton,
     create_widget,
 )
+from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
@@ -276,10 +277,15 @@ class SingleSampleSegmentationWidget(Container):
 
         # Disable the run button while processing
         self._run_segmentation_button.enabled = False
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._run_segmentation_button, "enabled", True)
-        )
 
+        # Restore run segmentation button and show message when finished
+        def on_finished():
+            self._run_segmentation_button.enabled = True
+            show_info("Segmentation complete")
+
+        self.worker_thread.finished.connect(on_finished)
+
+        show_info("Segmentation in progress...")
         # Run the analysis in a separate thread
         self.worker_thread.start()
 
