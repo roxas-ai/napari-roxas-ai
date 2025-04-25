@@ -67,7 +67,7 @@ class Worker(QObject):
         results = {}
 
         # Process cells if requested
-        if self.segment_cells and self.cells_model_weights_file:
+        if self.segment_cells:
             # Set up cells model
             cells_model = CellsSegmentationModel()
             cells_model.load_weights(self.cells_model_weights_file)
@@ -86,7 +86,7 @@ class Worker(QObject):
             }
 
         # Process rings if requested
-        if self.segment_rings and self.rings_model_weights_file:
+        if self.segment_rings:
             # Import torch here to avoid dependency if not used
             import torch
 
@@ -119,7 +119,7 @@ class Worker(QObject):
             ]
             name = f"{self.base_name}{suffix}"
             results["rings"] = {
-                "data": rings_labels.astype("uint8"),
+                "data": rings_labels.astype("int32"),
                 "name": name,
                 "features": boundaries_df,
             }
