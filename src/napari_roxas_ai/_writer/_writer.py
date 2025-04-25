@@ -264,7 +264,7 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
         settings.get("file_extensions.rings_file_extension")
     )
     rings_file_path = f"{sample_path}{rings_file_extension}"
-    save_image(rings_file_path, data, rescale=True)
+    save_image(rings_file_path, data, rescale=False)
     written_file_paths.append(rings_file_path)
 
     # return path to any file(s) that were successfully written
