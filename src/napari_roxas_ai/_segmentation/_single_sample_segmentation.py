@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import numpy as np
@@ -231,20 +232,20 @@ class SingleSampleSegmentationWidget(Container):
             return
 
         # Validate cells model if cells segmentation is selected
-        cells_model_file = None
+        self.cells_model_file = None
         if self._segment_cells_checkbox.value:
-            cells_model_file = self._cells_model_weights_file.value
-            if not cells_model_file:
+            self.cells_model_file = self._cells_model_weights_file.value
+            if not self.cells_model_file:
                 QMessageBox.warning(
                     None, "Error", "Please select a cells model file"
                 )
                 return
 
         # Validate rings model if rings segmentation is selected
-        rings_model_file = None
+        self.rings_model_file = None
         if self._segment_rings_checkbox.value:
-            rings_model_file = self._rings_model_weights_file.value
-            if not rings_model_file:
+            self.rings_model_file = self._rings_model_weights_file.value
+            if not self.rings_model_file:
                 QMessageBox.warning(
                     None, "Error", "Please select a rings model file"
                 )
@@ -253,33 +254,14 @@ class SingleSampleSegmentationWidget(Container):
         # Extract base name from input layer
         base_name = self._extract_base_name(self.input_layer.name)
 
-        # Run the analysis in a separate thread
-        self._run_in_thread(
-            self.input_layer.data,
-            self._segment_cells_checkbox.value,
-            cells_model_file,
-            self._segment_rings_checkbox.value,
-            rings_model_file,
-            base_name,
-        )
-
-    def _run_in_thread(
-        self,
-        input_array: np.ndarray,
-        segment_cells: bool,
-        cells_model_weights_file: Optional[str],
-        segment_rings: bool,
-        rings_model_weights_file: Optional[str],
-        base_name: str,
-    ) -> None:
-        """Run the segmentation in a separate thread."""
+        # Prepare worker to run the analysis in a separate thread
         self.worker_thread = QThread()
         self.worker = Worker(
-            input_array,
-            segment_cells,
-            cells_model_weights_file,
-            segment_rings,
-            rings_model_weights_file,
+            self.input_layer.data,
+            self._segment_cells_checkbox.value,
+            self.cells_model_file,
+            self._segment_rings_checkbox.value,
+            self.rings_model_file,
             self.settings,
             base_name,
         )
@@ -298,67 +280,82 @@ class SingleSampleSegmentationWidget(Container):
             lambda: setattr(self._run_segmentation_button, "enabled", True)
         )
 
+        # Run the analysis in a separate thread
         self.worker_thread.start()
 
     def _add_result_layers(self, results: Dict[str, Any]) -> None:
-        """Add result layers to the viewer."""
-        if "error" in results:
-            QMessageBox.warning(None, "Error", results["error"])
-            return
+        """Add result layers to the viewer or update existing ones."""
 
         # Get scale and sample metadata from input layer
-        input_scale = getattr(self.input_layer, "scale", None)
+        input_scale = self.input_layer.scale
 
         # Extract sample_ metadata fields
-        sample_metadata = {}
-        if hasattr(self.input_layer, "metadata") and isinstance(
-            self.input_layer.metadata, dict
-        ):
-            sample_metadata = {
-                k: v
-                for k, v in self.input_layer.metadata.items()
-                if isinstance(k, str) and k.startswith("sample_")
-            }
-        # Add cells layer if available
+        sample_metadata = {
+            k: v
+            for k, v in self.input_layer.metadata.items()
+            if isinstance(k, str) and k.startswith("sample_")
+        }
+
+        # Add or update cells layer if available
         if "cells" in results:
             cells = results["cells"]
-            cells_layer = self._viewer.add_labels(
-                cells["data"],
-                name=cells["name"],
-                colormap=make_binary_labels_colormap(),
-            )
+            cells_name = cells["name"]
 
-            # Apply scale if available
-            if input_scale is not None:
-                cells_layer.scale = input_scale
+            # Check if layer with this name already exists
+            try:
+                # Update existing layer
+                existing_layer = self._viewer.layers[cells_name]
+                existing_layer.data = cells["data"]
+                # Set colormap (in case it was changed)
+                existing_layer.colormap = make_binary_labels_colormap()
+                cells_layer = existing_layer
+            except KeyError:
+                # Create new layer
+                cells_layer = self._viewer.add_labels(
+                    cells["data"],
+                    name=cells_name,
+                    colormap=make_binary_labels_colormap(),
+                )
 
-            # Apply sample metadata
-            if sample_metadata and hasattr(cells_layer, "metadata"):
-                # Initialize metadata dict if it doesn't exist
-                if cells_layer.metadata is None:
-                    cells_layer.metadata = {}
-                # Update with sample metadata
-                cells_layer.metadata.update(sample_metadata)
+            # Create metadata for segmented cells layer
+            cells_metadata = {
+                "cells_segmentation_model": self.cells_model_file,
+                "cells_segmentation_datetime": datetime.now().isoformat(),
+            }
 
-        # Add rings layer if available
+            # Apply scale and update with sample and cells metadata
+            cells_layer.scale = input_scale
+            cells_layer.metadata.update(sample_metadata)
+            cells_layer.metadata.update(cells_metadata)
+
+        # Add or update rings layer if available
         if "rings" in results:
             rings = results["rings"]
-            rings_layer = self._viewer.add_labels(
-                rings["data"],
-                name=rings["name"],
-            )
+            rings_name = rings["name"]
 
-            # Apply scale if available
-            if input_scale is not None:
-                rings_layer.scale = input_scale
+            # Check if layer with this name already exists
+            try:
+                # Update existing layer
+                existing_layer = self._viewer.layers[rings_name]
+                existing_layer.data = rings["data"]
+                rings_layer = existing_layer
+            except KeyError:
+                # Create new layer
+                rings_layer = self._viewer.add_labels(
+                    rings["data"],
+                    name=rings_name,
+                )
 
-            # Apply sample metadata
-            if sample_metadata and hasattr(rings_layer, "metadata"):
-                # Initialize metadata dict if it doesn't exist
-                if rings_layer.metadata is None:
-                    rings_layer.metadata = {}
-                # Update with sample metadata
-                rings_layer.metadata.update(sample_metadata)
+            # Create metadata for segmented rings layer
+            rings_metadata = {
+                "rings_segmentation_model": self.rings_model_file,
+                "rings_segmentation_datetime": datetime.now().isoformat(),
+            }
+
+            # Apply scale and update with sample and rings metadata
+            rings_layer.scale = input_scale
+            rings_layer.metadata.update(sample_metadata)
+            rings_layer.metadata.update(rings_metadata)
 
             # Assign features to the rings layer
             if "features" in rings:
