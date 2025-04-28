@@ -9,6 +9,7 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
+    ProgressBar,
     PushButton,
 )
 from PIL import Image
@@ -36,6 +37,7 @@ settings = SettingsManager()
 
 class Worker(QObject):
     finished = Signal()
+    progress = Signal(int, int)  # current, total
 
     def __init__(
         self,
@@ -94,7 +96,12 @@ class Worker(QObject):
 
     def run(self):
 
+        factor = int(self.segment_cells) + int(self.segment_rings)
+        total = len(self.scan_file_paths) * factor
+        i = 0
+
         for scan_file_path in self.scan_file_paths:
+
             scan_data, scan_add_kwargs, _ = read_image_file(scan_file_path)
 
             sample_metadata = {
@@ -105,6 +112,11 @@ class Worker(QObject):
 
             # Process cells if requested
             if self.segment_cells:
+
+                # Emit progress signal
+                self.progress.emit(i, total)
+                i += 1
+
                 # Perform inference
                 cells_labels = self.cells_model.infer(scan_data)
 
@@ -136,6 +148,11 @@ class Worker(QObject):
 
             # Process rings if requested
             if self.segment_rings:
+
+                # Emit progress signal
+                self.progress.emit(i, total)
+                i += 1
+
                 # Perform inference
                 rings_labels, rings_boundaries = self.rings_model.infer(
                     scan_data
@@ -179,6 +196,7 @@ class Worker(QObject):
                     path=scan_file_path, data=rings_data, meta=rings_add_kwargs
                 )
 
+        self.progress.emit(total, total)
         self.finished.emit()
 
 
@@ -227,6 +245,11 @@ class BatchSampleSegmentationWidget(Container):
         self._run_segmentation_button = PushButton(text="Run Segmentation")
         self._run_segmentation_button.changed.connect(self._run_segmentation)
 
+        # Add a progress bar with a description
+        self.progress_bar = ProgressBar(
+            value=0, min=0, max=100, visible=False, label="Progress"
+        )
+
         # Append the widgets to the container
         self.extend(
             [
@@ -236,6 +259,7 @@ class BatchSampleSegmentationWidget(Container):
                 self._segment_rings_checkbox,
                 self._rings_model_weights_file,
                 self._run_segmentation_button,
+                self.progress_bar,
             ]
         )
 
@@ -268,6 +292,13 @@ class BatchSampleSegmentationWidget(Container):
         self._rings_model_weights_file.visible = (
             self._segment_rings_checkbox.value
         )
+
+    def _update_progress(self, current, total):
+        """Update the progress bar."""
+        if total > 0:
+            percentage = int(100 * current / total)
+            self.progress_bar.value = percentage
+            self.progress_bar.visible = True
 
     def _run_segmentation(self) -> None:
         """Run the segmentation analysis in a separate thread."""
@@ -324,6 +355,9 @@ class BatchSampleSegmentationWidget(Container):
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+
+        # Connect progress signal
+        self.worker.progress.connect(self._update_progress)
 
         # Disable the run button while processing
         self._run_segmentation_button.enabled = False
