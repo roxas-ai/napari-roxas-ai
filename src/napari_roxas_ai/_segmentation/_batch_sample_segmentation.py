@@ -1,6 +1,7 @@
 import glob
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
@@ -68,10 +69,11 @@ class Worker(QObject):
         )[0]
         self.scan_file_paths = sorted(
             glob.glob(
-                self.input_directory_path
-                + f"/**/*{
-                    self.scan_content_ext
-                }*",
+                str(
+                    Path(self.input_directory_path)
+                    / "**"
+                    / f"*{self.scan_content_ext}*"
+                ),
                 recursive=True,
             )
         )
@@ -122,7 +124,7 @@ class Worker(QObject):
 
                 # Create outputs
                 cells_layer_name = (
-                    f"{sample_metadata["sample_name"]}{self.cells_content_ext}"
+                    f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 )
                 cells_data = (cells_labels / 255).astype("uint8")
                 cells_add_kwargs = {
@@ -172,7 +174,7 @@ class Worker(QObject):
 
                 # Create outputs
                 rings_layer_name = (
-                    f"{sample_metadata["sample_name"]}{self.rings_content_ext}"
+                    f"{sample_metadata['sample_name']}{self.rings_content_ext}"
                 )
                 rings_data = rings_labels.astype("int32")
                 rings_add_kwargs = {
