@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
+import torch
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -87,8 +88,6 @@ class Worker(QObject):
 
         # Process rings if requested
         if self.segment_rings:
-            # Import torch here to avoid dependency if not used
-            import torch
 
             # Set up rings model
             imp = torch.package.PackageImporter(self.rings_model_weights_file)
