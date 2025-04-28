@@ -262,7 +262,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     return data, add_kwargs, "labels"
 
 
-def read_image_file(path):
+def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
     Read an image file and return it as a napari layer.
 

@@ -27,6 +27,8 @@ from ._worker import Worker
 if TYPE_CHECKING:
     import napari
 
+from pathlib import Path
+
 
 class PreparationWidget(Container):
     """
@@ -201,12 +203,17 @@ class PreparationWidget(Container):
             for ext in self.image_file_extensions:
                 self.source_files.extend(
                     glob.glob(
-                        f"{self.project_directory}/**/*{ext}", recursive=True
+                        str(Path(self.project_directory) / "**" / f"*{ext}"),
+                        recursive=True,
                     )
                 )
                 self.source_files.extend(
                     glob.glob(
-                        f"{self.project_directory}/**/*{ext.upper()}",
+                        str(
+                            Path(self.project_directory)
+                            / "**"
+                            / f"*{ext.upper()}"
+                        ),
                         recursive=True,
                     )
                 )
