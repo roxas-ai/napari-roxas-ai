@@ -4,6 +4,7 @@ Handles the selection and processing of crossdating files.
 
 import glob
 import os
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import pandas as pd
@@ -103,12 +104,15 @@ class CrossdatingSelectionDialog(QDialog):
         for ext in self.text_file_extensions:
             text_files.extend(
                 glob.glob(
-                    f"{self.project_directory}/**/*{ext}", recursive=True
+                    str(Path(self.project_directory) / "**" / f"*{ext}"),
+                    recursive=True,
                 )
             )
             text_files.extend(
                 glob.glob(
-                    f"{self.project_directory}/**/*{ext.upper()}",
+                    str(
+                        Path(self.project_directory) / "**" / f"*{ext.upper()}"
+                    ),
                     recursive=True,
                 )
             )

@@ -6,6 +6,7 @@ import glob
 import json
 import os
 import shutil
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from PIL import ExifTags, Image
@@ -69,12 +70,15 @@ class Worker(QObject):
         for ext in self.image_file_extensions:
             all_files.extend(
                 glob.glob(
-                    f"{self.project_directory}/**/*{ext}", recursive=True
+                    str(Path(self.project_directory) / "**" / f"*{ext}"),
+                    recursive=True,
                 )
             )
             all_files.extend(
                 glob.glob(
-                    f"{self.project_directory}/**/*{ext.upper()}",
+                    str(
+                        Path(self.project_directory) / "**" / f"*{ext.upper()}"
+                    ),
                     recursive=True,
                 )
             )
