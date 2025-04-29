@@ -3,7 +3,6 @@ Handles the selection and processing of crossdating files.
 """
 
 import glob
-import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -128,11 +127,11 @@ class CrossdatingSelectionDialog(QDialog):
         for file_path in text_files:
             # Display relative path for better readability
             try:
-                display_name = os.path.relpath(
-                    file_path, self.project_directory
+                display_name = str(
+                    Path(file_path).relative_to(self.project_directory)
                 )
             except ValueError:
-                display_name = os.path.basename(file_path)
+                display_name = Path(file_path).name
 
             self.file_list.addItem(display_name)
             # Store the full path as item data
@@ -192,20 +191,20 @@ def process_crossdating_files(
         The merged DataFrame if successful, None otherwise
     """
     # Determine the path for the project crossdating file (always in root directory)
-    crossdating_file_path = os.path.join(
-        project_directory, f"rings_series{crossdating_file_extension}"
+    crossdating_file_path = (
+        Path(project_directory) / f"rings_series{crossdating_file_extension}"
     )
 
     # Create the file if it doesn't exist
-    if not os.path.exists(crossdating_file_path):
+    if not crossdating_file_path.exists():
         # Create an empty dataframe and save it with tab separator
-        pd.DataFrame().to_csv(crossdating_file_path, sep="\t", index=True)
+        pd.DataFrame().to_csv(str(crossdating_file_path), sep="\t", index=True)
 
     # Show dialog to select crossdating files
     dialog = CrossdatingSelectionDialog(
         project_directory=project_directory,
         text_file_extensions=text_file_extensions,
-        project_file_path=crossdating_file_path,
+        project_file_path=str(crossdating_file_path),
     )
 
     result = dialog.exec_()
@@ -219,12 +218,14 @@ def process_crossdating_files(
         return None
 
     # Process selected files and merge with project file
-    merged_df = merge_crossdating_files(selected_files, crossdating_file_path)
+    merged_df = merge_crossdating_files(
+        selected_files, str(crossdating_file_path)
+    )
 
     # Save merged data back to the project file
     if merged_df is not None and not merged_df.empty:
         # Use tab separator for saving the file
-        merged_df.to_csv(crossdating_file_path, sep="\t", index=True)
+        merged_df.to_csv(str(crossdating_file_path), sep="\t", index=True)
 
     return merged_df
 
@@ -243,7 +244,7 @@ def _try_read_dataframe(filepath: str) -> Tuple[bool, Optional[pd.DataFrame]]:
     Tuple[bool, Optional[pd.DataFrame]]
         Success flag and DataFrame if successful, None otherwise
     """
-    if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+    if not Path(filepath).exists() or Path(filepath).stat().st_size == 0:
         return False, None
 
     # Then try with the more flexible reader
@@ -289,7 +290,7 @@ def merge_crossdating_files(
         if success and source_df is not None:
             dfs.append(source_df)
         else:
-            error_files.append(os.path.basename(file_path))
+            error_files.append(Path(file_path).name)
             print(f"Error reading file {file_path}")
 
     if not dfs:

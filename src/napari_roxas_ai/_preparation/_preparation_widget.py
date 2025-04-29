@@ -3,7 +3,7 @@ Widget for preparing sample images and metadata for ROXAS analysis.
 """
 
 import glob
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
 from magicgui.widgets import (
@@ -26,8 +26,6 @@ from ._worker import Worker
 
 if TYPE_CHECKING:
     import napari
-
-from pathlib import Path
 
 
 class PreparationWidget(Container):
@@ -198,7 +196,7 @@ class PreparationWidget(Container):
         # Get all image files in project directory
         self.source_files = []
 
-        if self.project_directory and os.path.exists(self.project_directory):
+        if self.project_directory and Path(self.project_directory).exists():
             # Gather all files with supported image extensions
             for ext in self.image_file_extensions:
                 self.source_files.extend(
@@ -222,7 +220,7 @@ class PreparationWidget(Container):
             if not self._process_processed_checkbox.value:
                 filtered_files = []
                 for file_path in self.source_files:
-                    basename = os.path.basename(file_path)
+                    basename = Path(file_path).name
                     if self.scan_content_extension not in basename:
                         filtered_files.append(file_path)
                 self.source_files = filtered_files
@@ -248,13 +246,13 @@ class PreparationWidget(Container):
             for file_path in self.source_files:
                 # Use relative path if possible, otherwise use base name
                 try:
-                    rel_path = os.path.relpath(
-                        file_path, self.project_directory
+                    rel_path = str(
+                        Path(file_path).relative_to(self.project_directory)
                     )
                     display_names.append(rel_path)
                     self._path_mapping[rel_path] = file_path
                 except ValueError:
-                    basename = os.path.basename(file_path)
+                    basename = Path(file_path).name
                     display_names.append(basename)
                     self._path_mapping[basename] = file_path
 
@@ -370,9 +368,9 @@ class PreparationWidget(Container):
 
         # Result_df will be None if user canceled or if there was an error
         if result_df is not None:
-            crossdating_file_path = os.path.join(
-                self.project_directory,
-                f"rings_series{self.crossdating_file_extension}",
+            crossdating_file_path = (
+                Path(self.project_directory)
+                / f"rings_series{self.crossdating_file_extension}"
             )
             QMessageBox.information(
                 None,

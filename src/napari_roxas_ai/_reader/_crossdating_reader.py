@@ -2,7 +2,7 @@
 Helper functions to read crossdating data files.
 """
 
-import os
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -32,11 +32,11 @@ def read_crossdating_file(path: str) -> pd.DataFrame:
     FileNotFoundError
         If the file does not exist
     """
-    if not os.path.exists(path):
+    if not Path(path).exists():
         raise FileNotFoundError(f"File not found: {path}")
 
     # Get file extension
-    file_ext = os.path.splitext(path)[1].lower()
+    file_ext = Path(path).suffix.lower()
 
     # Process based on file extension
     if file_ext in [".csv", ".tsv", ".txt"]:

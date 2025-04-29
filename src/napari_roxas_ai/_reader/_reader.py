@@ -3,7 +3,6 @@ Reader plugin for ROXAS AI-specific file formats.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
 
@@ -39,7 +38,7 @@ def napari_get_reader(path: Union[str, List[str]]) -> Optional[Callable]:
     # Handle the case where a single path is provided as a string
     if isinstance(path, str):
         # Check if the path is a directory
-        if os.path.isdir(path):
+        if Path(path).is_dir():
             return read_directory
 
         # Check if the path is a file that can be read
@@ -132,7 +131,7 @@ def get_metadata_from_file(path):
         Path(Path(path).stem).stem + metadata_file_extension
     )
 
-    if not os.path.exists(metadata_path):
+    if not metadata_path.exists():
         print(
             f"Error: Could not find metadata file: {metadata_path} for {path}"
         )
@@ -173,8 +172,8 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         data = np.zeros_like(data)
 
     # Create add_kwargs
-    filename = os.path.basename(path)
-    layer_name = os.path.splitext(filename)[0]
+    filename = Path(path).name
+    layer_name = Path(filename).stem
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
@@ -190,7 +189,7 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     cells_table_path = (
         "".join(path.split(".")[:-2]) + cells_table_file_extension
     )
-    if os.path.exists(cells_table_path):
+    if Path(cells_table_path).exists():
         add_kwargs["features"] = pd.read_csv(
             cells_table_path,
             sep=settings.get("tables.separator"),
@@ -228,8 +227,8 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         data = np.array(img)
 
     # Create add_kwargs
-    filename = os.path.basename(path)
-    layer_name = os.path.splitext(filename)[0]
+    filename = Path(path).name
+    layer_name = Path(filename).stem
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
@@ -245,7 +244,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     rings_table_path = (
         "".join(path.split(".")[:-2]) + rings_table_file_extension
     )
-    if os.path.exists(rings_table_path):
+    if Path(rings_table_path).exists():
         add_kwargs["features"] = pd.read_csv(
             rings_table_path,
             sep=settings.get("tables.separator"),
@@ -285,7 +284,7 @@ def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
         "file_extensions.image_file_extensions",
     )
 
-    file_ext = os.path.splitext(path)[1].lower()
+    file_ext = Path(path).suffix.lower()
     if file_ext not in image_file_extensions:
         return None
 
@@ -296,8 +295,8 @@ def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
         data = np.array(img)
 
     # Create add_kwargs
-    filename = os.path.basename(path)
-    layer_name = os.path.splitext(filename)[0]
+    filename = Path(path).name
+    layer_name = Path(filename).stem
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
@@ -379,12 +378,10 @@ def read_directory(path: str) -> List[Tuple[Any, dict, str]]:
     # List to store all found files
     files = []
 
-    # Walk through the directory and its subdirectories
-    for root, _, filenames in os.walk(path):
-        for filename in filenames:
-            file_path = os.path.join(root, filename)
-            if os.path.isfile(file_path):
-                files.append(file_path)
+    # Walk through the directory and its subdirectories using pathlib
+    for file_path in Path(path).rglob("*"):
+        if file_path.is_file():
+            files.append(str(file_path))
 
     # Use the existing read_files function to process the files
     return read_files(files)
