@@ -121,7 +121,13 @@ class TestSingleSampleSegmentation:
 
     def test_get_model_files(self):
         """Test getting model files from directory."""
-        with patch("os.listdir", return_value=["model1.pth", "model2.pth"]):
+        with patch(
+            "pathlib.Path.iterdir",
+            return_value=[
+                Path("dummy/path/model1.pth"),
+                Path("dummy/path/model2.pth"),
+            ],
+        ):
             from napari_roxas_ai._segmentation._single_sample_segmentation import (
                 SingleSampleSegmentationWidget,
             )
@@ -288,7 +294,13 @@ class TestBatchSampleSegmentation:
 
     def test_get_model_files(self):
         """Test getting model files from directory."""
-        with patch("os.listdir", return_value=["model1.pth", "model2.pth"]):
+        with patch(
+            "pathlib.Path.iterdir",
+            return_value=[
+                Path("dummy/path/model1.pth"),
+                Path("dummy/path/model2.pth"),
+            ],
+        ):
             from napari_roxas_ai._segmentation._batch_sample_segmentation import (
                 BatchSampleSegmentationWidget,
             )

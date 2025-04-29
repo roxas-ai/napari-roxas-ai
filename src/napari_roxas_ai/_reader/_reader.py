@@ -3,7 +3,6 @@ Reader plugin for ROXAS AI-specific file formats.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
 
@@ -379,12 +378,10 @@ def read_directory(path: str) -> List[Tuple[Any, dict, str]]:
     # List to store all found files
     files = []
 
-    # Walk through the directory and its subdirectories
-    for root, _, filenames in os.walk(path):
-        for filename in filenames:
-            file_path = Path(root) / filename
-            if file_path.is_file():
-                files.append(str(file_path))
+    # Walk through the directory and its subdirectories using pathlib
+    for file_path in Path(path).rglob("*"):
+        if file_path.is_file():
+            files.append(str(file_path))
 
     # Use the existing read_files function to process the files
     return read_files(files)

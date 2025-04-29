@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -316,8 +315,10 @@ def open_settings_file():
     import sys
 
     if sys.platform == "win32":
-        # Windows
-        os.startfile(settings_file)
+        # Windows - use Path.open() instead of os.startfile
+        import webbrowser
+
+        webbrowser.open(str(settings_file))
     elif sys.platform == "darwin":
         # macOS
         subprocess.call(["open", str(settings_file)])
