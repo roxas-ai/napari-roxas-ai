@@ -85,7 +85,7 @@ class TestWriterModule:
         metadata = create_test_metadata()
 
         # Test creating a new metadata file
-        with patch("os.path.exists", return_value=False), patch(
+        with patch("pathlib.Path.exists", return_value=False), patch(
             "builtins.open", create=True
         ), patch("json.dump") as mock_dump:
 
@@ -107,7 +107,7 @@ class TestWriterModule:
         }
 
         # Mock file operations
-        with patch("os.path.exists", return_value=True), patch(
+        with patch("pathlib.Path.exists", return_value=True), patch(
             "builtins.open", create=True
         ), patch("json.load", return_value=original_metadata), patch(
             "json.dump"

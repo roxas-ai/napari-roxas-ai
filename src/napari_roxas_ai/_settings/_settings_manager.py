@@ -60,7 +60,7 @@ class SettingsManager:
         """
         if self._settings_file is None:
             # Use the _settings module directory to store the settings file
-            settings_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+            settings_dir = Path(__file__).parent.absolute()
             self._settings_file = settings_dir / "settings.json"
         return self._settings_file
 
@@ -320,9 +320,9 @@ def open_settings_file():
         os.startfile(settings_file)
     elif sys.platform == "darwin":
         # macOS
-        subprocess.call(["open", settings_file])
+        subprocess.call(["open", str(settings_file)])
     else:
         # Linux and other UNIX-like systems
-        subprocess.call(["xdg-open", settings_file])
+        subprocess.call(["xdg-open", str(settings_file)])
 
     return settings_file

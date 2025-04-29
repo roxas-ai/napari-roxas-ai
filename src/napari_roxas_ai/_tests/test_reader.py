@@ -3,7 +3,6 @@ Tests for the reader module functionality.
 """
 
 import json
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -104,7 +103,7 @@ def test_files(temp_dir):
 
     # Create a subdirectory with additional files
     subdir = temp_dir / "subdir"
-    os.makedirs(subdir, exist_ok=True)
+    subdir.mkdir(exist_ok=True)
     scan_file_sub = create_test_image(subdir / "sub_sample.scan.tif")
 
     return {
@@ -192,7 +191,7 @@ class TestReaderModule:
     def test_get_metadata_from_file(self, test_files, mock_settings):
         """Test get_metadata_from_file function."""
         # Test with a valid metadata file
-        with patch("os.path.exists", return_value=True), patch(
+        with patch("pathlib.Path.exists", return_value=True), patch(
             "builtins.open", create=True
         ), patch(
             "json.load",
@@ -204,7 +203,7 @@ class TestReaderModule:
             assert metadata["sample_name"] == "test_sample"
 
         # Test with a non-existent metadata file
-        with patch("os.path.exists", return_value=False):
+        with patch("pathlib.Path.exists", return_value=False):
             metadata = get_metadata_from_file(str(test_files["scan_file"]))
             assert metadata is None
 
@@ -213,7 +212,7 @@ class TestReaderModule:
         with patch(
             "napari_roxas_ai._reader._reader.get_metadata_from_file"
         ) as mock_get_metadata, patch("PIL.Image.open") as mock_open, patch(
-            "os.path.exists", return_value=True
+            "pathlib.Path.exists", return_value=True
         ), patch(
             "pandas.read_csv", return_value=pd.DataFrame()
         ):
@@ -251,7 +250,7 @@ class TestReaderModule:
         with patch(
             "napari_roxas_ai._reader._reader.get_metadata_from_file"
         ) as mock_get_metadata, patch("PIL.Image.open") as mock_open, patch(
-            "os.path.exists", return_value=True
+            "pathlib.Path.exists", return_value=True
         ), patch(
             "pandas.read_csv", return_value=pd.DataFrame()
         ):

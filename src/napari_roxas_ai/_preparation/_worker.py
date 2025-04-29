@@ -4,7 +4,6 @@ Worker class for processing files in a separate thread.
 
 import glob
 import json
-import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -86,10 +85,10 @@ class Worker(QObject):
         # Filter based on selected files if provided
         if self.selected_files and len(self.selected_files) > 0:
             # Create a set of absolute paths for fast lookup
-            selected_paths = {os.path.abspath(f) for f in self.selected_files}
+            selected_paths = {Path(f).absolute() for f in self.selected_files}
             # Only include files that are in the selected paths
             filtered_files = [
-                f for f in all_files if os.path.abspath(f) in selected_paths
+                f for f in all_files if Path(f).absolute() in selected_paths
             ]
             all_files = filtered_files
 
@@ -97,7 +96,7 @@ class Worker(QObject):
         if not self.process_processed:
             filtered_files = []
             for file_path in all_files:
-                basename = os.path.basename(file_path)
+                basename = Path(file_path).name
                 if self.scan_content_extension not in basename:
                     filtered_files.append(file_path)
             all_files = filtered_files
@@ -135,9 +134,10 @@ class Worker(QObject):
         self.progress.emit(self.current_file_index, len(self.all_files))
 
         # Extract path components
-        dir_path = os.path.dirname(file_path)
-        file_name = os.path.basename(file_path)
-        base_name, file_ext = os.path.splitext(file_name)
+        dir_path = Path(file_path).parent
+        file_name = Path(file_path).name
+        base_name = Path(file_name).stem
+        file_ext = Path(file_name).suffix
 
         # Create Path object for advanced path manipulation
         file_path_obj = Path(file_path)
@@ -167,22 +167,22 @@ class Worker(QObject):
         else:
             # This is a new file, add the scan extension
             clean_base_name = base_name
-            new_image_path = os.path.join(
-                dir_path,
-                f"{clean_base_name}{self.scan_content_extension}{file_ext}",
+            new_image_path = (
+                dir_path
+                / f"{clean_base_name}{self.scan_content_extension}{file_ext}"
             )
             # Rename or copy file if needed
-            if file_path != new_image_path:
+            if file_path != str(new_image_path):
                 try:
                     # Extract metadata before modifying the file
                     img_metadata = self._extract_image_metadata(file_path)
 
                     if self.overwrite_files:
                         # If overwrite is enabled, rename the file (replace original)
-                        if os.path.exists(new_image_path):
-                            os.remove(
+                        if Path(new_image_path).exists():
+                            Path(
                                 new_image_path
-                            )  # Remove destination if it exists
+                            ).unlink()  # Remove destination if it exists
                         shutil.move(file_path, new_image_path)
                         print(f"Renamed file: {file_path} -> {new_image_path}")
                     else:
@@ -191,7 +191,7 @@ class Worker(QObject):
                         print(f"Copied file: {file_path} -> {new_image_path}")
 
                     # Update file path to the new location
-                    file_path = new_image_path
+                    file_path = str(new_image_path)
                 except OSError as e:
                     print(f"Error processing file {file_path}: {e}")
                     # Skip to next file
@@ -200,8 +200,8 @@ class Worker(QObject):
                     return
 
         # Define metadata path - always use the clean base name without scan extension
-        metadata_path = os.path.join(
-            dir_path, f"{clean_base_name}{self.metadata_file_extension}"
+        metadata_path = (
+            dir_path / f"{clean_base_name}{self.metadata_file_extension}"
         )
 
         # Extract image metadata if we haven't already
@@ -250,9 +250,9 @@ class Worker(QObject):
         """
         # Get current file info
         file_path = self.all_files[self.current_file_index]
-        dir_path = os.path.dirname(file_path)
-        file_name = os.path.basename(file_path)
-        base_name, file_ext = os.path.splitext(file_name)
+        dir_path = Path(file_path).parent
+        file_name = Path(file_path).name
+        base_name = Path(file_name).stem
 
         # Extract clean base name (without scan extension) for the metadata file path
         if self.scan_content_extension in base_name:
@@ -263,8 +263,8 @@ class Worker(QObject):
             clean_base_name = base_name
 
         # Create metadata path using clean base name
-        metadata_path = os.path.join(
-            dir_path, f"{clean_base_name}{self.metadata_file_extension}"
+        metadata_path = (
+            dir_path / f"{clean_base_name}{self.metadata_file_extension}"
         )
 
         # Use the cached image metadata

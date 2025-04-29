@@ -1,5 +1,5 @@
-import os
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import numpy as np
@@ -28,9 +28,9 @@ if TYPE_CHECKING:
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
 
-MODULE_PATH = os.path.dirname(os.path.abspath(__file__))
-CELLS_MODELS_PATH = os.path.join(MODULE_PATH, "_models", "_cells")
-RINGS_MODELS_PATH = os.path.join(MODULE_PATH, "_models", "_rings")
+MODULE_PATH = Path(__file__).parent.absolute()
+CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
+RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
 
 
 class Worker(QObject):
@@ -53,13 +53,13 @@ class Worker(QObject):
         self.segment_rings = segment_rings
         self.cells_model_weights_file = None
         if cells_model_weights_file:
-            self.cells_model_weights_file = os.path.join(
-                CELLS_MODELS_PATH, cells_model_weights_file
+            self.cells_model_weights_file = (
+                CELLS_MODELS_PATH / cells_model_weights_file
             )
         self.rings_model_weights_file = None
         if rings_model_weights_file:
-            self.rings_model_weights_file = os.path.join(
-                RINGS_MODELS_PATH, rings_model_weights_file
+            self.rings_model_weights_file = (
+                RINGS_MODELS_PATH / rings_model_weights_file
             )
         self.settings = settings
         self.base_name = base_name
@@ -189,7 +189,7 @@ class SingleSampleSegmentationWidget(Container):
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""
-        return tuple(os.listdir(where))
+        return tuple(path.name for path in Path(where).iterdir())
 
     def _update_cells_model_visibility(self) -> None:
         """Update visibility of cells model selection based on checkbox."""

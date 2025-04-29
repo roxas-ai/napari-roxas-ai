@@ -63,33 +63,29 @@ def project_with_images(temp_dirs):
 
     # Create test images with different extensions
     img_paths = []
-    img_paths.append(create_test_image(os.path.join(project_dir, "test1.jpg")))
-    img_paths.append(create_test_image(os.path.join(project_dir, "test2.png")))
-    img_paths.append(create_test_image(os.path.join(project_dir, "test3.tif")))
+    img_paths.append(create_test_image(Path(project_dir) / "test1.jpg"))
+    img_paths.append(create_test_image(Path(project_dir) / "test2.png"))
+    img_paths.append(create_test_image(Path(project_dir) / "test3.tif"))
 
     # Create a subdirectory
-    subdir = os.path.join(project_dir, "subdir")
-    os.makedirs(subdir, exist_ok=True)
-    img_paths.append(create_test_image(os.path.join(subdir, "test4.jpg")))
+    subdir = Path(project_dir) / "subdir"
+    subdir.mkdir(exist_ok=True)
+    img_paths.append(create_test_image(subdir / "test4.jpg"))
 
     # Create a "processed" file with a ROXAS extension
-    create_test_image(os.path.join(project_dir, "processed.scan.jpg"))
+    create_test_image(Path(project_dir) / "processed.scan.jpg")
 
     # Create crossdating subdirectory
-    crossdating_dir = os.path.join(project_dir, "crossdating")
-    os.makedirs(crossdating_dir, exist_ok=True)
+    crossdating_dir = Path(project_dir) / "crossdating"
+    crossdating_dir.mkdir(exist_ok=True)
 
     # Create a few test crossdating files
     crossdating_paths = []
     crossdating_paths.append(
-        create_test_crossdating_file(
-            os.path.join(crossdating_dir, "series1.rwl")
-        )
+        create_test_crossdating_file(crossdating_dir / "series1.rwl")
     )
     crossdating_paths.append(
-        create_test_crossdating_file(
-            os.path.join(crossdating_dir, "series2.txt")
-        )
+        create_test_crossdating_file(crossdating_dir / "series2.txt")
     )
 
     return project_dir, img_paths, crossdating_paths

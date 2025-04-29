@@ -10,7 +10,6 @@ Replace code below according to your needs.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
@@ -48,7 +47,7 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
         The path to the updated metadata file.
     """
 
-    if os.path.exists(path):
+    if Path(path).exists():
         # Load existing metadata from the file
         with open(path) as f:
             existing_metadata = json.load(f)
@@ -132,9 +131,9 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     written_file_paths = []
 
-    dirname = os.path.dirname(path)
+    dirname = Path(path).parent
     basename = Path(Path(path).stem).stem
-    sample_path = os.path.join(dirname, basename)
+    sample_path = dirname / basename
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -176,9 +175,9 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    dirname = os.path.dirname(path)
+    dirname = Path(path).parent
     basename = Path(Path(path).stem).stem
-    sample_path = os.path.join(dirname, basename)
+    sample_path = dirname / basename
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -233,9 +232,9 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    dirname = os.path.dirname(path)
+    dirname = Path(path).parent
     basename = Path(Path(path).stem).stem
-    sample_path = os.path.join(dirname, basename)
+    sample_path = dirname / basename
 
     # Update the metadata file
     metadata_file_extension = "".join(
