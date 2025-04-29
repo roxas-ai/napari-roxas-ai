@@ -4,6 +4,7 @@ Reader plugin for ROXAS AI-specific file formats.
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -127,7 +128,9 @@ def get_metadata_from_file(path):
     metadata_file_extension = "".join(metadata_file_extension_parts)
 
     # Check if metadata file exists
-    metadata_path = "".join(path.split(".")[:-2]) + metadata_file_extension
+    metadata_path = Path(path).parent / (
+        Path(Path(path).stem).stem + metadata_file_extension
+    )
 
     if not os.path.exists(metadata_path):
         print(

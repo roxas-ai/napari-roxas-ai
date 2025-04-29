@@ -6,6 +6,7 @@ import glob
 import json
 import os
 import shutil
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from PIL import ExifTags, Image
@@ -69,12 +70,15 @@ class Worker(QObject):
         for ext in self.image_file_extensions:
             all_files.extend(
                 glob.glob(
-                    f"{self.project_directory}/**/*{ext}", recursive=True
+                    str(Path(self.project_directory) / "**" / f"*{ext}"),
+                    recursive=True,
                 )
             )
             all_files.extend(
                 glob.glob(
-                    f"{self.project_directory}/**/*{ext.upper()}",
+                    str(
+                        Path(self.project_directory) / "**" / f"*{ext.upper()}"
+                    ),
                     recursive=True,
                 )
             )
@@ -135,6 +139,20 @@ class Worker(QObject):
         file_name = os.path.basename(file_path)
         base_name, file_ext = os.path.splitext(file_name)
 
+        # Create Path object for advanced path manipulation
+        file_path_obj = Path(file_path)
+
+        # Get the parent directory and pure stem (removing all extensions)
+        parent_dir = file_path_obj.parent
+        stem_name = file_path_obj.stem
+        # Remove all suffixes to get the pure stem name if we are processing scan files again
+
+        if stem_name.endswith(self.scan_content_extension):
+            stem_name = Path(stem_name).stem
+
+        # Create the sample_stem_path by joining parent and stem
+        sample_stem_path = str(parent_dir / stem_name)
+
         # Check if base_name already has the scan extension and remove it to avoid duplication
         original_has_scan_ext = False
         if self.scan_content_extension in base_name:
@@ -190,6 +208,9 @@ class Worker(QObject):
         if "img_metadata" not in locals():
             img_metadata = self._extract_image_metadata(file_path)
 
+        # Add sample_stem_path to the image metadata
+        img_metadata["sample_stem_path"] = sample_stem_path
+
         # Cache metadata for use in set_metadata
         self._current_img_metadata = img_metadata
 
@@ -201,6 +222,9 @@ class Worker(QObject):
 
             # Only update the sample name to match this file
             metadata["sample_name"] = clean_base_name
+
+            # Add sample_stem_path to this file's metadata
+            metadata["sample_stem_path"] = sample_stem_path
 
             # Add image metadata
             self._add_image_metadata_to_file_metadata(metadata, img_metadata)

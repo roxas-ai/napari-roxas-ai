@@ -28,9 +28,9 @@ if TYPE_CHECKING:
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
 
-MODULE_PATH = os.path.abspath(__file__).rsplit("/", 1)[0]
-CELLS_MODELS_PATH = os.path.join(MODULE_PATH, "_models/_cells")
-RINGS_MODELS_PATH = os.path.join(MODULE_PATH, "_models/_rings")
+MODULE_PATH = os.path.dirname(os.path.abspath(__file__))
+CELLS_MODELS_PATH = os.path.join(MODULE_PATH, "_models", "_cells")
+RINGS_MODELS_PATH = os.path.join(MODULE_PATH, "_models", "_rings")
 
 
 class Worker(QObject):

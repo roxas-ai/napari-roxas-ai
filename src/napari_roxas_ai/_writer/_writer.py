@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
@@ -67,9 +68,7 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
     existing_metadata.update(filtered_metadata)
 
     # Update the sample name in the metadata
-    existing_metadata.update(
-        {"sample_name": os.path.basename(path).split(".")[0]}
-    )
+    existing_metadata.update({"sample_name": Path(Path(path).stem).stem})
 
     # Write the updated metadata to the file
     with open(path, "w") as f:
@@ -134,7 +133,7 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     written_file_paths = []
 
     dirname = os.path.dirname(path)
-    basename = os.path.basename(path).split(".")[0]
+    basename = Path(Path(path).stem).stem
     sample_path = os.path.join(dirname, basename)
 
     # Update the metadata file
@@ -178,7 +177,7 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     written_file_paths = []
 
     dirname = os.path.dirname(path)
-    basename = os.path.basename(path).split(".")[0]
+    basename = Path(Path(path).stem).stem
     sample_path = os.path.join(dirname, basename)
 
     # Update the metadata file
@@ -235,7 +234,7 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     written_file_paths = []
 
     dirname = os.path.dirname(path)
-    basename = os.path.basename(path).split(".")[0]
+    basename = Path(Path(path).stem).stem
     sample_path = os.path.join(dirname, basename)
 
     # Update the metadata file
