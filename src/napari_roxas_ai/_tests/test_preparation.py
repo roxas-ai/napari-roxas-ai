@@ -2,7 +2,6 @@
 Tests for the preparation module functionality.
 """
 
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -424,7 +423,7 @@ class TestCrossdatingHandler:
         project_dir = Path(temp_dirs)
 
         # Create test files
-        os.makedirs(project_dir / "rwls", exist_ok=True)
+        (project_dir / "rwls").mkdir(exist_ok=True)  # Replace os.makedirs
         test_file1 = project_dir / "rwls" / "test1.rwl"
         test_file2 = project_dir / "rwls" / "test2.txt"
 
