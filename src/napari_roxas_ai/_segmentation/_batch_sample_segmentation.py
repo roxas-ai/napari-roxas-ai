@@ -79,7 +79,12 @@ class Worker(QObject):
 
         # Setup for cells segmentation
         if self.segment_cells:
-            self.cells_model = CellsSegmentationModel()
+            self.cells_model = CellsSegmentationModel(
+                try_to_use_gpu=self.settings.get("processing.try_to_use_gpu"),
+                try_to_use_autocast=self.settings.get(
+                    "processing.try_to_use_autocast"
+                ),
+            )
             self.cells_model.load_weights(self.cells_model_weights_file)
             self.cells_content_ext = settings.get(
                 "file_extensions.cells_file_extension"

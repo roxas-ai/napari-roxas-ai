@@ -70,7 +70,12 @@ class Worker(QObject):
         # Process cells if requested
         if self.segment_cells:
             # Set up cells model
-            cells_model = CellsSegmentationModel()
+            cells_model = CellsSegmentationModel(
+                try_to_use_gpu=self.settings.get("processing.try_to_use_gpu"),
+                try_to_use_autocast=self.settings.get(
+                    "processing.try_to_use_autocast"
+                ),
+            )
             cells_model.load_weights(self.cells_model_weights_file)
 
             # Perform inference

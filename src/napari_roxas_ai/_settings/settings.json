@@ -124,5 +124,9 @@
         "quality": 95,
         "optimize": true,
         "progressive": false
+    },
+    "processing": {
+        "try_to_use_gpu": true,
+        "try_to_use_autocast": true
     }
 }

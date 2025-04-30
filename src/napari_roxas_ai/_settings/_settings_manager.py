@@ -287,6 +287,10 @@ class SettingsManager:
                 "optimize": True,  # Default optimize flag
                 "progressive": False,  # Default progressive flag
             },
+            "processing": {
+                "try_to_use_gpu": True,  # Try to use GPU if available
+                "try_to_use_autocast": True,  # Try to use autocast if available
+            },
         }
         self.save_settings()
 
