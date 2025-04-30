@@ -22,7 +22,7 @@ https://napari.org/stable/plugins/index.html
 -->
 
 ## Installation
-You will need github large file storage to download model files (if not using a debian-based distribution, check https://git-lfs.com/, else run:
+You will need `github large file storage to download model files. If not using a debian-based distribution, check https://git-lfs.com/, else run:
 
     sudo apt install git-lfs
 
