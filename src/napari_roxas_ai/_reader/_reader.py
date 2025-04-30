@@ -186,10 +186,10 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     cells_table_file_extension = "".join(
         settings.get("file_extensions.cells_table_file_extension")
     )
-    cells_table_path = (
-        "".join(path.split(".")[:-2]) + cells_table_file_extension
+    cells_table_path = Path(path).parent / (
+        Path(layer_name).stem + cells_table_file_extension
     )
-    if Path(cells_table_path).exists():
+    if cells_table_path.exists():
         add_kwargs["features"] = pd.read_csv(
             cells_table_path,
             sep=settings.get("tables.separator"),
@@ -241,10 +241,11 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     rings_table_file_extension = "".join(
         settings.get("file_extensions.rings_table_file_extension")
     )
-    rings_table_path = (
-        "".join(path.split(".")[:-2]) + rings_table_file_extension
+
+    rings_table_path = Path(path).parent / (
+        Path(layer_name).stem + rings_table_file_extension
     )
-    if Path(rings_table_path).exists():
+    if rings_table_path.exists():
         add_kwargs["features"] = pd.read_csv(
             rings_table_path,
             sep=settings.get("tables.separator"),
