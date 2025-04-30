@@ -26,6 +26,10 @@ You will need `github large file storage` to download model files. If not using 
 
     sudo apt install git-lfs
 
+You then need to activate it with:
+
+    git lfs install --skip-repo
+
 You can install `napari-roxas-ai` via [pip]:
 
     pip install napari-roxas-ai
