@@ -2,6 +2,7 @@
 Reader plugin for ROXAS AI-specific file formats.
 """
 
+import ast
 import json
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
@@ -194,6 +195,7 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
             cells_table_path,
             sep=settings.get("tables.separator"),
             index_col=settings.get("tables.index_column"),
+            converters={"centroid": ast.literal_eval},
         )
 
     # Try to get sample metadata and cells metadata from metadata file
@@ -250,6 +252,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
             rings_table_path,
             sep=settings.get("tables.separator"),
             index_col=settings.get("tables.index_column"),
+            converters={"boundary_coordinates": ast.literal_eval},
         )
 
     # Try to get sample metadata and rings metadata from metadata file
