@@ -22,6 +22,9 @@ https://napari.org/stable/plugins/index.html
 -->
 
 ## Installation
+You will need github large file storage to download model files (if not using a debian-based distribution, check https://git-lfs.com/, else run:
+
+    sudo apt install git-lfs
 
 You can install `napari-roxas-ai` via [pip]:
 
@@ -29,9 +32,9 @@ You can install `napari-roxas-ai` via [pip]:
 
 
 
-To install latest development version :
+To install latest development version:
 
-    pip install git+https://github.com/roxas-ai/napari-roxas-ai.git
+    pip install -e git+https://github.com/roxas-ai/napari-roxas-ai.git#egg=napari-roxas-ai
 
 
 ## Contributing
