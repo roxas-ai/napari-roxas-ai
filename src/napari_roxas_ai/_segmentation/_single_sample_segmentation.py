@@ -16,6 +16,7 @@ from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
+from torch.package import PackageImporter
 
 from napari_roxas_ai._settings import SettingsManager
 
@@ -69,14 +70,21 @@ class Worker(QObject):
 
         # Process cells if requested
         if self.segment_cells:
+
             # Set up cells model
-            cells_model = CellsSegmentationModel(
-                try_to_use_gpu=self.settings.get("processing.try_to_use_gpu"),
-                try_to_use_autocast=self.settings.get(
-                    "processing.try_to_use_autocast"
-                ),
-            )
+            cells_model = CellsSegmentationModel()
             cells_model.load_weights(self.cells_model_weights_file)
+            cells_model.available_device = (
+                cells_model.available_device
+                if self.settings.get("processing.try_to_use_gpu")
+                else "cpu"
+            )
+            cells_model.to(device=cells_model.available_device)
+            cells_model.use_autocast = (
+                cells_model.use_autocast
+                and self.settings.get("processing.try_to_use_autocast")
+                and cells_model.available_device == "cuda"
+            )
 
             # Perform inference
             cells_labels = cells_model.infer(self.input_array)
@@ -95,13 +103,25 @@ class Worker(QObject):
         if self.segment_rings:
 
             # Set up rings model
-            imp = torch.package.PackageImporter(self.rings_model_weights_file)
-            package_name = "LinearRingModel"
-            resource_name = "model.pkl"
-            loaded_model = imp.load_pickle(package_name, resource_name)
+            rings_model = PackageImporter(
+                self.rings_model_weights_file
+            ).load_pickle("LinearRingModel", "model.pkl")
+            rings_model.available_device = (
+                rings_model.available_device
+                if self.settings.get("processing.try_to_use_gpu")
+                else "cpu"
+            )
+            rings_model.to(device=rings_model.available_device)
+            # Fix for problem with model object; device attribute is not updated with to()
+            rings_model.device = rings_model.available_device
+            rings_model.use_autocast = (
+                rings_model.use_autocast
+                and self.settings.get("processing.try_to_use_autocast")
+                and rings_model.available_device == "cuda"
+            )
 
             # Perform inference
-            rings_labels, rings_boundaries = loaded_model.infer(
+            rings_labels, rings_boundaries = rings_model.infer(
                 self.input_array
             )
 

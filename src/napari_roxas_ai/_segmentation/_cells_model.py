@@ -11,26 +11,17 @@ import torchvision.transforms as transforms
 
 
 class CellsSegmentationModel(pl.LightningModule):
-    def __init__(
-        self, try_to_use_gpu=True, try_to_use_autocast=True, **kwargs
-    ):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.available_device = (
-            "cuda" if (try_to_use_gpu and torch.cuda.is_available()) else "cpu"
-        )
-        self.use_autocast = (
-            torch.amp.autocast_mode.is_autocast_available(
-                self.available_device
-            )
-            and try_to_use_autocast
+        self.available_device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
+            self.available_device
         )
         self.net = smp.Unet(
             encoder_weights=None, classes=2, encoder_name="resnet50"
         ).to(device=self.available_device)
         self.preprocessing_fn = smp.encoders.get_preprocessing_fn("resnet50")
         self.eval()
-        print(self.use_autocast)
-        print(self.available_device)
 
     def load_weights(self, path):
         self.load_state_dict(
@@ -47,6 +38,7 @@ class CellsSegmentationModel(pl.LightningModule):
         return out
 
     def infer(self, img):
+
         # Patch size and stride
         patch_size = 1024
         stride = 800
