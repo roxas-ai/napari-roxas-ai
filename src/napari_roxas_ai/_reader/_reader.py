@@ -13,6 +13,7 @@ from PIL import Image
 
 # Import SettingsManager to get file extensions
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._utils import make_rings_colormap
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -264,6 +265,11 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
         )
+
+    # Create a colormap for the rings
+    unique_rings_raster_values = np.unique(data)
+    colormap = make_rings_colormap(unique_rings_raster_values)
+    add_kwargs["colormap"] = colormap
 
     return data, add_kwargs, "labels"
 
