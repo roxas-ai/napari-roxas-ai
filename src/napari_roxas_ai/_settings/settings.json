@@ -128,5 +128,11 @@
     "processing": {
         "try_to_use_gpu": true,
         "try_to_use_autocast": true
+    },
+    "vectorization": {
+        "cells_tolerance": 1,
+        "rings_tolerance": 1,
+        "rings_edge_width": 5,
+        "rings_edge_color": "red"
     }
 }

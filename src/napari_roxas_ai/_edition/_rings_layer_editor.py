@@ -1,0 +1,250 @@
+from typing import TYPE_CHECKING
+
+import cv2
+import numpy as np
+import pandas as pd
+from magicgui.widgets import (
+    Container,
+    PushButton,
+    create_widget,
+)
+from napari.utils.notifications import show_info
+from PIL import Image
+from qtpy.QtWidgets import QMessageBox
+
+from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._utils import make_rings_colormap
+
+if TYPE_CHECKING:
+    import napari
+
+# Disable DecompressionBomb warnings for large images
+Image.MAX_IMAGE_PIXELS = None
+
+settings = SettingsManager()
+
+
+def rearrange_coordinates(coords: list) -> list:
+    """
+    Rearrange coordinates from left to right if needed.
+    Args:
+        coords (list): List of coordinates.
+    Returns:
+        list: Rearranged coordinates.
+    """
+
+    if coords[0][1] > coords[-1][1]:
+        coords = coords[::-1]
+    return coords
+
+
+def horizontal_rings_completion(coords: list, width: int) -> list:
+    """
+    This function takes a list of coordinates and a width, and ensures that the
+    coordinates start at (x, 0) and end at (x, width).
+    This allows to have complete rings across the entire width of the image.
+    Straight lines to the edges is not the best approximation, but it allows to avoid crossing rings resulting from other interpolations.
+    Args:
+        coords (list): List of coordinates.
+        width (int): Width of the image.
+    Returns:
+        list: Completed coordinates.
+    """
+
+    if coords[0][1] > 0:
+        coords = [[coords[0][0], 0]] + coords
+    if coords[-1][1] < width:
+        coords = coords + [[coords[-1][0], width]]
+    return coords
+
+
+def calculate_polygon_area(coords: list, width: int) -> int:
+    """
+    This function calculates the number of pixels that would be drawn
+    for a polygon defined by the given coordinates using the Shoelace formula.
+    Args:
+        coords (list): List of coordinates.
+        canvas_width (int): Width of the canvas.
+    Returns:
+        int: Number of pixels that would be drawn for the polygon.
+    """
+
+    coords = np.array([[0, 0]] + coords + [[0, width]])
+    x, y = coords[:, 0], coords[:, 1]
+    area = 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+    return int(area)
+
+
+def rasterize_rings(
+    rings_table: pd.DataFrame, image_shape: tuple
+) -> np.ndarray:
+    """
+    Rasterize the rings from the rings table into a 2D array.
+    Args:
+        rings_table (pd.DataFrame): DataFrame containing the rings data.
+        image_shape (tuple): Shape of the image (height, width).
+    Returns:
+        np.ndarray: Rasterized rings as a 2D array.
+    """
+
+    rings_raster = np.ones(image_shape) * -1
+    previous_boundary = np.flip(
+        np.array([[0, 0], [0, image_shape[1]]]).round().astype("int32"), axis=1
+    )[::-1]
+
+    for _i, row in rings_table.iterrows():
+        coords = np.flip(
+            np.array(row["boundary_coordinates"]).round().astype("int32"),
+            axis=1,
+        )
+        value = row["ring_year"] if row["enabled"] else -1
+        cv2.fillPoly(
+            rings_raster, [np.vstack([previous_boundary, coords])], value
+        )
+        previous_boundary = coords[::-1]
+    return rings_raster.astype("int32")
+
+
+class RingsLayerEditorWidget(Container):
+    def __init__(self, viewer: "napari.viewer.Viewer"):
+        super().__init__()
+        self._viewer = viewer
+        self.settings = SettingsManager()
+
+        # Create a layer selection widget filtered by scan extension
+        self._input_layer_combo = create_widget(
+            label="Rings Layer", annotation="napari.layers.Labels"
+        )
+
+        # Create a button to create the rings working layer
+        self._edit_rings_geometries_button = PushButton(
+            text="Edit Rings Geometries"
+        )
+        self._edit_rings_geometries_button.changed.connect(
+            self._edit_rings_geometries
+        )
+
+        # Create a button to apply the changes
+        self._apply_rings_geometries_button = PushButton(
+            text="Apply Changes", visible=False
+        )
+        self._apply_rings_geometries_button.changed.connect(
+            self._apply_rings_geometries
+        )
+
+        # Append the widgets to the container
+        self.extend(
+            [
+                self._input_layer_combo,
+                self._edit_rings_geometries_button,
+                self._apply_rings_geometries_button,
+            ]
+        )
+
+    def _edit_rings_geometries(self) -> None:
+        """Run the segmentation analysis in a separate thread."""
+        # Get the selected input layer
+        if not self._input_layer_combo.value:
+            QMessageBox.warning(None, "Error", "Please select an input layer")
+            return
+
+        # Update button visibility
+        self._edit_rings_geometries_button.visible = False
+        self._apply_rings_geometries_button.visible = True
+
+        self.input_layer = self._input_layer_combo.value
+
+        # Simplify boundary coordinates using cv2.approxPolyDP
+        simplified_boundary_lines = [
+            cv2.approxPolyDP(
+                np.array(coords, dtype=np.float32),
+                epsilon=settings.get("vectorization.rings_tolerance"),
+                closed=False,
+            )
+            .squeeze()
+            .tolist()
+            for coords in self.input_layer.features["boundary_coordinates"]
+        ]
+
+        # Create a new Shapes layer with the simplified boundary lines
+        self._viewer.add_shapes(
+            simplified_boundary_lines,
+            shape_type="path",
+            edge_color=settings.get("vectorization.rings_edge_color"),
+            edge_width=settings.get("vectorization.rings_edge_width"),
+            name="Rings Modification",
+            scale=self.input_layer.scale,
+        )
+
+    def _apply_rings_geometries(self) -> None:
+        """Apply the changes to the input layer."""
+
+        # Recover new shapes data from the viewer
+        rings_table = pd.DataFrame(
+            data={
+                "boundary_coordinates": [
+                    coords.tolist()
+                    for coords in self._viewer.layers[
+                        "Rings Modification"
+                    ].data
+                ]
+            }
+        ).rename_axis("id")
+        self._viewer.layers.remove("Rings Modification")
+
+        # Reset the button visibility
+        self._edit_rings_geometries_button.visible = True
+        self._apply_rings_geometries_button.visible = False
+
+        # Rearrange coordinates from left to right if needed
+        rings_table["boundary_coordinates"] = rings_table[
+            "boundary_coordinates"
+        ].apply(rearrange_coordinates)
+
+        # Ensure complete rings
+        rings_table["boundary_coordinates"] = rings_table[
+            "boundary_coordinates"
+        ].apply(
+            lambda x: horizontal_rings_completion(
+                x, self.input_layer.data.shape[1]
+            )
+        )
+
+        # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
+        rings_table["cells_above"] = rings_table["boundary_coordinates"].apply(
+            lambda x: calculate_polygon_area(x, self.input_layer.data.shape[1])
+        )
+        rings_table = (
+            rings_table.sort_values(by="cells_above", ascending=True)
+            .reset_index(drop=True)
+            .rename_axis("id")
+        )
+
+        # Assign year
+        last_year = self.input_layer.metadata[
+            "sample_outmost_complete_ring_year"
+        ]
+        rings_table["ring_year"] = [
+            a + 1 for a in range(last_year - len(rings_table), last_year)
+        ]
+
+        # Disable rings (by default, the first ring is considered uncomplete and is disabled)
+        rings_table["enabled"] = True
+        rings_table.loc[0, "enabled"] = False
+
+        # Rings_rasterization
+        rings_raster = rasterize_rings(
+            rings_table, self.input_layer.data.shape
+        )
+
+        # Build a new colormap
+        unique_rings_raster_values = np.unique(rings_raster)
+        colormap = make_rings_colormap(unique_rings_raster_values)
+
+        # Update the input layer
+        self.input_layer.data = rings_raster
+        self.input_layer.features = rings_table
+        self.input_layer.colormap = colormap
+
+        # Show confirmation message
+        show_info("Ring geometries successfully updated")
