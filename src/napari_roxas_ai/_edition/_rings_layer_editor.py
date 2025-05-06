@@ -232,6 +232,14 @@ class RingsLayerEditorWidget(Container):
             self._edit_rings_geometries
         )
 
+        # Create a button to cancel the changes
+        self._cancel_rings_geometries_button = PushButton(
+            text="Cancel Changes", visible=False
+        )
+        self._cancel_rings_geometries_button.changed.connect(
+            self._cancel_rings_geometries
+        )
+
         # Create a button to apply the changes
         self._apply_rings_geometries_button = PushButton(
             text="Apply Changes", visible=False
@@ -245,6 +253,7 @@ class RingsLayerEditorWidget(Container):
             [
                 self._input_layer_combo,
                 self._edit_rings_geometries_button,
+                self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
             ]
         )
@@ -258,6 +267,7 @@ class RingsLayerEditorWidget(Container):
 
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
+        self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
 
         self.input_layer = self._input_layer_combo.value
@@ -283,6 +293,19 @@ class RingsLayerEditorWidget(Container):
             name="Rings Modification",
             scale=self.input_layer.scale,
         )
+
+    def _cancel_rings_geometries(self) -> None:
+        """Cancel the changes made to the input layer."""
+        # Remove the working layer
+        self._viewer.layers.remove("Rings Modification")
+
+        # Reset the button visibility
+        self._edit_rings_geometries_button.visible = True
+        self._cancel_rings_geometries_button.visible = False
+        self._apply_rings_geometries_button.visible = False
+
+        # Show confirmation message
+        show_info("Rings geometries modification cancelled")
 
     def _apply_rings_geometries(self) -> None:
         """Apply the changes to the input layer."""
@@ -315,6 +338,7 @@ class RingsLayerEditorWidget(Container):
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
+        self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 
         # Show confirmation message
