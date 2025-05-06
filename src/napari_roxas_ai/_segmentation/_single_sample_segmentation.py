@@ -18,6 +18,7 @@ from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
 from torch.package import PackageImporter
 
+from napari_roxas_ai._edition import update_rings_data
 from napari_roxas_ai._settings import SettingsManager
 
 from .._utils import make_binary_labels_colormap
@@ -390,3 +391,18 @@ class SingleSampleSegmentationWidget(Container):
             # Assign features to the rings layer
             if "features" in rings:
                 rings_layer.features = rings["features"]
+
+            # Update the rings layer with the new features
+            new_rings_table, new_rings_raster, new_colormap = (
+                update_rings_data(
+                    rings_table=rings_layer.features,
+                    last_year=rings_layer.metadata[
+                        "sample_outmost_complete_ring_year"
+                    ],
+                    image_shape=rings_layer.data.shape,
+                )
+            )
+
+            rings_layer.features = new_rings_table
+            rings_layer.data = new_rings_raster
+            rings_layer.colormap = new_colormap

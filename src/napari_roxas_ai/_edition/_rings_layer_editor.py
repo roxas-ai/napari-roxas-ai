@@ -38,6 +38,33 @@ def rearrange_coordinates(coords: list) -> list:
     return coords
 
 
+def outside_rings_deletion(
+    rings_table: pd.DataFrame, shape: tuple
+) -> pd.DataFrame:
+    """
+    Delete rings that are outside the rings raster.
+    Args:
+        rings_table (pd.DataFrame): DataFrame containing the rings data.
+        shape (tuple): Shape of the image (height, width).
+    Returns:
+        pd.DataFrame: Updated rings table with only valid rings.
+    """
+
+    # Check if any point of the ring is outside the mask
+    for i, coords in rings_table["boundary_coordinates"].items():
+        coords = np.array(coords)
+        is_any_valid = np.any(
+            (coords[:, 0] > 0)
+            & (coords[:, 0] <= shape[0])
+            & (coords[:, 1] > 0)
+            & (coords[:, 1] < shape[1])
+        )
+        if not is_any_valid:
+            rings_table.drop(i, inplace=True)
+
+    return rings_table
+
+
 def horizontal_rings_completion(coords: list, width: int) -> list:
     """
     This function takes a list of coordinates and a width, and ensures that the
@@ -56,6 +83,27 @@ def horizontal_rings_completion(coords: list, width: int) -> list:
     if coords[-1][1] < width:
         coords = coords + [[coords[-1][0], width]]
     return coords
+
+
+def horizontal_rings_clippping(coords: list, width: int) -> list:
+    """
+    Clip the coordinates of the rings to a specified width.
+    Args:
+        coords (list): List of coordinates.
+        width (int): Width of the image.
+    Returns:
+        list: Clipped coordinates.
+    """
+    coords = np.array(coords)
+
+    left_points = np.where(coords[:, 1] <= 0)[0]
+    right_points = np.where(coords[:, 1] >= width)[0]
+
+    coords = coords[left_points[-1] : right_points[0] + 1]
+
+    coords[:, 1] = np.clip(coords[:, 1], 0, width)
+
+    return coords.tolist()
 
 
 def calculate_polygon_area(coords: list, width: int) -> int:
@@ -103,6 +151,66 @@ def rasterize_rings(
         )
         previous_boundary = coords[::-1]
     return rings_raster.astype("int32")
+
+
+def update_rings_data(
+    rings_table: pd.DataFrame, last_year: int, image_shape: tuple
+) -> tuple:
+    """
+    Update the rings table with the new geometries and rasterize the rings.
+    Args:
+        rings_table (pd.DataFrame): DataFrame containing the rings data.
+        last_year (int): Year of the last complete ring.
+        image_shape (tuple): Shape of the image (height, width).
+    Returns:
+        tuple: Updated rings table, rasterized rings, and colormap.
+    """
+
+    # Rearrange coordinates from left to right if needed
+    rings_table["boundary_coordinates"] = rings_table[
+        "boundary_coordinates"
+    ].apply(rearrange_coordinates)
+
+    # Ensure rings are inside the image
+    rings_table = outside_rings_deletion(rings_table, image_shape)
+
+    # Ensure complete rings
+    rings_table["boundary_coordinates"] = rings_table[
+        "boundary_coordinates"
+    ].apply(lambda x: horizontal_rings_completion(x, image_shape[1]))
+
+    # Clip rings to the image width
+    rings_table["boundary_coordinates"] = rings_table[
+        "boundary_coordinates"
+    ].apply(lambda x: horizontal_rings_clippping(x, image_shape[1]))
+
+    # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
+    rings_table["cells_above"] = rings_table["boundary_coordinates"].apply(
+        lambda x: calculate_polygon_area(x, image_shape[1])
+    )
+    rings_table = (
+        rings_table.sort_values(by="cells_above", ascending=True)
+        .reset_index(drop=True)
+        .rename_axis("id")
+    )
+
+    # Assign year
+    rings_table["ring_year"] = [
+        a + 1 for a in range(last_year - len(rings_table), last_year)
+    ]
+
+    # Disable rings (by default, the first ring is considered uncomplete and is disabled)
+    rings_table["enabled"] = True
+    rings_table.loc[0, "enabled"] = False
+
+    # Rings_rasterization
+    rings_raster = rasterize_rings(rings_table, image_shape)
+
+    # Build a new colormap
+    unique_rings_raster_values = np.unique(rings_raster)
+    colormap = make_rings_colormap(unique_rings_raster_values)
+
+    return rings_table, rings_raster, colormap
 
 
 class RingsLayerEditorWidget(Container):
@@ -192,59 +300,22 @@ class RingsLayerEditorWidget(Container):
         ).rename_axis("id")
         self._viewer.layers.remove("Rings Modification")
 
+        # Update the rings layer with the new geometries
+        new_rings_table, new_rings_raster, new_colormap = update_rings_data(
+            rings_table=rings_table,
+            last_year=self.input_layer.metadata[
+                "sample_outmost_complete_ring_year"
+            ],
+            image_shape=self.input_layer.data.shape,
+        )
+
+        self.input_layer.data = new_rings_raster
+        self.input_layer.features = new_rings_table
+        self.input_layer.colormap = new_colormap
+
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = False
-
-        # Rearrange coordinates from left to right if needed
-        rings_table["boundary_coordinates"] = rings_table[
-            "boundary_coordinates"
-        ].apply(rearrange_coordinates)
-
-        # Ensure complete rings
-        rings_table["boundary_coordinates"] = rings_table[
-            "boundary_coordinates"
-        ].apply(
-            lambda x: horizontal_rings_completion(
-                x, self.input_layer.data.shape[1]
-            )
-        )
-
-        # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
-        rings_table["cells_above"] = rings_table["boundary_coordinates"].apply(
-            lambda x: calculate_polygon_area(x, self.input_layer.data.shape[1])
-        )
-        rings_table = (
-            rings_table.sort_values(by="cells_above", ascending=True)
-            .reset_index(drop=True)
-            .rename_axis("id")
-        )
-
-        # Assign year
-        last_year = self.input_layer.metadata[
-            "sample_outmost_complete_ring_year"
-        ]
-        rings_table["ring_year"] = [
-            a + 1 for a in range(last_year - len(rings_table), last_year)
-        ]
-
-        # Disable rings (by default, the first ring is considered uncomplete and is disabled)
-        rings_table["enabled"] = True
-        rings_table.loc[0, "enabled"] = False
-
-        # Rings_rasterization
-        rings_raster = rasterize_rings(
-            rings_table, self.input_layer.data.shape
-        )
-
-        # Build a new colormap
-        unique_rings_raster_values = np.unique(rings_raster)
-        colormap = make_rings_colormap(unique_rings_raster_values)
-
-        # Update the input layer
-        self.input_layer.data = rings_raster
-        self.input_layer.features = rings_table
-        self.input_layer.colormap = colormap
 
         # Show confirmation message
         show_info("Ring geometries successfully updated")

@@ -17,6 +17,7 @@ from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog, QMessageBox
 from torch.package import PackageImporter
 
+from napari_roxas_ai._edition import update_rings_data
 from napari_roxas_ai._settings import SettingsManager
 
 from .._reader import read_image_file
@@ -218,6 +219,16 @@ class Worker(QObject):
                         ).name,
                         "rings_segmentation_datetime": datetime.now().isoformat(),
                     }
+                )
+
+                rings_add_kwargs["features"], rings_data, _ = (
+                    update_rings_data(
+                        rings_table=rings_add_kwargs["features"],
+                        last_year=rings_add_kwargs["metadata"][
+                            "sample_outmost_complete_ring_year"
+                        ],
+                        image_shape=rings_data.shape,
+                    )
                 )
 
                 # Save to file (the file extension in the path argument is ignored)
