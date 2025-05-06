@@ -6,6 +6,7 @@ import pandas as pd
 from magicgui.widgets import (
     Container,
     PushButton,
+    SpinBox,
     create_widget,
 )
 from napari.utils.notifications import show_info
@@ -223,6 +224,17 @@ class RingsLayerEditorWidget(Container):
         self._input_layer_combo = create_widget(
             label="Rings Layer", annotation="napari.layers.Labels"
         )
+        # Connect the layer selection to update the year spinbox
+        self._input_layer_combo.changed.connect(self._update_year_spinbox)
+
+        # Create spinbox for the last year
+        self._last_year_spinbox = SpinBox(
+            label="Last Complete Ring Year",
+            min=-9999,
+            max=9999,
+            step=1,
+        )
+        self._last_year_spinbox.changed.connect(self._update_layer_year)
 
         # Create a button to create the rings working layer
         self._edit_rings_geometries_button = PushButton(
@@ -234,7 +246,7 @@ class RingsLayerEditorWidget(Container):
 
         # Create a button to cancel the changes
         self._cancel_rings_geometries_button = PushButton(
-            text="Cancel Changes", visible=False
+            text="Cancel Geometries Changes", visible=False
         )
         self._cancel_rings_geometries_button.changed.connect(
             self._cancel_rings_geometries
@@ -242,7 +254,7 @@ class RingsLayerEditorWidget(Container):
 
         # Create a button to apply the changes
         self._apply_rings_geometries_button = PushButton(
-            text="Apply Changes", visible=False
+            text="Apply Geometries Changes", visible=False
         )
         self._apply_rings_geometries_button.changed.connect(
             self._apply_rings_geometries
@@ -255,8 +267,36 @@ class RingsLayerEditorWidget(Container):
                 self._edit_rings_geometries_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
+                self._last_year_spinbox,
             ]
         )
+
+    def _update_year_spinbox(self) -> None:
+        """Update the year spinbox value based on the selected layer."""
+        if self._input_layer_combo.value:
+            layer = self._input_layer_combo.value
+            if "sample_outmost_complete_ring_year" in layer.metadata:
+                self._last_year_spinbox.value = layer.metadata[
+                    "sample_outmost_complete_ring_year"
+                ]
+
+    def _update_layer_year(self) -> None:
+        """Update the last year value in the layer metadata."""
+        if self._input_layer_combo.value:
+            self.input_layer = self._input_layer_combo.value
+            self.input_layer.metadata["sample_outmost_complete_ring_year"] = (
+                self._last_year_spinbox.value
+            )
+            new_rings_table, new_rings_raster, new_colormap = (
+                update_rings_data(
+                    rings_table=self.input_layer.features,
+                    last_year=self._last_year_spinbox.value,
+                    image_shape=self.input_layer.data.shape,
+                )
+            )
+            self.input_layer.data = new_rings_raster
+            self.input_layer.features = new_rings_table
+            self.input_layer.colormap = new_colormap
 
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
@@ -284,6 +324,18 @@ class RingsLayerEditorWidget(Container):
             for coords in self.input_layer.features["boundary_coordinates"]
         ]
 
+        features = {
+            "ring_year": self.input_layer.features["ring_year"].tolist(),
+        }
+
+        text = {
+            "string": "Year: {ring_year}",
+            "anchor": "upper_left",
+            "translation": [-5, 0],
+            "size": 20,
+            "color": "green",
+        }
+
         # Create a new Shapes layer with the simplified boundary lines
         self._viewer.add_shapes(
             simplified_boundary_lines,
@@ -292,6 +344,8 @@ class RingsLayerEditorWidget(Container):
             edge_width=settings.get("vectorization.rings_edge_width"),
             name="Rings Modification",
             scale=self.input_layer.scale,
+            features=features,
+            text=text,
         )
 
     def _cancel_rings_geometries(self) -> None:
