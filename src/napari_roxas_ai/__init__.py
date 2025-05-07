@@ -1,6 +1,6 @@
 __version__ = "0.0.1"
 from ._conversion import cells_vectorization_widget
-from ._edition import RingsLayerEditorWidget
+from ._edition import CellsLayerEditorWidget, RingsLayerEditorWidget
 from ._measurements import CellsMeasurementsWidget
 from ._preparation import PreparationWidget
 from ._reader import napari_get_reader
@@ -17,6 +17,7 @@ __all__ = (
     "SingleSampleSegmentationWidget",
     "BatchSampleSegmentationWidget",
     "PreparationWidget",
+    "CellsLayerEditorWidget",
     "RingsLayerEditorWidget",
     "cells_vectorization_widget",
     "load_conifer_sample_data",

@@ -28,6 +28,10 @@ contributions:
       python_name: napari_roxas_ai:cells_vectorization_widget
       title: Cell labels vectorization widget
 
+    - id: napari-roxas-ai.make_cells_layer_editor_widget
+      python_name: napari_roxas_ai:CellsLayerEditorWidget
+      title: Cells layer editor widget
+
     - id: napari-roxas-ai.make_rings_layer_editor_widget
       python_name: napari_roxas_ai:RingsLayerEditorWidget
       title: Rings layer editor widget
@@ -95,6 +99,9 @@ contributions:
 
     - command: napari-roxas-ai.make_cells_vectorization_widget
       display_name: Vectorize cell labels
+
+    - command: napari-roxas-ai.make_cells_layer_editor_widget
+      display_name: Edit cells layer
 
     - command: napari-roxas-ai.make_rings_layer_editor_widget
       display_name: Edit rings layer
