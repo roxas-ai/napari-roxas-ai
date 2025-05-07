@@ -228,7 +228,15 @@ class RingsLayerEditorWidget(Container):
         self._input_layer_combo.changed.connect(self._update_year_spinbox)
 
         # Create spinbox for the last year
+        year_value = (
+            self._input_layer_combo.value.metadata[
+                "sample_outmost_complete_ring_year"
+            ]
+            if self._input_layer_combo.value
+            else 9999
+        )
         self._last_year_spinbox = SpinBox(
+            value=year_value,
             label="Last Complete Ring Year",
             min=-9999,
             max=9999,
@@ -334,6 +342,7 @@ class RingsLayerEditorWidget(Container):
             "translation": [-5, 0],
             "size": 20,
             "color": "green",
+            "blending": "additive",
         }
 
         # Create a new Shapes layer with the simplified boundary lines
@@ -342,6 +351,7 @@ class RingsLayerEditorWidget(Container):
             shape_type="path",
             edge_color=settings.get("vectorization.rings_edge_color"),
             edge_width=settings.get("vectorization.rings_edge_width"),
+            opacity=1,
             name="Rings Modification",
             scale=self.input_layer.scale,
             features=features,
