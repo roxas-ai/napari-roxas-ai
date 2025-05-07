@@ -2,13 +2,13 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import cv2
+import napari.layers
 import numpy as np
 import pandas as pd
 from magicgui.widgets import (
     ComboBox,
     Container,
     PushButton,
-    create_widget,
 )
 from napari.utils.notifications import show_info
 from PIL import Image
@@ -32,8 +32,10 @@ class CellsLayerEditorWidget(Container):
         self.settings = SettingsManager()
 
         # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = create_widget(
-            label="Cells Layer", annotation="napari.layers.Labels"
+        self._input_layer_combo = ComboBox(
+            label="Cells Layer",
+            annotation="napari.layers.Labels",
+            choices=self._get_valid_layers,
         )
 
         # Create an edition mode combo box
@@ -77,6 +79,21 @@ class CellsLayerEditorWidget(Container):
                 self._apply_cells_geometries_button,
             ]
         )
+
+    def _get_valid_layers(self, widget=None):
+        """Get layers that are both Labels type and match the cells file extension."""
+        cells_extension = settings.get("file_extensions.cells_file_extension")[
+            0
+        ]
+        valid_layers = []
+
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
+                cells_extension
+            ):
+                valid_layers.append(layer)
+
+        return valid_layers
 
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
