@@ -15,7 +15,9 @@ from magicgui.widgets import (
 from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog, QMessageBox
+from torch.package import PackageImporter
 
+from napari_roxas_ai._edition import update_rings_data
 from napari_roxas_ai._settings import SettingsManager
 
 from .._reader import read_image_file
@@ -79,18 +81,45 @@ class Worker(QObject):
 
         # Setup for cells segmentation
         if self.segment_cells:
+            # Set up cells model
             self.cells_model = CellsSegmentationModel()
             self.cells_model.load_weights(self.cells_model_weights_file)
+            self.cells_model.available_device = (
+                self.cells_model.available_device
+                if settings.get("processing.try_to_use_gpu")
+                else "cpu"
+            )
+            self.cells_model.to(device=self.cells_model.available_device)
+            self.cells_model.use_autocast = (
+                self.cells_model.use_autocast
+                and settings.get("processing.try_to_use_autocast")
+                and self.cells_model.available_device == "cuda"
+            )
+
             self.cells_content_ext = settings.get(
                 "file_extensions.cells_file_extension"
             )[0]
 
         # Setup for rings segmentation
         if self.segment_rings:
-            imp = torch.package.PackageImporter(self.rings_model_weights_file)
-            self.rings_model = imp.load_pickle(
-                package="LinearRingModel", resource="model.pkl"
+            # Set up rings model
+            self.rings_model = PackageImporter(
+                self.rings_model_weights_file
+            ).load_pickle("LinearRingModel", "model.pkl")
+            self.rings_model.available_device = (
+                self.rings_model.available_device
+                if settings.get("processing.try_to_use_gpu")
+                else "cpu"
             )
+            self.rings_model.to(device=self.rings_model.available_device)
+            # Fix for problem with model object; device attribute is not updated with to()
+            self.rings_model.device = self.rings_model.available_device
+            self.rings_model.use_autocast = (
+                self.rings_model.use_autocast
+                and settings.get("processing.try_to_use_autocast")
+                and self
+            )
+
             self.rings_content_ext = settings.get(
                 "file_extensions.rings_file_extension"
             )[0]
@@ -190,6 +219,16 @@ class Worker(QObject):
                         ).name,
                         "rings_segmentation_datetime": datetime.now().isoformat(),
                     }
+                )
+
+                rings_add_kwargs["features"], rings_data, _ = (
+                    update_rings_data(
+                        rings_table=rings_add_kwargs["features"],
+                        last_year=rings_add_kwargs["metadata"][
+                            "sample_outmost_complete_ring_year"
+                        ],
+                        image_shape=rings_data.shape,
+                    )
                 )
 
                 # Save to file (the file extension in the path argument is ignored)

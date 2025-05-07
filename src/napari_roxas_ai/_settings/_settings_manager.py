@@ -287,6 +287,16 @@ class SettingsManager:
                 "optimize": True,  # Default optimize flag
                 "progressive": False,  # Default progressive flag
             },
+            "processing": {
+                "try_to_use_gpu": True,  # Try to use GPU if available
+                "try_to_use_autocast": True,  # Try to use autocast if available
+            },
+            "vectorization": {
+                "cells_tolerance": 1,  # Default tolerance in pixels for cells vectorization
+                "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
+                "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
+                "rings_edge_color": "red",  # Default color for vector shapes visualization
+            },
         }
         self.save_settings()
 

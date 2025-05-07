@@ -2,6 +2,7 @@
 Reader plugin for ROXAS AI-specific file formats.
 """
 
+import ast
 import json
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
@@ -12,6 +13,7 @@ from PIL import Image
 
 # Import SettingsManager to get file extensions
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._utils import make_rings_colormap
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -186,14 +188,15 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     cells_table_file_extension = "".join(
         settings.get("file_extensions.cells_table_file_extension")
     )
-    cells_table_path = (
-        "".join(path.split(".")[:-2]) + cells_table_file_extension
+    cells_table_path = Path(path).parent / (
+        Path(layer_name).stem + cells_table_file_extension
     )
-    if Path(cells_table_path).exists():
+    if cells_table_path.exists():
         add_kwargs["features"] = pd.read_csv(
             cells_table_path,
             sep=settings.get("tables.separator"),
             index_col=settings.get("tables.index_column"),
+            converters={"centroid": ast.literal_eval},
         )
 
     # Try to get sample metadata and cells metadata from metadata file
@@ -241,14 +244,16 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     rings_table_file_extension = "".join(
         settings.get("file_extensions.rings_table_file_extension")
     )
-    rings_table_path = (
-        "".join(path.split(".")[:-2]) + rings_table_file_extension
+
+    rings_table_path = Path(path).parent / (
+        Path(layer_name).stem + rings_table_file_extension
     )
-    if Path(rings_table_path).exists():
+    if rings_table_path.exists():
         add_kwargs["features"] = pd.read_csv(
             rings_table_path,
             sep=settings.get("tables.separator"),
             index_col=settings.get("tables.index_column"),
+            converters={"boundary_coordinates": ast.literal_eval},
         )
 
     # Try to get sample metadata and rings metadata from metadata file
@@ -260,6 +265,11 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
         )
+
+    # Create a colormap for the rings
+    unique_rings_raster_values = np.unique(data)
+    colormap = make_rings_colormap(unique_rings_raster_values)
+    add_kwargs["colormap"] = colormap
 
     return data, add_kwargs, "labels"
 

@@ -124,5 +124,18 @@
         "quality": 95,
         "optimize": true,
         "progressive": false
+    },
+    "processing": {
+        "try_to_use_gpu": true,
+        "try_to_use_autocast": true
+    },
+    "vectorization": {
+        "cells_tolerance": 1,
+        "cells_face_color": "blue",
+        "cells_edge_color": "darkblue",
+        "cells_edge_width": 1,
+        "rings_tolerance": 1,
+        "rings_edge_width": 5,
+        "rings_edge_color": "red"
     }
 }

@@ -26,3 +26,34 @@ def make_binary_labels_colormap():
 
     # Create a DirectLabelColormap
     return DirectLabelColormap(color_dict=color_dict)
+
+
+def make_rings_colormap(unique_rings_raster_values):
+
+    qualitative_colors = [
+        "blue",
+        "green",
+        "yellow",
+        "purple",
+        "orange",
+        "cyan",
+        "brown",
+        "pink",
+        "gray",
+        "lime",
+    ]
+
+    ring_years = unique_rings_raster_values[unique_rings_raster_values != -1]
+
+    # Create a colormap using string color names
+    colormap = defaultdict(
+        lambda: [0, 0, 0, 0]
+    )  # Default: transparent for unsupported values
+    colormap[-1] = "red"  # red for disabled rings
+
+    # Map each ring year to a color from the qualitative_colors list (cycling if needed)
+    for i, year in enumerate(ring_years):
+        color_idx = i % len(qualitative_colors)
+        colormap[year] = qualitative_colors[color_idx]
+
+    return colormap
