@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING
 
 import cv2
+import napari.layers
 import numpy as np
 import pandas as pd
 from magicgui.widgets import (
+    ComboBox,
     Container,
     PushButton,
     SpinBox,
-    create_widget,
 )
 from napari.utils.notifications import show_info
 from PIL import Image
@@ -221,8 +222,10 @@ class RingsLayerEditorWidget(Container):
         self.settings = SettingsManager()
 
         # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = create_widget(
-            label="Rings Layer", annotation="napari.layers.Labels"
+        self._input_layer_combo = ComboBox(
+            label="Rings Layer",
+            annotation="napari.layers.Labels",
+            choices=self._get_valid_layers,
         )
         # Connect the layer selection to update the year spinbox
         self._input_layer_combo.changed.connect(self._update_year_spinbox)
@@ -278,6 +281,23 @@ class RingsLayerEditorWidget(Container):
                 self._last_year_spinbox,
             ]
         )
+
+        # Update choices when layers change
+
+    def _get_valid_layers(self, widget=None) -> list:
+        """Get layers that are both Labels type and match the rings file extension."""
+        rings_extension = settings.get("file_extensions.rings_file_extension")[
+            0
+        ]
+        valid_layers = []
+
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
+                rings_extension
+            ):
+                valid_layers.append(layer)
+
+        return valid_layers
 
     def _update_year_spinbox(self) -> None:
         """Update the year spinbox value based on the selected layer."""

@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+import napari.layers
 import numpy as np
 import pandas as pd
 import torch
@@ -10,7 +11,6 @@ from magicgui.widgets import (
     ComboBox,
     Container,
     PushButton,
-    create_widget,
 )
 from napari.utils.notifications import show_info
 from PIL import Image
@@ -161,8 +161,10 @@ class SingleSampleSegmentationWidget(Container):
         self.settings = SettingsManager()
 
         # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = create_widget(
-            label="Thin Section", annotation="napari.layers.Image"
+        self._input_layer_combo = ComboBox(
+            label="Thin Section",
+            annotation="napari.layers.Image",
+            choices=self._get_valid_layers,
         )
 
         # Cells segmentation checkbox and model selection
@@ -212,6 +214,21 @@ class SingleSampleSegmentationWidget(Container):
         # Initialize visibility of model selection widgets
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
+
+    def _get_valid_layers(self, widget=None) -> list:
+        """Get layers that are both Labels type and match the scan file extension."""
+        scan_extension = self.settings.get(
+            "file_extensions.scan_file_extension"
+        )[0]
+        valid_layers = []
+
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Image) and layer.name.endswith(
+                scan_extension
+            ):
+                valid_layers.append(layer)
+
+        return valid_layers
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""
