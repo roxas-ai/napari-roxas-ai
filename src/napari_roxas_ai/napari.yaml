@@ -36,6 +36,10 @@ contributions:
       python_name: napari_roxas_ai:RingsLayerEditorWidget
       title: Rings layer editor widget
 
+    - id: napari-roxas-ai.make_cross_dating_plotter_widget
+      python_name: napari_roxas_ai:CrossDatingPlotterWidget
+      title: Cross dating plotter widget
+
     - id: napari-roxas-ai.make_preparation_widget
       python_name: napari_roxas_ai:PreparationWidget
       title: Sample preparation widget
@@ -105,6 +109,9 @@ contributions:
 
     - command: napari-roxas-ai.make_rings_layer_editor_widget
       display_name: Edit rings layer
+
+    - command: napari-roxas-ai.make_cross_dating_plotter_widget
+      display_name: Plot cross-dating
 
     - command: napari-roxas-ai.open_settings_file
       display_name: Settings
