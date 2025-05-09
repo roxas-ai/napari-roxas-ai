@@ -121,6 +121,18 @@ class CrossDatingPlotterWidget(Container):
             value=(0, 100),
         )
         self._x_range_slider.changed.connect(self._update_plot_limits)
+        self._x_range_slider_was_set = False
+
+        # Range slider for y-axis limits
+        self._y_range_slider = RangeSlider(
+            label="Width Range",
+            min=0,
+            max=100,
+            step=0.01,
+            value=(0, 100),
+        )
+        self._y_range_slider.changed.connect(self._update_plot_limits)
+        self._y_range_slider_was_set = False
 
         # Append the widgets to the container
         self.extend(
@@ -129,6 +141,7 @@ class CrossDatingPlotterWidget(Container):
                 self._crossdating_file_combo,
                 self._crossdating_column_combo,
                 self._x_range_slider,
+                self._y_range_slider,
                 self.plot_widget,
             ]
         )
@@ -346,47 +359,101 @@ class CrossDatingPlotterWidget(Container):
         self.plot_widget.ax.legend()
         self.plot_widget.ax.grid(True)
 
-        # Get the min and max years
+        # Get the min and max years for x-axis
         min_year = min(years) - 10
         max_year = max(years) + 10
 
-        # Get current slider values
-        current_low, current_high = self._x_range_slider.value
-
-        # Update slider range but preserve values if possible
+        # Update x slider range but preserve values if possible
         self._x_range_slider.min = min_year
         self._x_range_slider.max = max_year
 
-        # Compute new view range that preserves as much of previous view as possible
-        new_low = (
-            current_low
-            if (current_low >= min_year) and (current_low < max_year)
-            else min_year
-        )
-        new_high = (
-            current_high
-            if (current_high <= max_year) and (current_high > min_year)
-            else max_year
-        )
+        # If the value of the slider has been initialized
+        if self._x_range_slider_was_set:
 
-        # Only update if the previous range isn't valid anymore
-        if new_low != current_low or new_high != current_high:
-            self._x_range_slider.value = (new_low, new_high)
+            # Get current x slider values
+            current_x_low, current_x_high = self._x_range_slider.value
 
-        # Set the x-axis limits according to the slider
+            # Compute new x view range that preserves as much of previous view as possible
+            new_x_low = (
+                current_x_low
+                if (current_x_low >= min_year) and (current_x_low < max_year)
+                else min_year
+            )
+            new_x_high = (
+                current_x_high
+                if (current_x_high <= max_year) and (current_x_high > min_year)
+                else max_year
+            )
+
+            # Only update if the previous x range isn't valid anymore
+            if new_x_low != current_x_low or new_x_high != current_x_high:
+                self._x_range_slider.value = (new_x_low, new_x_high)
+        # Otherwise, we don't want to consider the current values as they are defaults with no meaning
+        else:
+            self._x_range_slider.value = (min_year, max_year)
+            self._x_range_slider_was_set = True
+
+        # Get the min and max values for y-axis
+        all_values = pd.concat(
+            [
+                self.plot_df["reference_series"].dropna(),
+                self.plot_df["layer_series"].dropna(),
+            ]
+        )
+        min_value = all_values.min() - 10
+        max_value = all_values.max() + 10
+
+        # Update y slider range but preserve values if possible
+        self._y_range_slider.min = min_value
+        self._y_range_slider.max = max_value
+
+        # If the value of the slider has been initialized
+        if self._y_range_slider_was_set:
+
+            # Get current y slider values
+            current_y_low, current_y_high = self._y_range_slider.value
+
+            # Compute new y view range that preserves as much of previous view as possible
+            new_y_low = (
+                current_y_low
+                if (current_y_low >= min_value) and (current_y_low < max_value)
+                else min_value
+            )
+            new_y_high = (
+                current_y_high
+                if (current_y_high <= max_value)
+                and (current_y_high > min_value)
+                else max_value
+            )
+
+            # Only update if the previous y range isn't valid anymore
+            if new_y_low != current_y_low or new_y_high != current_y_high:
+                self._y_range_slider.value = (new_y_low, new_y_high)
+        # Otherwise, we don't want to consider the current values as they are defaults with no meaning
+        else:
+            self._y_range_slider.value = (min_value, max_value)
+            self._y_range_slider_was_set = True
+
+        # Set the x and y axis limits according to the sliders
         self.plot_widget.ax.set_xlim(self._x_range_slider.value)
+        self.plot_widget.ax.set_ylim(self._y_range_slider.value)
 
         # Redraw the canvas
         self.plot_widget.figure.tight_layout()
         self.plot_widget.canvas.draw()
 
     def _update_plot_limits(self):
-        """Update the x-axis limits based on the range slider"""
+        """Update the axis limits based on the range sliders"""
         if self.plot_df is None or self.plot_df.empty:
             return
 
-        min_val, max_val = self._x_range_slider.value
-        self.plot_widget.ax.set_xlim(min_val, max_val)
+        # Get values from both sliders
+        x_min, x_max = self._x_range_slider.value
+        y_min, y_max = self._y_range_slider.value
+
+        # Update both axes limits
+        self.plot_widget.ax.set_xlim(x_min, x_max)
+        self.plot_widget.ax.set_ylim(y_min, y_max)
 
         # Redraw the canvas
         self.plot_widget.canvas.draw()
