@@ -161,7 +161,7 @@ def rasterize_rings(
     return rings_raster.astype("int32")
 
 
-def update_rings_data(
+def update_rings_geometries(
     rings_table: pd.DataFrame, last_year: int, image_shape: tuple
 ) -> tuple:
     """
@@ -317,12 +317,13 @@ class RingsLayerEditorWidget(Container):
     def _update_layer_year(self) -> None:
         """Update the last year value in the layer metadata."""
         if self._input_layer_combo.value:
+
             self.input_layer = self._input_layer_combo.value
             self.input_layer.metadata["sample_outmost_complete_ring_year"] = (
                 self._last_year_spinbox.value
             )
             new_rings_table, new_rings_raster, new_colormap = (
-                update_rings_data(
+                update_rings_geometries(
                     rings_table=self.input_layer.features,
                     last_year=self._last_year_spinbox.value,
                     image_shape=self.input_layer.data.shape,
@@ -416,12 +417,14 @@ class RingsLayerEditorWidget(Container):
         self._viewer.layers.remove("Rings Modification")
 
         # Update the rings layer with the new geometries
-        new_rings_table, new_rings_raster, new_colormap = update_rings_data(
-            rings_table=rings_table,
-            last_year=self.input_layer.metadata[
-                "sample_outmost_complete_ring_year"
-            ],
-            image_shape=self.input_layer.data.shape,
+        new_rings_table, new_rings_raster, new_colormap = (
+            update_rings_geometries(
+                rings_table=rings_table,
+                last_year=self.input_layer.metadata[
+                    "sample_outmost_complete_ring_year"
+                ],
+                image_shape=self.input_layer.data.shape,
+            )
         )
 
         self.input_layer.data = new_rings_raster
