@@ -137,7 +137,9 @@ def rasterize_rings(
         np.ndarray: Rasterized rings as a 2D array.
     """
 
-    rings_raster = np.ones(image_shape) * -1
+    rings_raster = np.ones(image_shape) * settings.get(
+        "rasterization.uncomplete_ring_value"
+    )
     previous_boundary = np.flip(
         np.array([[0, 0], [0, image_shape[1]]]).round().astype("int32"), axis=1
     )[::-1]
@@ -147,7 +149,11 @@ def rasterize_rings(
             np.array(row["boundary_coordinates"]).round().astype("int32"),
             axis=1,
         )
-        value = row["ring_year"] if row["enabled"] else -1
+        value = (
+            row["ring_year"]
+            if row["enabled"]
+            else settings.get("rasterization.uncomplete_ring_value")
+        )
         cv2.fillPoly(
             rings_raster, [np.vstack([previous_boundary, coords])], value
         )
@@ -155,7 +161,7 @@ def rasterize_rings(
     return rings_raster.astype("int32")
 
 
-def update_rings_data(
+def update_rings_geometries(
     rings_table: pd.DataFrame, last_year: int, image_shape: tuple
 ) -> tuple:
     """
@@ -241,7 +247,7 @@ class RingsLayerEditorWidget(Container):
         self._last_year_spinbox = SpinBox(
             value=year_value,
             label="Last Complete Ring Year",
-            min=-9999,
+            min=-999999,
             max=9999,
             step=1,
         )
@@ -311,12 +317,13 @@ class RingsLayerEditorWidget(Container):
     def _update_layer_year(self) -> None:
         """Update the last year value in the layer metadata."""
         if self._input_layer_combo.value:
+
             self.input_layer = self._input_layer_combo.value
             self.input_layer.metadata["sample_outmost_complete_ring_year"] = (
                 self._last_year_spinbox.value
             )
             new_rings_table, new_rings_raster, new_colormap = (
-                update_rings_data(
+                update_rings_geometries(
                     rings_table=self.input_layer.features,
                     last_year=self._last_year_spinbox.value,
                     image_shape=self.input_layer.data.shape,
@@ -335,6 +342,7 @@ class RingsLayerEditorWidget(Container):
 
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
+        self._last_year_spinbox.visible = False
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
 
@@ -385,6 +393,7 @@ class RingsLayerEditorWidget(Container):
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
+        self._last_year_spinbox.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 
@@ -408,12 +417,14 @@ class RingsLayerEditorWidget(Container):
         self._viewer.layers.remove("Rings Modification")
 
         # Update the rings layer with the new geometries
-        new_rings_table, new_rings_raster, new_colormap = update_rings_data(
-            rings_table=rings_table,
-            last_year=self.input_layer.metadata[
-                "sample_outmost_complete_ring_year"
-            ],
-            image_shape=self.input_layer.data.shape,
+        new_rings_table, new_rings_raster, new_colormap = (
+            update_rings_geometries(
+                rings_table=rings_table,
+                last_year=self.input_layer.metadata[
+                    "sample_outmost_complete_ring_year"
+                ],
+                image_shape=self.input_layer.data.shape,
+            )
         )
 
         self.input_layer.data = new_rings_raster
@@ -422,6 +433,7 @@ class RingsLayerEditorWidget(Container):
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
+        self._last_year_spinbox.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 

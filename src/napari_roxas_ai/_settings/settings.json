@@ -131,11 +131,24 @@
     },
     "vectorization": {
         "cells_tolerance": 1,
-        "cells_face_color": "blue",
-        "cells_edge_color": "darkblue",
-        "cells_edge_width": 1,
-        "rings_tolerance": 1,
+        "rings_tolerance": 5,
         "rings_edge_width": 5,
         "rings_edge_color": "red"
+    },
+    "rasterization": {
+        "uncomplete_ring_value": -1,
+        "uncomplete_ring_color": "red",
+        "rings_color_sequence": [
+            "blue",
+            "green",
+            "yellow",
+            "purple",
+            "orange",
+            "cyan",
+            "brown",
+            "pink",
+            "gray",
+            "lime"
+        ]
     }
 }

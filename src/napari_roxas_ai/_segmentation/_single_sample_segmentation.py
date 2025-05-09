@@ -18,7 +18,7 @@ from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
 from torch.package import PackageImporter
 
-from napari_roxas_ai._edition import update_rings_data
+from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._settings import SettingsManager
 
 from .._utils import make_binary_labels_colormap
@@ -76,15 +76,18 @@ class Worker(QObject):
             cells_model = CellsSegmentationModel()
             cells_model.load_weights(self.cells_model_weights_file)
             cells_model.available_device = (
-                cells_model.available_device
-                if self.settings.get("processing.try_to_use_gpu")
+                "cuda"
+                if torch.cuda.is_available()
+                and self.settings.get("processing.try_to_use_gpu")
                 else "cpu"
             )
             cells_model.to(device=cells_model.available_device)
-            cells_model.use_autocast = (
-                cells_model.use_autocast
-                and self.settings.get("processing.try_to_use_autocast")
-                and cells_model.available_device == "cuda"
+            cells_model.use_autocast = bool(
+                torch.amp.autocast_mode.is_autocast_available(
+                    cells_model.device.type
+                )
+                and self.settings.get("processing.try_to_use_gpu")
+                and cells_model.device == "cuda"
             )
 
             # Perform inference
@@ -108,17 +111,20 @@ class Worker(QObject):
                 self.rings_model_weights_file
             ).load_pickle("LinearRingModel", "model.pkl")
             rings_model.available_device = (
-                rings_model.available_device
-                if self.settings.get("processing.try_to_use_gpu")
+                "cuda"
+                if torch.cuda.is_available()
+                and self.settings.get("processing.try_to_use_gpu")
                 else "cpu"
             )
             rings_model.to(device=rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
             rings_model.device = rings_model.available_device
-            rings_model.use_autocast = (
-                rings_model.use_autocast
-                and self.settings.get("processing.try_to_use_autocast")
-                and rings_model.available_device == "cuda"
+            rings_model.use_autocast = bool(
+                torch.amp.autocast_mode.is_autocast_available(
+                    rings_model.device
+                )
+                and self.settings.get("processing.try_to_use_gpu")
+                and rings_model.device == "cuda"
             )
 
             # Perform inference
@@ -411,7 +417,7 @@ class SingleSampleSegmentationWidget(Container):
 
             # Update the rings layer with the new features
             new_rings_table, new_rings_raster, new_colormap = (
-                update_rings_data(
+                update_rings_geometries(
                     rings_table=rings_layer.features,
                     last_year=rings_layer.metadata[
                         "sample_outmost_complete_ring_year"

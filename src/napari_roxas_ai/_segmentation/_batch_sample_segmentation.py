@@ -17,7 +17,7 @@ from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog, QMessageBox
 from torch.package import PackageImporter
 
-from napari_roxas_ai._edition import update_rings_data
+from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._settings import SettingsManager
 
 from .._reader import read_image_file
@@ -85,15 +85,18 @@ class Worker(QObject):
             self.cells_model = CellsSegmentationModel()
             self.cells_model.load_weights(self.cells_model_weights_file)
             self.cells_model.available_device = (
-                self.cells_model.available_device
-                if settings.get("processing.try_to_use_gpu")
+                "cuda"
+                if torch.cuda.is_available()
+                and settings.get("processing.try_to_use_gpu")
                 else "cpu"
             )
             self.cells_model.to(device=self.cells_model.available_device)
-            self.cells_model.use_autocast = (
-                self.cells_model.use_autocast
-                and settings.get("processing.try_to_use_autocast")
-                and self.cells_model.available_device == "cuda"
+            self.cells_model.use_autocast = bool(
+                torch.amp.autocast_mode.is_autocast_available(
+                    self.cells_model.device.type
+                )
+                and settings.get("processing.try_to_use_gpu")
+                and self.cells_model.device == "cuda"
             )
 
             self.cells_content_ext = settings.get(
@@ -107,17 +110,20 @@ class Worker(QObject):
                 self.rings_model_weights_file
             ).load_pickle("LinearRingModel", "model.pkl")
             self.rings_model.available_device = (
-                self.rings_model.available_device
-                if settings.get("processing.try_to_use_gpu")
+                "cuda"
+                if torch.cuda.is_available()
+                and settings.get("processing.try_to_use_gpu")
                 else "cpu"
             )
             self.rings_model.to(device=self.rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
             self.rings_model.device = self.rings_model.available_device
-            self.rings_model.use_autocast = (
-                self.rings_model.use_autocast
-                and settings.get("processing.try_to_use_autocast")
-                and self
+            self.rings_model.use_autocast = bool(
+                torch.amp.autocast_mode.is_autocast_available(
+                    self.rings_model.device
+                )
+                and settings.get("processing.try_to_use_gpu")
+                and self.rings_model.device == "cuda"
             )
 
             self.rings_content_ext = settings.get(
@@ -222,7 +228,7 @@ class Worker(QObject):
                 )
 
                 rings_add_kwargs["features"], rings_data, _ = (
-                    update_rings_data(
+                    update_rings_geometries(
                         rings_table=rings_add_kwargs["features"],
                         last_year=rings_add_kwargs["metadata"][
                             "sample_outmost_complete_ring_year"

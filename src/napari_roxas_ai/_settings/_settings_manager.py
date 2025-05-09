@@ -297,6 +297,22 @@ class SettingsManager:
                 "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
                 "rings_edge_color": "red",  # Default color for vector shapes visualization
             },
+            "rasterization": {
+                "uncomplete_ring_value": -1,
+                "uncomplete_ring_color": "red",
+                "rings_color_sequence": [
+                    "blue",
+                    "green",
+                    "yellow",
+                    "purple",
+                    "orange",
+                    "cyan",
+                    "brown",
+                    "pink",
+                    "gray",
+                    "lime",
+                ],
+            },
         }
         self.save_settings()
 

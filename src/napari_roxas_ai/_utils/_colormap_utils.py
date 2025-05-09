@@ -8,6 +8,10 @@ from collections import defaultdict
 import numpy as np
 from napari.utils.colormaps import DirectLabelColormap
 
+from napari_roxas_ai._settings import SettingsManager
+
+settings = SettingsManager()
+
 
 def make_binary_labels_colormap():
     # Generate a bright, highly saturated random color
@@ -30,26 +34,21 @@ def make_binary_labels_colormap():
 
 def make_rings_colormap(unique_rings_raster_values):
 
-    qualitative_colors = [
-        "blue",
-        "green",
-        "yellow",
-        "purple",
-        "orange",
-        "cyan",
-        "brown",
-        "pink",
-        "gray",
-        "lime",
-    ]
+    qualitative_colors = settings.get("rasterization.rings_color_sequence")
+    uncomplete_ring_color = settings.get("rasterization.uncomplete_ring_color")
+    uncomplete_ring_value = settings.get("rasterization.uncomplete_ring_value")
 
-    ring_years = unique_rings_raster_values[unique_rings_raster_values != -1]
+    ring_years = unique_rings_raster_values[
+        unique_rings_raster_values != uncomplete_ring_value
+    ]
 
     # Create a colormap using string color names
     colormap = defaultdict(
         lambda: [0, 0, 0, 0]
     )  # Default: transparent for unsupported values
-    colormap[-1] = "red"  # red for disabled rings
+    colormap[uncomplete_ring_value] = (
+        uncomplete_ring_color  # red for disabled rings
+    )
 
     # Map each ring year to a color from the qualitative_colors list (cycling if needed)
     for i, year in enumerate(ring_years):
