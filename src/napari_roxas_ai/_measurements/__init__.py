@@ -1,3 +1,3 @@
-from ._cells_measurements_widget import CellsMeasurementsWidget
+from ._single_sample_measurements import SingleSampleMeasurementsWidget
 
-__all__ = ("CellsMeasurementsWidget",)
+__all__ = ("SingleSampleMeasurementsWidget",)
