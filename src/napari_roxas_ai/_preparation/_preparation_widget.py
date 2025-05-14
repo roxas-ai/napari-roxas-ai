@@ -106,6 +106,9 @@ class PreparationWidget(Container):
             value=True,
             label="Overwrite original files (replace instead of copy)",
         )
+        # Temporary disabling the checkbox as it produces unexpected behavior in windows (deletes files instead of copying)
+        self._overwrite_files_checkbox.value = False
+        self._overwrite_files_checkbox.visible = False
 
         # Process already processed files checkbox
         self._process_processed_checkbox = CheckBox(
