@@ -127,9 +127,6 @@ class SingleSampleMeasurementsWidget(Container):
             ]
         )
 
-        # Initialize output file path
-        self.output_file_path = None
-
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers names"""
 

@@ -403,6 +403,29 @@ class SampleAnalyzer:
             np.deg2rad(self.rings_table["boundary_angle"].rolling(2).mean())
         )
 
+    def _get_angled_distances(self, entry):
+        """Compute angled distances for top and bottom rings."""
+
+        if np.isnan(entry["bot_ring_id"]):
+            return pd.Series(
+                [np.nan, np.nan], index=["top_angled_dist", "bot_angled_dist"]
+            )
+
+        top_ring_angle = self.rings_table.loc[
+            entry["bot_ring_id"] - 1, "boundary_angle"
+        ]
+        bot_ring_angle = self.rings_table.loc[
+            entry["bot_ring_id"], "boundary_angle"
+        ]
+
+        avg_angle = (top_ring_angle + bot_ring_angle) / 2
+
+        top_dist = entry["top_vert_dist"] * np.cos(np.deg2rad(avg_angle))
+        bot_dist = entry["bot_vert_dist"] * np.cos(np.deg2rad(avg_angle))
+        return pd.Series(
+            [top_dist, bot_dist], index=["top_angled_dist", "bot_angled_dist"]
+        )
+
     def _compute_cells_to_rings_distances(self):
         """Compute distances from cells to rings."""
 
@@ -411,6 +434,11 @@ class SampleAnalyzer:
         for i, centroid in enumerate(self.cells_table["centroid"]):
             if not np.isnan(centroid).any():
                 centroids_map[centroid] = i
+
+        # Iitialize columns
+        self.cells_table["bot_ring_id"] = np.nan
+        self.cells_table["top_vert_dist"] = np.nan
+        self.cells_table["bot_vert_dist"] = np.nan
 
         for i in range(len(self.rings_table) - 1):
 
@@ -436,7 +464,7 @@ class SampleAnalyzer:
                 self.cells_table.loc[ids, "centroid"].tolist()
             )
 
-            diff = np.diff(canvas, axis=0)
+            diff = np.diff(canvas.astype("int32"), axis=0)
             complete_top_ring = np.all(np.any(diff > 0, axis=0))
             complete_bottom_ring = np.all(np.any(diff < 0, axis=0))
 
@@ -451,6 +479,10 @@ class SampleAnalyzer:
                     np.argmax(diff < 0, axis=0)[centroids[:, 1]]
                     - centroids[:, 0]
                 ) / self.config["pixels_per_um"]
+
+        self.cells_table[["top_angled_dist", "bot_angled_dist"]] = (
+            self.cells_table.apply(self._get_angled_distances, axis=1)
+        )
 
     def analyze_rings(self) -> pd.DataFrame:
         """Main method to analyze rings."""

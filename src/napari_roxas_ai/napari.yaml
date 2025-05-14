@@ -16,6 +16,10 @@ contributions:
       python_name: napari_roxas_ai:SingleSampleMeasurementsWidget
       title: Single sample measurements widget
 
+    - id: napari-roxas-ai.make_batch_sample_measurements_widget
+      python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
+      title: Batch sample measurements widget
+
     - id: napari-roxas-ai.make_single_sample_segmentation_widget
       python_name: napari_roxas_ai:SingleSampleSegmentationWidget
       title: Single sample segmentation widget
@@ -94,9 +98,6 @@ contributions:
     - command: napari-roxas-ai.make_batch_sample_segmentation_widget
       display_name: Batch segment samples (cells & rings)
 
-    - command: napari-roxas-ai.make_single_sample_measurements_widget
-      display_name: Measure sample (cells & rings)
-
     - command: napari-roxas-ai.make_cells_layer_editor_widget
       display_name: Edit cells layer
 
@@ -105,6 +106,12 @@ contributions:
 
     - command: napari-roxas-ai.make_cross_dating_plotter_widget
       display_name: Plot cross-dating
+
+    - command: napari-roxas-ai.make_single_sample_measurements_widget
+      display_name: Measure sample (cells & rings)
+
+    - command: napari-roxas-ai.make_batch_sample_measurements_widget
+      display_name: Batch measure samples (cells & rings)
 
     - command: napari-roxas-ai.open_settings_file
       display_name: Settings
