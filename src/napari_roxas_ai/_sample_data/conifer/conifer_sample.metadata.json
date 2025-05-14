@@ -28,5 +28,7 @@
             1
         ]
     },
-    "sample_stem_path": "/home/santacro/Desktop/dendro/napari-roxas-ai/src/napari_roxas_ai/_sample_data/conifer/conifer_sample"
+    "sample_stem_path": "/home/santacro/Desktop/dendro/napari-roxas-ai/src/napari_roxas_ai/_sample_data/conifer/conifer_sample",
+    "rings_segmentation_model": "linear_rings_model.pth",
+    "rings_segmentation_datetime": "2025-05-14T11:02:06.903084"
 }
