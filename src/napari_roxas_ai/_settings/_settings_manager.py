@@ -212,14 +212,14 @@ class SettingsManager:
                         "required": True,
                     },
                     {
-                        "id": "sample_outmost_complete_ring_year",
+                        "id": "rings_outmost_complete_year",
                         "label": "Outmost Complete Ring Year",
                         "widget_type": "QSpinBox",
                         "default": 9999,
                         "min": -10000,
                         "max": 9999,
                         "special_value_text": "Not set",
-                        "required": False,
+                        "required": True,
                     },
                 ]
             },

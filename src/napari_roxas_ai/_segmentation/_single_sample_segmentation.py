@@ -420,7 +420,7 @@ class SingleSampleSegmentationWidget(Container):
                 update_rings_geometries(
                     rings_table=rings_layer.features,
                     last_year=rings_layer.metadata[
-                        "sample_outmost_complete_ring_year"
+                        "rings_outmost_complete_year"
                     ],
                     image_shape=rings_layer.data.shape,
                 )

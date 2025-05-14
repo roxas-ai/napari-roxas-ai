@@ -231,7 +231,7 @@ class Worker(QObject):
                     update_rings_geometries(
                         rings_table=rings_add_kwargs["features"],
                         last_year=rings_add_kwargs["metadata"][
-                            "sample_outmost_complete_ring_year"
+                            "rings_outmost_complete_year"
                         ],
                         image_shape=rings_data.shape,
                     )

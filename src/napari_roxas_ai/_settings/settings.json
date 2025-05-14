@@ -53,7 +53,7 @@
                 "required": true
             },
             {
-                "id": "sample_outmost_complete_ring_year",
+                "id": "rings_outmost_complete_year",
                 "label": "Outmost Complete Ring Year",
                 "widget_type": "QSpinBox",
                 "default": 9999,
