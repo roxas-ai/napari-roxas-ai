@@ -60,7 +60,7 @@
                 "min": -10000,
                 "max": 9999,
                 "special_value_text": "Not set",
-                "required": false
+                "required": true
             }
         ]
     },
@@ -157,5 +157,6 @@
         "cells_smoothing_kernel_size": 5,
         "cells_integration_interval": 0.75,
         "cells_tangential_angle": 0.0
-    }
+    },
+    "project_directory": "/home/santacro/Desktop/dendro/example_data/inputs (Copy 3)"
 }

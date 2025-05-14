@@ -7,6 +7,7 @@ from ._measurements import (
     SingleSampleMeasurementsWidget,
 )
 from ._preparation import PreparationWidget
+from ._project_directory import ProjectDirectorySettingWidget
 from ._reader import napari_get_reader
 from ._sample_data import load_conifer_sample_data
 from ._segmentation import (
@@ -23,6 +24,7 @@ __all__ = (
     "SingleSampleSegmentationWidget",
     "BatchSampleSegmentationWidget",
     "PreparationWidget",
+    "ProjectDirectorySettingWidget",
     "CellsLayerEditorWidget",
     "RingsLayerEditorWidget",
     "cells_vectorization_widget",

@@ -12,13 +12,13 @@ contributions:
       title: Load Sample Data (Conifer)
 
     # Widgets contributions
-    - id: napari-roxas-ai.make_single_sample_measurements_widget
-      python_name: napari_roxas_ai:SingleSampleMeasurementsWidget
-      title: Single sample measurements widget
+    - id: napari-roxas-ai.make_project_directory_setting_widget
+      python_name: napari_roxas_ai:ProjectDirectorySettingWidget
+      title: Project directory setting widget
 
-    - id: napari-roxas-ai.make_batch_sample_measurements_widget
-      python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
-      title: Batch sample measurements widget
+    - id: napari-roxas-ai.make_preparation_widget
+      python_name: napari_roxas_ai:PreparationWidget
+      title: Sample preparation widget
 
     - id: napari-roxas-ai.make_single_sample_segmentation_widget
       python_name: napari_roxas_ai:SingleSampleSegmentationWidget
@@ -40,9 +40,13 @@ contributions:
       python_name: napari_roxas_ai:CrossDatingPlotterWidget
       title: Cross dating plotter widget
 
-    - id: napari-roxas-ai.make_preparation_widget
-      python_name: napari_roxas_ai:PreparationWidget
-      title: Sample preparation widget
+    - id: napari-roxas-ai.make_single_sample_measurements_widget
+      python_name: napari_roxas_ai:SingleSampleMeasurementsWidget
+      title: Single sample measurements widget
+
+    - id: napari-roxas-ai.make_batch_sample_measurements_widget
+      python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
+      title: Batch sample measurements widget
 
     - id: napari-roxas-ai.open_settings_file
       python_name: napari_roxas_ai:open_settings_file
@@ -89,6 +93,9 @@ contributions:
       key: unique_id.1
 
   widgets:
+    - command: napari-roxas-ai.make_project_directory_setting_widget
+      display_name: Project directory setting
+
     - command: napari-roxas-ai.make_preparation_widget
       display_name: Prepare samples
 

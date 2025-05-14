@@ -173,6 +173,14 @@ class SettingsManager:
                         "read_only": True,
                         "required": True,
                     },
+                    # In anticipation of better inclusion of the stem path
+                    # {
+                    #     "id": "sample_stem_path",
+                    #     "label": "Stem Path",
+                    #     "widget_type": "QLineEdit",
+                    #     "read_only": True,
+                    #     "required": True,
+                    # },
                     {
                         "id": "sample_type",
                         "label": "Type",
@@ -320,6 +328,7 @@ class SettingsManager:
                 "cells_integration_interval": 0.75,  # Default wall fraction for thickness measurement
                 "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
             },
+            "project_directory": None,  # Current project directory
         }
         self.save_settings()
 
