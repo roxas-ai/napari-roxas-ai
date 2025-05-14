@@ -281,7 +281,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     return data, add_kwargs, "labels"
 
 
-def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
+def read_scan_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
     Read an image file and return it as a napari layer.
 
@@ -373,7 +373,7 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
         elif rings_content_ext in path.lower():
             layers.append(read_rings_file(path))
         elif scan_content_ext in path.lower():
-            layers.append(read_image_file(path))
+            layers.append(read_scan_file(path))
 
     return layers
 

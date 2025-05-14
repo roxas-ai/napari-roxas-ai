@@ -20,7 +20,7 @@ from torch.package import PackageImporter
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._settings import SettingsManager
 
-from .._reader import read_image_file
+from .._reader import read_scan_file
 from .._writer import write_single_layer
 from ._cells_model import CellsSegmentationModel
 
@@ -73,7 +73,7 @@ class Worker(QObject):
                 str(
                     Path(self.input_directory_path)
                     / "**"
-                    / f"*{self.scan_content_ext}*"
+                    / f"*{self.scan_content_ext}.*"
                 ),
                 recursive=True,
             )
@@ -138,7 +138,7 @@ class Worker(QObject):
 
         for scan_file_path in self.scan_file_paths:
 
-            scan_data, scan_add_kwargs, _ = read_image_file(scan_file_path)
+            scan_data, scan_add_kwargs, _ = read_scan_file(scan_file_path)
 
             sample_metadata = {
                 k: v
