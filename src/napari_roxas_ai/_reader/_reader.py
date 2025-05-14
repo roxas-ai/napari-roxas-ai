@@ -13,7 +13,10 @@ from PIL import Image
 
 # Import SettingsManager to get file extensions
 from napari_roxas_ai._settings import SettingsManager
-from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai._utils import (
+    make_binary_labels_colormap,
+    make_rings_colormap,
+)
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -209,6 +212,10 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
             {key: metadata[key] for key in metadata_keys}
         )
 
+    # Create a colormap for the cells
+    colormap = make_binary_labels_colormap(create_random_color=False)
+    add_kwargs["colormap"] = colormap
+
     return data.astype(int), add_kwargs, "labels"
 
 
@@ -274,7 +281,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     return data, add_kwargs, "labels"
 
 
-def read_image_file(path: str) -> Tuple[np.ndarray, dict, str]:
+def read_scan_file(path: str) -> Tuple[np.ndarray, dict, str]:
     """
     Read an image file and return it as a napari layer.
 
@@ -366,7 +373,7 @@ def read_files(paths: Union[str, List[str]]) -> List[Tuple[Any, dict, str]]:
         elif rings_content_ext in path.lower():
             layers.append(read_rings_file(path))
         elif scan_content_ext in path.lower():
-            layers.append(read_image_file(path))
+            layers.append(read_scan_file(path))
 
     return layers
 

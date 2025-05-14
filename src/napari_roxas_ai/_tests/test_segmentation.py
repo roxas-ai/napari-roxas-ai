@@ -354,7 +354,7 @@ class TestBatchWorkerFunctionality:
         with patch(
             "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
         ) as mock_settings, patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_image_file"
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_scan_file"
         ) as mock_read_image:
             # Configure mock settings
             mock_settings.get.side_effect = lambda key, default=None: {
@@ -363,7 +363,7 @@ class TestBatchWorkerFunctionality:
                 "file_extensions.rings_file_extension": [".rings"],
             }.get(key, default)
 
-            # Mock the read_image_file function
+            # Mock the read_scan_file function
             mock_read_image.return_value = (
                 create_test_image(),
                 {
@@ -399,7 +399,7 @@ class TestBatchWorkerFunctionality:
                 worker.progress = MagicMock()
                 worker.finished = MagicMock()
 
-                # Mock read_image_file to get sample data
+                # Mock read_scan_file to get sample data
                 scan_data, scan_add_kwargs, _ = mock_read_image.return_value
 
                 # Extract sample metadata

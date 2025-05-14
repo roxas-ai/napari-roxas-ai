@@ -178,7 +178,7 @@ class CrossDatingPlotterWidget(Container):
         # Connect to this layer's events
         self._connect_layer_callback()
 
-        pattern = f"*{"".join(settings.get('file_extensions.crossdating_file_extension'))}"
+        pattern = f"*{''.join(settings.get('file_extensions.crossdating_file_extension'))}"
 
         current_path = Path(
             self._input_layer_combo.value.metadata["sample_stem_path"]

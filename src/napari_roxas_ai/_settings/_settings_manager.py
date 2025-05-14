@@ -312,6 +312,13 @@ class SettingsManager:
                     "gray",
                     "lime",
                 ],
+                "cells_color": "lime",
+            },
+            "measurements": {
+                "cells_cluster_separation_threshold": 3.0,  # Default cluster separation threshold in µm
+                "cells_smoothing_kernel_size": 5,  # Default smoothing kernel size (1 to disable)
+                "cells_integration_interval": 0.75,  # Default wall fraction for thickness measurement
+                "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
             },
         }
         self.save_settings()

@@ -149,6 +149,13 @@
             "pink",
             "gray",
             "lime"
-        ]
+        ],
+        "cells_color": "lime"
+    },
+    "measurements": {
+        "cells_cluster_separation_threshold": 3.0,
+        "cells_smoothing_kernel_size": 5,
+        "cells_integration_interval": 0.75,
+        "cells_tangential_angle": 0.0
     }
 }

@@ -18,8 +18,8 @@ from napari_roxas_ai._reader._reader import (
     napari_get_reader,
     read_cells_file,
     read_directory,
-    read_image_file,
     read_rings_file,
+    read_scan_file,
 )
 
 
@@ -283,8 +283,8 @@ class TestReaderModule:
                 assert "name" in add_kwargs
                 assert layer_type == "labels"
 
-    def test_read_image_file(self, test_files, mock_settings):
-        """Test read_image_file function."""
+    def test_read_scan_file(self, test_files, mock_settings):
+        """Test read_scan_file function."""
         with patch(
             "napari_roxas_ai._reader._reader.get_metadata_from_file"
         ) as mock_get_metadata, patch("PIL.Image.open") as mock_open:
@@ -308,7 +308,7 @@ class TestReaderModule:
                 }
 
                 # Test reading image file
-                data, add_kwargs, layer_type = read_image_file(
+                data, add_kwargs, layer_type = read_scan_file(
                     str(test_files["scan_file"])
                 )
 
