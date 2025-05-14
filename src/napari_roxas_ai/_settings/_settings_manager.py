@@ -312,6 +312,7 @@ class SettingsManager:
                     "gray",
                     "lime",
                 ],
+                "cells_color": "lime",
             },
             "measurements": {
                 "cells_cluster_separation_threshold": 3.0,  # Default cluster separation threshold in µm

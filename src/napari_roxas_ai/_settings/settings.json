@@ -149,7 +149,8 @@
             "pink",
             "gray",
             "lime"
-        ]
+        ],
+        "cells_color": "lime"
     },
     "measurements": {
         "cells_cluster_separation_threshold": 3.0,

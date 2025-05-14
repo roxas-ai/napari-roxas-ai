@@ -13,7 +13,10 @@ from PIL import Image
 
 # Import SettingsManager to get file extensions
 from napari_roxas_ai._settings import SettingsManager
-from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai._utils import (
+    make_binary_labels_colormap,
+    make_rings_colormap,
+)
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -208,6 +211,10 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
         )
+
+    # Create a colormap for the cells
+    colormap = make_binary_labels_colormap(create_random_color=False)
+    add_kwargs["colormap"] = colormap
 
     return data.astype(int), add_kwargs, "labels"
 

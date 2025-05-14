@@ -13,20 +13,26 @@ from napari_roxas_ai._settings import SettingsManager
 settings = SettingsManager()
 
 
-def make_binary_labels_colormap():
-    # Generate a bright, highly saturated random color
-    h = np.random.rand()  # Random hue (0 to 1)
-    s = 0.9  # High saturation
-    v = 1.0  # Maximum brightness
-    r, g, b = colorsys.hsv_to_rgb(h, s, v)  # Convert HSV to RGB
+def make_binary_labels_colormap(create_random_color=False):
 
     # Define the color mapping for labels
     color_dict = defaultdict(
         lambda: np.array([0, 0, 0, 0])
     )  # Default: transparent
-    color_dict[1] = np.array(
-        [r, g, b, 1]
-    )  # Label 1: bright visible color with full opacity
+
+    if create_random_color:
+        # Generate a bright, highly saturated random color
+        h = np.random.rand()  # Random hue (0 to 1)
+        s = 0.9  # High saturation
+        v = 1.0  # Maximum brightness
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)  # Convert HSV to RGB
+
+        color_dict[1] = np.array(
+            [r, g, b, 1]
+        )  # Label 1: bright visible color with full opacity
+
+    else:
+        color_dict[1] = settings.get("rasterization.cells_color")
 
     # Create a DirectLabelColormap
     return DirectLabelColormap(color_dict=color_dict)
