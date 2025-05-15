@@ -1,5 +1,5 @@
-from ._project_directory_setting_widget import ProjectDirectorySettingWidget
+from ._project_directory_dialog import open_project_directory_dialog
 
 __all__ = [
-    "ProjectDirectorySettingWidget",
+    "open_project_directory_dialog",
 ]
