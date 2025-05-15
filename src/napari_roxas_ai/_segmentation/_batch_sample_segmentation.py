@@ -18,6 +18,7 @@ from qtpy.QtWidgets import QFileDialog, QMessageBox
 from torch.package import PackageImporter
 
 from napari_roxas_ai._edition import update_rings_geometries
+from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 
 from .._reader import read_scan_file
@@ -218,8 +219,25 @@ class Worker(QObject):
                     "metadata": {},
                 }
                 rings_add_kwargs["metadata"].update(sample_metadata)
+
+                metadata_file_contents = get_metadata_from_file(
+                    path=sample_metadata["sample_stem_path"], path_is_stem=True
+                )
+                default_rings_year_value = [
+                    field["default"]
+                    for field in settings.get("samples_metadata.fields")
+                    if field["id"] == "rings_outmost_complete_year"
+                ][0]
+
                 rings_add_kwargs["metadata"].update(
                     {
+                        "rings_outmost_complete_year": (
+                            metadata_file_contents[
+                                "rings_outmost_complete_year"
+                            ]
+                            if metadata_file_contents
+                            else default_rings_year_value
+                        ),
                         "rings_segmentation_model": Path(
                             self.rings_model_weights_file
                         ).name,
@@ -252,8 +270,12 @@ class BatchSampleSegmentationWidget(Container):
         self._viewer = viewer
 
         # Get input directory
+        self.project_directory = settings.get("project_directory")
+        self.project_directory = (
+            Path(self.project_directory) if self.project_directory else None
+        )
         self._input_file_dialog_button = PushButton(
-            text="Input Directory: None"
+            text=f"Input Directory: {self.project_directory}"
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog

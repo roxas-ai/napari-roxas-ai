@@ -19,6 +19,7 @@ from qtpy.QtWidgets import QMessageBox
 from torch.package import PackageImporter
 
 from napari_roxas_ai._edition import update_rings_geometries
+from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 
 from .._utils import make_binary_labels_colormap
@@ -400,8 +401,23 @@ class SingleSampleSegmentationWidget(Container):
                     name=rings_name,
                 )
 
+            metadata_file_contents = get_metadata_from_file(
+                path=self.input_layer.metadata["sample_stem_path"],
+                path_is_stem=True,
+            )
+            default_rings_year_value = [
+                field["default"]
+                for field in self.settings.get("samples_metadata.fields")
+                if field["id"] == "rings_outmost_complete_year"
+            ][0]
+
             # Create metadata for segmented rings layer
             rings_metadata = {
+                "rings_outmost_complete_year": (
+                    metadata_file_contents["rings_outmost_complete_year"]
+                    if metadata_file_contents
+                    else default_rings_year_value
+                ),
                 "rings_segmentation_model": self.rings_model_file,
                 "rings_segmentation_datetime": datetime.now().isoformat(),
             }
