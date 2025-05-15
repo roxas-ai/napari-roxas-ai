@@ -12,13 +12,13 @@ contributions:
       title: Load Sample Data (Conifer)
 
     # Widgets contributions
-    - id: napari-roxas-ai.make_single_sample_measurements_widget
-      python_name: napari_roxas_ai:SingleSampleMeasurementsWidget
-      title: Single sample measurements widget
+    - id: napari-roxas-ai.open_project_directory_dialog
+      python_name: napari_roxas_ai:open_project_directory_dialog
+      title: Project directory setting widget
 
-    - id: napari-roxas-ai.make_batch_sample_measurements_widget
-      python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
-      title: Batch sample measurements widget
+    - id: napari-roxas-ai.make_preparation_widget
+      python_name: napari_roxas_ai:PreparationWidget
+      title: Sample preparation widget
 
     - id: napari-roxas-ai.make_single_sample_segmentation_widget
       python_name: napari_roxas_ai:SingleSampleSegmentationWidget
@@ -40,9 +40,13 @@ contributions:
       python_name: napari_roxas_ai:CrossDatingPlotterWidget
       title: Cross dating plotter widget
 
-    - id: napari-roxas-ai.make_preparation_widget
-      python_name: napari_roxas_ai:PreparationWidget
-      title: Sample preparation widget
+    - id: napari-roxas-ai.make_single_sample_measurements_widget
+      python_name: napari_roxas_ai:SingleSampleMeasurementsWidget
+      title: Single sample measurements widget
+
+    - id: napari-roxas-ai.make_batch_sample_measurements_widget
+      python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
+      title: Batch sample measurements widget
 
     - id: napari-roxas-ai.open_settings_file
       python_name: napari_roxas_ai:open_settings_file
@@ -89,11 +93,14 @@ contributions:
       key: unique_id.1
 
   widgets:
+    - command: napari-roxas-ai.open_project_directory_dialog
+      display_name: Project directory setting
+
     - command: napari-roxas-ai.make_preparation_widget
-      display_name: Prepare samples
+      display_name: Prepare project directory
 
     - command: napari-roxas-ai.make_single_sample_segmentation_widget
-      display_name: Segment sample (cells & rings)
+      display_name: Segment individual sample (cells & rings)
 
     - command: napari-roxas-ai.make_batch_sample_segmentation_widget
       display_name: Batch segment samples (cells & rings)
@@ -108,7 +115,7 @@ contributions:
       display_name: Plot cross-dating
 
     - command: napari-roxas-ai.make_single_sample_measurements_widget
-      display_name: Measure sample (cells & rings)
+      display_name: Measure individual sample (cells & rings)
 
     - command: napari-roxas-ai.make_batch_sample_measurements_widget
       display_name: Batch measure samples (cells & rings)

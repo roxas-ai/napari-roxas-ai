@@ -231,14 +231,6 @@ class MetadataDialog(QDialog):
             # Add to metadata
             metadata[field_id] = value
 
-        # Metadata that is not in the form
-
-        # Add sample_files field with content extensions
-        metadata["sample_files"] = [
-            self.scan_content_extension,
-            self.metadata_file_extension.split(".json")[0],
-        ]
-
         # Get apply_to_all flag
         apply_to_all = self.apply_to_all_checkbox.isChecked()
 

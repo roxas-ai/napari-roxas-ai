@@ -173,6 +173,14 @@ class SettingsManager:
                         "read_only": True,
                         "required": True,
                     },
+                    # In anticipation of better inclusion of the stem path
+                    # {
+                    #     "id": "sample_stem_path",
+                    #     "label": "Stem Path",
+                    #     "widget_type": "QLineEdit",
+                    #     "read_only": True,
+                    #     "required": True,
+                    # },
                     {
                         "id": "sample_type",
                         "label": "Type",
@@ -212,14 +220,14 @@ class SettingsManager:
                         "required": True,
                     },
                     {
-                        "id": "sample_outmost_complete_ring_year",
+                        "id": "rings_outmost_complete_year",
                         "label": "Outmost Complete Ring Year",
                         "widget_type": "QSpinBox",
                         "default": 9999,
                         "min": -10000,
                         "max": 9999,
                         "special_value_text": "Not set",
-                        "required": False,
+                        "required": True,
                     },
                 ]
             },
@@ -293,6 +301,9 @@ class SettingsManager:
             },
             "vectorization": {
                 "cells_tolerance": 1,  # Default tolerance in pixels for cells vectorization
+                "cells_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
+                "cells_edge_color": "blue",  # Default color for vector shapes visualization
+                "cells_face_color": "cyan",  # Default color for vector shapes visualization (also used for cells edition in raster mode)
                 "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
                 "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
                 "rings_edge_color": "red",  # Default color for vector shapes visualization
@@ -320,6 +331,7 @@ class SettingsManager:
                 "cells_integration_interval": 0.75,  # Default wall fraction for thickness measurement
                 "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
             },
+            "project_directory": None,  # Current project directory
         }
         self.save_settings()
 

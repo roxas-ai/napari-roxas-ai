@@ -4,7 +4,7 @@
     "sample_geometry": "linear",
     "sample_scale": 2.2675,
     "sample_angle": 0.0,
-    "sample_outmost_complete_ring_year": 9999,
+    "rings_outmost_complete_year": 9999,
     "sample_files": [
         ".scan",
         ".metadata"

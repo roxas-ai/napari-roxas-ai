@@ -53,14 +53,14 @@
                 "required": true
             },
             {
-                "id": "sample_outmost_complete_ring_year",
+                "id": "rings_outmost_complete_year",
                 "label": "Outmost Complete Ring Year",
                 "widget_type": "QSpinBox",
                 "default": 9999,
                 "min": -10000,
                 "max": 9999,
                 "special_value_text": "Not set",
-                "required": false
+                "required": true
             }
         ]
     },
@@ -131,6 +131,9 @@
     },
     "vectorization": {
         "cells_tolerance": 1,
+        "cells_edge_width": 5,
+        "cells_edge_color": "blue",
+        "cells_face_color": "cyan",
         "rings_tolerance": 5,
         "rings_edge_width": 5,
         "rings_edge_color": "red"
@@ -157,5 +160,6 @@
         "cells_smoothing_kernel_size": 5,
         "cells_integration_interval": 0.75,
         "cells_tangential_angle": 0.0
-    }
+    },
+    "project_directory": null
 }

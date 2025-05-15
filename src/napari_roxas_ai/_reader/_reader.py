@@ -110,7 +110,9 @@ def is_supported_file(path: str) -> bool:
     )
 
 
-def get_metadata_from_file(path):
+def get_metadata_from_file(
+    path: str, path_is_stem: bool = False
+) -> Optional[dict]:
     """
     Get metadata from a JSON file.
 
@@ -132,9 +134,12 @@ def get_metadata_from_file(path):
     metadata_file_extension = "".join(metadata_file_extension_parts)
 
     # Check if metadata file exists
-    metadata_path = Path(path).parent / (
-        Path(Path(path).stem).stem + metadata_file_extension
-    )
+    if path_is_stem:
+        metadata_path = Path(path + metadata_file_extension)
+    else:
+        metadata_path = Path(path).parent / (
+            Path(Path(path).stem).stem + metadata_file_extension
+        )
 
     if not metadata_path.exists():
         print(

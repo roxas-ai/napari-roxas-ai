@@ -239,7 +239,7 @@ class RingsLayerEditorWidget(Container):
         # Create spinbox for the last year
         year_value = (
             self._input_layer_combo.value.metadata[
-                "sample_outmost_complete_ring_year"
+                "rings_outmost_complete_year"
             ]
             if self._input_layer_combo.value
             else 9999
@@ -309,9 +309,9 @@ class RingsLayerEditorWidget(Container):
         """Update the year spinbox value based on the selected layer."""
         if self._input_layer_combo.value:
             layer = self._input_layer_combo.value
-            if "sample_outmost_complete_ring_year" in layer.metadata:
+            if "rings_outmost_complete_year" in layer.metadata:
                 self._last_year_spinbox.value = layer.metadata[
-                    "sample_outmost_complete_ring_year"
+                    "rings_outmost_complete_year"
                 ]
 
     def _update_layer_year(self) -> None:
@@ -319,7 +319,7 @@ class RingsLayerEditorWidget(Container):
         if self._input_layer_combo.value:
 
             self.input_layer = self._input_layer_combo.value
-            self.input_layer.metadata["sample_outmost_complete_ring_year"] = (
+            self.input_layer.metadata["rings_outmost_complete_year"] = (
                 self._last_year_spinbox.value
             )
             new_rings_table, new_rings_raster, new_colormap = (
@@ -421,7 +421,7 @@ class RingsLayerEditorWidget(Container):
             update_rings_geometries(
                 rings_table=rings_table,
                 last_year=self.input_layer.metadata[
-                    "sample_outmost_complete_ring_year"
+                    "rings_outmost_complete_year"
                 ],
                 image_shape=self.input_layer.data.shape,
             )

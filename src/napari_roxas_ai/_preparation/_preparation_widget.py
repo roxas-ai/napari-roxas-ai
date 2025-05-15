@@ -46,18 +46,18 @@ class PreparationWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # Load settings
-        self._load_settings()
-
-        # Create UI components
-        self._create_ui_components()
-
         # Initialize state variables
         self.project_directory = None
         self.worker = None
         self.worker_thread = None
         self.source_files = []  # List of files in the project directory
         self.selected_files = []  # List of files selected by the user
+
+        # Load settings
+        self._load_settings()
+
+        # Create UI components
+        self._create_ui_components()
 
     def _load_settings(self):
         """Load settings from the settings manager."""
@@ -96,8 +96,9 @@ class PreparationWidget(Container):
     def _create_ui_components(self):
         """Create and configure UI components."""
         # Project directory selector
+        self.project_directory = self.settings_manager.get("project_directory")
         self._project_dialog_button = PushButton(
-            text="Select Project Directory"
+            text=f"Project Directory: {self.project_directory}"
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
 
@@ -106,6 +107,9 @@ class PreparationWidget(Container):
             value=True,
             label="Overwrite original files (replace instead of copy)",
         )
+        # Temporary disabling the checkbox as it produces unexpected behavior in windows (deletes files instead of copying)
+        self._overwrite_files_checkbox.value = False
+        self._overwrite_files_checkbox.visible = False
 
         # Process already processed files checkbox
         self._process_processed_checkbox = CheckBox(
@@ -174,12 +178,14 @@ class PreparationWidget(Container):
                 self._progress_bar,
             ]
         )
+        self._refresh_file_list()
 
     def _open_project_dialog(self):
         """Open file dialog to select project directory and refresh file list."""
         directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Project Directory",
+            directory=self.project_directory,
         )
         if directory:
             self.project_directory = directory
@@ -217,6 +223,7 @@ class PreparationWidget(Container):
                 )
 
             # Filter based on whether to include already processed files
+
             if not self._process_processed_checkbox.value:
                 filtered_files = []
                 for file_path in self.source_files:
@@ -434,6 +441,13 @@ class PreparationWidget(Container):
         """Cancel the current processing job."""
         if self.worker:
             self.worker.stop()
+
+            # Wait for the thread to finish properly
+            if self.worker_thread and self.worker_thread.isRunning():
+                self.worker_thread.quit()
+                self.worker_thread.wait()
+
+        self._update_ui_for_processing(False)
 
     def _update_progress(self, current, total):
         """Update the progress bar."""

@@ -358,7 +358,7 @@ class TestMetadataDialog:
                 "sample_geometry": "linear",
                 "sample_scale": 2.5,
                 "sample_angle": 45.0,
-                "sample_outmost_complete_ring_year": 2020,
+                "rings_outmost_complete_year": 2020,
             }, True
 
         dialog.get_result = mock_get_result

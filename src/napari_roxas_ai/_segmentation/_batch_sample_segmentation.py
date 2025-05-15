@@ -18,6 +18,7 @@ from qtpy.QtWidgets import QFileDialog, QMessageBox
 from torch.package import PackageImporter
 
 from napari_roxas_ai._edition import update_rings_geometries
+from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 
 from .._reader import read_scan_file
@@ -218,8 +219,25 @@ class Worker(QObject):
                     "metadata": {},
                 }
                 rings_add_kwargs["metadata"].update(sample_metadata)
+
+                metadata_file_contents = get_metadata_from_file(
+                    path=sample_metadata["sample_stem_path"], path_is_stem=True
+                )
+                default_rings_year_value = [
+                    field["default"]
+                    for field in settings.get("samples_metadata.fields")
+                    if field["id"] == "rings_outmost_complete_year"
+                ][0]
+
                 rings_add_kwargs["metadata"].update(
                     {
+                        "rings_outmost_complete_year": (
+                            metadata_file_contents[
+                                "rings_outmost_complete_year"
+                            ]
+                            if metadata_file_contents
+                            else default_rings_year_value
+                        ),
                         "rings_segmentation_model": Path(
                             self.rings_model_weights_file
                         ).name,
@@ -231,7 +249,7 @@ class Worker(QObject):
                     update_rings_geometries(
                         rings_table=rings_add_kwargs["features"],
                         last_year=rings_add_kwargs["metadata"][
-                            "sample_outmost_complete_ring_year"
+                            "rings_outmost_complete_year"
                         ],
                         image_shape=rings_data.shape,
                     )
@@ -252,8 +270,9 @@ class BatchSampleSegmentationWidget(Container):
         self._viewer = viewer
 
         # Get input directory
+        self.input_directory_path = settings.get("project_directory")
         self._input_file_dialog_button = PushButton(
-            text="Input Directory: None"
+            text=f"Input Directory: {self.input_directory_path}",
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
@@ -315,13 +334,16 @@ class BatchSampleSegmentationWidget(Container):
 
     def _open_input_file_dialog(self):
         """Open a file dialog to select the input directory path."""
-        self.input_directory_path = QFileDialog.getExistingDirectory(
+        directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Input Directory",
+            directory=self.input_directory_path,
         )
-        self._input_file_dialog_button.text = (
-            f"Input Directory: {self.input_directory_path}"
-        )
+        if directory:
+            self.input_directory_path = directory
+            self._input_file_dialog_button.text = (
+                f"Input Directory: {self.input_directory_path}"
+            )
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""

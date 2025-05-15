@@ -233,8 +233,9 @@ class BatchSampleMeasurementsWidget(Container):
         self._viewer = viewer
 
         # Get input directory
+        self.input_directory_path = settings.get("project_directory")
         self._input_file_dialog_button = PushButton(
-            text="Input Directory: None"
+            text=f"Input Directory: {self.input_directory_path}",
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
@@ -308,13 +309,16 @@ class BatchSampleMeasurementsWidget(Container):
 
     def _open_input_file_dialog(self):
         """Open a file dialog to select the input directory path."""
-        self.input_directory_path = QFileDialog.getExistingDirectory(
+        directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Input Directory",
+            directory=self.input_directory_path,
         )
-        self._input_file_dialog_button.text = (
-            f"Input Directory: {self.input_directory_path}"
-        )
+        if directory:
+            self.input_directory_path = directory
+            self._input_file_dialog_button.text = (
+                f"Input Directory: {self.input_directory_path}"
+            )
 
     def _update_cells_settings_visibility(self):
         self._cells_measurements_settings.visible = (
