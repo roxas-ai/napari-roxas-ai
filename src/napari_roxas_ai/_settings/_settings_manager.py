@@ -301,6 +301,9 @@ class SettingsManager:
             },
             "vectorization": {
                 "cells_tolerance": 1,  # Default tolerance in pixels for cells vectorization
+                "cells_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
+                "cells_edge_color": "blue",  # Default color for vector shapes visualization
+                "cells_face_color": "cyan",  # Default color for vector shapes visualization (also used for cells edition in raster mode)
                 "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
                 "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
                 "rings_edge_color": "red",  # Default color for vector shapes visualization
