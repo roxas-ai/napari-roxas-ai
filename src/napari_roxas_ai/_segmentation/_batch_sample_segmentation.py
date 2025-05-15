@@ -270,12 +270,9 @@ class BatchSampleSegmentationWidget(Container):
         self._viewer = viewer
 
         # Get input directory
-        self.project_directory = settings.get("project_directory")
-        self.project_directory = (
-            Path(self.project_directory) if self.project_directory else None
-        )
+        self.input_directory_path = settings.get("project_directory")
         self._input_file_dialog_button = PushButton(
-            text=f"Input Directory: {self.project_directory}"
+            text=f"Input Directory: {self.input_directory_path}",
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
@@ -337,13 +334,16 @@ class BatchSampleSegmentationWidget(Container):
 
     def _open_input_file_dialog(self):
         """Open a file dialog to select the input directory path."""
-        self.input_directory_path = QFileDialog.getExistingDirectory(
+        directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Input Directory",
+            directory=self.input_directory_path,
         )
-        self._input_file_dialog_button.text = (
-            f"Input Directory: {self.input_directory_path}"
-        )
+        if directory:
+            self.input_directory_path = directory
+            self._input_file_dialog_button.text = (
+                f"Input Directory: {self.input_directory_path}"
+            )
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""
