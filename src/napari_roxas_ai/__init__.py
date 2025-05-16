@@ -2,6 +2,7 @@ __version__ = "0.0.1"
 from ._conversion import cells_vectorization_widget
 from ._crossdating import CrossDatingPlotterWidget
 from ._edition import CellsLayerEditorWidget, RingsLayerEditorWidget
+from ._loading import SamplesLoaderWidget
 from ._measurements import (
     BatchSampleMeasurementsWidget,
     SingleSampleMeasurementsWidget,
@@ -21,6 +22,7 @@ __all__ = (
     "CrossDatingPlotterWidget",
     "SingleSampleMeasurementsWidget",
     "BatchSampleMeasurementsWidget",
+    "SamplesLoaderWidget",
     "SingleSampleSegmentationWidget",
     "BatchSampleSegmentationWidget",
     "PreparationWidget",
