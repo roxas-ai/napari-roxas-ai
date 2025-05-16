@@ -19,7 +19,8 @@ from qtpy.QtWidgets import (
     QMessageBox,
 )
 
-from .._settings._settings_manager import SettingsManager
+from napari_roxas_ai._settings._settings_manager import SettingsManager
+
 from ._crossdating_handler import process_crossdating_files
 from ._metadata_dialog import MetadataDialog
 from ._worker import Worker

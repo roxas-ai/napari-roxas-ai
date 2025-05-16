@@ -1,3 +1,3 @@
-from ._samples_loader_widget import SamplesLoaderWidget
+from ._samples_loading_widget import SamplesLoadingWidget
 
-__all__ = ["SamplesLoaderWidget"]
+__all__ = ["SamplesLoadingWidget"]

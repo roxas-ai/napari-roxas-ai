@@ -18,8 +18,7 @@ from napari_roxas_ai._reader import (
     read_rings_file,
     read_scan_file,
 )
-
-from .._settings._settings_manager import SettingsManager
+from napari_roxas_ai._settings._settings_manager import SettingsManager
 
 if TYPE_CHECKING:
     import napari
@@ -89,7 +88,7 @@ class Worker(QObject):
         self.finished.emit()
 
 
-class SamplesLoaderWidget(Container):
+class SamplesLoadingWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
