@@ -28,6 +28,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        # We currently don't need git lfs-tracked files for testing (a.k.a. the big files)
+        # but if you do, uncomment the line below and make sure to install git lfs
+        # with:
+        #  lfs: true
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -73,6 +77,9 @@ jobs:
     if: contains(github.ref, 'tags')
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

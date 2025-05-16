@@ -1,5 +1,7 @@
 include LICENSE
 include README.md
+include *.pth
+recursive-include src *.pth
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
