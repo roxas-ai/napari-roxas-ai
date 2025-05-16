@@ -24,7 +24,7 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
 from ._cells_model import CellsSegmentationModel
-from ._models._model_files import scan_and_build_models
+from ._model_files_check import scan_and_build_models
 
 if TYPE_CHECKING:
     import napari
