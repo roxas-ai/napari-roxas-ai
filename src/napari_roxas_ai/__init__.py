@@ -2,6 +2,7 @@ __version__ = "0.0.1"
 from ._conversion import cells_vectorization_widget
 from ._crossdating import CrossDatingPlotterWidget
 from ._edition import CellsLayerEditorWidget, RingsLayerEditorWidget
+from ._loading import SamplesLoadingWidget
 from ._measurements import (
     BatchSampleMeasurementsWidget,
     SingleSampleMeasurementsWidget,
@@ -10,6 +11,7 @@ from ._preparation import PreparationWidget
 from ._project_directory import open_project_directory_dialog
 from ._reader import napari_get_reader
 from ._sample_data import load_conifer_sample_data
+from ._saving import SamplesSavingWidget
 from ._segmentation import (
     BatchSampleSegmentationWidget,
     SingleSampleSegmentationWidget,
@@ -21,6 +23,8 @@ __all__ = (
     "CrossDatingPlotterWidget",
     "SingleSampleMeasurementsWidget",
     "BatchSampleMeasurementsWidget",
+    "SamplesLoadingWidget",
+    "SamplesSavingWidget",
     "SingleSampleSegmentationWidget",
     "BatchSampleSegmentationWidget",
     "PreparationWidget",

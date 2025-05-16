@@ -17,7 +17,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .._settings._settings_manager import SettingsManager
+from napari_roxas_ai._settings._settings_manager import SettingsManager
 
 
 class MetadataDialog(QDialog):

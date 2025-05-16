@@ -20,6 +20,14 @@ contributions:
       python_name: napari_roxas_ai:PreparationWidget
       title: Sample preparation widget
 
+    - id: napari-roxas-ai.make_samples_loading_widget
+      python_name: napari_roxas_ai:SamplesLoadingWidget
+      title: Samples loading widget
+
+    - id: napari-roxas-ai.make_samples_saving_widget
+      python_name: napari_roxas_ai:SamplesSavingWidget
+      title: Samples saving widget
+
     - id: napari-roxas-ai.make_single_sample_segmentation_widget
       python_name: napari_roxas_ai:SingleSampleSegmentationWidget
       title: Single sample segmentation widget
@@ -98,6 +106,12 @@ contributions:
 
     - command: napari-roxas-ai.make_preparation_widget
       display_name: Prepare project directory
+
+    - command: napari-roxas-ai.make_samples_loading_widget
+      display_name: Load samples
+
+    - command: napari-roxas-ai.make_samples_saving_widget
+      display_name: Save samples
 
     - command: napari-roxas-ai.make_single_sample_segmentation_widget
       display_name: Segment individual sample (cells & rings)

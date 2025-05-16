@@ -5,10 +5,6 @@
     "sample_scale": 2.2675,
     "sample_angle": 0.0,
     "rings_outmost_complete_year": 9999,
-    "sample_files": [
-        ".scan",
-        ".metadata"
-    ],
     "scan_format": "JPEG",
     "scan_size": [
         500,
@@ -29,6 +25,8 @@
         ]
     },
     "sample_stem_path": "/home/santacro/Desktop/dendro/napari-roxas-ai/src/napari_roxas_ai/_sample_data/conifer/conifer_sample",
+    "cells_segmentation_model": "linear_cells_model.pth",
+    "cells_segmentation_datetime": "2025-05-16T14:10:13.521537",
     "rings_segmentation_model": "linear_rings_model.pth",
-    "rings_segmentation_datetime": "2025-05-14T11:02:06.903084"
+    "rings_segmentation_datetime": "2025-05-16T14:10:13.533872"
 }

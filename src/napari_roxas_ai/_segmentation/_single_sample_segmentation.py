@@ -21,8 +21,8 @@ from torch.package import PackageImporter
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._utils import make_binary_labels_colormap
 
-from .._utils import make_binary_labels_colormap
 from ._cells_model import CellsSegmentationModel
 
 if TYPE_CHECKING:

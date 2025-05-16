@@ -17,7 +17,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
-from .._reader._crossdating_reader import read_crossdating_file
+from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 
 
 class CrossdatingSelectionDialog(QDialog):
