@@ -85,3 +85,6 @@ venv/
 
 # settings file
 src/napari_roxas_ai/_settings/settings.json
+
+# Model weights files
+*pth

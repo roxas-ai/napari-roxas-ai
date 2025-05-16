@@ -82,6 +82,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml"]
+"napari_roxas_ai._segmentation._models" = ["*part_*"]
 
 
 [tool.setuptools.dynamic]

@@ -1,5 +1,6 @@
 include LICENSE
 include README.md
+recursive-include src/napari_roxas_ai/_segmentation/_models/ *part_*
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
