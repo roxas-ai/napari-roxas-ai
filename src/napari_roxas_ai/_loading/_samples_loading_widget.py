@@ -27,6 +27,8 @@ settings = SettingsManager()
 
 
 class Worker(QObject):
+    """Worker thread for loading samples."""
+
     finished = Signal()
     progress = Signal(int, int)  # current, total
     layer_data = Signal(tuple)
@@ -270,7 +272,7 @@ class SamplesLoadingWidget(Container):
             self._sample_select_widget.value = all_display_names
 
     def _load_selected_samples(self):
-
+        """Load selected samples and add them to the viewer."""
         # Disable the run button while processing
         self._load_samples_button.enabled = False
 
