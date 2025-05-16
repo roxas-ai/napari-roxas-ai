@@ -37,7 +37,7 @@ class Worker(QObject):
             layer_data_tuple = layer.as_layer_data_tuple()
 
             write_single_layer(
-                f"{layer_data_tuple[1]["metadata"]["sample_stem_path"]}.place.holder",  # TODO: Fix writing logic so it doesn't need to be a placeholder
+                f"{layer_data_tuple[1]['metadata']['sample_stem_path']}.place.holder",  # TODO: Fix writing logic so it doesn't need to be a placeholder
                 layer_data_tuple[0],
                 layer_data_tuple[1],
             )
