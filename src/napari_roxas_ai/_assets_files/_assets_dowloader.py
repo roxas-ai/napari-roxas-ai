@@ -21,8 +21,21 @@ def get_asset_file_url(asset_name: str) -> str:
 
     url = f"https://api.github.com/repos/{REPO}/releases"
 
-    resp = requests.get(url)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+    except (
+        requests.ConnectionError,
+        requests.Timeout,
+        requests.exceptions.HTTPError,
+    ) as e:
+        print(
+            "WARNING: Unable to connect to GitHub API. No internet connection or GitHub API is unavailable."
+        )
+        print(f"Error: {e}")
+        raise ConnectionError(
+            "Cannot access GitHub releases. Please check your internet connection and try again."
+        ) from e
 
     releases = resp.json()
 

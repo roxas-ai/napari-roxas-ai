@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from napari_roxas_ai._reader._reader import read_directory
+from napari_roxas_ai._reader import read_directory
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
