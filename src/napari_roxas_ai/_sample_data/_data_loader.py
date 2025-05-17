@@ -20,6 +20,6 @@ def load_conifer_sample_data():
     This function reads the sample data files from the specified directory
     and returns a list of layer data tuples.
     """
-    # Read the sample data files from the conifer directory
-    layers = read_directory(str(BASE_DIR / "conifer"))
+    # Read the sample data files from the sample_data directory
+    layers = read_directory(str(BASE_DIR / "sample_data"))
     return layers
