@@ -63,7 +63,6 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           GITHUB_TOKEN: ${{ github.token }}
-          TOX_TESTENV_PASSENV: GITHUB_TOKEN
 
       - name: Coverage
         uses: codecov/codecov-action@v3
@@ -76,6 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     if: contains(github.ref, 'tags')
     steps:
       - uses: actions/checkout@v4
