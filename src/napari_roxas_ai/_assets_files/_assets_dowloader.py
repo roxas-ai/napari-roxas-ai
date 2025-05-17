@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 import zipfile
@@ -21,8 +22,14 @@ def get_asset_file_url(asset_name: str) -> str:
 
     url = f"https://api.github.com/repos/{REPO}/releases"
 
+    # Set up headers with authentication token if available
+    headers = {}
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if github_token:
+        headers["Authorization"] = f"token {github_token}"
+
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
     except (
         requests.ConnectionError,
@@ -64,8 +71,14 @@ def download_and_decompress_file(url: str, dest: str) -> None:
     dest_path = Path(dest)
     dest_path.mkdir(parents=True, exist_ok=True)
 
+    # Set up headers with authentication token if available
+    headers = {}
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if github_token:
+        headers["Authorization"] = f"token {github_token}"
+
     # Download the file
-    response = requests.get(url)
+    response = requests.get(url, headers=headers)
     response.raise_for_status()
 
     # Save the file to the destination directory
