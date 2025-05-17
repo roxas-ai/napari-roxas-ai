@@ -296,8 +296,8 @@ class SettingsManager:
                 "progressive": False,  # Default progressive flag
             },
             "processing": {
-                "try_to_use_gpu": True,  # Try to use GPU if available
-                "try_to_use_autocast": True,  # Try to use autocast if available
+                "try_to_use_gpu": False,  # Try to use GPU if available
+                "try_to_use_autocast": False,  # Try to use autocast if available
             },
             "vectorization": {
                 "cells_tolerance": 1,  # Default tolerance in pixels for cells vectorization
