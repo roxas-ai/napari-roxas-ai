@@ -88,3 +88,6 @@ src/napari_roxas_ai/_settings/settings.json
 
 # sample data
 src/napari_roxas_ai/_sample_data/sample_data/
+
+# model files
+src/napari_roxas_ai/_segmentation/_models/
