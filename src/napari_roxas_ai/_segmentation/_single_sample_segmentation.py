@@ -24,7 +24,6 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
 from ._cells_model import CellsSegmentationModel
-from ._model_files_check import scan_and_build_models
 
 if TYPE_CHECKING:
     import napari
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
 Image.MAX_IMAGE_PIXELS = None
 
 MODULE_PATH = Path(__file__).parent.absolute()
-scan_and_build_models(MODULE_PATH / "_models")
 CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
 RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
 
@@ -241,11 +239,7 @@ class SingleSampleSegmentationWidget(Container):
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""
-        return tuple(
-            path.name
-            for path in Path(where).iterdir()
-            if path.suffix == ".pth"
-        )
+        return tuple(path.name for path in Path(where).iterdir())
 
     def _update_cells_model_visibility(self) -> None:
         """Update visibility of cells model selection based on checkbox."""
