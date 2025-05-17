@@ -60,6 +60,7 @@ jobs:
           run: python -m tox
         env:
           PLATFORM: ${{ matrix.platform }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Coverage
         uses: codecov/codecov-action@v3
@@ -85,6 +86,7 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TWINE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git tag
           python -m build .

@@ -7,8 +7,8 @@ categories: ["Annotation", "Segmentation", "Acquisition"]
 contributions:
   commands:
     # Sample data contributions
-    - id: napari-roxas-ai.load_conifer_sample_data
-      python_name: napari_roxas_ai:load_conifer_sample_data
+    - id: napari-roxas-ai.load_sample_data
+      python_name: napari_roxas_ai:load_sample_data
       title: Load Sample Data (Conifer)
 
     # Widgets contributions
@@ -96,7 +96,7 @@ contributions:
       display_name: Save Multiple Files with Basename
 
   sample_data:
-    - command: napari-roxas-ai.load_conifer_sample_data
+    - command: napari-roxas-ai.load_sample_data
       display_name: ROXAS AI
       key: unique_id.1
 

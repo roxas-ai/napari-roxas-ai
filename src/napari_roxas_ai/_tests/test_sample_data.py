@@ -1,11 +1,11 @@
 import numpy as np
 
-from napari_roxas_ai._sample_data import load_conifer_sample_data
+from napari_roxas_ai._sample_data import load_sample_data
 
 
-def test_load_conifer_sample_data():
+def test_load_sample_data():
     # Call the function to load sample data
-    sample_data = load_conifer_sample_data()
+    sample_data = load_sample_data()
 
     # Ensure we get a list with three elements
     assert isinstance(sample_data, list), "Sample data should be a list"
