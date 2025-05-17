@@ -26,9 +26,11 @@ def get_asset_file_url(asset_name: str) -> str:
     headers = {}
     github_token = os.environ.get("GITHUB_TOKEN")
     if github_token:
-        headers["Authorization"] = f"token {github_token}"
+        headers["Authorization"] = f"Bearer {github_token}"
+        print("Using GitHub token for authentication")
 
     try:
+        print(f"Requesting GitHub API at {url}")
         resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
     except (
@@ -40,6 +42,9 @@ def get_asset_file_url(asset_name: str) -> str:
             "WARNING: Unable to connect to GitHub API. No internet connection or GitHub API is unavailable."
         )
         print(f"Error: {e}")
+        print(
+            f"Rate limit headers: {resp.headers.get('X-RateLimit-Limit')}, Remaining: {resp.headers.get('X-RateLimit-Remaining')}"
+        )
         raise ConnectionError(
             "Cannot access GitHub releases. Please check your internet connection and try again."
         ) from e
@@ -75,7 +80,7 @@ def download_and_decompress_file(url: str, dest: str) -> None:
     headers = {}
     github_token = os.environ.get("GITHUB_TOKEN")
     if github_token:
-        headers["Authorization"] = f"token {github_token}"
+        headers["Authorization"] = f"Bearer {github_token}"
 
     # Download the file
     response = requests.get(url, headers=headers)
