@@ -10,7 +10,7 @@ from ._measurements import (
 from ._preparation import PreparationWidget
 from ._project_directory import open_project_directory_dialog
 from ._reader import napari_get_reader
-from ._sample_data import load_conifer_sample_data
+from ._sample_data import load_sample_data
 from ._saving import SamplesSavingWidget
 from ._segmentation import (
     BatchSampleSegmentationWidget,
@@ -32,7 +32,7 @@ __all__ = (
     "CellsLayerEditorWidget",
     "RingsLayerEditorWidget",
     "cells_vectorization_widget",
-    "load_conifer_sample_data",
+    "load_sample_data",
     "open_settings_file",
     "napari_get_reader",
     "write_single_layer",

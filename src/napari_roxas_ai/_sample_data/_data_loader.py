@@ -14,7 +14,7 @@ Image.MAX_IMAGE_PIXELS = None
 BASE_DIR = Path(__file__).parent.absolute()
 
 
-def load_conifer_sample_data():
+def load_sample_data():
     """
     Load the sample data for the conifer dataset.
     This function reads the sample data files from the specified directory
