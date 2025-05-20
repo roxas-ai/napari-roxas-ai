@@ -22,24 +22,49 @@ https://napari.org/stable/plugins/index.html
 -->
 
 ## Installation
-You will need `github large file storage` to download model files. If not using a debian-based distribution, check https://git-lfs.com/, else run:
 
-    sudo apt install git-lfs
+### Environment setup
+It's recommended to create a dedicated Python environment for napari-roxas-ai:
 
-You then need to activate it with:
+1. Install Miniconda if you don't have it already: [Miniconda Installation Guide](https://docs.conda.io/en/latest/miniconda.html)
 
-    git lfs install --skip-repo
+2. Create a new environment:
+```bash
+conda create -n roxas-ai python=3.12
+conda activate roxas-ai
+```
 
-You can install `napari-roxas-ai` via [pip]:
+### Installation
+Install `napari-roxas-ai` via [pip]:
 
-    pip install napari-roxas-ai
+```bash
+pip install napari-roxas-ai
+```
 
+### Launching the plugin
+Once installed, you can launch napari with the roxas-ai plugin:
 
+```bash
+napari
+```
 
-To install latest development version:
+### Verifying installation
+To check if the plugin is working correctly:
+1. Go to `File > Open Sample > ROXAS AI` in the napari interface.
+2. The first time you open a sample, it may take some time as sample data and model weights are being downloaded. Progress will be logged in the terminal.
+3. After the downloads, a sample made of three layers should open in the viewer
 
-    pip install -e git+https://github.com/roxas-ai/napari-roxas-ai.git#egg=napari-roxas-ai
+### GPU Support
+If you want to use GPU acceleration for model inference:
 
+1. Ensure you have the proper GPU drivers and CUDA installed for your system:
+   - [NVIDIA CUDA Installation Guide Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)
+   - [NVIDIA CUDA Installation Guide Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)
+
+2. Enable GPU support in the napari-roxas-ai settings within the napari interface.
+
+3. You may need to reinstall PyTorch with CUDA support for your specific hardware:
+   Visit the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) to find the appropriate installation command for your setup.
 
 ## Contributing
 
