@@ -265,10 +265,6 @@ class BatchSampleMeasurementsWidget(Container):
             value=settings.get("measurements.cells_integration_interval"),
             label="Wall Fraction for Thickness Measurement",
         )
-        self._tangential_angle = FloatSpinBox(
-            value=settings.get("measurements.cells_tangential_angle"),
-            label="Sample Angle (degrees, clockwise)",
-        )
 
         # Create a container for the cells measurements settings
         self._cells_measurements_settings = Container()
@@ -277,7 +273,6 @@ class BatchSampleMeasurementsWidget(Container):
                 self._cluster_separation_threshold,
                 self._smoothing_kernel_size,
                 self._integration_interval,
-                self._tangential_angle,
             ]
         )
 
@@ -356,7 +351,9 @@ class BatchSampleMeasurementsWidget(Container):
             "cluster_separation_threshold": self._cluster_separation_threshold.value,
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
             "integration_interval": self._integration_interval.value,
-            "tangential_angle": self._tangential_angle.value,
+            "tangential_angle": settings.get(
+                "measurements.cells_tangential_angle"
+            ),
         }
 
         # Prepare worker to run the analysis in a separate thread
