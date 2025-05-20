@@ -131,11 +131,3 @@ def check_assets_and_download(directory: str, asset_name: str) -> None:
         url = get_asset_file_url(asset_name)
         download_and_decompress_file(url, directory)
         print(f"Assets from {asset_name} have been downloaded in {directory}")
-
-
-if __name__ == "__main__":
-    # Example usage
-    asset_name = "rings_models.zip"  # Replace with the actual asset name
-    dest = "/home/santacro/Desktop/trial_relase_file_download/_rings/somsfa"  # Replace with the desired destination directory
-
-    check_assets_and_download(dest, asset_name)
