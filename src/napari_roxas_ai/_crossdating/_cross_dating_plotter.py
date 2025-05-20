@@ -217,7 +217,6 @@ class CrossDatingPlotterWidget(Container):
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
         if self._layer_callback is not None:
-            self._layer_callback.disconnect()
             self._layer_callback = None
 
     def _on_layer_change(self, event=None):
