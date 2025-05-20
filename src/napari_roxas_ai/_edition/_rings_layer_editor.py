@@ -365,12 +365,12 @@ class RingsLayerEditorWidget(Container):
         }
 
         text = {
-            "string": "Year: {ring_year}",
-            "anchor": "upper_left",
-            "translation": [-5, 0],
+            "string": "{ring_year}",
+            "anchor": "center",
+            "translation": [0, 0],
             "size": 20,
-            "color": "green",
-            "blending": "additive",
+            "color": "black",
+            "blending": "opaque",
         }
 
         # Create a new Shapes layer with the simplified boundary lines
