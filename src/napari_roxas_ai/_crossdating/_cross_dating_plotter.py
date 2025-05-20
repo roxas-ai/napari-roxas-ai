@@ -21,6 +21,10 @@ from qtpy.QtWidgets import QVBoxLayout, QWidget
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._utils._callback_manager import (
+    register_layer_callback,
+    unregister_layer_callback,
+)
 
 if TYPE_CHECKING:
     import napari
@@ -242,16 +246,18 @@ class CrossDatingPlotterWidget(Container):
         self._disconnect_layer_callback()
 
         if self._input_layer_combo.value is not None:
-            # Connect to the layer's events
-            self._layer_callback = (
-                self._input_layer_combo.value.events.connect(
-                    self._on_layer_data_change
-                )
+            # Connect to the layer's events using the shared callback manager
+            self._layer_callback = register_layer_callback(
+                self._input_layer_combo.value, self, self._on_layer_data_change
             )
 
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
-        if self._layer_callback is not None:
+        if (
+            self._input_layer_combo.value is not None
+            and self._layer_callback is not None
+        ):
+            unregister_layer_callback(self._input_layer_combo.value, self)
             self._layer_callback = None
 
     def _on_layer_change(self, event=None):
@@ -548,12 +554,3 @@ class CrossDatingPlotterWidget(Container):
 
         # Reset the offset slider to 0
         self._offset_slider.value = 0
-
-    def shutdown(self):
-        """Clean up when widget is closed."""
-        # Disconnect any layer callbacks
-        self._disconnect_layer_callback()
-
-        # Disconnect from viewer events
-        self._viewer.layers.events.inserted.disconnect(self._on_layer_change)
-        self._viewer.layers.events.removed.disconnect(self._on_layer_change)
