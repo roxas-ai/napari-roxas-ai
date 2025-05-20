@@ -8,6 +8,7 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
+    PushButton,
     RangeSlider,
     Slider,
 )
@@ -17,6 +18,7 @@ from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
 
+from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
 
@@ -153,6 +155,11 @@ class CrossDatingPlotterWidget(Container):
         self._offset_slider.changed.connect(
             self._update_crossdating_plot
         )  # Update the plot when the offset changes
+        self._offset_apply_button = PushButton(
+            text="Apply Offset",
+            tooltip="Apply the offset to the current input layer",
+        )
+        self._offset_apply_button.changed.connect(self._apply_offset_to_layer)
 
         # Create matplotlib canvas widget
         self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
@@ -167,6 +174,7 @@ class CrossDatingPlotterWidget(Container):
                 self._x_range_slider,
                 self._y_range_slider,
                 self._offset_slider,
+                self._offset_apply_button,
                 self.plot_widget,
             ]
         )
@@ -283,6 +291,7 @@ class CrossDatingPlotterWidget(Container):
             or event.type == "metadata"
             or event.type == "features"
         ) and self._crossdating_column_combo.value is not None:
+
             # Update the plot if we have a valid column selected
             self._update_crossdating_plot()
 
@@ -511,6 +520,34 @@ class CrossDatingPlotterWidget(Container):
 
         # Redraw the canvas
         self.plot_widget.canvas.draw()
+
+    def _apply_offset_to_layer(self):
+        """Apply the offset to the current input layer."""
+        if self._input_layer_combo.value is None:
+            return
+
+        input_layer = self._input_layer_combo.value
+
+        # Get the current offset value
+        offset = self._offset_slider.value
+        new_last_year = (
+            input_layer.metadata["rings_outmost_complete_year"] + offset
+        )
+
+        input_layer.metadata["rings_outmost_complete_year"] = new_last_year
+        new_rings_table, new_rings_raster, new_colormap = (
+            update_rings_geometries(
+                rings_table=input_layer.features,
+                last_year=new_last_year,
+                image_shape=input_layer.data.shape,
+            )
+        )
+        input_layer.data = new_rings_raster
+        input_layer.features = new_rings_table
+        input_layer.colormap = new_colormap
+
+        # Reset the offset slider to 0
+        self._offset_slider.value = 0
 
     def shutdown(self):
         """Clean up when widget is closed."""
