@@ -251,7 +251,11 @@ class RingsLayerEditorWidget(Container):
             max=9999,
             step=1,
         )
-        self._last_year_spinbox.changed.connect(self._update_layer_year)
+        self._last_year_update_button = PushButton(
+            text="Update Year",
+            visible=True,
+        )
+        self._last_year_update_button.changed.connect(self._update_layer_year)
 
         # Create a button to create the rings working layer
         self._edit_rings_geometries_button = PushButton(
@@ -285,6 +289,7 @@ class RingsLayerEditorWidget(Container):
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
                 self._last_year_spinbox,
+                self._last_year_update_button,
             ]
         )
 
@@ -343,6 +348,7 @@ class RingsLayerEditorWidget(Container):
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
         self._last_year_spinbox.visible = False
+        self._last_year_update_button.visible = False
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
 
@@ -394,6 +400,7 @@ class RingsLayerEditorWidget(Container):
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
         self._last_year_spinbox.visible = True
+        self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 
@@ -434,6 +441,7 @@ class RingsLayerEditorWidget(Container):
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
         self._last_year_spinbox.visible = True
+        self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 
