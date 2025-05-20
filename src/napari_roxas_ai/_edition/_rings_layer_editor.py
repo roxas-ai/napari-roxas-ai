@@ -366,10 +366,10 @@ class RingsLayerEditorWidget(Container):
 
         text = {
             "string": "{ring_year}",
-            "anchor": "center",
-            "translation": [0, 0],
+            "anchor": "upper_left",  # "center"
+            "translation": [0, 0],  # [0, -self.input_layer.data.shape[1] // 2]
             "size": 20,
-            "color": "black",
+            "color": "red",
             "blending": "opaque",
         }
 
