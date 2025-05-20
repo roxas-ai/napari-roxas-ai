@@ -5,9 +5,12 @@ import napari.layers
 import numpy as np
 import pandas as pd
 from magicgui.widgets import (
+    CheckBox,
     ComboBox,
     Container,
+    PushButton,
     RangeSlider,
+    Slider,
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
@@ -15,8 +18,13 @@ from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
 
+from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._utils._callback_manager import (
+    register_layer_callback,
+    unregister_layer_callback,
+)
 
 if TYPE_CHECKING:
     import napari
@@ -82,9 +90,6 @@ class CrossDatingPlotterWidget(Container):
         self.plot_df = None
         self._layer_callback = None
 
-        # Create matplotlib canvas widget
-        self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
-
         # Create a layer selection widget filtered by layer type
         self._input_layer_combo = ComboBox(
             label="Rings Layer",
@@ -92,7 +97,7 @@ class CrossDatingPlotterWidget(Container):
             choices=self._get_valid_layers,  # Custom filtering function
         )
         # Get the crossdating file for the selected layer
-        self._input_layer_combo.changed.connect(self._update_crossdating_files)
+        self._input_layer_combo.changed.connect(self._on_new_input_layer)
 
         # Make a combobox to choose the crossdating file path
         self._crossdating_file_combo = ComboBox(
@@ -100,7 +105,7 @@ class CrossDatingPlotterWidget(Container):
             choices=lambda widget: self.crossdating_files,
         )
         self._crossdating_file_combo.changed.connect(
-            self._update_crossdating_columns
+            self._on_new_crossdating_file
         )
 
         # Create a selection widget for the column name
@@ -109,6 +114,15 @@ class CrossDatingPlotterWidget(Container):
             choices=lambda widget: self.crossdating_columns,
         )
         self._crossdating_column_combo.changed.connect(
+            self._update_crossdating_plot
+        )
+
+        # Checkbox to show/hide the average of the crossdating file columns
+        self._plot_average_checkbox = CheckBox(
+            label="Plot Columns Average",
+            value=True,
+        )
+        self._plot_average_checkbox.changed.connect(
             self._update_crossdating_plot
         )
 
@@ -134,20 +148,43 @@ class CrossDatingPlotterWidget(Container):
         self._y_range_slider.changed.connect(self._update_plot_limits)
         self._y_range_slider_was_set = False
 
+        # Slider for offset
+        self._offset_slider = Slider(
+            label="Offset",
+            min=-50,
+            max=50,
+            step=1,
+            value=0,
+        )
+        self._offset_slider.changed.connect(
+            self._update_crossdating_plot
+        )  # Update the plot when the offset changes
+        self._offset_apply_button = PushButton(
+            text="Apply Offset",
+            tooltip="Apply the offset to the current input layer",
+        )
+        self._offset_apply_button.changed.connect(self._apply_offset_to_layer)
+
+        # Create matplotlib canvas widget
+        self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
+
         # Append the widgets to the container
         self.extend(
             [
                 self._input_layer_combo,
                 self._crossdating_file_combo,
                 self._crossdating_column_combo,
+                self._plot_average_checkbox,
                 self._x_range_slider,
                 self._y_range_slider,
+                self._offset_slider,
+                self._offset_apply_button,
                 self.plot_widget,
             ]
         )
 
-        self._update_crossdating_files()
-        self._update_crossdating_columns()
+        self._on_new_input_layer()
+        self._on_new_crossdating_file()
 
         # Connect to viewer events to track layer changes
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
@@ -168,7 +205,7 @@ class CrossDatingPlotterWidget(Container):
 
         return valid_layers
 
-    def _update_crossdating_files(self):
+    def _on_new_input_layer(self):
         # Skip if no layer is selected
         if self._input_layer_combo.value is None:
             # Clean up any previous layer callback
@@ -201,23 +238,26 @@ class CrossDatingPlotterWidget(Container):
             # Move up to parent directory
             current_path = current_path.parent
 
+        self._update_crossdating_plot()
+
     def _connect_layer_callback(self):
         """Connect callback to the currently selected layer."""
         # Clean up any previous callback first
         self._disconnect_layer_callback()
 
         if self._input_layer_combo.value is not None:
-            # Connect to the layer's events
-            self._layer_callback = (
-                self._input_layer_combo.value.events.connect(
-                    self._on_layer_data_change
-                )
+            # Connect to the layer's events using the shared callback manager
+            self._layer_callback = register_layer_callback(
+                self._input_layer_combo.value, self, self._on_layer_data_change
             )
 
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
-        if self._layer_callback is not None:
-            self._layer_callback.disconnect()
+        if (
+            self._input_layer_combo.value is not None
+            and self._layer_callback is not None
+        ):
+            unregister_layer_callback(self._input_layer_combo.value, self)
             self._layer_callback = None
 
     def _on_layer_change(self, event=None):
@@ -257,10 +297,11 @@ class CrossDatingPlotterWidget(Container):
             or event.type == "metadata"
             or event.type == "features"
         ) and self._crossdating_column_combo.value is not None:
+
             # Update the plot if we have a valid column selected
             self._update_crossdating_plot()
 
-    def _update_crossdating_columns(self):
+    def _on_new_crossdating_file(self):
         # Skip if no crossdating file is selected
         if self._crossdating_file_combo.value is None:
             return
@@ -270,25 +311,37 @@ class CrossDatingPlotterWidget(Container):
             self._crossdating_file_combo.value
         )
 
+        # average of the crossdating file columns
+        self.crossdating_dataframe["average"] = (
+            self.crossdating_dataframe.mean(axis=1, skipna=True)
+        )
+
         # Then, we order the column names by decreasing size
         column_names = sorted(
-            self.crossdating_dataframe.columns,
+            self.crossdating_dataframe.drop("average", axis=1).columns,
             key=lambda x: len(x),
             reverse=True,
         )
 
         # We match the column names with the layer name
-        self.crossdating_columns = [
+        matching_columns = [
             name
             for name in column_names
             if simplify_string(name)
             in simplify_string(self._input_layer_combo.value.name)
         ]
 
+        # We provice the matching columns first, and then remaining columns
+        self.crossdating_columns = matching_columns + [
+            name for name in column_names if name not in matching_columns
+        ]
+
         if not self.crossdating_columns:
             show_info(
                 f"No data found in the crossdating file {self._crossdating_file_combo.value} for layer {self._input_layer_combo.value}."
             )
+
+        self._update_crossdating_plot()
 
     def _update_crossdating_plot(self):
         # Skip if no crossdating column is selected
@@ -299,6 +352,9 @@ class CrossDatingPlotterWidget(Container):
         reference_series = self.crossdating_dataframe[
             self._crossdating_column_combo.value
         ]
+
+        # Get the average series
+        average_series = self.crossdating_dataframe["average"]
 
         # Get the layer rings series
         layer_df = self._input_layer_combo.value.features.set_index(
@@ -324,6 +380,7 @@ class CrossDatingPlotterWidget(Container):
             [
                 self.plot_df,
                 reference_series.rename("reference_series"),
+                average_series.rename("average"),
                 width_series.rename("layer_series"),
             ],
             axis=1,
@@ -349,8 +406,20 @@ class CrossDatingPlotterWidget(Container):
             label="Reference Series",
         )
         self.plot_widget.ax.plot(
-            years, self.plot_df["layer_series"], "r-", label="Current Sample"
+            np.array(years) + self._offset_slider.value,
+            self.plot_df["layer_series"],
+            "r-",
+            label="Current Sample",
         )
+
+        # Plot the average if checkbox is checked
+        if self._plot_average_checkbox.value:
+            self.plot_widget.ax.plot(
+                years,
+                self.plot_df["average"],
+                "g-",
+                label="Average",
+            )
 
         # Set labels and title
         self.plot_widget.ax.set_xlabel("Year")
@@ -458,11 +527,30 @@ class CrossDatingPlotterWidget(Container):
         # Redraw the canvas
         self.plot_widget.canvas.draw()
 
-    def shutdown(self):
-        """Clean up when widget is closed."""
-        # Disconnect any layer callbacks
-        self._disconnect_layer_callback()
+    def _apply_offset_to_layer(self):
+        """Apply the offset to the current input layer."""
+        if self._input_layer_combo.value is None:
+            return
 
-        # Disconnect from viewer events
-        self._viewer.layers.events.inserted.disconnect(self._on_layer_change)
-        self._viewer.layers.events.removed.disconnect(self._on_layer_change)
+        input_layer = self._input_layer_combo.value
+
+        # Get the current offset value
+        offset = self._offset_slider.value
+        new_last_year = (
+            input_layer.metadata["rings_outmost_complete_year"] + offset
+        )
+
+        input_layer.metadata["rings_outmost_complete_year"] = new_last_year
+        new_rings_table, new_rings_raster, new_colormap = (
+            update_rings_geometries(
+                rings_table=input_layer.features,
+                last_year=new_last_year,
+                image_shape=input_layer.data.shape,
+            )
+        )
+        input_layer.data = new_rings_raster
+        input_layer.features = new_rings_table
+        input_layer.colormap = new_colormap
+
+        # Reset the offset slider to 0
+        self._offset_slider.value = 0

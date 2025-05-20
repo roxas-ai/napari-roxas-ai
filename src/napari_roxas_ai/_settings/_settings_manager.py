@@ -209,17 +209,6 @@ class SettingsManager:
                         "required": True,
                     },
                     {
-                        "id": "sample_angle",
-                        "label": "Angle",
-                        "widget_type": "QDoubleSpinBox",
-                        "default": 0.0,
-                        "min": -360.0,
-                        "max": 360.0,
-                        "step": 0.1,
-                        "decimals": 2,
-                        "required": True,
-                    },
-                    {
                         "id": "rings_outmost_complete_year",
                         "label": "Outmost Complete Ring Year",
                         "widget_type": "QSpinBox",

@@ -324,7 +324,7 @@ class SampleAnalyzer:
             self.cells[cell_id].update(
                 {
                     f"CWT_{label_map[label]}": avg_dist
-                    * self.config["pixels_per_um"],
+                    / self.config["pixels_per_um"],
                 }
             )
 

@@ -16,6 +16,10 @@ from qtpy.QtWidgets import QMessageBox
 
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai._utils._callback_manager import (
+    register_layer_callback,
+    unregister_layer_callback,
+)
 
 if TYPE_CHECKING:
     import napari
@@ -227,6 +231,8 @@ class RingsLayerEditorWidget(Container):
         self._viewer = viewer
         self.settings = SettingsManager()
 
+        self._layer_callback = None
+
         # Create a layer selection widget filtered by scan extension
         self._input_layer_combo = ComboBox(
             label="Rings Layer",
@@ -234,7 +240,7 @@ class RingsLayerEditorWidget(Container):
             choices=self._get_valid_layers,
         )
         # Connect the layer selection to update the year spinbox
-        self._input_layer_combo.changed.connect(self._update_year_spinbox)
+        self._input_layer_combo.changed.connect(self._connect_layer_callback)
 
         # Create spinbox for the last year
         year_value = (
@@ -251,7 +257,11 @@ class RingsLayerEditorWidget(Container):
             max=9999,
             step=1,
         )
-        self._last_year_spinbox.changed.connect(self._update_layer_year)
+        self._last_year_update_button = PushButton(
+            text="Update Year",
+            visible=True,
+        )
+        self._last_year_update_button.changed.connect(self._update_layer_year)
 
         # Create a button to create the rings working layer
         self._edit_rings_geometries_button = PushButton(
@@ -285,6 +295,7 @@ class RingsLayerEditorWidget(Container):
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
                 self._last_year_spinbox,
+                self._last_year_update_button,
             ]
         )
 
@@ -304,6 +315,39 @@ class RingsLayerEditorWidget(Container):
                 valid_layers.append(layer)
 
         return valid_layers
+
+    def _connect_layer_callback(self):
+        """Connect callback to the currently selected layer."""
+        # Clean up any previous callback first
+        self._disconnect_layer_callback()
+
+        if self._input_layer_combo.value is not None:
+            # Connect to the layer's events using the shared callback manager
+            self._layer_callback = register_layer_callback(
+                self._input_layer_combo.value, self, self._on_layer_data_change
+            )
+            self._update_year_spinbox()
+
+    def _disconnect_layer_callback(self):
+        """Disconnect callback from the previously selected layer."""
+        if (
+            self._input_layer_combo.value is not None
+            and self._layer_callback is not None
+        ):
+            unregister_layer_callback(self._input_layer_combo.value, self)
+            self._layer_callback = None
+
+    def _on_layer_data_change(self, event=None):
+        """Called when the data in the selected layer changes."""
+        # Only respond to data, metadata, or features changes
+        if (
+            event.type == "data"
+            or event.type == "metadata"
+            or event.type == "features"
+        ):
+
+            # Update the spinbox value
+            self._update_year_spinbox()
 
     def _update_year_spinbox(self) -> None:
         """Update the year spinbox value based on the selected layer."""
@@ -343,6 +387,7 @@ class RingsLayerEditorWidget(Container):
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
         self._last_year_spinbox.visible = False
+        self._last_year_update_button.visible = False
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
 
@@ -365,12 +410,12 @@ class RingsLayerEditorWidget(Container):
         }
 
         text = {
-            "string": "Year: {ring_year}",
-            "anchor": "upper_left",
-            "translation": [-5, 0],
+            "string": "{ring_year}",
+            "anchor": "upper_left",  # "center"
+            "translation": [0, 0],  # [0, -self.input_layer.data.shape[1] // 2]
             "size": 20,
-            "color": "green",
-            "blending": "additive",
+            "color": "red",
+            "blending": "opaque",
         }
 
         # Create a new Shapes layer with the simplified boundary lines
@@ -394,6 +439,7 @@ class RingsLayerEditorWidget(Container):
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
         self._last_year_spinbox.visible = True
+        self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 
@@ -434,6 +480,7 @@ class RingsLayerEditorWidget(Container):
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
         self._last_year_spinbox.visible = True
+        self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
 
