@@ -68,8 +68,37 @@ If you want to use GPU acceleration for model inference:
 
 ## Contributing
 
-Contributions are very welcome. Tests can be run with [tox], please ensure
+Contributions are very welcome. Tests are automatically run with [tox], please ensure
 the coverage at least stays the same before you submit a pull request.
+
+### Contributor Installation
+
+In order to contribute to the development of the plugin the installation can be done as follows:
+1. Create an environment
+```bash
+conda create -n roxas-ai python=3.12
+conda activate roxas-ai
+```
+2. In the cloned / forked plugin directory, install the plugin dependencies
+```bash
+pip install -e .
+```
+
+3. Install the testing dependencies, as well as the napari plugin engine
+```bash
+pip install -e ".[testing]"
+pip install npe2
+```
+
+4. Install pre-commit for quality checks
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+### Documentation: Plugin Template and Development
+You can find more information on the plugin template on the [napari-plugin-template repository](https://github.com/napari/napari-plugin-template).
+You can find more information on plugin contributions and how to create plugins on the [plugins section of the napari documentation](https://napari.org/dev/plugins/index.html).
 
 ## License
 
