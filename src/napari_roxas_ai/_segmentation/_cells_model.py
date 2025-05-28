@@ -13,7 +13,11 @@ import torchvision.transforms as transforms
 class CellsSegmentationModel(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.available_device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.available_device = (
+            "cuda"
+            if torch.cuda.is_available()
+            else "mps" if torch.mps.is_available() else "cpu"
+        )
         self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
             self.available_device
         )

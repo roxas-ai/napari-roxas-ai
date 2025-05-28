@@ -88,7 +88,12 @@ class Worker(QObject):
                 "cuda"
                 if torch.cuda.is_available()
                 and settings.get("processing.try_to_use_gpu")
-                else "cpu"
+                else (
+                    "mps"
+                    if torch.mps.is_available()
+                    and settings.get("processing.try_to_use_gpu")
+                    else "cpu"
+                )
             )
             self.cells_model.to(device=self.cells_model.available_device)
             self.cells_model.use_autocast = bool(
@@ -96,7 +101,10 @@ class Worker(QObject):
                     self.cells_model.device.type
                 )
                 and settings.get("processing.try_to_use_gpu")
-                and self.cells_model.device == "cuda"
+                and (
+                    self.cells_model.device == "cuda"
+                    or self.cells_model.device == "mps"
+                )
             )
 
             self.cells_content_ext = settings.get(
@@ -113,7 +121,12 @@ class Worker(QObject):
                 "cuda"
                 if torch.cuda.is_available()
                 and settings.get("processing.try_to_use_gpu")
-                else "cpu"
+                else (
+                    "mps"
+                    if torch.mps.is_available()
+                    and settings.get("processing.try_to_use_gpu")
+                    else "cpu"
+                )
             )
             self.rings_model.to(device=self.rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
@@ -123,7 +136,10 @@ class Worker(QObject):
                     self.rings_model.device
                 )
                 and settings.get("processing.try_to_use_gpu")
-                and self.rings_model.device == "cuda"
+                and (
+                    self.rings_model.device == "cuda"
+                    or self.rings_model.device == "mps"
+                )
             )
 
             self.rings_content_ext = settings.get(

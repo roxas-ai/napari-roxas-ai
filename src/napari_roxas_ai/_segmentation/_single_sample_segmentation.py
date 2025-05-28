@@ -80,7 +80,12 @@ class Worker(QObject):
                 "cuda"
                 if torch.cuda.is_available()
                 and self.settings.get("processing.try_to_use_gpu")
-                else "cpu"
+                else (
+                    "mps"
+                    if torch.mps.is_available()
+                    and self.settings.get("processing.try_to_use_gpu")
+                    else "cpu"
+                )
             )
             cells_model.to(device=cells_model.available_device)
             cells_model.use_autocast = bool(
@@ -88,7 +93,9 @@ class Worker(QObject):
                     cells_model.device.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
-                and cells_model.device == "cuda"
+                and (
+                    cells_model.device == "cuda" or cells_model.device == "mps"
+                )
             )
 
             # Perform inference
@@ -115,7 +122,12 @@ class Worker(QObject):
                 "cuda"
                 if torch.cuda.is_available()
                 and self.settings.get("processing.try_to_use_gpu")
-                else "cpu"
+                else (
+                    "mps"
+                    if torch.mps.is_available()
+                    and self.settings.get("processing.try_to_use_gpu")
+                    else "cpu"
+                )
             )
             rings_model.to(device=rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
@@ -125,7 +137,9 @@ class Worker(QObject):
                     rings_model.device
                 )
                 and self.settings.get("processing.try_to_use_gpu")
-                and rings_model.device == "cuda"
+                and (
+                    rings_model.device == "cuda" or rings_model.device == "mps"
+                )
             )
 
             # Perform inference
