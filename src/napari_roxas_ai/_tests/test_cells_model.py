@@ -11,7 +11,8 @@ def test_cells_segmentation_model():
     print(f"Model running on device : {model.available_device}")
 
     # Create a synthetic input image
-    test_input = np.random.randn(1, 3, 1024, 1024)
+    # note: force float32 bc mps backend does not like float64
+    test_input = np.random.randn(1, 3, 1024, 1024).astype(np.float32)
 
     # Run forward pass (full image inference is too heavy for github actions environment)
     with torch.no_grad():
