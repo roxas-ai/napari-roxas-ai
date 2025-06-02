@@ -43,7 +43,7 @@ dependencies = [
     "torch>=2.2.0,<2.7.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
     "torchvision==0.21.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
     # macOS/ARM (CPU-only fallback)
-    "torch>=2.2.0,<2.7.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
+    "torch>=2.4.0,<2.7.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
     "torchvision==0.21.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
     "pytorch-lightning==2.5.1",
     "segmentation-models-pytorch==0.4.0",
