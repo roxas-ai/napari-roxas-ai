@@ -102,37 +102,37 @@ contributions:
 
   widgets:
     - command: napari-roxas-ai.open_project_directory_dialog
-      display_name: Project directory setting
+      display_name: 0 - Define project directory
 
     - command: napari-roxas-ai.make_preparation_widget
-      display_name: Prepare project directory
+      display_name: 1 - Prepare project images for analysis
 
     - command: napari-roxas-ai.make_samples_loading_widget
-      display_name: Load samples
-
-    - command: napari-roxas-ai.make_samples_saving_widget
-      display_name: Save samples
+      display_name: 2/4 - Load image(s)
 
     - command: napari-roxas-ai.make_single_sample_segmentation_widget
-      display_name: Segment individual sample (cells & rings)
+      display_name: 3A - Detect cells & rings (individual image)
 
     - command: napari-roxas-ai.make_batch_sample_segmentation_widget
-      display_name: Batch segment samples (cells & rings)
+      display_name: 3B - Batch detect cells & rings
 
     - command: napari-roxas-ai.make_cells_layer_editor_widget
-      display_name: Edit cells layer
+      display_name: 5 - Edit cells
 
     - command: napari-roxas-ai.make_rings_layer_editor_widget
-      display_name: Edit rings layer
+      display_name: 6 - Edit rings
 
     - command: napari-roxas-ai.make_cross_dating_plotter_widget
-      display_name: Plot cross-dating
+      display_name: 7 - Visual cross-dating
+
+    - command: napari-roxas-ai.make_samples_saving_widget
+      display_name: 8 - Save cells & rings editing
 
     - command: napari-roxas-ai.make_single_sample_measurements_widget
-      display_name: Measure individual sample (cells & rings)
+      display_name: 9A - Measure cells & rings (individual image)
 
     - command: napari-roxas-ai.make_batch_sample_measurements_widget
-      display_name: Batch measure samples (cells & rings)
+      display_name: 9B - Batch measure cells & rings
 
     - command: napari-roxas-ai.open_settings_file
-      display_name: Settings
+      display_name: ZZ - Settings
