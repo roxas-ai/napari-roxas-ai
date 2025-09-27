@@ -78,3 +78,27 @@ def get_layer_callbacks(layer):
     if layer in _layer_callbacks:
         return _layer_callbacks[layer]
     return {}
+
+
+def trigger_layer_callbacks(layer, event_type="metadata"):
+    """
+    Manually trigger all callbacks registered for a layer with a specific event type.
+
+    Parameters
+    ----------
+    layer : napari.layers.Layer
+        The layer to trigger callbacks for
+    event_type : str
+        The event type to trigger (default: "metadata")
+    """
+    if layer in _layer_callbacks:
+        # Create a simple event object with the specified type
+        class SimpleEvent:
+            def __init__(self, type_name):
+                self.type = type_name
+
+        event = SimpleEvent(event_type)
+
+        # Trigger all callbacks for this layer
+        for _callback_owner, callback_ref in _layer_callbacks[layer].items():
+            callback_ref(event)

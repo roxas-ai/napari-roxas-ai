@@ -23,6 +23,7 @@ from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
+    trigger_layer_callbacks,
     unregister_layer_callback,
 )
 
@@ -551,6 +552,9 @@ class CrossDatingPlotterWidget(Container):
         input_layer.data = new_rings_raster
         input_layer.features = new_rings_table
         input_layer.colormap = new_colormap
+
+        # Trigger callbacks for the updated layer
+        trigger_layer_callbacks(input_layer)
 
         # Reset the offset slider to 0
         self._offset_slider.value = 0
