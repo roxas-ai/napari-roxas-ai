@@ -26,7 +26,9 @@ https://napari.org/stable/plugins/index.html
 ### Environment setup
 It's recommended to create a dedicated Python environment for napari-roxas-ai:
 
-1. Install Miniconda if you don't have it already: [Miniconda Installation Guide](https://docs.conda.io/en/latest/miniconda.html)
+1. Install Miniconda or Miniforge if you don't have it already:
+   - [Miniconda Installation Guide](https://docs.conda.io/en/latest/miniconda.html)
+   - [Miniforge Installer Repo](https://github.com/conda-forge/miniforge)
 
 2. Create a new environment:
 ```bash
@@ -42,7 +44,7 @@ pip install napari-roxas-ai
 ```
 
 ### Launching the plugin
-Once installed, you can launch napari with the roxas-ai plugin:
+Once installed, you can launch napari with the roxas-ai plugin (from within the activated environment):
 
 ```bash
 napari
@@ -55,16 +57,20 @@ To check if the plugin is working correctly:
 3. After the downloads, a sample made of three layers should open in the viewer
 
 ### GPU Support
-If you want to use GPU acceleration for model inference:
+If you want to use GPU acceleration for model inference...
 
+**On Linux and Windows systems:**
 1. Ensure you have the proper GPU drivers and CUDA installed for your system:
    - [NVIDIA CUDA Installation Guide Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)
    - [NVIDIA CUDA Installation Guide Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)
 
-2. Enable GPU support in the napari-roxas-ai settings within the napari interface.
-
-3. You may need to reinstall PyTorch with CUDA support for your specific hardware:
+2. You may need to reinstall PyTorch with CUDA support for your specific hardware:
    Visit the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) to find the appropriate installation command for your setup.
+
+**On macOS:**
+1. CUDA is not available for macOS, however, PyTorch is supporting GPU acceleration for Apple Silicon devices (M1 and newer) via MPS. There is no need to install drivers or CUDA. Note that the MPS acceleration can currently only be leveraged for the cell segmentation model.
+
+Finally, enable GPU support in the napari-roxas-ai settings within the napari interface. Go to `Plugins > ROXAS AI > ZZ - Settings` and under `processing` change the variables `try_to_use_gpu` and `try_to_use_autocast` to `true`. You may need to restart the application for changes to take effect.
 
 ## Contributing
 

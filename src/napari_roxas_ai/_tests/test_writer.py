@@ -141,7 +141,9 @@ class TestWriterModule:
             # Verify PIL.Image.fromarray was called with the correct array
             mock_fromarray.assert_called_once()
             # Verify save was called on the PIL Image
-            mock_image.save.assert_called_once_with(str(image_path))
+            mock_image.save.assert_called_once_with(
+                str(image_path), compression="tiff_deflate"
+            )
 
             assert result == str(image_path)
 
@@ -164,7 +166,9 @@ class TestWriterModule:
             # Verify PIL.Image.fromarray was called
             mock_fromarray.assert_called_once()
             # Verify save was called on the PIL Image
-            mock_image.save.assert_called_once_with(str(image_path))
+            mock_image.save.assert_called_once_with(
+                str(image_path), compression="tiff_deflate"
+            )
 
             assert result == str(image_path)
 
