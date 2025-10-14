@@ -6,23 +6,38 @@ name: tests
 on:
   push:
     branches:
-      - main
-      - npe2
+      - develop
+      - released
     tags:
       - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
   pull_request:
     branches:
-      - main
-      - npe2
+      - develop
+      - released
   workflow_dispatch:
 
 jobs:
+  check_pr_source:
+    name: Check PR source branch
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'released'
+    steps:
+      - name: Check if PR is from develop branch
+        run: |
+          if [ "${{ github.event.pull_request.head.ref }}" != "develop" ]; then
+            echo "Error: Pull requests to 'released' branch must come from 'develop' branch"
+            echo "Current PR is from: ${{ github.event.pull_request.head.ref }}"
+            exit 1
+          fi
+          echo "✓ PR is from develop branch, proceeding..."
+
   test:
     name: ${{ matrix.platform }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 30
     permissions:
       contents: read
+    if: github.ref_name == 'develop' || github.ref_name == 'released' || (github.event_name == 'pull_request' && (github.event.pull_request.base.ref == 'develop' || github.event.pull_request.base.ref == 'released'))
     strategy:
       matrix:
         platform: [ubuntu-latest, windows-latest, macos-latest]
@@ -76,7 +91,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    if: contains(github.ref, 'tags')
+    if: (contains(github.ref, 'tags') || github.ref_name == 'released' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'released'))
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
