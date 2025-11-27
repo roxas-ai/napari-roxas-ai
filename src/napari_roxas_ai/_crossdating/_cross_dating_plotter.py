@@ -96,6 +96,13 @@ class CrossDatingPlotterWidget(Container):
             annotation="napari.layers.Labels",  # This enables basic type filtering
             choices=self._get_valid_layers,  # Custom filtering function
         )
+
+        self._auto_offset_button = PushButton(
+            text="Find best overlap",
+            tooltip="Automatically align Reference and Sample",
+        )
+        self._auto_offset_button.changed.connect(self._auto_align_sample)
+
         # Get the crossdating file for the selected layer
         self._input_layer_combo.changed.connect(self._on_new_input_layer)
 
@@ -179,6 +186,7 @@ class CrossDatingPlotterWidget(Container):
                 self._y_range_slider,
                 self._offset_slider,
                 self._offset_apply_button,
+                self._auto_offset_button,
                 self.plot_widget,
             ]
         )
@@ -554,3 +562,93 @@ class CrossDatingPlotterWidget(Container):
 
         # Reset the offset slider to 0
         self._offset_slider.value = 0
+
+    def _auto_align_sample(self):
+        """Find best position of sample inside reference using sliding-window correlation
+        and reassign ring_year values accordingly"""
+
+        if self.plot_df is None or self.plot_df.empty:
+            show_info("Auto-align failed: no data in plot_df")
+            return
+
+        # Extract non-NaN sample values
+        sample_series = (
+            self.plot_df["layer_series"]
+            .dropna()
+            .sort_index()
+        )
+        sample_vals = sample_series.to_numpy(dtype=float)
+
+        if len(sample_vals) < 5:
+            show_info("Auto-align failed: sample too short")
+            return
+
+        # Extract non-NaN reference values
+        reference_series = (
+            self.plot_df["reference_series"]
+            .dropna()
+            .sort_index()
+        )
+        reference_vals = reference_series.to_numpy(dtype=float)
+        reference_years = reference_series.index.to_numpy()
+
+        if len(reference_vals) < len(sample_vals):
+            show_info("Auto-align failed: reference shorter than sample")
+            return
+
+        # Normalize both series
+        sample_norm = (sample_vals - np.mean(sample_vals)) / np.std(sample_vals)
+        reference_norm = (reference_vals - np.mean(reference_vals)) / np.std(reference_vals)
+
+        window = len(sample_norm)
+
+        # Sliding-window correlation
+        best_corr = -999999
+        best_start = None
+
+        max_pos = len(reference_norm) - window + 1
+
+        # use Pearson correlation coefficient to measure linear pattern similarity
+        for start in range(max_pos):
+            ref_win = reference_norm[start:start + window]
+            corr = np.corrcoef(sample_norm, ref_win)[0, 1]
+
+            if corr > best_corr:
+                best_corr = corr
+                best_start = start
+
+        if best_start is None:
+            show_info("Auto-align failed: no matching window found")
+            return
+
+        # calc target years
+        target_start_year = int(reference_years[best_start])
+        target_end_year = target_start_year + window - 1
+
+        # Apply new years to the napari layer
+        layer = self._input_layer_combo.value
+        rings_table = layer.features.copy().sort_values("ring_year")
+
+        # Assign new aligned years
+        rings_table.loc[rings_table.index[:window], "ring_year"] = np.arange(
+            target_start_year, target_end_year + 1
+        )
+
+        new_table, new_raster, new_colormap = update_rings_geometries(
+            rings_table=rings_table,
+            last_year=target_end_year,
+            image_shape=layer.data.shape,
+        )
+
+        layer.data = new_raster
+        layer.features = new_table
+        layer.colormap = new_colormap
+        layer.metadata["rings_outmost_complete_year"] = target_end_year
+
+        # Reset UI offset slider
+        self._offset_slider.value = 0
+        self._update_crossdating_plot()
+
+        show_info(f"Best matching alignment: {target_start_year}–{target_end_year} (corr={best_corr:.3f})")
+
+
