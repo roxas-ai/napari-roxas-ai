@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+from napari.utils.notifications import show_info
 
 
 def read_crossdating_file(path: str) -> pd.DataFrame:
@@ -112,6 +113,7 @@ def read_doctored_tucson_file(
     pd.DataFrame
         DataFrame containing the doctored Tucson data
     """
+
     if end_of_line_values is None:
         end_of_line_values = [-9999, -999, 9999, 999]
 
@@ -141,7 +143,10 @@ def read_doctored_tucson_file(
             values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         )
         # Assign year values as columns
-        df.columns = [sum(a) for a in df.columns.to_list()]
+        try:
+            df.columns = [sum(a) for a in df.columns.to_list()]
+        except:
+            raise ValueError("There is a Problem with the tucson file format")
         # Merge duplicate columns
         df = df.T.groupby(level=0).apply(
             lambda group: group.bfill(axis=0).iloc[0, :]
@@ -266,5 +271,6 @@ def read_raw_tucson_file(
 
         return df
 
-    except (OSError, UnicodeDecodeError) as e:
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        show_info("Error reading file. Please check file")
         raise ValueError(f"Error reading file: {str(e)}") from e

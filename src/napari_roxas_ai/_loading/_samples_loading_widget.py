@@ -306,14 +306,26 @@ class SamplesLoadingWidget(Container):
         )
 
         # Connect layer data signal to add layers to the viewer
-        self.worker.layer_data.connect(
-            lambda layer_data_tuple: self._viewer.add_layer(
-                napari.layers.Layer.create(*layer_data_tuple)
-            )
-        )
+        self.worker.layer_data.connect(self._add_loaded_layer)
+
 
         # Run the analysis in a separate thread
         self.worker_thread.start()
+
+    def _add_loaded_layer(self, layer_data_tuple):
+        data, add_kwargs, layer_type = layer_data_tuple
+
+        layer = napari.layers.Layer.create(data, add_kwargs, layer_type)
+
+        original_path = add_kwargs.get("metadata", {}).get("path")
+
+        if original_path:
+            print(f"[Loader] Setting file_path = {original_path}")
+            layer.metadata["file_path"] = original_path
+        else:
+            print("[Loader] WARNING: no file_path in reader metadata")
+
+        self._viewer.add_layer(layer)
 
     def _update_progress(self, current, total):
         """Update the progress bar."""

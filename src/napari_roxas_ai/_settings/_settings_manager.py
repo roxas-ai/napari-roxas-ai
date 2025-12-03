@@ -236,7 +236,7 @@ class SettingsManager:
                 ],  # Parts of cells file extension
                 "cells_table_file_extension": [
                     ".cells_table",
-                    ".txt",
+                    ".csv",
                 ],  # And those of the cells table
                 "rings_file_extension": [
                     ".rings",
@@ -244,7 +244,7 @@ class SettingsManager:
                 ],  # Parts of rings file extension
                 "rings_table_file_extension": [
                     ".rings_table",
-                    ".txt",
+                    ".csv",
                 ],  # And those of the rings table
                 "crossdating_file_extension": [
                     ".crossdating",
@@ -276,7 +276,7 @@ class SettingsManager:
             # Tabular data settings
             "tables": {
                 "index_column": "id",
-                "separator": "\t",
+                "separator": ";",
             },
             # Image processing settings
             "JPEG_compression": {

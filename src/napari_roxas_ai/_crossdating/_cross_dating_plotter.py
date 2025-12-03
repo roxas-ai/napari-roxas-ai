@@ -649,6 +649,8 @@ class CrossDatingPlotterWidget(Container):
         self._offset_slider.value = 0
         self._update_crossdating_plot()
 
+        self._x_range_slider.value = (target_start_year - 10, target_end_year + 10)
+
         show_info(f"Best matching alignment: {target_start_year}–{target_end_year} (corr={best_corr:.3f})")
 
 
