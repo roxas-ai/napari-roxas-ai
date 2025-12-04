@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
+import pandas as pd
 from PIL import Image
 
 # Import SettingsManager to get file extensions
@@ -155,6 +156,19 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     return written_file_paths
 
 
+def add_id_and_cid(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+    df = df.reset_index(drop=True)
+
+    if "id" in df.columns:
+        df = df.drop(columns=["id"])
+
+    df.insert(0, "ID", sample_name)
+    df.insert(1, "CID", range(1, len(df) + 1))
+
+    return df
+
+
+
 def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     """Writes a cells file.
 
@@ -193,10 +207,13 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
             settings.get("file_extensions.cells_table_file_extension")
         )
         cells_table_file_path = f"{sample_path}{cells_table_file_extension}"
-        meta["features"].to_csv(
+        features = add_id_and_cid(
+            meta["features"], meta["metadata"]["sample_name"]
+        )
+        features.to_csv(
             cells_table_file_path,
             sep=settings.get("tables.separator"),
-            index_label=settings.get("tables.index_column"),
+            index=False,
         )
         written_file_paths.append(cells_table_file_path)
 

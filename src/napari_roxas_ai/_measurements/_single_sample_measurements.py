@@ -263,7 +263,6 @@ class SingleSampleMeasurementsWidget(Container):
         )
 
         self.worker_thread.start()
-        print("6")
 
 
     def _add_result_layers(self, cells_table, rings_table):
@@ -318,6 +317,13 @@ class SingleSampleMeasurementsWidget(Container):
                 self._rings_input_layer.metadata["file_path"] = rings_path
 
             print(f"[Rings] Writing results to: {rings_path}")
+
+            # move boundary_coordinates at the end of the table
+            if "boundary_coordinates" in rings_table.columns:
+                cols = [c for c in rings_table.columns if c != "boundary_coordinates"]
+                cols.append("boundary_coordinates")
+                rings_table = rings_table[cols]
+
             write_single_layer(
                 path=rings_path,
                 data=self._rings_input_layer.data,

@@ -19,6 +19,13 @@ from napari_roxas_ai._reader import (
     read_scan_file,
 )
 from napari_roxas_ai._settings._settings_manager import SettingsManager
+from napari_roxas_ai.shortcuts import (
+    install_wasd_shortcuts,
+    has_shortcuts_applied,
+    mark_shortcuts_applied,
+)
+
+
 
 if TYPE_CHECKING:
     import napari
@@ -94,6 +101,13 @@ class SamplesLoadingWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
+        try:
+            if not has_shortcuts_applied(viewer):
+                install_wasd_shortcuts(viewer)
+                mark_shortcuts_applied(viewer)
+
+        except Exception as e:
+            print("Shortcut installation failed:", e)
 
         # Directory selection
         self.project_directory = settings.get("project_directory")
