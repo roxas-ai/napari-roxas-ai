@@ -483,6 +483,15 @@ class SampleAnalyzer:
         self.cells_table[["top_angled_dist", "bot_angled_dist"]] = (
             self.cells_table.apply(self._get_angled_distances, axis=1)
         )
+        self.cells_table["ring_year"] = (
+            self.cells_table["bot_ring_id"]
+            .map(self.rings_table["ring_year"])
+        )
+        self.cells_table["ring_year"] = (
+            self.cells_table["ring_year"]
+            .astype("Int64")
+        )
+
 
     def analyze_rings(self) -> pd.DataFrame:
         """Main method to analyze rings."""

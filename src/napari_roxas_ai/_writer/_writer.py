@@ -156,16 +156,40 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     return written_file_paths
 
 
-def add_id_and_cid(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+    """
+    Standardize ROXAS-AI output table:
+    - Remove pandas internal 'id' column if present
+    - Add 'ID' (sample name)
+    - Add 'CID' (1..n)
+    - Ensure 'ring_year' is renamed to 'YEAR'
+    - Move 'YEAR' to 3rd position (index 2)
+    """
+
+    # Reset index so CID is stable and no index leaks into CSV
     df = df.reset_index(drop=True)
 
+    # Remove internal numeric id if present
     if "id" in df.columns:
         df = df.drop(columns=["id"])
 
+    # Insert ID and CID
     df.insert(0, "ID", sample_name)
     df.insert(1, "CID", range(1, len(df) + 1))
 
+    # Rename ring_year → YEAR (if present)
+    if "ring_year" in df.columns:
+        df.rename(columns={"ring_year": "YEAR"}, inplace=True)
+
+    # Move YEAR to the 3rd position
+    if "YEAR" in df.columns:
+        cols = df.columns.tolist()
+        cols.remove("YEAR")
+        cols.insert(2, "YEAR")
+        df = df[cols]
+
     return df
+
 
 
 
@@ -207,7 +231,7 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
             settings.get("file_extensions.cells_table_file_extension")
         )
         cells_table_file_path = f"{sample_path}{cells_table_file_extension}"
-        features = add_id_and_cid(
+        features = format_output_table(
             meta["features"], meta["metadata"]["sample_name"]
         )
         features.to_csv(
