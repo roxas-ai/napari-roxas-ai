@@ -181,12 +181,31 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     if "ring_year" in df.columns:
         df.rename(columns={"ring_year": "YEAR"}, inplace=True)
 
-    # Move YEAR to the 3rd position
+    # Rename lumen_area → LA (if present)
+    if "lumen_area" in df.columns:
+        df.rename(columns={"lumen_area": "LA"}, inplace=True)
+
+    # Move YEAR to the 3. position
     if "YEAR" in df.columns:
         cols = df.columns.tolist()
         cols.remove("YEAR")
         cols.insert(2, "YEAR")
         df = df[cols]
+
+    # Move LA to the 4. position
+    if "LA" in df.columns:
+        cols = df.columns.tolist()
+        cols.remove("LA")
+        cols.insert(3, "LA")
+        df = df[cols]
+
+    # all columns that should be rounded
+    columns_to_be_rounded = ["LA"]
+
+    for col in columns_to_be_rounded:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = df[col].round(2)
 
     return df
 
