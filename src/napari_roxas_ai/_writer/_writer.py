@@ -158,12 +158,7 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
 def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     """
-    Standardize ROXAS-AI output table:
-    - Remove pandas internal 'id' column if present
-    - Add 'ID' (sample name)
-    - Add 'CID' (1..n)
-    - Ensure 'ring_year' is renamed to 'YEAR'
-    - Move 'YEAR' to 3rd position (index 2)
+    Standardize ROXAS-AI output table
     """
 
     # Reset index so CID is stable and no index leaks into CSV
@@ -172,6 +167,10 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     # Remove internal numeric id if present
     if "id" in df.columns:
         df = df.drop(columns=["id"])
+
+    # Remove centroid column if present
+    if "centroid" in df.columns:
+        df = df.drop(columns=["centroid"])
 
     # Insert ID and CID
     df.insert(0, "ID", sample_name)
@@ -198,6 +197,21 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
         cols.remove("LA")
         cols.insert(3, "LA")
         df = df[cols]
+
+    # Move XPIX to the 5. position
+    if "XPIX" in df.columns:
+        cols = df.columns.tolist()
+        cols.remove("XPIX")
+        cols.insert(4, "XPIX")
+        df = df[cols]
+
+    # Move YPIX to the 6. position
+    if "YPIX" in df.columns:
+        cols = df.columns.tolist()
+        cols.remove("YPIX")
+        cols.insert(5, "YPIX")
+        df = df[cols]
+
 
     # all columns that should be rounded
     columns_to_be_rounded = ["LA"]

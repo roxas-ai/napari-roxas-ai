@@ -96,6 +96,8 @@ class SampleAnalyzer:
                 cell.update(
                     {
                         "centroid": (cy, cx),
+                        "XPIX": cx,
+                        "YPIX": cy,
                         "lumen_area": M["m00"]
                         / self.config["pixels_per_um"] ** 2,
                         "lumen_peri": cv2.arcLength(contour, True)
@@ -106,6 +108,8 @@ class SampleAnalyzer:
                 cell.update(
                     {
                         "centroid": (np.nan, np.nan),
+                        "XPIX": np.nan,
+                        "YPIX": np.nan,
                         "lumen_area": np.nan,
                         "lumen_peri": np.nan,
                     }
