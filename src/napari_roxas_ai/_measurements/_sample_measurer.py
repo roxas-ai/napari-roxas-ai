@@ -496,6 +496,49 @@ class SampleAnalyzer:
             .astype("Int64")
         )
 
+        self.compute_rraddistr()
+
+    def compute_rraddistr(self) -> None:
+        """
+        Compute RRADDISTR (relative radial distance within the annual ring).
+
+        Definition:
+            RRADDISTR = 100 * (top_angled_dist / RingWidth_local)
+
+        where
+            top_angled_dist  = distance from the proximal (inner / upper) ring boundary
+                              to the cell centre
+            RingWidth_local = distance from proximal to distal boundary along the
+                              local radial line  → top_angled_dist + bot_angled_dist
+
+        Interpretation:
+            0%   → cell centre at proximal (upper) boundary
+            100% → cell centre at distal (lower) boundary
+        """
+
+        # Ensure numeric types; invalid entries become NaN
+        top = pd.to_numeric(self.cells_table["top_angled_dist"], errors="coerce")
+        bot = pd.to_numeric(self.cells_table["bot_angled_dist"], errors="coerce")
+
+        # Local ring width along the radial line through the cell
+        ring_width_local = top + bot
+
+        # Initialise RRADDISTR with NaN
+        rr = pd.Series(np.nan, index=self.cells_table.index, dtype="float64")
+
+        # Valid only with positive width (avoid division by zero)
+        valid = ring_width_local > 0
+
+        # Relative radial position in percent, 0% at proximal (top) boundary
+        rr[valid] = 100.0 * top[valid] / ring_width_local[valid]
+
+        # Assign back to the table
+        self.cells_table["RRADDISTR"] = rr
+
+        # cleanup: discard values outside the physical [0, 100] range
+        self.cells_table.loc[self.cells_table["RRADDISTR"] < 0, "RRADDISTR"] = np.nan
+        self.cells_table.loc[self.cells_table["RRADDISTR"] > 100, "RRADDISTR"] = np.nan
+
 
     def analyze_rings(self) -> pd.DataFrame:
         """Main method to analyze rings."""

@@ -184,45 +184,43 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     if "lumen_area" in df.columns:
         df.rename(columns={"lumen_area": "LA"}, inplace=True)
 
-    # Move YEAR to the 3. position
-    if "YEAR" in df.columns:
-        cols = df.columns.tolist()
-        cols.remove("YEAR")
-        cols.insert(2, "YEAR")
-        df = df[cols]
+    # Rename bot_angled_dist → RADDISTR (if present)
+    if "top_angled_dist" in df.columns:
+        df.rename(columns={"top_angled_dist": "RADDISTR"}, inplace=True)
 
-    # Move LA to the 4. position
-    if "LA" in df.columns:
-        cols = df.columns.tolist()
-        cols.remove("LA")
-        cols.insert(3, "LA")
-        df = df[cols]
+    df = (df
+          .pipe(shift_column, 2, "YEAR")    # Move YEAR to the 3. position
+          .pipe(shift_column, 3, "LA")            # Move LA to the 4. position
+          .pipe(shift_column, 4, "XPIX")          # Move XPIX to the 5. position
+          .pipe(shift_column, 5, "YPIX")          # Move YPIX to the 6. position
+          .pipe(shift_column, 6, "RADDISTR")      # Move RADDISTR to the 7. position
+          .pipe(shift_column, 7, "RRADDISTR")     # Move RRADDISTR to the 8. position
+          )
 
-    # Move XPIX to the 5. position
-    if "XPIX" in df.columns:
-        cols = df.columns.tolist()
-        cols.remove("XPIX")
-        cols.insert(4, "XPIX")
-        df = df[cols]
-
-    # Move YPIX to the 6. position
-    if "YPIX" in df.columns:
-        cols = df.columns.tolist()
-        cols.remove("YPIX")
-        cols.insert(5, "YPIX")
-        df = df[cols]
-
-
-    # all columns that should be rounded
-    columns_to_be_rounded = ["LA"]
-
-    for col in columns_to_be_rounded:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-            df[col] = df[col].round(2)
+    df = (df
+          .pipe(round_column, "LA", 2)            # round LA to 2 decimals
+          .pipe(round_column, "RADDISTR", 0, integer=True)      # round RADDISTR to 0 decimals
+          .pipe(round_column, "RRADDISTR", 0, integer=True)     # round RRADDISTR to 0 decimals
+          )
 
     return df
 
+def round_column(df, col, decimals, integer=False):
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").round(decimals)
+        if integer:
+            df[col] = df[col].astype("Int64")
+    return df
+
+def shift_column(df, index, colname):
+    if colname not in df.columns:
+        return df
+
+    cols = df.columns.tolist()
+    index = min(index, len(cols) - 1)
+    cols.remove(colname)
+    cols.insert(index, colname)
+    return df[cols]
 
 
 
