@@ -141,9 +141,19 @@ class SampleAnalyzer:
         if w >= h:
             a, b = w / 2, h / 2
             aoma_rad = angle - self.radial_angle
+            angle_major = angle
         else:
             a, b = h / 2, w / 2
             aoma_rad = angle - self.radial_angle - 90
+            angle_major = angle + 90
+
+        # Normalize major axis angle to [0,180)
+        angle_major = angle_major % 180
+
+        # Compute MAJAX: deviation from the image vertical (90°)
+        majax = abs(angle_major - 90)
+        if majax > 90:
+            majax = 180 - majax  # fold into [0,90]
 
         aoma_tang = aoma_rad + 90
 
@@ -173,6 +183,7 @@ class SampleAnalyzer:
 
         asp = a / b if b != 0 else np.nan
 
+
         cell.update(
             {
                 "lumen_aoma_rad": aoma_rad,
@@ -181,6 +192,7 @@ class SampleAnalyzer:
                 "lumen_diam_tang": lumen_diam_tang
                 / self.config["pixels_per_um"],
                 "ASP": asp,
+                "MAJAX": majax,
             }
         )
 

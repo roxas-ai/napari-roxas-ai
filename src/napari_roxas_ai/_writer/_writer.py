@@ -232,6 +232,7 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
           .pipe(round_column, "RADDISTR", 0, integer=True)      # round RADDISTR to 0 decimals
           .pipe(round_column, "RRADDISTR", 0, integer=True)     # round RRADDISTR to 0 decimals
           .pipe(round_column, "ASP", 3)                         # round ASP to 3 decimals
+          .pipe(round_column, "MAJAX", 0, integer=True)         # round MAJAX to 0 decimals
           )
 
     return df
