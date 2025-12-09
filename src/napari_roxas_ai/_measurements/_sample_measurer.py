@@ -171,6 +171,8 @@ class SampleAnalyzer:
             )
         )
 
+        asp = a / b if b != 0 else np.nan
+
         cell.update(
             {
                 "lumen_aoma_rad": aoma_rad,
@@ -178,6 +180,7 @@ class SampleAnalyzer:
                 / self.config["pixels_per_um"],
                 "lumen_diam_tang": lumen_diam_tang
                 / self.config["pixels_per_um"],
+                "ASP": asp,
             }
         )
 

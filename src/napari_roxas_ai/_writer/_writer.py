@@ -188,21 +188,50 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     if "top_angled_dist" in df.columns:
         df.rename(columns={"top_angled_dist": "RADDISTR"}, inplace=True)
 
-    df = (df
-          .pipe(shift_column, 2, "YEAR")    # Move YEAR to the 3. position
-          .pipe(shift_column, 3, "LA")            # Move LA to the 4. position
-          .pipe(shift_column, 4, "XPIX")          # Move XPIX to the 5. position
-          .pipe(shift_column, 5, "YPIX")          # Move YPIX to the 6. position
-          .pipe(shift_column, 6, "RADDISTR")      # Move RADDISTR to the 7. position
-          .pipe(shift_column, 7, "RRADDISTR")     # Move RRADDISTR to the 8. position
-          .pipe(shift_column, 8, "NBRNO")         # Move NBRNO to the 9. position
-          .pipe(shift_column, 9, "NBRID")         # Move NBRID to the 10. position
-          )
+    columns_order = [
+        "ID",
+        "CID",
+        "YEAR",
+        "LA",
+        "XPIX",
+        "YPIX",
+        "RADDISTR",
+        "RRADDISTR",
+        "NBRNO",
+        "NBRID",
+        "ASP",
+        "MAJAX",
+        "KH",
+        "CWTPI",
+        "CWTBA",
+        "CWTLE",
+        "CWTRI",
+        "CWTTAN",
+        "CWTRAD",
+        "CWTALL",
+        "RTSR",
+        "CTSR",
+        "DH",
+        "DRAD",
+        "DTAN",
+        "TB2",
+        "CWA",
+        "RWD"
+    ]
+
+    # Keep only those that actually exist in df
+    columns_order_existing = [c for c in columns_order if c in df.columns]
+
+    # All columns not listed are appended at the end
+    other_cols = [c for c in df.columns if c not in columns_order_existing]
+
+    df = df[columns_order_existing + other_cols]
 
     df = (df
-          .pipe(round_column, "LA", 2)            # round LA to 2 decimals
+          .pipe(round_column, "LA", 2)                          # round LA to 2 decimals
           .pipe(round_column, "RADDISTR", 0, integer=True)      # round RADDISTR to 0 decimals
           .pipe(round_column, "RRADDISTR", 0, integer=True)     # round RRADDISTR to 0 decimals
+          .pipe(round_column, "ASP", 3)                         # round ASP to 3 decimals
           )
 
     return df
@@ -213,17 +242,6 @@ def round_column(df, col, decimals, integer=False):
         if integer:
             df[col] = df[col].astype("Int64")
     return df
-
-def shift_column(df, index, colname):
-    if colname not in df.columns:
-        return df
-
-    cols = df.columns.tolist()
-    index = min(index, len(cols) - 1)
-    cols.remove(colname)
-    cols.insert(index, colname)
-    return df[cols]
-
 
 
 def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
