@@ -355,19 +355,29 @@ class SampleAnalyzer:
                 self.cells[cell_id]["cluster"] = np.nan
 
     def _compute_cluster_sizes(self):
-        """Compute NBRNO: number of cells in each cluster."""
+        """Compute NBRNO (cluster size) and NBRID (cluster ID) """
+
         if "cluster" not in self.cells_table.columns:
-            return  # no clusters → nothing to compute
+            return
+
+        clusters = self.cells_table["cluster"]
 
         # Count cells per cluster ID
         cluster_sizes = (
-            self.cells_table["cluster"]
-            .value_counts(dropna=False)
+            clusters
+            .value_counts(dropna=False)  # count all cluster IDs
             .rename("NBRNO")
         )
 
-        # Map counts back to each cell
-        self.cells_table["NBRNO"] = self.cells_table["cluster"].map(cluster_sizes)
+        # Map cluster size to each cell
+        self.cells_table["NBRNO"] = clusters.map(cluster_sizes)
+
+        # Compute NBRID = cluster ID per cell
+        self.cells_table["NBRID"] = clusters.copy()
+
+        # Cells that have cluster size == 1 → solitary → set NBRID = NA
+        self.cells_table.loc[self.cells_table["NBRNO"] == 1, "NBRID"] = pd.NA
+
 
     def _get_cells_table(self) -> pd.DataFrame:
         """Return results as pandas DataFrame."""
