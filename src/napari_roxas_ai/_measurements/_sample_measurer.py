@@ -365,21 +365,34 @@ class SampleAnalyzer:
 
         clusters = self.cells_table["cluster"]
 
-        # Count cells per cluster ID
-        cluster_sizes = (
-            clusters
-            .value_counts(dropna=False)  # count all cluster IDs
-            .rename("NBRNO")
-        )
+        # only add NBRNO and NBRID when sample_type is not conifer
+        if self.config["sample_type"] != "conifer":
+            # Count cells per cluster ID
+            cluster_sizes = (
+                clusters
+                .value_counts(dropna=False)  # count all cluster IDs
+                .rename("NBRNO")
+            )
+            # Map cluster size to each cell
+            self.cells_table["NBRNO"] = clusters.map(cluster_sizes)
 
-        # Map cluster size to each cell
-        self.cells_table["NBRNO"] = clusters.map(cluster_sizes)
+            cluster_members = (
+                self.cells_table
+                .groupby("cluster")
+                .apply(lambda df: df.index.tolist())
+            )
 
-        # Compute NBRID = cluster ID per cell
-        self.cells_table["NBRID"] = clusters.copy()
+            # Map each cell's cluster to its member list
+            self.cells_table["NBRID"] = clusters.map(cluster_members)
 
-        # Cells that have cluster size == 1 → solitary → set NBRID = NA
-        self.cells_table.loc[self.cells_table["NBRNO"] == 1, "NBRID"] = pd.NA
+            # 3) Solitary cells → NBRID = NA
+            solitary_mask = self.cells_table["NBRNO"] == 1
+            self.cells_table.loc[solitary_mask, "NBRID"] = pd.NA
+
+        else:
+            # Conifer: always set NA
+            self.cells_table["NBRNO"] = np.nan
+            self.cells_table["NBRID"] = np.nan
 
 
     def _get_cells_table(self) -> pd.DataFrame:
@@ -398,9 +411,7 @@ class SampleAnalyzer:
         sample_type = self.config.get("sample_type", None)
         print("Sample type: ", sample_type)
 
-        # only compute NBRNO when sample_type is not conifer
-        if self.config["sample_type"] != "conifer":
-            self._compute_cluster_sizes()
+        self._compute_cluster_sizes()
 
         return self.cells_table
 
