@@ -225,6 +225,12 @@ class SingleSampleMeasurementsWidget(Container):
         else:
             raise ValueError("Choose a measurement to compute.")
 
+        sample_type = None
+        if self._measure_cells_checkbox.value:
+            sample_type = self._cells_input_layer.metadata.get("sample_type")
+        elif self._measure_rings_checkbox.value:
+            sample_type = self._rings_input_layer.metadata.get("sample_type")
+
         config = {
             "pixels_per_um": scale,
             "cluster_separation_threshold": self._cluster_separation_threshold.value,
@@ -233,6 +239,7 @@ class SingleSampleMeasurementsWidget(Container):
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
+            "sample_type": sample_type,
         }
 
         # Run the analysis in a separate thread

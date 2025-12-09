@@ -195,6 +195,7 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
           .pipe(shift_column, 5, "YPIX")          # Move YPIX to the 6. position
           .pipe(shift_column, 6, "RADDISTR")      # Move RADDISTR to the 7. position
           .pipe(shift_column, 7, "RRADDISTR")     # Move RRADDISTR to the 8. position
+          .pipe(shift_column, 8, "NBRNO")         # Move NBRNO to the 8. position
           )
 
     df = (df

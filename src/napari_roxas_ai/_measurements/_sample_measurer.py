@@ -354,6 +354,21 @@ class SampleAnalyzer:
             else:
                 self.cells[cell_id]["cluster"] = np.nan
 
+    def _compute_cluster_sizes(self):
+        """Compute NBRNO: number of cells in each cluster."""
+        if "cluster" not in self.cells_table.columns:
+            return  # no clusters → nothing to compute
+
+        # Count cells per cluster ID
+        cluster_sizes = (
+            self.cells_table["cluster"]
+            .value_counts(dropna=False)
+            .rename("NBRNO")
+        )
+
+        # Map counts back to each cell
+        self.cells_table["NBRNO"] = self.cells_table["cluster"].map(cluster_sizes)
+
     def _get_cells_table(self) -> pd.DataFrame:
         """Return results as pandas DataFrame."""
         self.cells_table = pd.DataFrame(self.cells).T.set_index("id")
@@ -366,6 +381,13 @@ class SampleAnalyzer:
         self._compute_cell_walls()
         self._cluster_cells()
         self._get_cells_table()
+
+        sample_type = self.config.get("sample_type", None)
+        print("Sample type: ", sample_type)
+
+        # only compute NBRNO when sample_type is not conifer
+        if self.config["sample_type"] != "conifer":
+            self._compute_cluster_sizes()
 
         return self.cells_table
 
