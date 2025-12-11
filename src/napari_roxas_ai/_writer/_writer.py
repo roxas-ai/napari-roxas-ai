@@ -188,6 +188,22 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     if "top_angled_dist" in df.columns:
         df.rename(columns={"top_angled_dist": "RADDISTR"}, inplace=True)
 
+    # Rename CWT_pith → CWTPI (if present)
+    if "CWT_pith" in df.columns:
+        df.rename(columns={"CWT_pith": "CWTPI"}, inplace=True)
+
+    # Rename CWT_bark → CWTBA (if present)
+    if "CWT_bark" in df.columns:
+        df.rename(columns={"CWT_bark": "CWTBA"}, inplace=True)
+
+    # Rename CWT_left → CWTLE (if present)
+    if "CWT_left" in df.columns:
+        df.rename(columns={"CWT_left": "CWTLE"}, inplace=True)
+
+    # Rename CWT_right → CWTRI (if present)
+    if "CWT_right" in df.columns:
+        df.rename(columns={"CWT_right": "CWTRI"}, inplace=True)
+
     columns_order = [
         "ID",
         "CID",
