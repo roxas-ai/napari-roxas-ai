@@ -124,6 +124,9 @@ class SampleAnalyzer:
                         "lumen_aoma_rad": np.nan,
                         "lumen_diam_rad": np.nan,
                         "lumen_diam_tang": np.nan,
+                        "ASP": np.nan,
+                        "MAJAX": np.nan,
+                        "KH": np.nan,
                     }
                 )
 
@@ -182,6 +185,13 @@ class SampleAnalyzer:
         )
 
         asp = a / b if b != 0 else np.nan
+        LA = cell.get("lumen_area", np.nan)
+        KH = self.compute_kh(
+            lumen_area_um2=LA,
+            major_radius_px=a,
+            minor_radius_px=b,
+            pixels_per_um=self.config["pixels_per_um"]
+        )
 
 
         cell.update(
@@ -193,8 +203,68 @@ class SampleAnalyzer:
                 / self.config["pixels_per_um"],
                 "ASP": asp,
                 "MAJAX": majax,
+                "KH": KH,
             }
         )
+
+    def compute_kh(self, lumen_area_um2: float, major_radius_px: float, minor_radius_px: float, pixels_per_um: float) -> float:
+        """
+        Compute theoretical hydraulic conductance KH for an elliptical lumen.
+
+        Parameters
+        ----------
+        lumen_area_um2 : Lumen area in µm².
+        major_radius_px : Major semi-axis (a) in pixels.
+        minor_radius_px : Minor semi-axis (b) in pixels.
+        pixels_per_um : Conversion factor: pixels per micrometer.
+        """
+        if (
+                lumen_area_um2 is None or np.isnan(lumen_area_um2) or
+                major_radius_px is None or minor_radius_px is None or
+                np.isnan(major_radius_px) or np.isnan(minor_radius_px) or
+                major_radius_px <= 0 or minor_radius_px <= 0
+        ):
+            return np.nan
+
+        # Convert radii to µm
+        a_um = major_radius_px / pixels_per_um
+        b_um = minor_radius_px / pixels_per_um
+
+        a_um = a_um / 1000000
+        b_um = b_um / 1000000
+
+        if a_um <= 0 or b_um <= 0:
+            return np.nan
+
+        # calculate Eccentricity
+        diff = a_um * a_um - b_um * b_um
+        e = np.sqrt(max(diff, 0)) / a_um
+
+        # calculate Lumen circumference C
+        C = np.pi * (3 * (a_um + b_um) - np.sqrt((3 * a_um + b_um) * (a_um + 3 * b_um)))
+        if C <= 0:
+            return np.nan
+
+        # calculate Mean hydraulic radius m
+        m = (np.pi * a_um * b_um) / C
+
+        # calculate Form factor k
+        term = 1 - e ** 4
+        if term < 0:
+            return np.nan
+
+        k = 4.0 / (1.0 + np.sqrt(term))
+        if k <= 0:
+            return np.nan
+
+        # Convert LA from µm² → m²
+        LA_m2 = lumen_area_um2 * 1e-12
+
+        # calculate KH final formula
+        nu = 1.002e-9  # viscosity of water (MPa·s)
+        KH = (LA_m2 * (m * m)) / (nu * k)
+
+        return KH
 
     def _compute_cell_walls(self) -> None:
         """Calculate cell wall metrics."""
