@@ -160,7 +160,38 @@ def rename_column(df: pd.DataFrame, old_name: str, roxas_name: str):
     if old_name in df.columns:
         df.rename(columns={old_name: roxas_name}, inplace=True)
 
-def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+
+    # Remove internal numeric id if present
+    df = df.reset_index(drop=True)
+    if "id" in df.columns:
+        df = df.drop(columns=["id"])
+
+    df.insert(0, "ID", sample_name)
+
+    rename_column(df, "ring_year", "YEAR")
+
+    columns_order = [
+        "ID",
+        "YEAR",
+        "RA",
+        "MRW",
+        "RVGI",
+        "RVSF",
+        "RGSGV",
+        "AOIAR",
+        "DH",
+        "DH2",
+    ]
+    # Keep only those that actually exist in df
+    columns_order_existing = [c for c in columns_order if c in df.columns]
+    # All columns not listed are appended at the end
+    other_cols = [c for c in df.columns if c not in columns_order_existing]
+    df = df[columns_order_existing + other_cols]
+
+    return df
+
+def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     """
     Standardize ROXAS-AI output table
     """
@@ -285,7 +316,7 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
             settings.get("file_extensions.cells_table_file_extension")
         )
         cells_table_file_path = f"{sample_path}{cells_table_file_extension}"
-        features = format_output_table(
+        features = format_cells_output_table(
             meta["features"], meta["metadata"]["sample_name"]
         )
         features.to_csv(
@@ -345,10 +376,13 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
             settings.get("file_extensions.rings_table_file_extension")
         )
         rings_table_file_path = f"{sample_path}{rings_table_file_extension}"
-        meta["features"].to_csv(
+        features = format_rings_output_table(
+            meta["features"], meta["metadata"]["sample_name"]
+        )
+        features.to_csv(
             rings_table_file_path,
             sep=settings.get("tables.separator"),
-            index_label=settings.get("tables.index_column"),
+            index=False,
         )
         written_file_paths.append(rings_table_file_path)
 
