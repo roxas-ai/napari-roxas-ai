@@ -427,6 +427,7 @@ class SampleAnalyzer:
         self._compute_cwtall(cell_id)
         self._compute_rtsr(cell_id)
         self._compute_ctsr(cell_id)
+        self._compute_tb2(cell_id)
 
     def _compute_cwttan(self, cell_id: int) -> None:
         """Compute CWTTAN = tangential wall thickness = (CWT_pith + CWT_bark) / 2"""
@@ -516,6 +517,52 @@ class SampleAnalyzer:
             return np.nan
 
         return 4.0 * lumen_area_um2 / lumen_peri_um
+
+    def _compute_tb2(self, cell_id: int) -> None:
+        """
+        Compute TB2 = Cell wall reinforcement index (t/b)^2
+        following Hacke et al. (2001).
+
+        t = double cell wall thickness
+            - radial: 2 * CWTRAD
+            - tangential: 2 * CWTTAN
+
+        b = conduit wall span
+            = side length of a square with area equal to lumen area
+            = sqrt(LA)
+
+        TB2 is the smaller of the radial or tangential value.
+        """
+
+        cwtrad = self.cells[cell_id].get("CWTRAD", np.nan)
+        cwttan = self.cells[cell_id].get("CWTTAN", np.nan)
+        la = self.cells[cell_id].get("lumen_area", np.nan)
+
+        # Basic validity checks
+        if (
+                la is None or np.isnan(la) or la <= 0 or
+                (np.isnan(cwtrad) or cwtrad <= 0) and
+                (np.isnan(cwttan) or cwttan <= 0)
+        ):
+            self.cells[cell_id]["TB2"] = np.nan
+            return
+
+        # Conduit wall span b (µm)
+        b = np.sqrt(la)
+
+        values = []
+
+        # Radial TB2
+        if not np.isnan(cwtrad) and cwtrad > 0:
+            t_rad = 2.0 * cwtrad
+            values.append((t_rad / b) ** 2)
+
+        # Tangential TB2
+        if not np.isnan(cwttan) and cwttan > 0:
+            t_tan = 2.0 * cwttan
+            values.append((t_tan / b) ** 2)
+
+        self.cells[cell_id]["TB2"] = min(values) if values else np.nan
 
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""

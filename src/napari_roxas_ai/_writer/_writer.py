@@ -188,6 +188,7 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     rename_column(df, "CWT_left", "CWTLE")
     rename_column(df, "CWT_right", "CWTRI")
     rename_column(df, "lumen_diam_rad", "DRAD")
+    rename_column(df, "lumen_diam_tang", "DTAN")
 
     columns_order = [
         "ID",
