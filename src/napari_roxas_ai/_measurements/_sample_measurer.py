@@ -193,6 +193,11 @@ class SampleAnalyzer:
             pixels_per_um=self.config["pixels_per_um"]
         )
 
+        DH = self.compute_dh(
+            lumen_area_um2=LA,
+            lumen_peri_um=cell.get("lumen_peri", np.nan)
+        )
+
 
         cell.update(
             {
@@ -204,6 +209,7 @@ class SampleAnalyzer:
                 "ASP": asp,
                 "MAJAX": majax,
                 "KH": KH,
+                "DH": DH,
             }
         )
 
@@ -495,6 +501,21 @@ class SampleAnalyzer:
         circle_diameter = 2.0 * np.sqrt(la / np.pi)
 
         self.cells[cell_id]["CTSR"] = (4.0 * cwtall) / circle_diameter
+
+    def compute_dh(self, lumen_area_um2: float, lumen_peri_um: float) -> float:
+        """
+        Hydraulic diameter Dh in µm -> Lewis & Boose (1995):
+            Dh = 4 * A / P
+        with A in µm² and P in µm.
+        """
+        if (
+                lumen_area_um2 is None or lumen_peri_um is None or
+                np.isnan(lumen_area_um2) or np.isnan(lumen_peri_um) or
+                lumen_area_um2 <= 0 or lumen_peri_um <= 0
+        ):
+            return np.nan
+
+        return 4.0 * lumen_area_um2 / lumen_peri_um
 
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""

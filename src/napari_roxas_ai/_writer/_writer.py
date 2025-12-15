@@ -204,6 +204,10 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     if "CWT_right" in df.columns:
         df.rename(columns={"CWT_right": "CWTRI"}, inplace=True)
 
+    # Rename lumen_diam_rad → DRAD (if present)
+    if "lumen_diam_rad" in df.columns:
+        df.rename(columns={"lumen_diam_rad": "DRAD"}, inplace=True)
+
     columns_order = [
         "ID",
         "CID",
