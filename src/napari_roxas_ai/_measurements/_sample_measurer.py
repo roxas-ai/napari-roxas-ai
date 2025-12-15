@@ -529,40 +529,35 @@ class SampleAnalyzer:
             - radial: 2 * CWTRAD
             - tangential: 2 * CWTTAN
 
-        b = conduit wall span
-            = side length of a square with area equal to lumen area
-            = sqrt(LA)
+        b = lumen diameter in the same direction
+            - radial:      DRAD  (lumen_diam_rad)
+            - tangential: DTAN  (lumen_diam_tang)
 
         TB2 is the smaller of the radial or tangential value.
         """
 
         cwtrad = self.cells[cell_id].get("CWTRAD", np.nan)
         cwttan = self.cells[cell_id].get("CWTTAN", np.nan)
-        la = self.cells[cell_id].get("lumen_area", np.nan)
-
-        # Basic validity checks
-        if (
-                la is None or np.isnan(la) or la <= 0 or
-                (np.isnan(cwtrad) or cwtrad <= 0) and
-                (np.isnan(cwttan) or cwttan <= 0)
-        ):
-            self.cells[cell_id]["TB2"] = np.nan
-            return
-
-        # Conduit wall span b (µm)
-        b = np.sqrt(la)
+        drad = self.cells[cell_id].get("lumen_diam_rad", np.nan)
+        dtan = self.cells[cell_id].get("lumen_diam_tang", np.nan)
 
         values = []
 
         # Radial TB2
-        if not np.isnan(cwtrad) and cwtrad > 0:
+        if (
+                not np.isnan(cwtrad) and cwtrad > 0 and
+                not np.isnan(drad) and drad > 0
+        ):
             t_rad = 2.0 * cwtrad
-            values.append((t_rad / b) ** 2)
+            values.append((t_rad / drad) ** 2)
 
         # Tangential TB2
-        if not np.isnan(cwttan) and cwttan > 0:
+        if (
+                not np.isnan(cwttan) and cwttan > 0 and
+                not np.isnan(dtan) and dtan > 0
+        ):
             t_tan = 2.0 * cwttan
-            values.append((t_tan / b) ** 2)
+            values.append((t_tan / dtan) ** 2)
 
         self.cells[cell_id]["TB2"] = min(values) if values else np.nan
 
