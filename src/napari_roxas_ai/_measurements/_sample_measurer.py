@@ -428,6 +428,8 @@ class SampleAnalyzer:
         self._compute_rtsr(cell_id)
         self._compute_ctsr(cell_id)
         self._compute_tb2(cell_id)
+        self._compute_cwa(cell_id)
+        self._compute_rwd(cell_id)
 
     def _compute_cwttan(self, cell_id: int) -> None:
         """Compute CWTTAN = tangential wall thickness = (CWT_pith + CWT_bark) / 2"""
@@ -563,6 +565,40 @@ class SampleAnalyzer:
             values.append((t_tan / b) ** 2)
 
         self.cells[cell_id]["TB2"] = min(values) if values else np.nan
+
+    def _compute_cwa(self, cell_id: int) -> None:
+        """Compute Cell wall area = cell_area - lumen_area
+        """
+
+        cell_area = self.cells[cell_id].get("cell_area", np.nan)
+        lumen_area = self.cells[cell_id].get("lumen_area", np.nan)
+
+        if (
+                not np.isnan(cell_area) and cell_area > 0 and
+                not np.isnan(lumen_area) and lumen_area > 0 and
+                cell_area > lumen_area
+        ):
+            CWA = cell_area - lumen_area
+        else:
+            CWA = np.nan
+
+
+        self.cells[cell_id]["CWA"] = CWA
+
+    def _compute_rwd(self, cell_id: int) -> None:
+        """Compute RWD = Relative anatomical cell density = CWA / (CWA + LA)"""
+
+        cwa = self.cells[cell_id].get("CWA", np.nan)
+        la = self.cells[cell_id].get("lumen_area", np.nan)
+
+        if (
+                not np.isnan(cwa) and cwa > 0 and
+                not np.isnan(la) and la > 0 and
+                (cwa + la) > 0
+        ):
+            self.cells[cell_id]["RWD"] = cwa / (cwa + la)
+        else:
+            self.cells[cell_id]["RWD"] = np.nan
 
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""
