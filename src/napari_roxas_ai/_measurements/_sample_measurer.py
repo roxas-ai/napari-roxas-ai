@@ -416,6 +416,85 @@ class SampleAnalyzer:
                     / self.config["pixels_per_um"],
                 }
             )
+        self._compute_cwttan(cell_id)
+        self._compute_cwtrad(cell_id)
+        self._compute_cwtall(cell_id)
+        self._compute_rtsr(cell_id)
+        self._compute_ctsr(cell_id)
+
+    def _compute_cwttan(self, cell_id: int) -> None:
+        """Compute CWTTAN = tangential wall thickness = (CWT_pith + CWT_bark) / 2"""
+
+        cwt_pith = self.cells[cell_id].get("CWT_pith", np.nan)
+        cwt_bark = self.cells[cell_id].get("CWT_bark", np.nan)
+
+        if (
+                not np.isnan(cwt_pith) and cwt_pith > 0 and
+                not np.isnan(cwt_bark) and cwt_bark > 0
+        ):
+            self.cells[cell_id]["CWTTAN"] = (cwt_pith + cwt_bark) / 2
+        else:
+            self.cells[cell_id]["CWTTAN"] = np.nan
+
+
+    def _compute_cwtrad(self, cell_id: int) -> None:
+        """Compute CWTRAD = Thickness of radial cell walls ([CWT_left+CWT_right]/2)"""
+
+        cwt_left = self.cells[cell_id].get("CWT_left", np.nan)
+        cwt_right = self.cells[cell_id].get("CWT_right", np.nan)
+
+        if (
+                not np.isnan(cwt_left) and cwt_left > 0 and
+                not np.isnan(cwt_right) and cwt_right > 0
+        ):
+            self.cells[cell_id]["CWTRAD"] = (cwt_left + cwt_right) / 2
+        else:
+            self.cells[cell_id]["CWTRAD"] = np.nan
+
+
+    def _compute_cwtall(self, cell_id: int) -> None:
+        """Compute CWTALL = Thickness of all cell walls ([CWTRAD+CWTTAN]/2)"""
+
+        CWTRAD = self.cells[cell_id].get("CWTRAD", np.nan)
+        CWTTAN = self.cells[cell_id].get("CWTTAN", np.nan)
+
+        if not np.isnan(CWTRAD)  and not np.isnan(CWTTAN):
+            self.cells[cell_id]["CWTALL"] = (CWTRAD + CWTTAN) / 2
+        else:
+            self.cells[cell_id]["CWTALL"] = np.nan
+
+    def _compute_rtsr(self, cell_id: int) -> None:
+        """Compute RTSR = Radial Thickness-to-span ratio, Mork's index: ratio between 4x single cell wall
+           thickness (CWTtan) and tracheid diameter (lumen_diam_rad) in radial direction (pith to bark)
+        """
+
+        cwttan = self.cells[cell_id].get("CWTTAN", np.nan)
+        lumen_diam_rad = self.cells[cell_id].get("lumen_diam_rad", np.nan)
+
+        if not np.isnan(lumen_diam_rad) and lumen_diam_rad > 0:
+            self.cells[cell_id]["RTSR"] = (4 * cwttan) / lumen_diam_rad
+        else:
+            self.cells[cell_id]["RTSR"] = np.nan
+
+    def _compute_ctsr(self, cell_id: int) -> None:
+        """Compute CTSR = Circular Thickness-to-span ratio: ratio between 4x single cell wall
+           thickness (CWTall) and tracheid diameter (assuming a circle area-equivalent to the lumen area)
+        """
+
+        cwtall = self.cells[cell_id].get("CWTALL", np.nan)
+        la = self.cells[cell_id].get("lumen_area", np.nan)
+
+        if (
+                cwtall is None or np.isnan(cwtall) or cwtall <= 0 or
+                la is None or np.isnan(la) or la <= 0
+        ):
+            self.cells[cell_id]["CTSR"] = np.nan
+            return
+
+        # Circle diameter from area-equivalent circle
+        circle_diameter = 2.0 * np.sqrt(la / np.pi)
+
+        self.cells[cell_id]["CTSR"] = (4.0 * cwtall) / circle_diameter
 
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""
