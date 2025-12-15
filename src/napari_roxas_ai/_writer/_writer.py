@@ -156,6 +156,10 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     return written_file_paths
 
 
+def rename_column(df: pd.DataFrame, old_name: str, roxas_name: str):
+    if old_name in df.columns:
+        df.rename(columns={old_name: roxas_name}, inplace=True)
+
 def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     """
     Standardize ROXAS-AI output table
@@ -176,37 +180,14 @@ def format_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     df.insert(0, "ID", sample_name)
     df.insert(1, "CID", range(1, len(df) + 1))
 
-    # Rename ring_year → YEAR (if present)
-    if "ring_year" in df.columns:
-        df.rename(columns={"ring_year": "YEAR"}, inplace=True)
-
-    # Rename lumen_area → LA (if present)
-    if "lumen_area" in df.columns:
-        df.rename(columns={"lumen_area": "LA"}, inplace=True)
-
-    # Rename bot_angled_dist → RADDISTR (if present)
-    if "top_angled_dist" in df.columns:
-        df.rename(columns={"top_angled_dist": "RADDISTR"}, inplace=True)
-
-    # Rename CWT_pith → CWTPI (if present)
-    if "CWT_pith" in df.columns:
-        df.rename(columns={"CWT_pith": "CWTPI"}, inplace=True)
-
-    # Rename CWT_bark → CWTBA (if present)
-    if "CWT_bark" in df.columns:
-        df.rename(columns={"CWT_bark": "CWTBA"}, inplace=True)
-
-    # Rename CWT_left → CWTLE (if present)
-    if "CWT_left" in df.columns:
-        df.rename(columns={"CWT_left": "CWTLE"}, inplace=True)
-
-    # Rename CWT_right → CWTRI (if present)
-    if "CWT_right" in df.columns:
-        df.rename(columns={"CWT_right": "CWTRI"}, inplace=True)
-
-    # Rename lumen_diam_rad → DRAD (if present)
-    if "lumen_diam_rad" in df.columns:
-        df.rename(columns={"lumen_diam_rad": "DRAD"}, inplace=True)
+    rename_column(df, "ring_year", "YEAR")
+    rename_column(df, "lumen_area", "LA")
+    rename_column(df, "top_angled_dist", "RADDISTR")
+    rename_column(df, "CWT_pith", "CWTPI")
+    rename_column(df, "CWT_bark", "CWTBA")
+    rename_column(df, "CWT_left", "CWTLE")
+    rename_column(df, "CWT_right", "CWTRI")
+    rename_column(df, "lumen_diam_rad", "DRAD")
 
     columns_order = [
         "ID",
