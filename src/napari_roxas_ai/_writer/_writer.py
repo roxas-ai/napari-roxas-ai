@@ -161,6 +161,9 @@ def rename_column(df: pd.DataFrame, old_name: str, roxas_name: str):
         df.rename(columns={old_name: roxas_name}, inplace=True)
 
 def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+    """
+    Standardize ROXAS-AI rings output table
+    """
 
     # Remove internal numeric id if present
     df = df.reset_index(drop=True)
@@ -193,7 +196,7 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
 
 def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
     """
-    Standardize ROXAS-AI output table
+    Standardize ROXAS-AI cells output table
     """
 
     # Reset index so CID is stable and no index leaks into CSV
