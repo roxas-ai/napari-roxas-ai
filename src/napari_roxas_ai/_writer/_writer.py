@@ -259,9 +259,9 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     columns_order_existing = [c for c in columns_order if c in df.columns]
 
     # All columns not listed are appended at the end
-    other_cols = [c for c in df.columns if c not in columns_order_existing]
+    # other_cols = [c for c in df.columns if c not in columns_order_existing]
 
-    df = df[columns_order_existing + other_cols]
+    df = df[columns_order_existing]
 
     df = (df
           .pipe(round_column, "LA", 2)                          # round LA to 2 decimals

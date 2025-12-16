@@ -195,7 +195,7 @@ class SampleAnalyzer:
 
         DH = self.compute_dh(
             lumen_area_um2=LA,
-            lumen_peri_um=cell.get("lumen_peri", np.nan)
+            aspect_ratio=asp
         )
 
 
@@ -505,20 +505,36 @@ class SampleAnalyzer:
 
         self.cells[cell_id]["CTSR"] = (4.0 * cwtall) / circle_diameter
 
-    def compute_dh(self, lumen_area_um2: float, lumen_peri_um: float) -> float:
+    def compute_dh(self, lumen_area_um2: float, aspect_ratio: float) -> float:
         """
-        Hydraulic diameter Dh in µm -> Lewis & Boose (1995):
-            Dh = 4 * A / P
-        with A in µm² and P in µm.
+        Compute hydraulic diameter Dh (µm) following Lewis & Boose (1995)
+        for an elliptical conduit.
+
+        Dh = sqrt( (2 a² b²) / (a² + b²) )
+
+        where:
+            a, b = semi-axes of an ellipse derived from
+                   lumen area and aspect ratio (a / b).
         """
+
         if (
-                lumen_area_um2 is None or lumen_peri_um is None or
-                np.isnan(lumen_area_um2) or np.isnan(lumen_peri_um) or
-                lumen_area_um2 <= 0 or lumen_peri_um <= 0
+                lumen_area_um2 is None or np.isnan(lumen_area_um2) or lumen_area_um2 <= 0 or
+                aspect_ratio is None or np.isnan(aspect_ratio) or aspect_ratio <= 0
         ):
             return np.nan
 
-        return 4.0 * lumen_area_um2 / lumen_peri_um
+        a = 2.0 * np.sqrt(aspect_ratio * lumen_area_um2 / np.pi)
+        b = a / aspect_ratio
+
+        a2 = a * a
+        b2 = b * b
+
+        denom = a2 + b2
+        if denom <= 0:
+            return np.nan
+
+        Dh = np.sqrt((2.0 * a2 * b2) / denom)
+        return Dh
 
     def _compute_tb2(self, cell_id: int) -> None:
         """
