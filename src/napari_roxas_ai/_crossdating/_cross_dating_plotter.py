@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import napari.layers
 import numpy as np
 import pandas as pd
+from PyQt5.QtWidgets import QSizePolicy
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -68,6 +69,10 @@ class MatplotlibCanvas(Container):
         layout = QVBoxLayout()
         layout.addWidget(self.canvas)
         widget.setLayout(layout)
+        widget.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding,
+        )
 
         # Initialize the Container with our widget
         super().__init__(widgets=[])
@@ -102,6 +107,7 @@ class CrossDatingPlotterWidget(Container):
             tooltip="Automatically align Reference and Sample",
         )
         self._auto_offset_button.changed.connect(self._auto_align_sample)
+
 
         # Get the crossdating file for the selected layer
         self._input_layer_combo.changed.connect(self._on_new_input_layer)
@@ -189,6 +195,18 @@ class CrossDatingPlotterWidget(Container):
                 self._auto_offset_button,
                 self.plot_widget,
             ]
+        )
+
+        self._alignment_candidates = []
+        self._alignment_buttons_container = Container()
+        self._alignment_buttons_container.native.setSizePolicy(
+            self._alignment_buttons_container.native.sizePolicy().Expanding,
+            self._alignment_buttons_container.native.sizePolicy().Fixed,
+        )
+
+        self.insert(
+            self.index(self._auto_offset_button) + 1,
+            self._alignment_buttons_container
         )
 
         self._on_new_input_layer()
@@ -383,6 +401,12 @@ class CrossDatingPlotterWidget(Container):
             * self._input_layer_combo.value.metadata["sample_scale"]
         )
 
+        # adapt for reference graph
+        width_series = self.align_graphs(
+            sample=width_series,
+            reference=reference_series,
+        )
+
         self.plot_df = pd.DataFrame()
         self.plot_df = pd.concat(
             [
@@ -508,7 +532,11 @@ class CrossDatingPlotterWidget(Container):
                 self._y_range_slider.value = (new_y_low, new_y_high)
         # Otherwise, we don't want to consider the current values as they are defaults with no meaning
         else:
-            self._y_range_slider.value = (min_value, max_value)
+            self._y_range_slider.value = (
+                min_value,
+                min(max_value, self._y_range_slider.max),
+            )
+
             self._y_range_slider_was_set = True
 
         # Set the x and y axis limits according to the sliders
@@ -518,6 +546,53 @@ class CrossDatingPlotterWidget(Container):
         # Redraw the canvas
         self.plot_widget.figure.tight_layout()
         self.plot_widget.canvas.draw()
+
+    def align_graphs(self,
+            sample: pd.Series,
+            reference: pd.Series,
+            min_overlap: int = 5,
+    ) -> pd.Series:
+        """
+        Align sample series to reference series by affine transformation:
+        y' = a * y + b
+
+        This is a VISUAL alignment only.
+        """
+
+        # common years
+        common = sample.index.intersection(reference.index)
+
+        if len(common) < min_overlap:
+            return sample
+
+        s = sample.loc[common].astype(float)
+        r = reference.loc[common].astype(float)
+
+        s = s.dropna()
+        r = r.dropna()
+
+        common = s.index.intersection(r.index)
+        if len(common) < min_overlap:
+            return sample
+
+        s = s.loc[common]
+        r = r.loc[common]
+
+        # 1) Amplitude
+        s_amp = np.nanpercentile(s, 75) - np.nanpercentile(s, 25)
+        r_amp = np.nanpercentile(r, 75) - np.nanpercentile(r, 25)
+
+        if s_amp <= 0 or r_amp <= 0:
+            return sample
+
+        a = r_amp / s_amp
+
+        # 2) vertical shift
+        s_med = np.nanmedian(s * a)
+        r_med = np.nanmedian(r)
+
+        b = r_med - s_med
+        return sample * a + b
 
     def _update_plot_limits(self):
         """Update the axis limits based on the range sliders"""
@@ -564,93 +639,124 @@ class CrossDatingPlotterWidget(Container):
         self._offset_slider.value = 0
 
     def _auto_align_sample(self):
-        """Find best position of sample inside reference using sliding-window correlation
-        and reassign ring_year values accordingly"""
-
         if self.plot_df is None or self.plot_df.empty:
-            show_info("Auto-align failed: no data in plot_df")
+            show_info("Auto-align failed: no data")
             return
 
-        # Extract non-NaN sample values
-        sample_series = (
-            self.plot_df["layer_series"]
-            .dropna()
-            .sort_index()
-        )
-        sample_vals = sample_series.to_numpy(dtype=float)
+        self._clear_alignment_buttons()
 
-        if len(sample_vals) < 5:
-            show_info("Auto-align failed: sample too short")
+        self._alignment_candidates = self._compute_alignment_candidates(top_k=5)
+
+        if not self._alignment_candidates:
+            show_info("No valid alignments found")
             return
 
-        # Extract non-NaN reference values
-        reference_series = (
-            self.plot_df["reference_series"]
-            .dropna()
-            .sort_index()
-        )
-        reference_vals = reference_series.to_numpy(dtype=float)
-        reference_years = reference_series.index.to_numpy()
+        # Beste automatisch anwenden
+        best = self._alignment_candidates[0]
+        self._apply_alignment(best)
 
-        if len(reference_vals) < len(sample_vals):
-            show_info("Auto-align failed: reference shorter than sample")
-            return
+        self._update_alignment_buttons()
 
-        # Normalize both series
-        sample_norm = (sample_vals - np.mean(sample_vals)) / np.std(sample_vals)
-        reference_norm = (reference_vals - np.mean(reference_vals)) / np.std(reference_vals)
+    def _apply_alignment(self, candidate: dict):
+        target_start = candidate["start_year"]
+        target_end = candidate["end_year"]
 
-        window = len(sample_norm)
-
-        # Sliding-window correlation
-        best_corr = -999999
-        best_start = None
-
-        max_pos = len(reference_norm) - window + 1
-
-        # use Pearson correlation coefficient to measure linear pattern similarity
-        for start in range(max_pos):
-            ref_win = reference_norm[start:start + window]
-            corr = np.corrcoef(sample_norm, ref_win)[0, 1]
-
-            if corr > best_corr:
-                best_corr = corr
-                best_start = start
-
-        if best_start is None:
-            show_info("Auto-align failed: no matching window found")
-            return
-
-        # calc target years
-        target_start_year = int(reference_years[best_start])
-        target_end_year = target_start_year + window - 1
-
-        # Apply new years to the napari layer
         layer = self._input_layer_combo.value
         rings_table = layer.features.copy().sort_values("ring_year")
 
-        # Assign new aligned years
+        window = target_end - target_start + 1
+
         rings_table.loc[rings_table.index[:window], "ring_year"] = np.arange(
-            target_start_year, target_end_year + 1
+            target_start, target_end + 1
         )
 
         new_table, new_raster, new_colormap = update_rings_geometries(
             rings_table=rings_table,
-            last_year=target_end_year,
+            last_year=target_end,
             image_shape=layer.data.shape,
         )
 
         layer.data = new_raster
         layer.features = new_table
         layer.colormap = new_colormap
-        layer.metadata["rings_outmost_complete_year"] = target_end_year
+        layer.metadata["rings_outmost_complete_year"] = target_end
 
-        # Reset UI offset slider
         self._offset_slider.value = 0
         self._update_crossdating_plot()
+        self._x_range_slider.value = (target_start - 10, target_end + 10)
 
-        self._x_range_slider.value = (target_start_year - 10, target_end_year + 10)
+    def _compute_alignment_candidates(self, top_k: int = 4):
+        sample_series = (
+            self.plot_df["layer_series"]
+            .dropna()
+            .sort_index()
+        )
+        reference_series = (
+            self.plot_df["reference_series"]
+            .dropna()
+            .sort_index()
+        )
 
-        show_info(f"Best matching alignment: {target_start_year}–{target_end_year} (corr={best_corr:.3f})")
+        sample_vals = sample_series.to_numpy(dtype=float)
+        ref_vals = reference_series.to_numpy(dtype=float)
+        ref_years = reference_series.index.to_numpy()
+
+        if len(sample_vals) < 5 or len(ref_vals) < len(sample_vals):
+            return []
+
+        sample_norm = (sample_vals - sample_vals.mean()) / sample_vals.std()
+        ref_norm = (ref_vals - ref_vals.mean()) / ref_vals.std()
+
+        window = len(sample_norm)
+        max_pos = len(ref_norm) - window + 1
+
+        candidates = []
+
+        for start in range(max_pos):
+            ref_win = ref_norm[start:start + window]
+            corr = np.corrcoef(sample_norm, ref_win)[0, 1]
+
+            if np.isnan(corr):
+                continue
+
+            candidates.append({
+                "start_index": start,
+                "start_year": int(ref_years[start]),
+                "end_year": int(ref_years[start] + window - 1),
+                "corr": float(corr),
+            })
+
+        candidates.sort(key=lambda x: x["corr"], reverse=True)
+        return candidates[:top_k]
+
+    def _update_alignment_buttons(self):
+        self._alignment_buttons_container.widgets = []
+
+        for candidate in self._alignment_candidates[1:4]:
+            btn = PushButton(
+                text=f"{candidate['start_year']}–{candidate['end_year']} "
+                     f"(corr={candidate['corr']:.3f})"
+            )
+
+            btn.changed.connect(
+                lambda _, c=candidate: self._apply_alignment(c)
+            )
+
+            self._alignment_buttons_container.append(btn)
+
+    def _clear_alignment_buttons(self):
+        container = self._alignment_buttons_container
+        layout = container.native.layout()
+
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        container.widgets = []
+
+
 
 
