@@ -173,6 +173,7 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     df.insert(0, "ID", sample_name)
 
     rename_column(df, "ring_year", "YEAR")
+    rename_column(df, "ring_angle_width", "MRW")
 
     columns_order = [
         "ID",

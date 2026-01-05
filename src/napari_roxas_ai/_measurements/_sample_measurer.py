@@ -728,7 +728,6 @@ class SampleAnalyzer:
         ] * np.cos(
             np.deg2rad(self.rings_table["boundary_angle"].rolling(2).mean())
         )
-        self._compute_ring_area()
 
     def _compute_ring_area(self) -> None:
         # Compute ring area (RA) in mm² and store in rings_table["RA"].
@@ -764,6 +763,29 @@ class SampleAnalyzer:
             # µm² → mm²
             area_mm2 = area_um2 / 1e6
             self.rings_table.loc[i + 1, "RA"] = area_mm2
+
+    def _compute_cno(self) -> None:
+        # Compute CNO = number of cells per ring (using bot_ring_id).
+        self.rings_table["CNO"] = np.nan
+
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+
+        counts = (
+            self.cells_table["bot_ring_id"]
+            .dropna()
+            .astype(int)
+            .value_counts()
+        )
+
+        # rings_table index -> ring_id
+        for ring_id, cnt in counts.items():
+            if ring_id in self.rings_table.index:
+                self.rings_table.loc[ring_id, "CNO"] = int(cnt)
+
+        # disabled rings -> NaN
+        self.rings_table.loc[~self.rings_table["enabled"], "CNO"] = np.nan
+
 
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
@@ -903,6 +925,9 @@ class SampleAnalyzer:
         self._compute_rings_metrics()
         if not self.cells_table.empty:
             self._compute_cells_to_rings_distances()
+
+        self._compute_ring_area()
+        self._compute_cno()
 
         return self.rings_table
 
