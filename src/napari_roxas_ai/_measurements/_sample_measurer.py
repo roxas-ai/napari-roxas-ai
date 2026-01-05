@@ -941,6 +941,15 @@ class SampleAnalyzer:
 
         self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
 
+    def _compute_vessel_grouping_metrics(self) -> None:
+        """
+        Placeholder for vessel grouping metrics (RVGI, RVSF, RGSGV).
+        For conifers: metrics are not applicable and are always NA.
+        """
+        self.rings_table["RVGI"] = np.nan
+        self.rings_table["RVSF"] = np.nan
+        self.rings_table["RGSGV"] = np.nan
+
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
 
@@ -1089,6 +1098,7 @@ class SampleAnalyzer:
         self._compute_minla_maxla()
         self._compute_kh_ring()
         self._compute_ks()
+        self._compute_vessel_grouping_metrics()
 
         return self.rings_table
 
