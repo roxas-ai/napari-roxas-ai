@@ -786,6 +786,24 @@ class SampleAnalyzer:
         # disabled rings -> NaN
         self.rings_table.loc[~self.rings_table["enabled"], "CNO"] = np.nan
 
+    def _compute_cd(self) -> None:
+        self.rings_table["CD"] = np.nan
+
+        if "CNO" not in self.rings_table.columns:
+            return
+        if "RA" not in self.rings_table.columns:
+            return
+
+        cno = pd.to_numeric(self.rings_table["CNO"], errors="coerce")
+        ra = pd.to_numeric(self.rings_table["RA"], errors="coerce")
+
+        valid = cno.notna() & ra.notna() & (ra > 0)
+
+        self.rings_table.loc[valid, "CD"] = cno[valid] / ra[valid]
+
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, "CD"] = np.nan
 
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
@@ -928,6 +946,7 @@ class SampleAnalyzer:
 
         self._compute_ring_area()
         self._compute_cno()
+        self._compute_cd()
 
         return self.rings_table
 
