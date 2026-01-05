@@ -805,6 +805,31 @@ class SampleAnalyzer:
             disabled = self.rings_table["enabled"] == False
             self.rings_table.loc[disabled, "CD"] = np.nan
 
+    def _compute_cta(self) -> None:
+        # Compute CTA = cumulative lumen area of all counted cells per ring (mm²).
+        self.rings_table["CTA"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "lumen_area" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "lumen_area"]].copy()
+        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+        df["lumen_area"] = pd.to_numeric(df["lumen_area"], errors="coerce")
+        df = df.dropna(subset=["bot_ring_id", "lumen_area"])
+
+        cta_um2 = df.groupby(df["bot_ring_id"].astype(int))["lumen_area"].sum()
+        cta_mm2 = cta_um2 / 1e6
+
+        self.rings_table.loc[cta_mm2.index, "CTA"] = cta_mm2.values
+
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, "CTA"] = np.nan
+
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
 
@@ -947,6 +972,7 @@ class SampleAnalyzer:
         self._compute_ring_area()
         self._compute_cno()
         self._compute_cd()
+        self._compute_cta()
 
         return self.rings_table
 
