@@ -611,6 +611,30 @@ class SampleAnalyzer:
         else:
             self.cells[cell_id]["RWD"] = np.nan
 
+    def _compute_kh_ring(self) -> None:
+        # Compute ring-level KH as sum of cell-level KH within each ring.
+        self.rings_table["KH"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "KH" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "KH"]].copy()
+        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+        df["KH"] = pd.to_numeric(df["KH"], errors="coerce")
+        df = df.dropna(subset=["bot_ring_id", "KH"])
+
+        kh_sum = df.groupby(df["bot_ring_id"].astype(int))["KH"].sum()
+
+        self.rings_table.loc[kh_sum.index, "KH"] = kh_sum.values
+
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, "KH"] = np.nan
+
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""
         # Threshold distance transform for clustering
@@ -868,6 +892,34 @@ class SampleAnalyzer:
             disabled = self.rings_table["enabled"] == False
             self.rings_table.loc[disabled, "MLA"] = np.nan
 
+    def _compute_minla_maxla(self) -> None:
+        # Compute MINLA and MAXLA = min/max lumen area per ring (µm²).
+        self.rings_table["MINLA"] = np.nan
+        self.rings_table["MAXLA"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "lumen_area" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "lumen_area"]].copy()
+        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+        df["lumen_area"] = pd.to_numeric(df["lumen_area"], errors="coerce")
+        df = df.dropna(subset=["bot_ring_id", "lumen_area"])
+
+        grouped = df.groupby(df["bot_ring_id"].astype(int))["lumen_area"]
+        minla = grouped.min()
+        maxla = grouped.max()
+
+        self.rings_table.loc[minla.index, "MINLA"] = minla.values
+        self.rings_table.loc[maxla.index, "MAXLA"] = maxla.values
+
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, ["MINLA", "MAXLA"]] = np.nan
+
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
 
@@ -1013,6 +1065,8 @@ class SampleAnalyzer:
         self._compute_cta()
         self._compute_rcta()
         self._compute_mla()
+        self._compute_minla_maxla()
+        self._compute_kh_ring()
 
         return self.rings_table
 

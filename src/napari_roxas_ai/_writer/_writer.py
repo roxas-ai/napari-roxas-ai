@@ -223,6 +223,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
           .pipe(round_column, "CTA", 3)  # round CTA to 3 decimals
           .pipe(round_column, "RCTA", 2)  # round RCTA to 2 decimals
           .pipe(round_column, "MLA", 2)  # round MLA to 2 decimals
+          .pipe(round_column, "MINLA", 2)  # round MINLA to 2 decimals
+          .pipe(round_column, "MAXLA", 2)  # round MAXLA to 2 decimals
           )
 
     return df
