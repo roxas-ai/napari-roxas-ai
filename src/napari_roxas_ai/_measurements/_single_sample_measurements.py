@@ -273,7 +273,6 @@ class SingleSampleMeasurementsWidget(Container):
 
 
     def _add_result_layers(self, cells_table, rings_table):
-        print("--- ADD RESULT LAYERS ---")
 
         project_dir = Path(settings.get("project_directory")) / "measurements"
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -342,7 +341,6 @@ class SingleSampleMeasurementsWidget(Container):
             )
             show_info(f"Rings exported to: {rings_path}")
 
-        print("--- EXPORT FINISHED ---")
         show_info("Measurements completed and saved.")
 
 

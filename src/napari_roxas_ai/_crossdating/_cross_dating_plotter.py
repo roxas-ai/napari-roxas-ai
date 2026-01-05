@@ -651,7 +651,6 @@ class CrossDatingPlotterWidget(Container):
             show_info("No valid alignments found")
             return
 
-        # Beste automatisch anwenden
         best = self._alignment_candidates[0]
         self._apply_alignment(best)
 

@@ -728,6 +728,42 @@ class SampleAnalyzer:
         ] * np.cos(
             np.deg2rad(self.rings_table["boundary_angle"].rolling(2).mean())
         )
+        self._compute_ring_area()
+
+    def _compute_ring_area(self) -> None:
+        # Compute ring area (RA) in mm² and store in rings_table["RA"].
+
+        h, w = self.cells_array.shape[:2]
+        px_per_um = self.config["pixels_per_um"]
+
+        # init RA column
+        self.rings_table["ring_area"] = np.nan
+
+        # ring i exists between boundary i and i+1
+        for i in range(len(self.rings_table) - 1):
+            if not self.rings_table.loc[i, "enabled"]:
+                continue
+            if not self.rings_table.loc[i + 1, "enabled"]:
+                continue
+
+            bounds = np.array(
+                self.rings_table["boundary_coordinates"][i]
+                + self.rings_table["boundary_coordinates"][i + 1][::-1],
+                dtype=np.int32
+            )
+
+            # bounds are (y, x) in tables, but fillPoly expects (x, y)
+            bounds = np.flip(bounds, axis=1)
+
+            canvas = np.zeros((h, w), dtype=np.uint8)
+            cv2.fillPoly(canvas, [bounds], 1)
+
+            area_px = int(canvas.sum())
+            # px² → µm²
+            area_um2 = area_px / (px_per_um ** 2)
+            # µm² → mm²
+            area_mm2 = area_um2 / 1e6
+            self.rings_table.loc[i + 1, "RA"] = area_mm2
 
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
