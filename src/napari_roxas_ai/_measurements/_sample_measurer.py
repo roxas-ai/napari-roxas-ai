@@ -830,6 +830,44 @@ class SampleAnalyzer:
             disabled = self.rings_table["enabled"] == False
             self.rings_table.loc[disabled, "CTA"] = np.nan
 
+    def _compute_rcta(self) -> None:
+        # Compute RCTA = percentage of conductive area = 100 * CTA / RA.
+        self.rings_table["RCTA"] = np.nan
+
+        if "CTA" not in self.rings_table.columns:
+            return
+        if "RA" not in self.rings_table.columns:
+            return
+
+        cta = pd.to_numeric(self.rings_table["CTA"], errors="coerce")
+        ra = pd.to_numeric(self.rings_table["RA"], errors="coerce")
+
+        valid = cta.notna() & ra.notna() & (ra > 0)
+        self.rings_table.loc[valid, "RCTA"] = 100.0 * (cta[valid] / ra[valid])
+
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, "RCTA"] = np.nan
+
+    def _compute_mla(self) -> None:
+        # Compute MLA = mean lumen area per ring (µm²).
+        self.rings_table["MLA"] = np.nan
+
+        if "CTA" not in self.rings_table.columns:
+            return
+        if "CNO" not in self.rings_table.columns:
+            return
+
+        cta_mm2 = pd.to_numeric(self.rings_table["CTA"], errors="coerce")
+        cno = pd.to_numeric(self.rings_table["CNO"], errors="coerce")
+
+        valid = cta_mm2.notna() & cno.notna() & (cno > 0)
+        self.rings_table.loc[valid, "MLA"] = (cta_mm2[valid] / cno[valid]) * 1e6
+
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, "MLA"] = np.nan
+
     def _get_angled_distances(self, entry):
         """Compute angled distances for top and bottom rings."""
 
@@ -973,6 +1011,8 @@ class SampleAnalyzer:
         self._compute_cno()
         self._compute_cd()
         self._compute_cta()
+        self._compute_rcta()
+        self._compute_mla()
 
         return self.rings_table
 

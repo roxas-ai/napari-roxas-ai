@@ -216,6 +216,15 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     other_cols = [c for c in df.columns if c not in columns_order_existing]
     df = df[columns_order_existing + other_cols]
 
+    df = (df
+          .pipe(round_column, "MRW", 2)  # round MRW to 2 decimals
+          .pipe(round_column, "RA", 3)  # round RA to 3 decimals
+          .pipe(round_column, "CD", 2)  # round CD to 2 decimals
+          .pipe(round_column, "CTA", 3)  # round CTA to 3 decimals
+          .pipe(round_column, "RCTA", 2)  # round RCTA to 2 decimals
+          .pipe(round_column, "MLA", 2)  # round MLA to 2 decimals
+          )
+
     return df
 
 def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
