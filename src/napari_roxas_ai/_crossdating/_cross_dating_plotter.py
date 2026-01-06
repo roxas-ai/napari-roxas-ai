@@ -18,6 +18,7 @@ from matplotlib.figure import Figure
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
+from superqt import QRangeSlider
 
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
@@ -181,6 +182,10 @@ class CrossDatingPlotterWidget(Container):
         # Create matplotlib canvas widget
         self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
 
+        # style sliders
+        self._style_rangeslider(self._x_range_slider)
+        self._style_rangeslider(self._y_range_slider)
+
         # Append the widgets to the container
         self.extend(
             [
@@ -215,6 +220,46 @@ class CrossDatingPlotterWidget(Container):
         # Connect to viewer events to track layer changes
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
+
+    def _style_rangeslider(self, slider: RangeSlider) -> None:
+        # Style magicgui RangeSlider handles to look like thin vertical bars instead of fat circles.
+        native = slider.native
+
+        qrange = native.findChild(QRangeSlider)
+        if qrange is None:
+            return
+
+        qrange.setStyleSheet("""
+        QRangeSlider::groove {
+            height: 6px;
+            background: #444;
+            border-radius: 3px;
+        }
+
+        QRangeSlider::sub-page {
+            background: #777;
+            border-radius: 3px;
+        }
+
+        QRangeSlider::add-page {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        /* THIS is the important part */
+        QRangeSlider::handle {
+            background: #e0e0e0;
+            border: 1px solid #555;
+            width: 3px;
+            margin: -6px 0px;    /* makes handle taller */
+            border-radius: 0px;  /* square = looks like | */
+        }
+
+        QRangeSlider::handle:hover {
+            width: 6px;
+            background: #ffffff;
+        }
+        """)
 
     def _get_valid_layers(self, widget=None):
         """Get layers that are both Labels type and match the rings file extension."""
