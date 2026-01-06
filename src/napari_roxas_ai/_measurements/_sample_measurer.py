@@ -1354,6 +1354,34 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "DRAD"] = np.nan
 
+    def _compute_mean_dtan(self) -> None:
+        # DTAN = Mean tangential cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_tang and aggregates by bot_ring_id.
+        self.rings_table["DTAN"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "lumen_diam_tang" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "lumen_diam_tang"]].copy()
+        df = df.dropna(subset=["bot_ring_id", "lumen_diam_tang"])
+
+        if df.empty:
+            return
+
+        # group by ring id and compute mean
+        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["lumen_diam_tang"].mean()
+
+        for ring_id, val in ring_mean.items():
+            if ring_id in self.rings_table.index:
+                self.rings_table.loc[ring_id, "DTAN"] = float(val)
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "DTAN"] = np.nan
+
     def _compute_mean_cwtpi(self) -> None:
         # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
         self.rings_table["CWTPI"] = np.nan
@@ -1543,6 +1571,8 @@ class SampleAnalyzer:
         self._compute_mean_dh()
         self._compute_mean_dh2()
         self._compute_mean_drad()
+        self._compute_mean_dtan()
+
 
         return self.rings_table
 
