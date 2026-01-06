@@ -943,12 +943,79 @@ class SampleAnalyzer:
 
     def _compute_vessel_grouping_metrics(self) -> None:
         """
-        Placeholder for vessel grouping metrics (RVGI, RVSF, RGSGV).
+        Compute vessel grouping metrics per ring:
+          - RVGI: Vessel Grouping Index (mean number of cells per group; solitary cells count as group size 1)
+          - RVSF: Vessel Solitary Fraction [%]
+          - RGSGV: Mean group size of grouped / non-solitary cells e.g. groups with size > 1
+
         For conifers: metrics are not applicable and are always NA.
+        For angiosperms: computed based on cluster IDs (cell-level "cluster") within each ring.
         """
+
+        # Init columns
         self.rings_table["RVGI"] = np.nan
         self.rings_table["RVSF"] = np.nan
         self.rings_table["RGSGV"] = np.nan
+
+        # Only compute for non-conifers
+        if self.config.get("sample_type", None) == "conifer":
+            return
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "cluster" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "cluster"]].copy()
+        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+        df["cluster"] = pd.to_numeric(df["cluster"], errors="coerce")
+        df = df.dropna(subset=["bot_ring_id", "cluster"])
+
+        if df.empty:
+            return
+
+        # Iterate rings and compute metrics ring-wise
+        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
+            if ring_id not in self.rings_table.index:
+                continue
+
+            # Total cells in ring
+            n_total = len(ring_df)
+            if n_total <= 0:
+                continue
+
+            # Ring-internal group sizes (clusters counted within ring)
+            group_sizes = ring_df["cluster"].value_counts()
+
+            n_groups = len(group_sizes)
+            if n_groups <= 0:
+                continue
+
+            # RVGI: mean number of cells per group (solitary = group size 1)
+            rvgi = n_total / n_groups
+
+            # Solitary fraction: groups of size 1 correspond to solitary cells
+            n_solitary = int((group_sizes == 1).sum())  # number of solitary groups
+            # solitary cells = number of solitary groups * 1, so same number
+            rvsf = 100.0 * (n_solitary / n_total)
+
+            # RGSGV: mean group size for grouped (non-solitary) groups only
+            grouped_sizes = group_sizes[group_sizes > 1]
+            if len(grouped_sizes) > 0:
+                rgsgv = float(grouped_sizes.mean())
+            else:
+                rgsgv = np.nan
+
+            self.rings_table.loc[ring_id, "RVGI"] = float(rvgi)
+            self.rings_table.loc[ring_id, "RVSF"] = float(rvsf)
+            self.rings_table.loc[ring_id, "RGSGV"] = rgsgv
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, ["RVGI", "RVSF", "RGSGV"]] = np.nan
 
     def _compute_mean_cwtba(self) -> None:
         # CWTBA = Mean thickness of outer (bark-facing) cell wall per ring [µm]. Uses cell-level CWT_bark and aggregates by bot_ring_id.
