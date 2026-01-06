@@ -212,19 +212,38 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
 
     # Keep only those that actually exist in df
     columns_order_existing = [c for c in columns_order if c in df.columns]
-    # All columns not listed are appended at the end
-    other_cols = [c for c in df.columns if c not in columns_order_existing]
-    df = df[columns_order_existing + other_cols]
 
+    # All columns not listed are appended at the end
+    # other_cols = [c for c in df.columns if c not in columns_order_existing]
+    # df = df[columns_order_existing + other_cols]
+
+    df = df[columns_order_existing]
+    # round columns with column name and number of decimals
     df = (df
-          .pipe(round_column, "MRW", 2)  # round MRW to 2 decimals
-          .pipe(round_column, "RA", 3)  # round RA to 3 decimals
-          .pipe(round_column, "CD", 2)  # round CD to 2 decimals
-          .pipe(round_column, "CTA", 3)  # round CTA to 3 decimals
-          .pipe(round_column, "RCTA", 2)  # round RCTA to 2 decimals
-          .pipe(round_column, "MLA", 2)  # round MLA to 2 decimals
-          .pipe(round_column, "MINLA", 2)  # round MINLA to 2 decimals
-          .pipe(round_column, "MAXLA", 2)  # round MAXLA to 2 decimals
+          .pipe(round_column, "MRW", 2)
+          .pipe(round_column, "RA", 3)
+          .pipe(round_column, "CD", 2)
+          .pipe(round_column, "CTA", 3)
+          .pipe(round_column, "RCTA", 2)
+          .pipe(round_column, "MLA", 2)
+          .pipe(round_column, "MINLA", 2)
+          .pipe(round_column, "MAXLA", 2)
+          .pipe(round_column, "CWTPI", 2)
+          .pipe(round_column, "CWTBA", 2)
+          .pipe(round_column, "CWTLE", 2)
+          .pipe(round_column, "CWTRI", 2)
+          .pipe(round_column, "CWTTAN", 2)
+          .pipe(round_column, "CWTRAD", 2)
+          .pipe(round_column, "CWTALL", 2)
+          .pipe(round_column, "RTSR", 2)
+          .pipe(round_column, "CTSR", 2)
+          .pipe(round_column, "DH", 2)
+          .pipe(round_column, "DH2", 2)
+          .pipe(round_column, "DRAD", 2)
+          .pipe(round_column, "DTAN", 2)
+          .pipe(round_column, "TB2", 2)
+          .pipe(round_column, "CWA", 2)
+          .pipe(round_column, "RWD", 2)
           )
 
     return df
