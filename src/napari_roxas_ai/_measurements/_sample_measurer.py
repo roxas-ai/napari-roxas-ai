@@ -1241,6 +1241,47 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "CTSR"] = np.nan
 
+    def _compute_mean_dh(self) -> None:
+        # DH = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
+        self.rings_table["DH"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "DH" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "DH"]].copy()
+        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+        df["DH"] = pd.to_numeric(df["DH"], errors="coerce")
+        df = df.dropna(subset=["bot_ring_id", "DH"])
+
+        if df.empty:
+            return
+
+        # Keep only positive DH values
+        df = df[df["DH"] > 0]
+        if df.empty:
+            return
+
+        # group by ring id and compute hydraulically weighted diameter
+        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
+            if ring_id not in self.rings_table.index:
+                continue
+
+            dh = ring_df["DH"].values.astype(float)
+            denom = np.sum(dh ** 4)
+            if denom <= 0 or np.isnan(denom):
+                continue
+
+            num = np.sum(dh ** 5)
+            self.rings_table.loc[ring_id, "DH"] = float(num / denom)
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "DH"] = np.nan
+
     def _compute_mean_cwtpi(self) -> None:
         # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
         self.rings_table["CWTPI"] = np.nan
@@ -1427,6 +1468,7 @@ class SampleAnalyzer:
         self._compute_mean_cwtall()
         self._compute_mean_rtsr()
         self._compute_mean_ctsr()
+        self._compute_mean_dh()
 
         return self.rings_table
 
