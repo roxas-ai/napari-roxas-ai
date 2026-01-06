@@ -1438,6 +1438,34 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "CWA"] = np.nan
 
+    def _compute_mean_rwd(self) -> None:
+        # RWD = Mean relative anatomical cell density per ring. Uses cell-level RWD and aggregates by bot_ring_id.
+        self.rings_table["RWD"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "RWD" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "RWD"]].copy()
+        df = df.dropna(subset=["bot_ring_id", "RWD"])
+
+        if df.empty:
+            return
+
+        # group by ring id and compute mean
+        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["RWD"].mean()
+
+        for ring_id, val in ring_mean.items():
+            if ring_id in self.rings_table.index:
+                self.rings_table.loc[ring_id, "RWD"] = float(val)
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "RWD"] = np.nan
+
     def _compute_mean_cwtpi(self) -> None:
         # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
         self.rings_table["CWTPI"] = np.nan
@@ -1630,6 +1658,7 @@ class SampleAnalyzer:
         self._compute_mean_dtan()
         self._compute_mean_tb2()
         self._compute_mean_cwa()
+        self._compute_mean_rwd()
 
         return self.rings_table
 
