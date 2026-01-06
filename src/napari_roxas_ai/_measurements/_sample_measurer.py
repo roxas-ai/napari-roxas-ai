@@ -1282,6 +1282,78 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "DH"] = np.nan
 
+    def _compute_mean_dh2(self) -> None:
+        # DH2 = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
+        self.rings_table["DH2"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "DH" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "DH"]].copy()
+        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+        df["DH"] = pd.to_numeric(df["DH"], errors="coerce")
+        df = df.dropna(subset=["bot_ring_id", "DH"])
+
+        if df.empty:
+            return
+
+        # Keep only positive DH values
+        df = df[df["DH"] > 0]
+        if df.empty:
+            return
+
+        # group by ring id and compute DH2
+        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
+            if ring_id not in self.rings_table.index:
+                continue
+
+            dh = ring_df["DH"].values.astype(float)
+            n = dh.size
+            if n <= 0:
+                continue
+
+            mean_dh4 = np.sum(dh ** 4) / n
+            if mean_dh4 <= 0 or np.isnan(mean_dh4):
+                continue
+
+            self.rings_table.loc[ring_id, "DH2"] = float(mean_dh4 ** 0.25)
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "DH2"] = np.nan
+
+    def _compute_mean_drad(self) -> None:
+        # DRAD = Mean radial cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_rad and aggregates by bot_ring_id.
+        self.rings_table["DRAD"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "lumen_diam_rad" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "lumen_diam_rad"]].copy()
+        df = df.dropna(subset=["bot_ring_id", "lumen_diam_rad"])
+
+        if df.empty:
+            return
+
+        # group by ring id and compute mean
+        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["lumen_diam_rad"].mean()
+
+        for ring_id, val in ring_mean.items():
+            if ring_id in self.rings_table.index:
+                self.rings_table.loc[ring_id, "DRAD"] = float(val)
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "DRAD"] = np.nan
+
     def _compute_mean_cwtpi(self) -> None:
         # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
         self.rings_table["CWTPI"] = np.nan
@@ -1469,6 +1541,8 @@ class SampleAnalyzer:
         self._compute_mean_rtsr()
         self._compute_mean_ctsr()
         self._compute_mean_dh()
+        self._compute_mean_dh2()
+        self._compute_mean_drad()
 
         return self.rings_table
 
