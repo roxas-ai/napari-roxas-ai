@@ -174,6 +174,7 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
 
     rename_column(df, "ring_year", "YEAR")
     rename_column(df, "ring_angle_width", "MRW")
+    rename_column(df, "boundary_coordinates", "RBXY")
 
     columns_order = [
         "ID",
@@ -208,6 +209,7 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "TB2",
         "CWA",
         "RWD",
+        "RBXY"
     ]
 
     # Keep only those that actually exist in df
@@ -218,6 +220,7 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     # df = df[columns_order_existing + other_cols]
 
     df = df[columns_order_existing]
+
     # round columns with column name and number of decimals
     df = (df
           .pipe(round_column, "MRW", 2)
