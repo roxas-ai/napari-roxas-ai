@@ -217,6 +217,8 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
             {key: metadata[key] for key in metadata_keys}
         )
 
+    add_kwargs["metadata"]["path"] = path
+
     # Create a colormap for the cells
     colormap = make_binary_labels_colormap(create_random_color=False)
     add_kwargs["colormap"] = colormap
@@ -278,6 +280,7 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
             {key: metadata[key] for key in metadata_keys}
         )
 
+    add_kwargs["metadata"]["path"] = path
     # Create a colormap for the rings
     unique_rings_raster_values = np.unique(data)
     colormap = make_rings_colormap(unique_rings_raster_values)
@@ -335,6 +338,7 @@ def read_scan_file(path: str) -> Tuple[np.ndarray, dict, str]:
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
         )
+    add_kwargs["metadata"]["path"] = path
 
     return data, add_kwargs, "image"
 

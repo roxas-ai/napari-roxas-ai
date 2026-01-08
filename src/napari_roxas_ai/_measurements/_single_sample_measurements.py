@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict
-
-import numpy as np
-import pandas as pd
+from pathlib import Path
+from qtpy.QtCore import QTimer
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -12,10 +11,14 @@ from magicgui.widgets import (
 )
 from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
-
 from napari_roxas_ai._settings import SettingsManager
-
 from ._sample_measurer import SampleAnalyzer
+from napari_roxas_ai._writer import write_single_layer
+
+
+import numpy as np
+import pandas as pd
+
 
 settings = SettingsManager()
 
@@ -60,6 +63,14 @@ class Worker(QObject):
 class SingleSampleMeasurementsWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
+
+        self._spinner_frames = ["|", "/", "-", "\\"]
+        self._spinner_index = 0
+
+        self._spinner_timer = QTimer()
+        self._spinner_timer.setInterval(150)  # update speed in ms
+        self._spinner_timer.timeout.connect(self._update_spinner)
+
         self._viewer = viewer
 
         # Create a layer selection widget for label layers
@@ -122,6 +133,11 @@ class SingleSampleMeasurementsWidget(Container):
             ]
         )
 
+    def _update_spinner(self):
+        frame = self._spinner_frames[self._spinner_index]
+        self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
+        self._run_analysis_button.text = f"{self._current_status} {frame}"
+
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers names"""
 
@@ -135,7 +151,11 @@ class SingleSampleMeasurementsWidget(Container):
         )
 
     def _run_analysis(self):
-        """Run the analysis in a separate thread."""
+        self._run_analysis_button.enabled = False
+        self._current_status = "Processing"
+        self._spinner_index = 0
+        self._spinner_timer.start()
+
 
         # Get the selected label layer
         if self._input_sample_combo.value is None:
@@ -205,6 +225,12 @@ class SingleSampleMeasurementsWidget(Container):
         else:
             raise ValueError("Choose a measurement to compute.")
 
+        sample_type = None
+        if self._measure_cells_checkbox.value:
+            sample_type = self._cells_input_layer.metadata.get("sample_type")
+        elif self._measure_rings_checkbox.value:
+            sample_type = self._rings_input_layer.metadata.get("sample_type")
+
         config = {
             "pixels_per_um": scale,
             "cluster_separation_threshold": self._cluster_separation_threshold.value,
@@ -213,6 +239,7 @@ class SingleSampleMeasurementsWidget(Container):
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
+            "sample_type": sample_type,
         }
 
         # Run the analysis in a separate thread
@@ -234,17 +261,86 @@ class SingleSampleMeasurementsWidget(Container):
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
+        self.worker_thread.finished.connect(self._spinner_timer.stop)
+        self.worker_thread.finished.connect(
+            lambda: setattr(self._run_analysis_button, "text", "Run Analysis")
+        )
+        self.worker_thread.finished.connect(
+            lambda: setattr(self._run_analysis_button, "enabled", True)
+        )
+
         self.worker_thread.start()
 
+
     def _add_result_layers(self, cells_table, rings_table):
-        """Add result images to the viewer."""
 
+        project_dir = Path(settings.get("project_directory")) / "measurements"
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # ---------------------------
+        # Export Cells
+        # ---------------------------
         if not cells_table.empty:
+            print("[Cells] Updating layer features...")
             self._cells_input_layer.features = cells_table
-            # TODO: add metadata update
 
+            cells_path = self._cells_input_layer.metadata.get("file_path")
+
+
+            if cells_path is None:
+                sample_name = self._cells_input_layer.metadata.get(
+                    "sample_name", self._cells_input_layer.name
+                )
+                cells_path = str(project_dir / f"{sample_name}.cells.png")
+                self._cells_input_layer.metadata["file_path"] = cells_path
+
+            print(f"[Cells] Writing results to: {cells_path}")
+            write_single_layer(
+                path=cells_path,
+                data=self._cells_input_layer.data,
+                meta={
+                    "name": self._cells_input_layer.name,
+                    "metadata": self._cells_input_layer.metadata,
+                    "features": cells_table,
+                },
+            )
+            show_info(f"Cells exported to: {cells_path}")
+
+        # ---------------------------
+        # Export Rings
+        # ---------------------------
         if not rings_table.empty:
+            print("[Rings] Updating layer features...")
             self._rings_input_layer.features = rings_table
-            # TODO: add metadata update
 
-        show_info("measurements completed successfully.")
+            rings_path = self._rings_input_layer.metadata.get("file_path")
+
+            if rings_path is None:
+                sample_name = self._rings_input_layer.metadata.get(
+                    "sample_name", self._rings_input_layer.name
+                )
+                rings_path = str(project_dir / f"{sample_name}.rings.png")
+                self._rings_input_layer.metadata["file_path"] = rings_path
+
+            print(f"[Rings] Writing results to: {rings_path}")
+
+            # move boundary_coordinates at the end of the table
+            if "boundary_coordinates" in rings_table.columns:
+                cols = [c for c in rings_table.columns if c != "boundary_coordinates"]
+                cols.append("boundary_coordinates")
+                rings_table = rings_table[cols]
+
+            write_single_layer(
+                path=rings_path,
+                data=self._rings_input_layer.data,
+                meta={
+                    "name": self._rings_input_layer.name,
+                    "metadata": self._rings_input_layer.metadata,
+                    "features": rings_table,
+                },
+            )
+            show_info(f"Rings exported to: {rings_path}")
+
+        show_info("Measurements completed and saved.")
+
+

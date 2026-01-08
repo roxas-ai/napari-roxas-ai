@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
+import pandas as pd
 from PIL import Image
 
 # Import SettingsManager to get file extensions
@@ -155,6 +156,188 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     return written_file_paths
 
 
+def rename_column(df: pd.DataFrame, old_name: str, roxas_name: str):
+    if old_name in df.columns:
+        df.rename(columns={old_name: roxas_name}, inplace=True)
+
+def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+    """
+    Standardize ROXAS-AI rings output table
+    """
+
+    # Remove internal numeric id if present
+    df = df.reset_index(drop=True)
+    if "id" in df.columns:
+        df = df.drop(columns=["id"])
+
+    df.insert(0, "ID", sample_name)
+
+    rename_column(df, "ring_year", "YEAR")
+    rename_column(df, "ring_angle_width", "MRW")
+    rename_column(df, "boundary_coordinates", "RBXY")
+
+    columns_order = [
+        "ID",
+        "YEAR",
+        "RA",
+        "MRW",
+        "CNO",
+        "CD",
+        "CTA",
+        "RCTA",
+        "MLA",
+        "MINLA",
+        "MAXLA",
+        "KH",
+        "KS",
+        "RVGI",
+        "RVSF",
+        "RGSGV",
+        "CWTPI",
+        "CWTBA",
+        "CWTLE",
+        "CWTRI",
+        "CWTTAN",
+        "CWTRAD",
+        "CWTALL",
+        "RTSR",
+        "CTSR",
+        "DH",
+        "DH2",
+        "DRAD",
+        "DTAN",
+        "TB2",
+        "CWA",
+        "RWD",
+        "RBXY"
+    ]
+
+    # Keep only those that actually exist in df
+    columns_order_existing = [c for c in columns_order if c in df.columns]
+
+    # All columns not listed are appended at the end
+    # other_cols = [c for c in df.columns if c not in columns_order_existing]
+    # df = df[columns_order_existing + other_cols]
+
+    df = df[columns_order_existing]
+
+    # round columns with column name and number of decimals
+    df = (df
+          .pipe(round_column, "MRW", 2)
+          .pipe(round_column, "RA", 3)
+          .pipe(round_column, "CD", 2)
+          .pipe(round_column, "CTA", 3)
+          .pipe(round_column, "RCTA", 2)
+          .pipe(round_column, "MLA", 2)
+          .pipe(round_column, "MINLA", 2)
+          .pipe(round_column, "MAXLA", 2)
+          .pipe(round_column, "CWTPI", 2)
+          .pipe(round_column, "CWTBA", 2)
+          .pipe(round_column, "CWTLE", 2)
+          .pipe(round_column, "CWTRI", 2)
+          .pipe(round_column, "CWTTAN", 2)
+          .pipe(round_column, "CWTRAD", 2)
+          .pipe(round_column, "CWTALL", 2)
+          .pipe(round_column, "RTSR", 2)
+          .pipe(round_column, "CTSR", 2)
+          .pipe(round_column, "DH", 2)
+          .pipe(round_column, "DH2", 2)
+          .pipe(round_column, "DRAD", 2)
+          .pipe(round_column, "DTAN", 2)
+          .pipe(round_column, "TB2", 2)
+          .pipe(round_column, "CWA", 2)
+          .pipe(round_column, "RWD", 2)
+          )
+
+    return df
+
+def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFrame:
+    """
+    Standardize ROXAS-AI cells output table
+    """
+
+    # Reset index so CID is stable and no index leaks into CSV
+    df = df.reset_index(drop=True)
+
+    # Remove internal numeric id if present
+    if "id" in df.columns:
+        df = df.drop(columns=["id"])
+
+    # Remove centroid column if present
+    if "centroid" in df.columns:
+        df = df.drop(columns=["centroid"])
+
+    # Insert ID and CID
+    df.insert(0, "ID", sample_name)
+    df.insert(1, "CID", range(1, len(df) + 1))
+
+    rename_column(df, "ring_year", "YEAR")
+    rename_column(df, "lumen_area", "LA")
+    rename_column(df, "top_angled_dist", "RADDISTR")
+    rename_column(df, "CWT_pith", "CWTPI")
+    rename_column(df, "CWT_bark", "CWTBA")
+    rename_column(df, "CWT_left", "CWTLE")
+    rename_column(df, "CWT_right", "CWTRI")
+    rename_column(df, "lumen_diam_rad", "DRAD")
+    rename_column(df, "lumen_diam_tang", "DTAN")
+
+    columns_order = [
+        "ID",
+        "CID",
+        "YEAR",
+        "LA",
+        "XPIX",
+        "YPIX",
+        "RADDISTR",
+        "RRADDISTR",
+        "NBRNO",
+        "NBRID",
+        "ASP",
+        "MAJAX",
+        "KH",
+        "CWTPI",
+        "CWTBA",
+        "CWTLE",
+        "CWTRI",
+        "CWTTAN",
+        "CWTRAD",
+        "CWTALL",
+        "RTSR",
+        "CTSR",
+        "DH",
+        "DRAD",
+        "DTAN",
+        "TB2",
+        "CWA",
+        "RWD"
+    ]
+
+    # Keep only those that actually exist in df
+    columns_order_existing = [c for c in columns_order if c in df.columns]
+
+    # All columns not listed are appended at the end
+    # other_cols = [c for c in df.columns if c not in columns_order_existing]
+
+    df = df[columns_order_existing]
+
+    df = (df
+          .pipe(round_column, "LA", 2)                          # round LA to 2 decimals
+          .pipe(round_column, "RADDISTR", 0, integer=True)      # round RADDISTR to 0 decimals
+          .pipe(round_column, "RRADDISTR", 0, integer=True)     # round RRADDISTR to 0 decimals
+          .pipe(round_column, "ASP", 3)                         # round ASP to 3 decimals
+          .pipe(round_column, "MAJAX", 0, integer=True)         # round MAJAX to 0 decimals
+          )
+
+    return df
+
+def round_column(df, col, decimals, integer=False):
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").round(decimals)
+        if integer:
+            df[col] = df[col].astype("Int64")
+    return df
+
+
 def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     """Writes a cells file.
 
@@ -193,10 +376,13 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
             settings.get("file_extensions.cells_table_file_extension")
         )
         cells_table_file_path = f"{sample_path}{cells_table_file_extension}"
-        meta["features"].to_csv(
+        features = format_cells_output_table(
+            meta["features"], meta["metadata"]["sample_name"]
+        )
+        features.to_csv(
             cells_table_file_path,
             sep=settings.get("tables.separator"),
-            index_label=settings.get("tables.index_column"),
+            index=False,
         )
         written_file_paths.append(cells_table_file_path)
 
@@ -250,10 +436,13 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
             settings.get("file_extensions.rings_table_file_extension")
         )
         rings_table_file_path = f"{sample_path}{rings_table_file_extension}"
-        meta["features"].to_csv(
+        features = format_rings_output_table(
+            meta["features"], meta["metadata"]["sample_name"]
+        )
+        features.to_csv(
             rings_table_file_path,
             sep=settings.get("tables.separator"),
-            index_label=settings.get("tables.index_column"),
+            index=False,
         )
         written_file_paths.append(rings_table_file_path)
 
