@@ -154,7 +154,7 @@ def rasterize_rings(
             axis=1,
         )
         value = (
-            row["ring_year"]
+            row["YEAR"]
             if row["enabled"]
             else settings.get("rasterization.uncomplete_ring_value")
         )
@@ -207,7 +207,7 @@ def update_rings_geometries(
     )
 
     # Assign year
-    rings_table["ring_year"] = [
+    rings_table["YEAR"] = [
         a + 1 for a in range(last_year - len(rings_table), last_year)
     ]
 
@@ -406,11 +406,11 @@ class RingsLayerEditorWidget(Container):
         ]
 
         features = {
-            "ring_year": self.input_layer.features["ring_year"].tolist(),
+            "YEAR": self.input_layer.features["YEAR"].tolist(),
         }
 
         text = {
-            "string": "{ring_year}",
+            "string": "{YEAR}",
             "anchor": "upper_left",  # "center"
             "translation": [0, 0],  # [0, -self.input_layer.data.shape[1] // 2]
             "size": 20,

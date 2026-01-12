@@ -165,14 +165,18 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     Standardize ROXAS-AI rings output table
     """
 
+    df = df.copy()
+
     # Remove internal numeric id if present
     df = df.reset_index(drop=True)
     if "id" in df.columns:
         df = df.drop(columns=["id"])
 
-    df.insert(0, "ID", sample_name)
+    if "ID" in df.columns:
+        df["ID"] = sample_name
+    else:
+        df.insert(0, "ID", sample_name)
 
-    rename_column(df, "ring_year", "YEAR")
     rename_column(df, "ring_angle_width", "MRW")
     rename_column(df, "boundary_coordinates", "RBXY")
 
@@ -209,7 +213,9 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "TB2",
         "CWA",
         "RWD",
-        "RBXY"
+        "RBXY",
+        "cells_above",
+        "enabled"
     ]
 
     # Keep only those that actually exist in df
@@ -256,6 +262,7 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     Standardize ROXAS-AI cells output table
     """
 
+    df = df.copy()
     # Reset index so CID is stable and no index leaks into CSV
     df = df.reset_index(drop=True)
 
@@ -268,10 +275,13 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         df = df.drop(columns=["centroid"])
 
     # Insert ID and CID
-    df.insert(0, "ID", sample_name)
-    df.insert(1, "CID", range(1, len(df) + 1))
+    if "ID" in df.columns:
+        df["ID"] = sample_name
+    else:
+        df.insert(0, "ID", sample_name)
+    if "CID" not in df.columns:
+        df.insert(1, "CID", range(1, len(df) + 1))
 
-    rename_column(df, "ring_year", "YEAR")
     rename_column(df, "lumen_area", "LA")
     rename_column(df, "top_angled_dist", "RADDISTR")
     rename_column(df, "CWT_pith", "CWTPI")

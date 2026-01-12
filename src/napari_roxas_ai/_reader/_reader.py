@@ -200,12 +200,13 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         Path(layer_name).stem + cells_table_file_extension
     )
     if cells_table_path.exists():
-        add_kwargs["features"] = pd.read_csv(
+        df = pd.read_csv(
             cells_table_path,
             sep=settings.get("tables.separator"),
-            index_col=settings.get("tables.index_column"),
-            converters={"centroid": ast.literal_eval},
+            index_col=None,
+            converters={"centroid": ast.literal_eval},  # legacy
         )
+        add_kwargs["features"] = df
 
     # Try to get sample metadata and cells metadata from metadata file
     add_kwargs["metadata"] = {}
@@ -262,13 +263,30 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     rings_table_path = Path(path).parent / (
         Path(layer_name).stem + rings_table_file_extension
     )
+    print("[Reader] rings_table_path:", rings_table_path, "exists=", rings_table_path.exists())
+
     if rings_table_path.exists():
-        add_kwargs["features"] = pd.read_csv(
+        df = pd.read_csv(
             rings_table_path,
             sep=settings.get("tables.separator"),
-            index_col=settings.get("tables.index_column"),
-            converters={"boundary_coordinates": ast.literal_eval},
+            index_col=None,
+            converters={
+                "RBXY": ast.literal_eval,
+                "boundary_coordinates": ast.literal_eval,  # legacy
+            },
         )
+        rename_map = {}
+        if "ring_year" in df.columns and "YEAR" not in df.columns:
+            rename_map["YEAR"] = "ring_year"
+        if "RBXY" in df.columns and "boundary_coordinates" not in df.columns:
+            rename_map["RBXY"] = "boundary_coordinates"
+        if "MRW" in df.columns and "ring_angle_width" not in df.columns:
+            rename_map["MRW"] = "ring_angle_width"
+
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
+        add_kwargs["features"] = df
 
     # Try to get sample metadata and rings metadata from metadata file
     add_kwargs["metadata"] = {}

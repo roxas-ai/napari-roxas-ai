@@ -274,7 +274,7 @@ class SingleSampleMeasurementsWidget(Container):
 
     def _add_result_layers(self, cells_table, rings_table):
 
-        project_dir = Path(settings.get("project_directory")) / "measurements"
+        project_dir = Path(settings.get("project_directory"))
         project_dir.mkdir(parents=True, exist_ok=True)
 
         # ---------------------------

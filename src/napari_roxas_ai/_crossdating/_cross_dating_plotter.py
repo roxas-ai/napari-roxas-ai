@@ -429,7 +429,7 @@ class CrossDatingPlotterWidget(Container):
 
         # Get the layer rings series
         layer_df = self._input_layer_combo.value.features.set_index(
-            "ring_year"
+            "YEAR"
         ).copy()
 
         # Compute the difference with previous year
@@ -461,7 +461,7 @@ class CrossDatingPlotterWidget(Container):
                 width_series.rename("layer_series"),
             ],
             axis=1,
-        ).rename_axis("ring_year")
+        ).rename_axis("YEAR")
 
         # Update the plot
         self._plot_crossdating_data()
@@ -706,11 +706,11 @@ class CrossDatingPlotterWidget(Container):
         target_end = candidate["end_year"]
 
         layer = self._input_layer_combo.value
-        rings_table = layer.features.copy().sort_values("ring_year")
+        rings_table = layer.features.copy().sort_values("YEAR")
 
         window = target_end - target_start + 1
 
-        rings_table.loc[rings_table.index[:window], "ring_year"] = np.arange(
+        rings_table.loc[rings_table.index[:window], "YEAR"] = np.arange(
             target_start, target_end + 1
         )
 
