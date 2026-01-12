@@ -178,7 +178,6 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         df.insert(0, "ID", sample_name)
 
     rename_column(df, "ring_angle_width", "MRW")
-    rename_column(df, "boundary_coordinates", "RBXY")
 
     columns_order = [
         "ID",
@@ -503,7 +502,7 @@ def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
     elif layer_name.endswith(rings_content_ext):
         written_file_paths += write_rings_file(path, data, meta)
     else:
-        written_file_paths += None
+        return written_file_paths
     # return path to any file(s) that were successfully written
     return written_file_paths
 

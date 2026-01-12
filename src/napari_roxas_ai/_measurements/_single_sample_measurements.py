@@ -324,10 +324,10 @@ class SingleSampleMeasurementsWidget(Container):
 
             print(f"[Rings] Writing results to: {rings_path}")
 
-            # move boundary_coordinates at the end of the table
-            if "boundary_coordinates" in rings_table.columns:
-                cols = [c for c in rings_table.columns if c != "boundary_coordinates"]
-                cols.append("boundary_coordinates")
+            # move RBXY at the end of the table
+            if "RBXY" in rings_table.columns:
+                cols = [c for c in rings_table.columns if c != "RBXY"]
+                cols.append("RBXY")
                 rings_table = rings_table[cols]
 
             write_single_layer(

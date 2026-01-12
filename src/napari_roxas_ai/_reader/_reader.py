@@ -255,38 +255,60 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         scale_value = 1 / float(metadata["sample_scale"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
-    # Try to get tablular data associated with the rings
-    rings_table_file_extension = "".join(
-        settings.get("file_extensions.rings_table_file_extension")
-    )
+        # Try to get tabular data associated with the rings
+        rings_table_base = Path(path).parent / (Path(layer_name).stem + ".rings_table")
 
-    rings_table_path = Path(path).parent / (
-        Path(layer_name).stem + rings_table_file_extension
-    )
-    print("[Reader] rings_table_path:", rings_table_path, "exists=", rings_table_path.exists())
+        rings_table_candidates = [
+            Path(str(rings_table_base) + ".csv"),  # modern
+            Path(str(rings_table_base) + ".txt"),  # legacy
+        ]
 
-    if rings_table_path.exists():
-        df = pd.read_csv(
-            rings_table_path,
-            sep=settings.get("tables.separator"),
-            index_col=None,
-            converters={
-                "RBXY": ast.literal_eval,
-                "boundary_coordinates": ast.literal_eval,  # legacy
-            },
-        )
-        rename_map = {}
-        if "ring_year" in df.columns and "YEAR" not in df.columns:
-            rename_map["YEAR"] = "ring_year"
-        if "RBXY" in df.columns and "boundary_coordinates" not in df.columns:
-            rename_map["RBXY"] = "boundary_coordinates"
-        if "MRW" in df.columns and "ring_angle_width" not in df.columns:
-            rename_map["MRW"] = "ring_angle_width"
+        rings_table_path = next((p for p in rings_table_candidates if p.exists()), None)
 
-        if rename_map:
-            df = df.rename(columns=rename_map)
+        if rings_table_path is not None:
+            expected_any = {"boundary_coordinates", "RBXY", "ring_year", "YEAR"}
 
-        add_kwargs["features"] = df
+            # try configured separator first
+            df = pd.read_csv(
+                rings_table_path,
+                sep=settings.get("tables.separator"),
+                index_col=None,
+                converters={
+                    "RBXY": ast.literal_eval,
+                    "boundary_coordinates": ast.literal_eval,
+                },
+            )
+
+            # fallback: legacy tab-separated
+            if df.empty or expected_any.isdisjoint(set(df.columns)):
+                df = pd.read_csv(
+                    rings_table_path,
+                    sep="\t",
+                    index_col=None,
+                    converters={
+                        "RBXY": ast.literal_eval,
+                        "boundary_coordinates": ast.literal_eval,
+                    },
+                )
+
+            # normalize column names so downstream code can rely on RBXY + YEAR
+            rename_map = {}
+
+            if "ring_year" in df.columns and "YEAR" not in df.columns:
+                rename_map["ring_year"] = "YEAR"
+
+            # important: keep legacy RBXY if already there; otherwise map boundary_coordinates -> RBXY
+            if "boundary_coordinates" in df.columns and "RBXY" not in df.columns:
+                rename_map["boundary_coordinates"] = "RBXY"
+
+            # legacy
+            if "ring_angle_width" in df.columns and "MRW" not in df.columns:
+                rename_map["ring_angle_width"] = "MRW"
+
+            if rename_map:
+                df = df.rename(columns=rename_map)
+
+            add_kwargs["features"] = df
 
     # Try to get sample metadata and rings metadata from metadata file
     add_kwargs["metadata"] = {}

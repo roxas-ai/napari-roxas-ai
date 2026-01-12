@@ -702,7 +702,7 @@ class SampleAnalyzer:
 
         # Compute rings regressions
         self.rings_table[["boundary_slope", "boundary_intercept"]] = (
-            self.rings_table["boundary_coordinates"]
+            self.rings_table["RBXY"]
             .apply(self._rings_linear_regression)
             .apply(pd.Series)
         )
@@ -746,8 +746,8 @@ class SampleAnalyzer:
                 continue
 
             bounds = np.array(
-                self.rings_table["boundary_coordinates"][i]
-                + self.rings_table["boundary_coordinates"][i + 1][::-1],
+                self.rings_table["RBXY"][i]
+                + self.rings_table["RBXY"][i + 1][::-1],
                 dtype=np.int32
             )
 
@@ -1536,8 +1536,8 @@ class SampleAnalyzer:
             # Get cells in the current ring
             bounds = np.flip(
                 np.array(
-                    self.rings_table["boundary_coordinates"][i]
-                    + self.rings_table["boundary_coordinates"][i + 1][::-1],
+                    self.rings_table["RBXY"][i]
+                    + self.rings_table["RBXY"][i + 1][::-1],
                     dtype=np.int32,
                 ),
                 axis=1,
@@ -1705,7 +1705,7 @@ if __name__ == "__main__":
         ),
         sep="\t",
         index_col=0,
-        converters={"boundary_coordinates": ast.literal_eval},
+        converters={"RBXY": ast.literal_eval},
     )
 
     # Initialize the analyzer

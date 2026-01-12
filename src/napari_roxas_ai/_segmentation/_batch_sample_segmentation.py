@@ -218,7 +218,7 @@ class Worker(QObject):
                         coords = boundary.cpu().numpy().tolist()
                     else:
                         coords = boundary
-                    boundary_data.append({"boundary_coordinates": coords})
+                    boundary_data.append({"RBXY": coords})
 
                 boundaries_df = pd.DataFrame(boundary_data)
 

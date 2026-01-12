@@ -110,12 +110,14 @@ class CellsLayerEditorWidget(Container):
 
         self.input_layer = self._input_layer_combo.value
 
-        if self._edition_mode_combo.value == "Edit As Raster":
-            # Create a new working layer with the same data as the input layer
+        sample_name = self.input_layer.metadata.get("sample_name")
+        sample_stem_path = self.input_layer.metadata.get("sample_stem_path")
 
+        if self._edition_mode_combo.value == "Edit As Raster":
             colormap = defaultdict(lambda: [0, 0, 0, 0])
             colormap[1] = self.settings.get("vectorization.cells_face_color")
-            self._viewer.add_labels(
+
+            work_layer = self._viewer.add_labels(
                 self.input_layer.data,
                 name="Cells Modification",
                 scale=self.input_layer.scale,
@@ -123,7 +125,6 @@ class CellsLayerEditorWidget(Container):
             )
 
         elif self._edition_mode_combo.value == "Edit As Vector":
-            # Simplify boundary coordinates using cv2.approxPolyDP
             cells_contours = [
                 np.maximum(contour - 1, 0)
                 for contour in cv2.findContours(
@@ -146,8 +147,7 @@ class CellsLayerEditorWidget(Container):
                 if polygon.shape[0] > 2
             ]
 
-            # Create a new Shapes layer with the simplified boundary lines
-            self._viewer.add_shapes(
+            work_layer = self._viewer.add_shapes(
                 cells_polygons,
                 shape_type="polygon",
                 face_color=settings.get("vectorization.cells_face_color"),
@@ -157,6 +157,16 @@ class CellsLayerEditorWidget(Container):
                 name="Cells Modification",
                 scale=self.input_layer.scale,
             )
+
+        else:
+            QMessageBox.warning(None, "Error", "Unknown edition mode selected")
+            return
+
+        # Attach required metadata so other widgets don't crash when iterating layers
+        if sample_name is not None:
+            work_layer.metadata["sample_name"] = sample_name
+        if sample_stem_path is not None:
+            work_layer.metadata["sample_stem_path"] = sample_stem_path
 
     def _cancel_cells_geometries(self) -> None:
         """Cancel the changes made to the input layer."""

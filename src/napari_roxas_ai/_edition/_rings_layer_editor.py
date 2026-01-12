@@ -57,7 +57,7 @@ def outside_rings_deletion(
     """
 
     # Check if any point of the ring is outside the mask
-    for i, coords in rings_table["boundary_coordinates"].items():
+    for i, coords in rings_table["RBXY"].items():
         coords = np.array(coords)
         is_any_valid = np.any(
             (coords[:, 0] > 0)
@@ -150,7 +150,7 @@ def rasterize_rings(
 
     for _i, row in rings_table.iterrows():
         coords = np.flip(
-            np.array(row["boundary_coordinates"]).round().astype("int32"),
+            np.array(row["RBXY"]).round().astype("int32"),
             axis=1,
         )
         value = (
@@ -179,25 +179,25 @@ def update_rings_geometries(
     """
 
     # Rearrange coordinates from left to right if needed
-    rings_table["boundary_coordinates"] = rings_table[
-        "boundary_coordinates"
+    rings_table["RBXY"] = rings_table[
+        "RBXY"
     ].apply(rearrange_coordinates)
 
     # Ensure rings are inside the image
     rings_table = outside_rings_deletion(rings_table, image_shape)
 
     # Ensure complete rings
-    rings_table["boundary_coordinates"] = rings_table[
-        "boundary_coordinates"
+    rings_table["RBXY"] = rings_table[
+        "RBXY"
     ].apply(lambda x: horizontal_rings_completion(x, image_shape[1]))
 
     # Clip rings to the image width
-    rings_table["boundary_coordinates"] = rings_table[
-        "boundary_coordinates"
+    rings_table["RBXY"] = rings_table[
+        "RBXY"
     ].apply(lambda x: horizontal_rings_clippping(x, image_shape[1]))
 
     # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
-    rings_table["cells_above"] = rings_table["boundary_coordinates"].apply(
+    rings_table["cells_above"] = rings_table["RBXY"].apply(
         lambda x: calculate_polygon_area(x, image_shape[1])
     )
     rings_table = (
@@ -402,7 +402,7 @@ class RingsLayerEditorWidget(Container):
             )
             .squeeze()
             .tolist()
-            for coords in self.input_layer.features["boundary_coordinates"]
+            for coords in self.input_layer.features["RBXY"]
         ]
 
         features = {
@@ -452,7 +452,7 @@ class RingsLayerEditorWidget(Container):
         # Recover new shapes data from the viewer
         rings_table = pd.DataFrame(
             data={
-                "boundary_coordinates": [
+                "RBXY": [
                     coords.tolist()
                     for coords in self._viewer.layers[
                         "Rings Modification"
