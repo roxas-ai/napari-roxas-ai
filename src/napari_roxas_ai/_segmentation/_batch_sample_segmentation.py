@@ -23,6 +23,7 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
 from ._cells_model import CellsSegmentationModel
+from ._single_sample_segmentation import apply_segmentation_results_to_viewer
 
 if TYPE_CHECKING:
     import napari
@@ -40,6 +41,7 @@ settings = SettingsManager()
 class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
+    result_ready = Signal(object)
 
     def __init__(
         self,
@@ -259,21 +261,25 @@ class Worker(QObject):
                         "rings_segmentation_datetime": datetime.now().isoformat(),
                     }
                 )
-
-                rings_add_kwargs["features"], rings_data, _ = (
-                    update_rings_geometries(
-                        rings_table=rings_add_kwargs["features"],
-                        last_year=rings_add_kwargs["metadata"][
-                            "rings_outmost_complete_year"
-                        ],
-                        image_shape=rings_data.shape,
-                    )
-                )
-
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=scan_file_path, data=rings_data, meta=rings_add_kwargs
                 )
+
+            results = {}
+            if self.segment_cells:
+                results["cells"] = {"data": cells_data, "name": cells_layer_name}
+
+            if self.segment_rings:
+                results["rings"] = {
+                    "data": rings_data,
+                    "name": rings_layer_name,
+                    "features": boundaries_df,
+                }
+
+            self.result_ready.emit(
+                (results, scan_add_kwargs["scale"], sample_metadata, sample_metadata.get("sample_stem_path"))
+            )
 
         self.progress.emit(total, total)
         self.finished.emit()
@@ -448,5 +454,21 @@ class BatchSampleSegmentationWidget(Container):
             lambda: setattr(self._run_segmentation_button, "enabled", True)
         )
 
+        self.worker.result_ready.connect(self._add_result_layers)
+
         # Run the analysis in a separate thread
         self.worker_thread.start()
+
+    def _add_result_layers(self, payload):
+        results, input_scale, sample_metadata, sample_stem_path = payload
+        apply_segmentation_results_to_viewer(
+            self._viewer,
+            results=results,
+            settings=settings,
+            input_scale=input_scale,
+            sample_metadata=sample_metadata,
+            sample_stem_path=sample_stem_path,
+            cells_model_file=self.cells_model_file,
+            rings_model_file=self.rings_model_file,
+        )
+

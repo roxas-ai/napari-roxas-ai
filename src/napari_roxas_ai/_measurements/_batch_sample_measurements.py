@@ -148,6 +148,12 @@ class Worker(QObject):
                 self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
                     "sample_scale"
                 ]
+                self.config["sample_type"] = (
+                        (cells_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or (rings_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or "conifer"
+                )
+
                 analyzer = SampleAnalyzer(
                     self.config,
                     cells_data.astype("uint8") * 255,
@@ -181,6 +187,10 @@ class Worker(QObject):
                 self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
                     "sample_scale"
                 ]
+                self.config["sample_type"] = (
+                        (cells_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or "conifer"
+                )
                 analyzer = SampleAnalyzer(
                     self.config,
                     cells_data.astype("uint8") * 255,
@@ -208,6 +218,10 @@ class Worker(QObject):
                 self.config["pixels_per_um"] = rings_add_kwargs["metadata"][
                     "sample_scale"
                 ]
+                self.config["sample_type"] = (
+                        (rings_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or "conifer"
+                )
                 analyzer = SampleAnalyzer(
                     self.config,
                     np.zeros_like(rings_data),

@@ -177,7 +177,10 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     else:
         df.insert(0, "ID", sample_name)
 
-    rename_column(df, "ring_angle_width", "MRW")
+    if "MRW" in df.columns and "ring_angle_width" in df.columns:
+        df = df.drop(columns=["ring_angle_width"])
+    elif "MRW" not in df.columns and "ring_angle_width" in df.columns:
+        df = df.rename(columns={"ring_angle_width": "MRW"})
 
     columns_order = [
         "ID",
