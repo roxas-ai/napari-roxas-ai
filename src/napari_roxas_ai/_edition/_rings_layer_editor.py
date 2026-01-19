@@ -225,6 +225,38 @@ def update_rings_geometries(
     return rings_table, rings_raster, colormap
 
 
+def interpolate_row_at_col(coords_rc: list, col_query: float) -> float:
+    # used to place the YEAR label vertically centered *inside* a ring at the left margin:
+    # take each ring boundary polyline, compute its row-position at a fixed column (near the left edge),
+    # then the ring center is halfway between boundary i and i+1 at that same column.
+    pts = np.asarray(coords_rc, dtype=float)
+    if pts.ndim != 2 or pts.shape[0] < 2:
+        return float("nan")
+
+    rows = pts[:, 0]
+    cols = pts[:, 1]
+
+    order = np.argsort(cols)
+    cols = cols[order]
+    rows = rows[order]
+
+    if col_query <= cols[0]:
+        return float(rows[0])
+    if col_query >= cols[-1]:
+        return float(rows[-1])
+
+    j = int(np.searchsorted(cols, col_query) - 1)
+    c0, c1 = float(cols[j]), float(cols[j + 1])
+    r0, r1 = float(rows[j]), float(rows[j + 1])
+
+    if c1 == c0:
+        return float(r0)
+
+    t = (col_query - c0) / (c1 - c0)
+    return float(r0 + t * (r1 - r0))
+
+
+
 class RingsLayerEditorWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
@@ -393,32 +425,56 @@ class RingsLayerEditorWidget(Container):
 
         self.input_layer = self._input_layer_combo.value
 
+        # If there is already an edit session open, remove old helper layers first
+        if "Rings Years" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Years")
+        if "Rings Modification" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Modification")
+
+        # Build a DF in the same logical order as the annotated export
+        df = self.input_layer.features.copy()
+
+        # Prefer YEAR ordering; otherwise fall back to cells_above if present
+        if "YEAR" in df.columns:
+            df = df.sort_values("YEAR").reset_index(drop=True)
+        elif "cells_above" in df.columns:
+            df = df.sort_values("cells_above").reset_index(drop=True)
+
+        # Keep only enabled rings
+        if "enabled" in df.columns:
+            df = df[df["enabled"].fillna(True)].reset_index(drop=True)
+
+        if df.empty or "RBXY" not in df.columns or "YEAR" not in df.columns:
+            show_info("No valid rings to edit")
+            return
+
         # Simplify boundary coordinates using cv2.approxPolyDP
-        simplified_boundary_lines = [
-            cv2.approxPolyDP(
+        simplified_boundary_lines = []
+        keep_rows = []
+        for i, coords in enumerate(df["RBXY"].tolist()):
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                continue
+
+            approx = cv2.approxPolyDP(
                 np.array(coords, dtype=np.float32),
                 epsilon=settings.get("vectorization.rings_tolerance"),
                 closed=False,
             )
-            .squeeze()
-            .tolist()
-            for coords in self.input_layer.features["RBXY"]
-        ]
 
-        features = {
-            "YEAR": self.input_layer.features["YEAR"].tolist(),
-        }
+            approx = np.squeeze(approx)
+            if approx.ndim != 2 or approx.shape[0] < 2:
+                continue
 
-        text = {
-            "string": "{YEAR}",
-            "anchor": "upper_left",  # "center"
-            "translation": [0, 0],  # [0, -self.input_layer.data.shape[1] // 2]
-            "size": 20,
-            "color": "red",
-            "blending": "opaque",
-        }
+            simplified_boundary_lines.append(approx.tolist())
+            keep_rows.append(i)
 
-        # Create a new Shapes layer with the simplified boundary lines
+        # Ensure features rows match the number of shapes
+        df = df.iloc[keep_rows].reset_index(drop=True)
+        if df.empty:
+            show_info("No valid rings to edit")
+            return
+
+        # Create the editable Shapes layer
         self._viewer.add_shapes(
             simplified_boundary_lines,
             shape_type="path",
@@ -427,14 +483,62 @@ class RingsLayerEditorWidget(Container):
             opacity=1,
             name="Rings Modification",
             scale=self.input_layer.scale,
-            features=features,
-            text=text,
+            features={"YEAR": df["YEAR"].tolist()},
         )
+
+        # left margin in data coords
+        sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
+        x_left = 10.0 / sx
+
+        # y-value of each boundary line at x_left
+        y_on_left = [interpolate_row_at_col(coords, x_left) for coords in df["RBXY"].tolist()]
+
+        # center of ring i is between boundary i and boundary i+1 at that same x
+        centers_r = []
+        for i in range(len(y_on_left)):
+            if i + 1 < len(y_on_left):
+                centers_r.append(0.5 * (y_on_left[i] + y_on_left[i + 1]))
+            else:
+                centers_r.append(y_on_left[i])
+
+        # left margin in *data coords*
+        sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
+        x_left = 10.0 / sx
+
+        years = [str(int(y)) for y in df["YEAR"].tolist()]
+
+        points_rc = np.column_stack([
+            np.array(centers_r, dtype=float),
+            np.full(len(df), x_left, dtype=float),
+        ])
+
+        self._viewer.add_points(
+            points_rc,
+            name="Rings Years",
+            size=1,
+            opacity=1.0,
+            edge_width=0,
+            face_color=[0, 0, 0, 0],
+            edge_color=[0, 0, 0, 0],
+            scale=self.input_layer.scale,
+            features={"YEAR": years},
+            text={
+                "string": "{YEAR}",
+                "anchor": "upper_left",
+                "translation": [0, 0],
+                "size": 8,
+                "color": "black",
+                "blending": "translucent",
+            },
+        )
+
 
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
         # Remove the working layer
         self._viewer.layers.remove("Rings Modification")
+        if "Rings Years" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Years")
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
