@@ -1,9 +1,10 @@
 """
 Worker class for processing files in a separate thread.
 """
-
+import errno
 import glob
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -55,6 +56,48 @@ class Worker(QObject):
         self.default_metadata = None
         self.apply_to_all = False
         self._current_img_metadata = None  # Temporary cache for image metadata
+
+    def _safe_rename_or_copy_delete(self, src: Path, dst: Path) -> Path:
+        """
+        Rename/move a file without leaving duplicates.
+        Uses atomic replace when possible; falls back to copy+delete on cross-device moves.
+        """
+        src = Path(src)
+        dst = Path(dst)
+
+        if not src.exists():
+            raise FileNotFoundError(f"Source does not exist: {src}")
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+        # If destination exists, remove it to allow replace semantics
+        if dst.exists():
+            dst.unlink()
+
+        # Handle case-only rename on case-insensitive filesystems (Windows/macOS default)
+        try:
+            if (
+                src.resolve().as_posix().lower() == dst.resolve().as_posix().lower()
+                and src.name != dst.name
+            ):
+                tmp = dst.with_name(dst.name + ".__tmp__")
+                os.replace(src, tmp)
+                os.replace(tmp, dst)
+                return dst
+        except Exception:
+            # If resolve fails, ignore and proceed with normal path
+            pass
+
+        try:
+            os.replace(src, dst)  # atomic on same filesystem
+            return dst
+        except OSError as e:
+            if e.errno != errno.EXDEV:
+                raise
+            # Cross-device rename not possible: copy+delete (still no duplicates at end)
+            shutil.copy2(src, dst)
+            src.unlink()
+            return dst
 
     def run(self):
         """
@@ -186,24 +229,15 @@ class Worker(QObject):
                     # Extract metadata before modifying the file
                     img_metadata = self._extract_image_metadata(file_path)
 
-                    if self.overwrite_files:
-                        # If overwrite is enabled, rename the file (replace original)
-                        if Path(new_image_path).exists():
-                            Path(
-                                new_image_path
-                            ).unlink()  # Remove destination if it exists
-                        shutil.move(file_path, new_image_path)
-                        print(f"Renamed file: {file_path} -> {new_image_path}")
-                    else:
-                        # Otherwise, just copy it (keep original)
-                        shutil.copy2(file_path, new_image_path)
-                        print(f"Copied file: {file_path} -> {new_image_path}")
+                    # Always avoid duplicates: rename if possible, else copy+delete
+                    moved_path = self._safe_rename_or_copy_delete(
+                        Path(file_path), Path(new_image_path)
+                    )
+                    print(f"Renamed file: {file_path} -> {moved_path}")
 
-                    # Update file path to the new location
-                    file_path = str(new_image_path)
+                    file_path = str(moved_path)
                 except OSError as e:
                     print(f"Error processing file {file_path}: {e}")
-                    # Skip to next file
                     self.current_file_index += 1
                     self._process_next_file()
                     return
