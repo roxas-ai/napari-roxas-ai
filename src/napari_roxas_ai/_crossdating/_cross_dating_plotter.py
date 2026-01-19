@@ -182,6 +182,16 @@ class CrossDatingPlotterWidget(Container):
         # Create matplotlib canvas widget
         self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
 
+        # Export plot button at bottom-right
+        self._export_plot_button = PushButton(
+            text="Export plot",
+            tooltip="Save current crossdating plot as an image in the project directory",
+        )
+        self._export_plot_button.changed.connect(self._export_plot)
+        self._plot_footer = Container(layout="horizontal")
+        self._plot_footer.append(Container())  # spacer
+        self._plot_footer.append(self._export_plot_button)
+
         # style sliders
         self._style_rangeslider(self._x_range_slider)
         self._style_rangeslider(self._y_range_slider)
@@ -199,6 +209,8 @@ class CrossDatingPlotterWidget(Container):
                 self._offset_apply_button,
                 self._auto_offset_button,
                 self.plot_widget,
+                self.plot_widget,
+                self._plot_footer,
             ]
         )
 
@@ -220,6 +232,32 @@ class CrossDatingPlotterWidget(Container):
         # Connect to viewer events to track layer changes
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
+
+
+    def _export_plot(self):
+        layer = self._input_layer_combo.value
+        if layer is None:
+            show_info("Export plot failed: no rings layer selected")
+            return
+
+        # Decide output directory (prefer project_directory)
+        proj = settings.get("project_directory")
+        if isinstance(proj, str) and proj:
+            out_dir = Path(proj)
+        else:
+            # Fallback: try layer path, else cwd
+            layer_file = layer.metadata.get("path")
+            out_dir = Path(layer_file).parent if isinstance(layer_file, str) and layer_file else Path.cwd()
+
+        sample_name = layer.metadata.get("sample_name") or layer.name
+
+        out_path = self.save_crossdating_plot_image(out_dir, sample_name)
+        if out_path is None:
+            show_info("Export plot failed: plot not ready")
+            return
+
+        show_info(f"Plot exported to: {out_path}")
+
 
     def _style_rangeslider(self, slider: RangeSlider) -> None:
         # Style magicgui RangeSlider handles to look like thin vertical bars instead of fat circles.
@@ -826,6 +864,28 @@ class CrossDatingPlotterWidget(Container):
                 widget.deleteLater()
 
         container.widgets = []
+
+    def save_crossdating_plot_image(self, out_dir: str | Path, sample_name: str) -> Path | None:
+        """Save the currently displayed crossdating plot as a JPG."""
+        if self.plot_df is None or self.plot_df.empty:
+            return None
+        if self._crossdating_column_combo.value is None:
+            return None
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        out_path = out_dir / f"{sample_name}_ReferenceSeries.jpg"
+
+        # Save the exact figure that is shown in the UI
+        self.plot_widget.figure.savefig(
+            out_path,
+            dpi=200,
+            bbox_inches="tight",
+            facecolor="white",
+        )
+        return out_path
+
 
 
 
