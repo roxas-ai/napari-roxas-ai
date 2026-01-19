@@ -109,6 +109,57 @@ def is_supported_file(path: str) -> bool:
         )
     )
 
+def _map_sample_stem_path(
+    meta: dict,
+    *,
+    opened_path: str,
+    metadata_path: Path,
+    path_is_stem: bool,
+    metadata_file_extension: str,
+) -> dict:
+    """
+    make sure that meta['sample_stem_path'] is valid on the running machine.
+
+    Strategy:
+    - If missing: compute from opened_path
+    - If absolute and exists: keep
+    - If absolute and missing: recompute from opened_path (current location)
+    - If relative: keep
+    """
+    stored = meta.get("sample_stem_path")
+
+    # compute the expected stem from the currently opened file/stem
+    opened = Path(opened_path)
+
+    if path_is_stem:
+        expected_stem_abs = opened.resolve()
+    else:
+        base = Path(opened.name).stem
+        base = Path(base).stem
+        expected_stem_abs = (opened.parent / base).resolve()
+
+    # if missing/empty -> set
+    if not isinstance(stored, str) or not stored.strip():
+        meta["sample_stem_path"] = expected_stem_abs.as_posix()
+        return meta
+
+    p = Path(stored)
+
+    # If it's relative -> keep
+    if not p.is_absolute():
+        # normalize to posix string, but do not resolve against anything here
+        meta["sample_stem_path"] = p.as_posix()
+        return meta
+
+    # absolute and exists -> keep (but normalize)
+    if p.exists():
+        meta["sample_stem_path"] = p.resolve().as_posix()
+        return meta
+
+    # absolute but does not exist -> map to current expected location
+    meta["sample_stem_path"] = expected_stem_abs.as_posix()
+    return meta
+
 
 def get_metadata_from_file(
     path: str, path_is_stem: bool = False
@@ -142,15 +193,44 @@ def get_metadata_from_file(
         )
 
     if not metadata_path.exists():
-        print(
-            f"Error: Could not find metadata file: {metadata_path} for {path}"
-        )
-        return None
+        if path_is_stem:
+            stem_name = Path(path).name
+            project_dir = settings.get("project_directory")
+
+            if project_dir:
+                candidates = list(Path(project_dir).rglob(stem_name + metadata_file_extension))
+                if len(candidates) > 0:
+                    metadata_path = candidates[0]
+                else:
+                    print(
+                        f"Error: Could not find metadata file: {metadata_path} for {path} "
+                        f"(also not found under project_directory={project_dir})"
+                    )
+                    return None
+            else:
+                print(
+                    f"Error: Could not find metadata file: {metadata_path} for {path} "
+                    f"(project_directory not set)"
+                )
+                return None
+        else:
+            print(
+                f"Error: Could not find metadata file: {metadata_path} for {path}"
+            )
+            return None
 
     # Load metadata from JSON file
     try:
         with open(metadata_path) as f:
-            return json.load(f)
+            meta = json.load(f)
+
+        return _map_sample_stem_path(
+            meta,
+            opened_path=path,
+            metadata_path=metadata_path,
+            path_is_stem=path_is_stem,
+            metadata_file_extension=metadata_file_extension,
+        )
     except (json.JSONDecodeError, UnicodeDecodeError):
         print(f"Error: Could not parse JSON metadata file: {metadata_path}")
         return None

@@ -288,9 +288,27 @@ class CrossDatingPlotterWidget(Container):
 
         pattern = f"*{''.join(settings.get('file_extensions.crossdating_file_extension'))}"
 
-        current_path = Path(
-            self._input_layer_combo.value.metadata["sample_stem_path"]
-        ).parent
+        layer = self._input_layer_combo.value
+        stem = Path(layer.metadata.get("sample_stem_path", layer.name))
+
+        base_dir = None
+
+        # layer file path (if present)
+        layer_file = layer.metadata.get("path")
+        if isinstance(layer_file, str) and layer_file:
+            base_dir = Path(layer_file).parent
+
+        # configured project directory
+        if base_dir is None:
+            proj = settings.get("project_directory")
+            if isinstance(proj, str) and proj:
+                base_dir = Path(proj)
+
+        # Resolve stem if needed
+        if base_dir is not None and not stem.is_absolute():
+            stem = base_dir / stem
+
+        current_path = stem.parent if stem.parent != Path(".") else (base_dir or Path.cwd())
 
         # Walk up the directory tree
         while True:  # Stop at root

@@ -150,8 +150,17 @@ class Worker(QObject):
         if stem_name.endswith(self.scan_content_extension):
             stem_name = Path(stem_name).stem
 
-        # Create the sample_stem_path by joining parent and stem
-        sample_stem_path = str(parent_dir / stem_name)
+        # Create absolute stem path
+        sample_stem_abs = (parent_dir / stem_name).resolve()
+
+        # Store as relative to the project root if possible
+        project_root = Path(self.project_directory).resolve()
+        try:
+            sample_stem_rel = sample_stem_abs.relative_to(project_root)
+            sample_stem_path = sample_stem_rel.as_posix()  # store portable separators
+        except ValueError:
+            # If file isn't under project root, store as POSIX absolute
+            sample_stem_path = sample_stem_abs.as_posix()
 
         # Check if base_name already has the scan extension and remove it to avoid duplication
         original_has_scan_ext = False
