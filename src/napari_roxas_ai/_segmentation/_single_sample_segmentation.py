@@ -46,47 +46,49 @@ def apply_segmentation_results_to_viewer(
     cells_model_file: Optional[str] = None,
     rings_model_file: Optional[str] = None,
 ) -> None:
+    """Apply segmentation outputs to the napari viewer.
+
+    Fix: ensure layers have sample metadata at *insert time* (viewer.add_labels),
+    so any UI callbacks triggered by layer insertion never see missing keys.
+    """
+
+    sample_metadata = sample_metadata or {}
 
     # --- CELLS ---
     if "cells" in results:
         cells = results["cells"]
         cells_name = cells["name"]
 
-        try:
-            existing_layer = viewer.layers[cells_name]
-            existing_layer.data = cells["data"]
-            existing_layer.colormap = make_binary_labels_colormap()
-            cells_layer = existing_layer
-        except KeyError:
-            cells_layer = viewer.add_labels(
-                cells["data"],
-                name=cells_name,
-                colormap=make_binary_labels_colormap(),
-            )
-
         cells_metadata = {
             "cells_segmentation_model": cells_model_file,
             "cells_segmentation_datetime": datetime.now().isoformat(),
         }
 
+        cells_md = {}
+        cells_md.update(sample_metadata)
+        cells_md.update(cells_metadata)
+
+        try:
+            cells_layer = viewer.layers[cells_name]
+            cells_layer.data = cells["data"]
+            cells_layer.colormap = make_binary_labels_colormap()
+            # Update metadata for existing layer as well
+            cells_layer.metadata.update(cells_md)
+        except KeyError:
+            # Important: pass metadata at creation time
+            cells_layer = viewer.add_labels(
+                cells["data"],
+                name=cells_name,
+                colormap=make_binary_labels_colormap(),
+                metadata=cells_md,
+            )
+
         cells_layer.scale = input_scale
-        cells_layer.metadata.update(sample_metadata)
-        cells_layer.metadata.update(cells_metadata)
 
     # --- RINGS ---
     if "rings" in results:
         rings = results["rings"]
         rings_name = rings["name"]
-
-        try:
-            existing_layer = viewer.layers[rings_name]
-            existing_layer.data = rings["data"]
-            rings_layer = existing_layer
-        except KeyError:
-            rings_layer = viewer.add_labels(
-                rings["data"],
-                name=rings_name,
-            )
 
         metadata_file_contents = (
             get_metadata_from_file(path=sample_stem_path, path_is_stem=True)
@@ -101,7 +103,7 @@ def apply_segmentation_results_to_viewer(
 
         rings_metadata = {
             "rings_outmost_complete_year": (
-                metadata_file_contents["rings_outmost_complete_year"]
+                metadata_file_contents.get("rings_outmost_complete_year")
                 if metadata_file_contents
                 else default_rings_year_value
             ),
@@ -109,44 +111,76 @@ def apply_segmentation_results_to_viewer(
             "rings_segmentation_datetime": datetime.now().isoformat(),
         }
 
+        rings_md = {}
+        rings_md.update(sample_metadata)
+        rings_md.update(rings_metadata)
+
+        try:
+            rings_layer = viewer.layers[rings_name]
+            rings_layer.data = rings["data"]
+            rings_layer.metadata.update(rings_md)
+        except KeyError:
+            # pass metadata at creation time
+            rings_layer = viewer.add_labels(
+                rings["data"],
+                name=rings_name,
+                metadata=rings_md,
+            )
+
         rings_layer.scale = input_scale
-        rings_layer.metadata.update(sample_metadata)
-        rings_layer.metadata.update(rings_metadata)
 
-        if "features" in rings:
-            new_df = rings["features"]
+        # Apply / merge features
+        new_df = rings.get("features", None)
 
-            # If existing features already contain YEAR etc., preserve them and only update RBXY
-            if (
-                    hasattr(rings_layer, "features")
-                    and rings_layer.features is not None
-                    and not rings_layer.features.empty
-                    and "YEAR" in rings_layer.features.columns
-                    and "RBXY" in new_df.columns
-            ):
-                old_df = rings_layer.features.copy()
-
-                n = min(len(old_df), len(new_df))
-                old_df = old_df.iloc[:n].copy()
-                old_df.loc[old_df.index[:n], "RBXY"] = new_df["RBXY"].iloc[:n].values
-
-                rings_layer.features = old_df
-            else:
-                # fallback: accept new_df, but ensure YEAR exists if possible
+        with rings_layer.events.blocker():
+            if new_df is not None and not new_df.empty:
                 df = new_df.copy()
-                if "YEAR" not in df.columns and "ring_year" in df.columns:
-                    df = df.rename(columns={"ring_year": "YEAR"})
-                rings_layer.features = df
 
-        new_rings_table, new_rings_raster, new_colormap = update_rings_geometries(
-            rings_table=rings_layer.features,
-            last_year=rings_layer.metadata["rings_outmost_complete_year"],
-            image_shape=rings_layer.data.shape,
-        )
+                # Normalize YEAR
+                if "YEAR" not in df.columns:
+                    if "ring_year" in df.columns:
+                        df = df.rename(columns={"ring_year": "YEAR"})
+                    else:
+                        # Pre-fill YEAR based on last_year and number of boundaries
+                        n = len(df)
+                        last_year = int(rings_layer.metadata["rings_outmost_complete_year"])
+                        df["YEAR"] = list(range(last_year - n + 1, last_year + 1))
 
-        rings_layer.features = new_rings_table
-        rings_layer.data = new_rings_raster
-        rings_layer.colormap = new_colormap
+                # Ensure enabled exists
+                if "enabled" not in df.columns:
+                    df["enabled"] = True
+                    if len(df) > 0:
+                        df.loc[df.index[0], "enabled"] = False
+
+                # If existing features already contain YEAR etc., preserve them and only update RBXY
+                if (
+                        getattr(rings_layer, "features", None) is not None
+                        and not rings_layer.features.empty
+                        and "YEAR" in rings_layer.features.columns
+                        and "RBXY" in df.columns
+                ):
+                    old_df = rings_layer.features.copy()
+                    n = min(len(old_df), len(df))
+                    old_df = old_df.iloc[:n].copy()
+                    old_df.loc[old_df.index[:n], "RBXY"] = df["RBXY"].iloc[:n].values
+                    rings_layer.features = old_df
+                else:
+                    rings_layer.features = df
+
+            # Ensure rings_layer.features exists before update_rings_geometries
+            if getattr(rings_layer, "features", None) is None or rings_layer.features.empty:
+                rings_layer.features = pd.DataFrame({"RBXY": [], "YEAR": [], "enabled": []})
+
+            new_rings_table, new_rings_raster, new_colormap = update_rings_geometries(
+                rings_table=rings_layer.features,
+                last_year=rings_layer.metadata["rings_outmost_complete_year"],
+                image_shape=rings_layer.data.shape,
+            )
+
+            rings_layer.features = new_rings_table
+            rings_layer.data = new_rings_raster
+            rings_layer.colormap = new_colormap
+
 
 class Worker(QObject):
     finished = Signal()

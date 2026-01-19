@@ -436,6 +436,14 @@ class CrossDatingPlotterWidget(Container):
         # Skip if no crossdating column is selected
         if self._crossdating_column_combo.value is None:
             return
+        layer = self._input_layer_combo.value
+        if layer is None:
+            return
+
+        feats = getattr(layer, "features", None)
+        if feats is None or feats.empty or "YEAR" not in feats.columns:
+            # Features not ready yet (e.g. during segmentation apply)
+            return
 
         # Get reference series
         reference_series = self.crossdating_dataframe[

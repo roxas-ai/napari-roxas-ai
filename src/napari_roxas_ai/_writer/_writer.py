@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Union
 import numpy as np
 import pandas as pd
 from PIL import Image
+import cv2
 
 # Import SettingsManager to get file extensions
 from napari_roxas_ai._settings import SettingsManager
@@ -110,6 +111,163 @@ def save_image(path: str, image: np.ndarray, rescale: bool = False) -> str:
     pil_image.save(path, compression="tiff_deflate")
 
     return path
+
+def save_annotated_scan_image(
+    scan_path: str,
+    annotated_path: str,
+    rings_features: pd.DataFrame,
+) -> None:
+    """Draw ring polylines + YEAR labels onto the scan image and save.
+
+    - Uses a single, constant font size for all rings.
+    - Font height is set to ~20% of the mean ring width (in pixels).
+    - YEAR label is placed vertically centered between this ring and the next one.
+    - Ring separator lines are drawn black and thicker.
+    - Draws black text (no outline).
+    """
+
+    if rings_features is None or rings_features.empty:
+        return
+    if "RBXY" not in rings_features.columns:
+        return
+
+    # Load scan
+    img = np.array(Image.open(scan_path))
+    if img.ndim == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    elif img.shape[2] == 4:
+        img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+    else:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+    df = rings_features.copy()
+    h, w = img.shape[:2]
+
+    # Prefer YEAR ordering; otherwise fall back to cells_above if present
+    if "YEAR" in df.columns:
+        df = df.sort_values("YEAR").reset_index(drop=True)
+    elif "cells_above" in df.columns:
+        df = df.sort_values("cells_above").reset_index(drop=True)
+
+    # Keep only enabled rings
+    if "enabled" in df.columns:
+        df = df[df["enabled"].fillna(True)].reset_index(drop=True)
+
+    if df.empty:
+        out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        Image.fromarray(out_rgb).save(annotated_path)
+        return
+
+    # Estimate mean ring width in pixels using consecutive cells_above differences
+    mean_ring_width_px = 40.0  # fallback
+    ring_width_px = None
+    if "cells_above" in df.columns and len(df) >= 2:
+        band_area = df["cells_above"].shift(-1) - df["cells_above"]
+        rw = (band_area / float(w)).abs()
+        # For the last ring, reuse median of previous widths
+        if len(rw) > 1:
+            rw.iloc[-1] = float(rw.iloc[:-1].median())
+        ring_width_px = rw
+        rw_valid = rw.dropna()
+        if not rw_valid.empty:
+            mean_ring_width_px = float(rw_valid.mean())
+
+    # Target font height is 20% of mean ring width (clamped)
+    target_h = max(12.0, 0.2 * mean_ring_width_px)
+
+    # Convert desired pixel height to OpenCV font scale
+    sample_label = "9999"
+    (_tw, th), _baseline = cv2.getTextSize(
+        sample_label, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 1
+    )
+    font_scale = target_h / max(th, 1)
+
+    # Make text thicker
+    thickness_text = max(3, int(round(font_scale * 3.0)))
+
+    # Thicker black ring separator lines
+    ring_line_thickness = 6  # was 3 (double thickness)
+
+    # Precompute mid-points (in image coords) for each ring polyline
+    mids_rc = []
+    for i, row in df.iterrows():
+        coords = row["RBXY"]
+        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+            mids_rc.append(None)
+            continue
+        mid = coords[len(coords) // 2]  # [row, col]
+        mids_rc.append((float(mid[0]), float(mid[1])))
+
+    # Draw each ring and label
+    for i, row in df.iterrows():
+        coords = row["RBXY"]
+        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+            continue
+
+        # RBXY is [row, col]; OpenCV expects (x=col, y=row)
+        pts = (
+            np.array([[p[1], p[0]] for p in coords], dtype=np.float32)
+            .round()
+            .astype(np.int32)
+            .reshape((-1, 1, 2))
+        )
+
+        cv2.polylines(
+            img,
+            [pts],
+            isClosed=False,
+            color=(0, 0, 0),
+            thickness=ring_line_thickness,
+        )
+
+        year = None
+        if "YEAR" in row.index:
+            year = row["YEAR"]
+        elif "ring_year" in row.index:
+            year = row["ring_year"]
+        if year is None:
+            continue
+
+        # Compute a vertically centered label position between this ring and the next one.
+        # If next ring is missing, fall back to this ring's mid-point.
+        this_mid = mids_rc[i]
+        if this_mid is None:
+            continue
+
+        if i + 1 < len(mids_rc) and mids_rc[i + 1] is not None:
+            next_mid = mids_rc[i + 1]
+            center_r = 0.5 * (this_mid[0] + next_mid[0])
+            center_c = 0.5 * (this_mid[1] + next_mid[1])
+        else:
+            center_r, center_c = this_mid
+
+        label = str(int(year))
+
+        # Center the text around (center_c, center_r)
+        (tw, th), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness_text
+        )
+        x = int(round(center_c - tw / 2))
+        y = int(round(center_r + th / 2))
+
+        # Keep text inside the image bounds
+        x = max(0, min(x, w - tw - 1))
+        y = max(th + 1, min(y, h - 1))
+
+        cv2.putText(
+            img,
+            label,
+            (x, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            thickness_text,
+            cv2.LINE_AA,
+        )
+
+    out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    Image.fromarray(out_rgb).save(annotated_path)
+
 
 
 def write_scan_file(path: str, data: Any, meta: dict) -> str:
@@ -466,7 +624,25 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     save_image(rings_file_path, data, rescale=False)
     written_file_paths.append(rings_file_path)
 
-    # return path to any file(s) that were successfully written
+    # --- Save annotated scan image ---
+    scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
+    scan_file_path = f"{sample_path}{scan_file_extension}"
+
+    # annotated filename: <sample>_annotated.<ext>
+    scan_suffix = Path(scan_file_path).suffix  # e.g. ".jpg"
+    annotated_path = str(Path(sample_path).with_name(f"{basename}_annotated{scan_suffix}"))
+
+    try:
+        if Path(scan_file_path).exists() and (not meta["features"].empty):
+            save_annotated_scan_image(
+                scan_path=scan_file_path,
+                annotated_path=annotated_path,
+                rings_features=meta["features"],
+            )
+            written_file_paths.append(annotated_path)
+    except Exception as e:
+        print(f"Annotated image export failed for {basename}: {e}")
+
     return written_file_paths
 
 
