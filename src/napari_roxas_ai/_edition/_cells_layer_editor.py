@@ -122,6 +122,10 @@ class CellsLayerEditorWidget(Container):
                 name="Cells Modification",
                 scale=self.input_layer.scale,
                 colormap=colormap,
+                metadata={
+                    "sample_name": sample_name,
+                    "sample_stem_path": sample_stem_path,
+                },
             )
 
         elif self._edition_mode_combo.value == "Edit As Vector":
@@ -156,6 +160,10 @@ class CellsLayerEditorWidget(Container):
                 opacity=1,
                 name="Cells Modification",
                 scale=self.input_layer.scale,
+                metadata={
+                    "sample_name": sample_name,
+                    "sample_stem_path": sample_stem_path,
+                },
             )
 
         else:

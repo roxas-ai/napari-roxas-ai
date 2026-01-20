@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import napari.layers
 import numpy as np
+from scipy import ndimage as ndi
 import pandas as pd
 import torch
 from magicgui.widgets import (
@@ -182,6 +183,50 @@ def apply_segmentation_results_to_viewer(
             rings_layer.colormap = new_colormap
 
 
+def remove_border_touching_components(binary: np.ndarray) -> np.ndarray:
+    """
+    Remove connected components that touch the image border.
+    Expects a 2D binary array (0/1 or 0/255).
+    Returns a uint8 array with values 0/1.
+    """
+    if binary.ndim != 2:
+        raise ValueError(f"Expected 2D array, got shape={binary.shape}")
+
+    mask = (binary > 0)
+
+    if not mask.any():
+        return mask.astype("uint8")
+
+    # 8-connectivity for 2D
+    structure = np.ones((3, 3), dtype=bool)
+    labeled, num = ndi.label(mask, structure=structure)
+
+    if num == 0:
+        return mask.astype("uint8")
+
+    # Collect labels that appear on the border
+    border_labels = np.unique(
+        np.concatenate(
+            [
+                labeled[0, :],
+                labeled[-1, :],
+                labeled[:, 0],
+                labeled[:, -1],
+            ]
+        )
+    )
+    border_labels = border_labels[border_labels != 0]  # ignore background
+
+    if border_labels.size == 0:
+        return mask.astype("uint8")
+
+    # Remove all pixels belonging to those labels
+    remove = np.isin(labeled, border_labels)
+    mask[remove] = False
+
+    return mask.astype("uint8")
+
+
 class Worker(QObject):
     finished = Signal()
     result_ready = Signal(dict)  # Dictionary with results
@@ -247,13 +292,16 @@ class Worker(QObject):
             # Perform inference
             cells_labels = cells_model.infer(self.input_array)
 
-            # Add to results
-            suffix = self.settings.get("file_extensions.cells_file_extension")[
-                0
-            ]
+            # Add to results (compute layer name first)
+            suffix = self.settings.get("file_extensions.cells_file_extension")[0]
             name = f"{self.base_name}{suffix}"
+
+            # Normalize to 0/1 and remove border-touching components
+            cells_binary = (cells_labels > 0).astype("uint8")
+            cells_binary = remove_border_touching_components(cells_binary)
+
             results["cells"] = {
-                "data": (cells_labels / 255).astype("uint8"),
+                "data": cells_binary,
                 "name": name,
             }
 

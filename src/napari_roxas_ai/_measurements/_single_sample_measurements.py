@@ -139,11 +139,18 @@ class SingleSampleMeasurementsWidget(Container):
         self._run_analysis_button.text = f"{self._current_status} {frame}"
 
     def _get_valid_layers(self, widget=None) -> list:
-        """Get layers names"""
+        names = set()
 
-        return list(
-            {layer.metadata["sample_name"] for layer in self._viewer.layers}
-        )
+        for layer in self._viewer.layers:
+            meta = getattr(layer, "metadata", None)
+            if not isinstance(meta, dict):
+                continue
+
+            sample_name = meta.get("sample_name")
+            if isinstance(sample_name, str) and sample_name:
+                names.add(sample_name)
+
+        return sorted(names)
 
     def _update_cells_settings_visibility(self):
         self._cells_measurements_settings.visible = (

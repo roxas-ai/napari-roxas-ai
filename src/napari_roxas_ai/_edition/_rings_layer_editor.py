@@ -289,6 +289,10 @@ class RingsLayerEditorWidget(Container):
             max=9999,
             step=1,
         )
+
+        self._refresh_button = PushButton(text="Refresh widget", visible=True)
+        self._refresh_button.changed.connect(self._refresh_widget)
+
         self._last_year_update_button = PushButton(
             text="Update Year",
             visible=True,
@@ -328,10 +332,41 @@ class RingsLayerEditorWidget(Container):
                 self._apply_rings_geometries_button,
                 self._last_year_spinbox,
                 self._last_year_update_button,
+                self._refresh_button,
             ]
         )
 
         # Update choices when layers change
+
+    def _refresh_widget(self) -> None:
+        """Refresh widget state by re-reading layers/metadata and re-binding callbacks."""
+        # Remove helper layers if present
+        for name in ("Rings Years", "Rings Modification"):
+            if name in self._viewer.layers:
+                self._viewer.layers.remove(name)
+
+        current = self._input_layer_combo.value
+
+        new_choices = self._get_valid_layers()
+        self._input_layer_combo.choices = new_choices
+
+        if not new_choices:
+            self._disconnect_layer_callback()
+            # Optional: reset UI to a safe default
+            self._last_year_spinbox.value = 9999
+            show_info("No rings layers found to refresh.")
+            return
+
+        # Keep current selection if still valid, otherwise fall back to first choice
+        if current in new_choices:
+            self._input_layer_combo.value = current
+        else:
+            self._input_layer_combo.value = new_choices[0]
+
+        self._connect_layer_callback()
+        self._update_year_spinbox()
+
+        show_info("Refreshed rings editor")
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the rings file extension."""
