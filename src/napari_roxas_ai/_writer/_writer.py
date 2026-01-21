@@ -154,8 +154,6 @@ def save_annotated_scan_image(
         df = df[df["enabled"].fillna(True)].reset_index(drop=True)
 
     if df.empty:
-        out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        Image.fromarray(out_rgb).save(annotated_path)
         return
 
     # Estimate mean ring width in pixels using consecutive cells_above differences
@@ -188,6 +186,7 @@ def save_annotated_scan_image(
     # Thicker black ring separator lines
     ring_line_thickness = 6  # was 3 (double thickness)
 
+    did_draw = False
     # Precompute mid-points (in image coords) for each ring polyline
     mids_rc = []
     for i, row in df.iterrows():
@@ -264,6 +263,11 @@ def save_annotated_scan_image(
             thickness_text,
             cv2.LINE_AA,
         )
+
+        did_draw = True
+
+    if not did_draw:
+        return
 
     out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     Image.fromarray(out_rgb).save(annotated_path)

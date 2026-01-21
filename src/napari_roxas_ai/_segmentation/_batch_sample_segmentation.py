@@ -24,6 +24,7 @@ from napari_roxas_ai._writer import write_single_layer
 
 from ._cells_model import CellsSegmentationModel
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
+from .._utils._segmentation_postprocess import remove_border_touching_components
 
 if TYPE_CHECKING:
     import napari
@@ -173,12 +174,15 @@ class Worker(QObject):
 
                 # Perform inference
                 cells_labels = self.cells_model.infer(scan_data)
+                cells_binary = (cells_labels > 0).astype("uint8")
+                cells_binary = remove_border_touching_components(cells_binary)
+
+                cells_data = (cells_binary * 255).astype("uint8")
 
                 # Create outputs
                 cells_layer_name = (
                     f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 )
-                cells_data = (cells_labels / 255).astype("uint8")
                 cells_add_kwargs = {
                     "name": cells_layer_name,
                     "scale": scan_add_kwargs["scale"],
@@ -277,9 +281,7 @@ class Worker(QObject):
                     "features": boundaries_df,
                 }
 
-            self.result_ready.emit(
-                (results, scan_add_kwargs["scale"], sample_metadata, sample_metadata.get("sample_stem_path"))
-            )
+
 
         self.progress.emit(total, total)
         self.finished.emit()
@@ -454,21 +456,6 @@ class BatchSampleSegmentationWidget(Container):
             lambda: setattr(self._run_segmentation_button, "enabled", True)
         )
 
-        self.worker.result_ready.connect(self._add_result_layers)
-
         # Run the analysis in a separate thread
         self.worker_thread.start()
-
-    def _add_result_layers(self, payload):
-        results, input_scale, sample_metadata, sample_stem_path = payload
-        apply_segmentation_results_to_viewer(
-            self._viewer,
-            results=results,
-            settings=settings,
-            input_scale=input_scale,
-            sample_metadata=sample_metadata,
-            sample_stem_path=sample_stem_path,
-            cells_model_file=self.cells_model_file,
-            rings_model_file=self.rings_model_file,
-        )
 
