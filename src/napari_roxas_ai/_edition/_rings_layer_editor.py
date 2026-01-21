@@ -206,14 +206,17 @@ def update_rings_geometries(
         .rename_axis("id")
     )
 
-    # Assign year
-    rings_table["YEAR"] = [
-        a + 1 for a in range(last_year - len(rings_table), last_year)
-    ]
+    # Assign year only if not already present
+    if "YEAR" not in rings_table.columns:
+        rings_table["YEAR"] = [
+            a + 1 for a in range(last_year - len(rings_table), last_year)
+        ]
 
     # Disable rings (by default, the first ring is considered uncomplete and is disabled)
-    rings_table["enabled"] = True
-    rings_table.loc[0, "enabled"] = False
+    if "enabled" not in rings_table.columns:
+        rings_table["enabled"] = True
+        # By default, mark the first ring as uncomplete only for legacy inputs
+        rings_table.loc[0, "enabled"] = False
 
     # Rings_rasterization
     rings_raster = rasterize_rings(rings_table, image_shape)
@@ -475,9 +478,10 @@ class RingsLayerEditorWidget(Container):
         elif "cells_above" in df.columns:
             df = df.sort_values("cells_above").reset_index(drop=True)
 
-        # Keep only enabled rings
+        # Do NOT drop disabled rings; the top "uncomplete" boundary is required
+        # to preserve the red/uncomplete region after rasterization.
         if "enabled" in df.columns:
-            df = df[df["enabled"].fillna(True)].reset_index(drop=True)
+            df["enabled"] = df["enabled"].fillna(True)
 
         if df.empty or "RBXY" not in df.columns or "YEAR" not in df.columns:
             show_info("No valid rings to edit")
@@ -518,7 +522,10 @@ class RingsLayerEditorWidget(Container):
             opacity=1,
             name="Rings Modification",
             scale=self.input_layer.scale,
-            features={"YEAR": df["YEAR"].tolist()},
+            features={
+                "YEAR": df["YEAR"].tolist(),
+                "enabled": df["enabled"].fillna(True).tolist() if "enabled" in df.columns else [True] * len(df),
+            },
         )
 
         # left margin in data coords
@@ -567,6 +574,22 @@ class RingsLayerEditorWidget(Container):
             },
         )
 
+        years_layer = self._viewer.layers["Rings Years"]
+        shapes_layer = self._viewer.layers["Rings Modification"]
+
+        layers = self._viewer.layers
+        years_index = layers.index(years_layer)
+        shapes_index = layers.index(shapes_layer)
+
+        # We want years directly below shapes => years should end up at index == shapes_index - 1.
+        dest_index = shapes_index
+        if years_index < shapes_index:
+            dest_index -= 1
+
+        layers.move(years_index, dest_index)
+
+        layers.selection.active = shapes_layer
+        years_layer.editable = False
 
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
@@ -588,17 +611,17 @@ class RingsLayerEditorWidget(Container):
     def _apply_rings_geometries(self) -> None:
         """Apply the changes to the input layer."""
 
-        # Recover new shapes data from the viewer
+        layer = self._viewer.layers["Rings Modification"]
+
         rings_table = pd.DataFrame(
-            data={
-                "RBXY": [
-                    coords.tolist()
-                    for coords in self._viewer.layers[
-                        "Rings Modification"
-                    ].data
-                ]
+            {
+                "RBXY": [coords.tolist() for coords in layer.data],
+                "YEAR": layer.features["YEAR"].astype(int).tolist() if "YEAR" in layer.features else None,
+                "enabled": layer.features["enabled"].tolist() if "enabled" in layer.features else None,
             }
         ).rename_axis("id")
+        rings_table = rings_table.dropna(axis=1, how="all")
+
         self._viewer.layers.remove("Rings Modification")
 
         # Update the rings layer with the new geometries
