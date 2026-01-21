@@ -766,32 +766,31 @@ class CrossDatingPlotterWidget(Container):
         self._update_alignment_buttons()
 
     def _apply_alignment(self, candidate: dict):
-        target_start = candidate["start_year"]
-        target_end = candidate["end_year"]
-
         layer = self._input_layer_combo.value
-        rings_table = layer.features.copy().sort_values("YEAR")
+        if layer is None:
+            return
 
-        window = target_end - target_start + 1
+        target_end = int(candidate["end_year"])
+        current_last = int(layer.metadata.get("rings_outmost_complete_year", target_end))
+        offset = target_end - current_last
 
-        rings_table.loc[rings_table.index[:window], "YEAR"] = np.arange(
-            target_start, target_end + 1
-        )
+        # Apply offset via the same logic as the UI button, but without touching YEAR directly
+        new_last_year = current_last + offset
+        layer.metadata["rings_outmost_complete_year"] = new_last_year
 
         new_table, new_raster, new_colormap = update_rings_geometries(
-            rings_table=rings_table,
-            last_year=target_end,
+            rings_table=layer.features,
+            last_year=new_last_year,
             image_shape=layer.data.shape,
         )
 
         layer.data = new_raster
         layer.features = new_table
         layer.colormap = new_colormap
-        layer.metadata["rings_outmost_complete_year"] = target_end
 
         self._offset_slider.value = 0
         self._update_crossdating_plot()
-        self._x_range_slider.value = (target_start - 10, target_end + 10)
+        self._x_range_slider.value = (int(candidate["start_year"]) - 10, target_end + 10)
 
     def _compute_alignment_candidates(self, top_k: int = 4):
         sample_series = (

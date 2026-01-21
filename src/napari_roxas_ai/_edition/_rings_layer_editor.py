@@ -622,7 +622,11 @@ class RingsLayerEditorWidget(Container):
         ).rename_axis("id")
         rings_table = rings_table.dropna(axis=1, how="all")
 
-        self._viewer.layers.remove("Rings Modification")
+        # Remove helper layers
+        if "Rings Modification" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Modification")
+        if "Rings Years" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Years")
 
         # Update the rings layer with the new geometries
         new_rings_table, new_rings_raster, new_colormap = (
