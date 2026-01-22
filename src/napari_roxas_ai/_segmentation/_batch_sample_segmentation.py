@@ -24,6 +24,7 @@ from napari_roxas_ai._writer import write_single_layer
 
 from ._cells_model import CellsSegmentationModel
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
+from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._segmentation_postprocess import remove_border_touching_components
 
 if TYPE_CHECKING:
@@ -148,6 +149,10 @@ class Worker(QObject):
             self.rings_content_ext = settings.get(
                 "file_extensions.rings_file_extension"
             )[0]
+
+            # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+            if self.input_directory_path:
+                fix_sample_stem_paths_in_project(self.input_directory_path)
 
     def run(self):
         factor = int(self.segment_cells) + int(self.segment_rings)

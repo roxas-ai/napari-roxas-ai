@@ -25,6 +25,7 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
 from ._cells_model import CellsSegmentationModel
+from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._segmentation_postprocess import remove_border_touching_components
 
 if TYPE_CHECKING:
@@ -435,6 +436,12 @@ class SingleSampleSegmentationWidget(Container):
 
     def _run_segmentation(self) -> None:
         """Run the segmentation analysis in a separate thread."""
+
+        # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+        proj = self.settings.get("project_directory")
+        if isinstance(proj, str) and proj:
+            fix_sample_stem_paths_in_project(proj)
+
         # Get the selected input layer
         if not self._input_layer_combo.value:
             QMessageBox.warning(None, "Error", "Please select an input layer")

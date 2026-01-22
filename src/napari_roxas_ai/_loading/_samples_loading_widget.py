@@ -19,6 +19,7 @@ from napari_roxas_ai._reader import (
     read_scan_file,
 )
 from napari_roxas_ai._settings._settings_manager import SettingsManager
+from napari_roxas_ai._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from napari_roxas_ai.shortcuts import (
     install_wasd_shortcuts,
     has_shortcuts_applied,
@@ -129,6 +130,11 @@ class SamplesLoadingWidget(Container):
 
         # Directory selection
         self.project_directory = settings.get("project_directory")
+
+        # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+        if self.project_directory:
+            fix_sample_stem_paths_in_project(self.project_directory)
+
         self._project_dialog_button = PushButton(
             text=f"Project Directory: {self.project_directory}"
         )
