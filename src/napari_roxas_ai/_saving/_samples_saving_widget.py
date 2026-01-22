@@ -1,7 +1,7 @@
 """
 Widget for preparing sample images and metadata for ROXAS analysis.
 """
-
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import napari.layers
@@ -29,21 +29,30 @@ class Worker(QObject):
         self.layers = layers
 
     def run(self):
+        project_dir = settings.get("project_directory")
+        if not project_dir:
+            raise RuntimeError("project_directory is not configured")
+
+        project_dir = Path(project_dir)
 
         total = len(self.layers)
 
         for i, layer in enumerate(self.layers):
             self.progress.emit(i, total)
-            layer_data_tuple = layer.as_layer_data_tuple()
-            meta = layer_data_tuple[1].get("metadata") or {}
+
+            data, kwargs, layer_type = layer.as_layer_data_tuple()
+            meta = kwargs.get("metadata") or {}
+
             stem = meta.get("sample_stem_path")
             if not stem:
-                continue
+                raise RuntimeError(f"No sample_stem_path for layer {layer.name}")
+
+            out_path = project_dir / stem
 
             write_single_layer(
-                f"{layer_data_tuple[1]['metadata']['sample_stem_path']}.place.holder",  # TODO: Fix writing logic so it doesn't need to be a placeholder
-                layer_data_tuple[0],
-                layer_data_tuple[1],
+                str(out_path),
+                data,
+                kwargs,
             )
 
         self.progress.emit(total, total)
