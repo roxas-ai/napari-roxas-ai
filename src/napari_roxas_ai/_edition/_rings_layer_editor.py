@@ -4,6 +4,7 @@ import cv2
 import napari.layers
 import numpy as np
 import pandas as pd
+from PyQt5.QtCore import QTimer
 from magicgui.widgets import (
     ComboBox,
     Container,
@@ -341,12 +342,18 @@ class RingsLayerEditorWidget(Container):
 
         # Update choices when layers change
 
+    def _deferred_remove_layer(self, name: str) -> None:
+        def _rm():
+            if name in self._viewer.layers:
+                self._viewer.layers.remove(name)
+
+        QTimer.singleShot(0, _rm)
+
     def _refresh_widget(self) -> None:
         """Refresh widget state by re-reading layers/metadata and re-binding callbacks."""
         # Remove helper layers if present
         for name in ("Rings Years", "Rings Modification"):
-            if name in self._viewer.layers:
-                self._viewer.layers.remove(name)
+            self._deferred_remove_layer(name)
 
         current = self._input_layer_combo.value
 
@@ -465,9 +472,9 @@ class RingsLayerEditorWidget(Container):
 
         # If there is already an edit session open, remove old helper layers first
         if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+            self._deferred_remove_layer("Rings Years")
         if "Rings Modification" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Modification")
+            self._deferred_remove_layer("Rings Modification")
 
         # Build a DF in the same logical order as the annotated export
         df = self.input_layer.features.copy()
@@ -594,9 +601,9 @@ class RingsLayerEditorWidget(Container):
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
         # Remove the working layer
-        self._viewer.layers.remove("Rings Modification")
+        self._deferred_remove_layer("Rings Modification")
         if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+            self._deferred_remove_layer("Rings Years")
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
@@ -624,9 +631,9 @@ class RingsLayerEditorWidget(Container):
 
         # Remove helper layers
         if "Rings Modification" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Modification")
+            self._deferred_remove_layer("Rings Modification")
         if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+            self._deferred_remove_layer("Rings Years")
 
         # Update the rings layer with the new geometries
         new_rings_table, new_rings_raster, new_colormap = (
