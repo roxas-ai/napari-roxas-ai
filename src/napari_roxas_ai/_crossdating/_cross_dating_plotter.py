@@ -233,21 +233,38 @@ class CrossDatingPlotterWidget(Container):
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
 
-
     def _export_plot(self):
         layer = self._input_layer_combo.value
         if layer is None:
             show_info("Export plot failed: no rings layer selected")
             return
 
-        # Decide output directory (prefer project_directory)
+        # Project directory is the anchor for relative stems
         proj = settings.get("project_directory")
-        if isinstance(proj, str) and proj:
-            out_dir = Path(proj)
-        else:
-            # Fallback: try layer path, else cwd
-            layer_file = layer.metadata.get("path")
-            out_dir = Path(layer_file).parent if isinstance(layer_file, str) and layer_file else Path.cwd()
+        project_dir = Path(proj).resolve() if isinstance(proj, str) and proj else None
+
+        # Prefer: project_dir / sample_stem_path.parent
+        out_dir = None
+        stem = layer.metadata.get("sample_stem_path")
+
+        if project_dir is not None and isinstance(stem, str) and stem.strip():
+            stem_path = Path(stem)
+            # sample_stem_path is expected to be relative (e.g. "02_5/MEN.FICU_RAL16A_02_5")
+            # but handle absolute defensively
+            if stem_path.is_absolute():
+                out_dir = stem_path.parent
+            else:
+                out_dir = (project_dir / stem_path).parent
+
+        # Fallbacks
+        if out_dir is None:
+            layer_file = layer.metadata.get("file_path") or layer.metadata.get("path")
+            if isinstance(layer_file, str) and layer_file:
+                out_dir = Path(layer_file).resolve().parent
+            elif project_dir is not None:
+                out_dir = project_dir
+            else:
+                out_dir = Path.cwd()
 
         sample_name = layer.metadata.get("sample_name") or layer.name
 
@@ -257,7 +274,6 @@ class CrossDatingPlotterWidget(Container):
             return
 
         show_info(f"Plot exported to: {out_path}")
-
 
     def _style_rangeslider(self, slider: RangeSlider) -> None:
         # Style magicgui RangeSlider handles to look like thin vertical bars instead of fat circles.

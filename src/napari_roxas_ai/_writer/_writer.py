@@ -48,40 +48,44 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
     str
         The path to the updated metadata file.
     """
+    path_p = Path(path)
 
-    if Path(path).exists():
-        # Load existing metadata from the file
-        with open(path) as f:
+    if path_p.exists():
+        with path_p.open("r", encoding="utf-8") as f:
             existing_metadata = json.load(f)
-
     else:
-        # Create a new metadata file if it doesn't exist
         existing_metadata = {
-            k: v for k, v in metadata.items() if k.startswith("sample_")
+            k: v for k, v in (metadata or {}).items()
+            if isinstance(k, str) and k.startswith("sample_")
         }
 
-    # Filter metadata to only include keys with the specified prefix
+    src_meta = metadata or {}
+
+    # Only include keys with the specified prefix
     filtered_metadata = {
-        k: v for k, v in metadata.items() if k.startswith(keys_prefix)
+        k: v for k, v in src_meta.items()
+        if isinstance(k, str) and k.startswith(keys_prefix)
     }
 
-    # Update the existing metadata with the new filtered metadata
     existing_metadata.update(filtered_metadata)
 
-    # Derive sample_name by stripping the known metadata extension, not by Path.stem
-    metadata_ext = "".join(settings.get("file_extensions.metadata_file_extension"))
-    name = Path(path).name
-    if name.endswith(metadata_ext):
-        sample_name = name[: -len(metadata_ext)]
-    else:
-        sample_name = Path(path).stem  # fallback
-    existing_metadata.update({"sample_name": sample_name})
+    # Prefer explicit sample_name from metadata
+    sample_name = src_meta.get("sample_name")
+    if not isinstance(sample_name, str) or not sample_name.strip():
+        # Fallback: derive from filename by stripping metadata extension
+        metadata_ext = "".join(settings.get("file_extensions.metadata_file_extension"))
+        filename = path_p.name
+        if metadata_ext and filename.endswith(metadata_ext):
+            sample_name = filename[: -len(metadata_ext)]
+        else:
+            sample_name = path_p.stem
 
-    # Write the updated metadata to the file
-    with open(path, "w") as f:
+    existing_metadata["sample_name"] = sample_name
+
+    with path_p.open("w", encoding="utf-8") as f:
         json.dump(existing_metadata, f, indent=4)
 
-    return path
+    return str(path_p)
 
 
 def save_image(path: str, image: np.ndarray, rescale: bool = False) -> str:
@@ -300,15 +304,18 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     written_file_paths = []
 
-    p = Path(path)
-    scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
+    md = meta.get("metadata") or {}
 
-    # If caller passed a full scan filename, strip only that known suffix.
-    # Otherwise treat it as sample stem path.
-    if str(p).endswith(scan_file_extension):
-        sample_path = Path(str(p)[: -len(scan_file_extension)])
+    stem = md.get("sample_stem_path")
+    if isinstance(stem, str) and stem.strip():
+        project_dir = Path(settings.get("project_directory")).resolve()
+        sample_path = (project_dir / stem).resolve()  # stem is stored relative
     else:
-        sample_path = p
+        # Fallback: sample_name in current dir of 'path'
+        sample_name = md.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(path).stem).stem
+        sample_path = Path(path).parent / sample_name
 
 
     # Update the metadata file
@@ -545,7 +552,19 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    sample_path = Path(path)
+    md = meta.get("metadata") or {}
+
+    stem = md.get("sample_stem_path")
+    if isinstance(stem, str) and stem.strip():
+        project_dir = Path(settings.get("project_directory")).resolve()
+        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+    else:
+        # Fallback: sample_name in current dir of 'path'
+        sample_name = md.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(path).stem).stem
+        sample_path = Path(path).parent / sample_name
+
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -603,8 +622,20 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    sample_path = Path(path)
-    basename = sample_path.name
+    md = meta.get("metadata") or {}
+
+    stem = md.get("sample_stem_path")
+    if isinstance(stem, str) and stem.strip():
+        project_dir = Path(settings.get("project_directory")).resolve()
+        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+    else:
+        # Fallback: sample_name in current dir of 'path'
+        sample_name = md.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(path).stem).stem
+        sample_path = Path(path).parent / sample_name
+
+    basename = sample_path.name  # use for annotated naming etc.
 
     # Update the metadata file
     metadata_file_extension = "".join(
