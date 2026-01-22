@@ -41,13 +41,29 @@ class Worker(QObject):
             self.progress.emit(i, total)
 
             data, kwargs, layer_type = layer.as_layer_data_tuple()
-            meta = kwargs.get("metadata") or {}
+            meta = (kwargs.get("metadata") or {}).copy()
 
-            stem = meta.get("sample_stem_path")
-            if not stem:
-                raise RuntimeError(f"No sample_stem_path for layer {layer.name}")
+            # Prefer explicit per-layer file_path (like SingleSampleMeasurementsWidget)
+            file_path = meta.get("file_path")
+            if isinstance(file_path, str) and file_path.strip():
+                out_path = Path(file_path)
+            else:
+                # Fallback: build from sample_stem_path or sample_name
+                stem = meta.get("sample_stem_path")
+                sample_name = meta.get("sample_name") or layer.name
 
-            out_path = project_dir / stem
+                if isinstance(stem, str) and stem.strip():
+                    out_path = project_dir / stem
+                else:
+                    # Last resort: put it in project root under sample_name
+                    out_path = project_dir / str(sample_name)
+
+            # Ensure parent exists
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Keep kwargs metadata in sync (optional but helps later)
+            meta["file_path"] = str(out_path)
+            kwargs["metadata"] = meta
 
             write_single_layer(
                 str(out_path),

@@ -113,52 +113,58 @@ def _map_sample_stem_path(
     meta: dict,
     *,
     opened_path: str,
-    metadata_path: Path,
     path_is_stem: bool,
-    metadata_file_extension: str,
 ) -> dict:
     """
-    make sure that meta['sample_stem_path'] is valid on the running machine.
+    Ensure meta['sample_stem_path'] is a relative path (relative to project_directory)
+    and valid on the current machine.
 
-    Strategy:
-    - If missing: compute from opened_path
-    - If absolute and exists: keep
-    - If absolute and missing: recompute from opened_path (current location)
-    - If relative: keep
+    Rules:
+    - If metadata contains a relative path: keep it
+    - If metadata contains an absolute path: convert to relative to project_directory
+    - If metadata is missing or invalid: compute relative path from opened_path
+    - Absolute paths must never be written back into metadata
     """
+
+    project_dir = settings.get("project_directory")
+    if not project_dir:
+        return meta
+
+    project_dir = Path(project_dir).resolve()
     stored = meta.get("sample_stem_path")
 
-    # compute the expected stem from the currently opened file/stem
     opened = Path(opened_path)
 
+    # Compute absolute expected stem from opened_path
     if path_is_stem:
-        expected_stem_abs = opened.resolve()
+        expected_abs = opened.resolve()
     else:
         base = Path(opened.name).stem
         base = Path(base).stem
-        expected_stem_abs = (opened.parent / base).resolve()
+        expected_abs = (opened.parent / base).resolve()
 
-    # if missing/empty -> set
+    def to_relative(abs_path: Path) -> str:
+        try:
+            return abs_path.relative_to(project_dir).as_posix()
+        except ValueError:
+            return abs_path.name
+
+    # missing or invalid metadata -> recompute
     if not isinstance(stored, str) or not stored.strip():
-        meta["sample_stem_path"] = expected_stem_abs.as_posix()
+        meta["sample_stem_path"] = to_relative(expected_abs)
         return meta
 
     p = Path(stored)
 
-    # If it's relative -> keep
+    # already relative -> keep as-is
     if not p.is_absolute():
-        # normalize to posix string, but do not resolve against anything here
         meta["sample_stem_path"] = p.as_posix()
         return meta
 
-    # absolute and exists -> keep (but normalize)
-    if p.exists():
-        meta["sample_stem_path"] = p.resolve().as_posix()
-        return meta
-
-    # absolute but does not exist -> map to current expected location
-    meta["sample_stem_path"] = expected_stem_abs.as_posix()
+    # absolute path -> map to relative (whether it exists or not)
+    meta["sample_stem_path"] = to_relative(p if p.exists() else expected_abs)
     return meta
+
 
 
 def get_metadata_from_file(
@@ -227,9 +233,7 @@ def get_metadata_from_file(
         return _map_sample_stem_path(
             meta,
             opened_path=path,
-            metadata_path=metadata_path,
             path_is_stem=path_is_stem,
-            metadata_file_extension=metadata_file_extension,
         )
     except (json.JSONDecodeError, UnicodeDecodeError):
         print(f"Error: Could not parse JSON metadata file: {metadata_path}")

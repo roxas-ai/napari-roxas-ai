@@ -732,6 +732,13 @@ class CrossDatingPlotterWidget(Container):
             input_layer.metadata["rings_outmost_complete_year"] + offset
         )
 
+        n = len(input_layer.features) if getattr(input_layer, "features", None) is not None else 0
+        if n > 0 and "YEAR" in input_layer.features.columns:
+            start = int(new_last_year) - n + 1
+            input_layer.features = input_layer.features.copy()
+            input_layer.features["YEAR"] = list(range(start, int(new_last_year) + 1))
+
+
         input_layer.metadata["rings_outmost_complete_year"] = new_last_year
         new_rings_table, new_rings_raster, new_colormap = (
             update_rings_geometries(
@@ -771,16 +778,20 @@ class CrossDatingPlotterWidget(Container):
             return
 
         target_end = int(candidate["end_year"])
-        current_last = int(layer.metadata.get("rings_outmost_complete_year", target_end))
-        offset = target_end - current_last
+        target_start = int(candidate["start_year"])
 
-        # Apply offset via the same logic as the UI button, but without touching YEAR directly
-        new_last_year = current_last + offset
-        layer.metadata["rings_outmost_complete_year"] = new_last_year
+        layer.metadata["rings_outmost_complete_year"] = target_end
+
+        n = len(layer.features) if getattr(layer, "features", None) is not None else 0
+        if n > 0 and "YEAR" in layer.features.columns:
+            start = int(target_end) - n + 1
+            layer.features = layer.features.copy()
+            layer.features["YEAR"] = list(range(start, int(target_end) + 1))
+
 
         new_table, new_raster, new_colormap = update_rings_geometries(
             rings_table=layer.features,
-            last_year=new_last_year,
+            last_year=target_end,
             image_shape=layer.data.shape,
         )
 
@@ -790,7 +801,7 @@ class CrossDatingPlotterWidget(Container):
 
         self._offset_slider.value = 0
         self._update_crossdating_plot()
-        self._x_range_slider.value = (int(candidate["start_year"]) - 10, target_end + 10)
+        self._x_range_slider.value = (target_start - 10, target_end + 10)
 
     def _compute_alignment_candidates(self, top_k: int = 4):
         sample_series = (

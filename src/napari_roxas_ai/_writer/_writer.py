@@ -68,8 +68,14 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
     # Update the existing metadata with the new filtered metadata
     existing_metadata.update(filtered_metadata)
 
-    # Update the sample name in the metadata
-    existing_metadata.update({"sample_name": Path(Path(path).stem).stem})
+    # Derive sample_name by stripping the known metadata extension, not by Path.stem
+    metadata_ext = "".join(settings.get("file_extensions.metadata_file_extension"))
+    name = Path(path).name
+    if name.endswith(metadata_ext):
+        sample_name = name[: -len(metadata_ext)]
+    else:
+        sample_name = Path(path).stem  # fallback
+    existing_metadata.update({"sample_name": sample_name})
 
     # Write the updated metadata to the file
     with open(path, "w") as f:
@@ -294,9 +300,16 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     written_file_paths = []
 
-    dirname = Path(path).parent
-    basename = Path(Path(path).stem).stem
-    sample_path = dirname / basename
+    p = Path(path)
+    scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
+
+    # If caller passed a full scan filename, strip only that known suffix.
+    # Otherwise treat it as sample stem path.
+    if str(p).endswith(scan_file_extension):
+        sample_path = Path(str(p)[: -len(scan_file_extension)])
+    else:
+        sample_path = p
+
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -532,9 +545,7 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    dirname = Path(path).parent
-    basename = Path(Path(path).stem).stem
-    sample_path = dirname / basename
+    sample_path = Path(path)
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -592,9 +603,8 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    dirname = Path(path).parent
-    basename = Path(Path(path).stem).stem
-    sample_path = dirname / basename
+    sample_path = Path(path)
+    basename = sample_path.name
 
     # Update the metadata file
     metadata_file_extension = "".join(

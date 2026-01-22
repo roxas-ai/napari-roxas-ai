@@ -92,11 +92,17 @@ def apply_segmentation_results_to_viewer(
         rings = results["rings"]
         rings_name = rings["name"]
 
-        metadata_file_contents = (
-            get_metadata_from_file(path=sample_stem_path, path_is_stem=True)
-            if sample_stem_path
-            else None
-        )
+        metadata_file_contents = None
+        if sample_stem_path:
+            p = Path(sample_stem_path)
+            if not p.is_absolute():
+                proj = settings.get("project_directory")
+                if isinstance(proj, str) and proj:
+                    p = Path(proj) / p
+            metadata_file_contents = get_metadata_from_file(
+                path=str(p),
+                path_is_stem=True,
+            )
         default_rings_year_value = [
             field["default"]
             for field in settings.get("samples_metadata.fields")
@@ -511,13 +517,18 @@ class SingleSampleSegmentationWidget(Container):
             if isinstance(k, str) and k.startswith("sample_")
         }
 
+        # Ensure stem is propagated to derived layers
+        stem = self.input_layer.metadata.get("sample_stem_path")
+        if isinstance(stem, str) and stem.strip():
+            sample_metadata["sample_stem_path"] = stem
+
         apply_segmentation_results_to_viewer(
             self._viewer,
             results=results,
             settings=self.settings,
             input_scale=input_scale,
             sample_metadata=sample_metadata,
-            sample_stem_path=self.input_layer.metadata.get("sample_stem_path"),
+            sample_stem_path=stem,
             cells_model_file=self.cells_model_file,
             rings_model_file=self.rings_model_file,
         )
