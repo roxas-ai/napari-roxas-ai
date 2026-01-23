@@ -1582,6 +1582,16 @@ class SampleAnalyzer:
             self.cells_table["YEAR"]
             .astype("Int64")
         )
+        # cells outside all ring polygons (outermost incomplete band) ---
+        # Those cells have bot_ring_id = NaN -> YEAR becomes NA.
+        # Assign them to last_year + 1 (outermost incomplete ring year).
+        missing_year = self.cells_table["YEAR"].isna()
+        if missing_year.any():
+            last_year = pd.to_numeric(self.rings_table.get("YEAR"), errors="coerce").max()
+            if pd.notna(last_year):
+                self.cells_table.loc[missing_year, "YEAR"] = int(last_year) + 1
+                self.cells_table["YEAR"] = self.cells_table["YEAR"].astype("Int64")
+
 
         self.compute_rraddistr()
 
