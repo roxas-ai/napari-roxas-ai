@@ -159,10 +159,6 @@ def save_annotated_scan_image(
     elif "cells_above" in df.columns:
         df = df.sort_values("cells_above").reset_index(drop=True)
 
-    # Keep only enabled rings
-    if "enabled" in df.columns:
-        df = df[df["enabled"].fillna(True)].reset_index(drop=True)
-
     if df.empty:
         return
 
@@ -635,7 +631,6 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
             sample_name = Path(Path(path).stem).stem
         sample_path = Path(path).parent / sample_name
 
-    basename = sample_path.name  # use for annotated naming etc.
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -670,6 +665,7 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     written_file_paths.append(rings_file_path)
 
     # --- Save annotated scan image ---
+    basename = sample_path.name  # use for annotated naming
     scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
     scan_file_path = f"{sample_path}{scan_file_extension}"
 

@@ -735,15 +735,17 @@ class SampleAnalyzer:
         h, w = self.cells_array.shape[:2]
         px_per_um = self.config["pixels_per_um"]
 
-        # init RA column
-        self.rings_table["ring_area"] = np.nan
+        # Ensure RA exists and reset
+        self.rings_table["RA"] = np.nan
 
         # ring i exists between boundary i and i+1
         for i in range(len(self.rings_table) - 1):
-            if not self.rings_table.loc[i, "enabled"]:
-                continue
-            if not self.rings_table.loc[i + 1, "enabled"]:
-                continue
+            ring_row = i + 1  # ring is represented by the lower boundary row
+
+            # Only compute RA for enabled rings (not enabled boundary)
+            if "enabled" in self.rings_table.columns:
+                if not bool(self.rings_table.loc[ring_row, "enabled"]):
+                    continue
 
             bounds = np.array(
                 self.rings_table["RBXY"][i]
