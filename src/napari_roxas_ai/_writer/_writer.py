@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Union
 import numpy as np
 import pandas as pd
 from PIL import Image
+import cv2
 
 # Import SettingsManager to get file extensions
 from napari_roxas_ai._settings import SettingsManager
@@ -47,34 +48,44 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
     str
         The path to the updated metadata file.
     """
+    path_p = Path(path)
 
-    if Path(path).exists():
-        # Load existing metadata from the file
-        with open(path) as f:
+    if path_p.exists():
+        with path_p.open("r", encoding="utf-8") as f:
             existing_metadata = json.load(f)
-
     else:
-        # Create a new metadata file if it doesn't exist
         existing_metadata = {
-            k: v for k, v in metadata.items() if k.startswith("sample_")
+            k: v for k, v in (metadata or {}).items()
+            if isinstance(k, str) and k.startswith("sample_")
         }
 
-    # Filter metadata to only include keys with the specified prefix
+    src_meta = metadata or {}
+
+    # Only include keys with the specified prefix
     filtered_metadata = {
-        k: v for k, v in metadata.items() if k.startswith(keys_prefix)
+        k: v for k, v in src_meta.items()
+        if isinstance(k, str) and k.startswith(keys_prefix)
     }
 
-    # Update the existing metadata with the new filtered metadata
     existing_metadata.update(filtered_metadata)
 
-    # Update the sample name in the metadata
-    existing_metadata.update({"sample_name": Path(Path(path).stem).stem})
+    # Prefer explicit sample_name from metadata
+    sample_name = src_meta.get("sample_name")
+    if not isinstance(sample_name, str) or not sample_name.strip():
+        # Fallback: derive from filename by stripping metadata extension
+        metadata_ext = "".join(settings.get("file_extensions.metadata_file_extension"))
+        filename = path_p.name
+        if metadata_ext and filename.endswith(metadata_ext):
+            sample_name = filename[: -len(metadata_ext)]
+        else:
+            sample_name = path_p.stem
 
-    # Write the updated metadata to the file
-    with open(path, "w") as f:
+    existing_metadata["sample_name"] = sample_name
+
+    with path_p.open("w", encoding="utf-8") as f:
         json.dump(existing_metadata, f, indent=4)
 
-    return path
+    return str(path_p)
 
 
 def save_image(path: str, image: np.ndarray, rescale: bool = False) -> str:
@@ -111,6 +122,163 @@ def save_image(path: str, image: np.ndarray, rescale: bool = False) -> str:
 
     return path
 
+def save_annotated_scan_image(
+    scan_path: str,
+    annotated_path: str,
+    rings_features: pd.DataFrame,
+) -> None:
+    """Draw ring polylines + YEAR labels onto the scan image and save.
+
+    - Uses a single, constant font size for all rings.
+    - Font height is set to ~20% of the mean ring width (in pixels).
+    - YEAR label is placed vertically centered between this ring and the next one.
+    - Ring separator lines are drawn black and thicker.
+    - Draws black text (no outline).
+    """
+
+    if rings_features is None or rings_features.empty:
+        return
+    if "RBXY" not in rings_features.columns:
+        return
+
+    # Load scan
+    img = np.array(Image.open(scan_path))
+    if img.ndim == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    elif img.shape[2] == 4:
+        img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+    else:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+    df = rings_features.copy()
+    h, w = img.shape[:2]
+
+    # Prefer YEAR ordering; otherwise fall back to cells_above if present
+    if "YEAR" in df.columns:
+        df = df.sort_values("YEAR").reset_index(drop=True)
+    elif "cells_above" in df.columns:
+        df = df.sort_values("cells_above").reset_index(drop=True)
+
+    if df.empty:
+        return
+
+    # Estimate mean ring width in pixels using consecutive cells_above differences
+    mean_ring_width_px = 40.0  # fallback
+    ring_width_px = None
+    if "cells_above" in df.columns and len(df) >= 2:
+        band_area = df["cells_above"].shift(-1) - df["cells_above"]
+        rw = (band_area / float(w)).abs()
+        # For the last ring, reuse median of previous widths
+        if len(rw) > 1:
+            rw.iloc[-1] = float(rw.iloc[:-1].median())
+        ring_width_px = rw
+        rw_valid = rw.dropna()
+        if not rw_valid.empty:
+            mean_ring_width_px = float(rw_valid.mean())
+
+    # Target font height is 20% of mean ring width (clamped)
+    target_h = max(12.0, 0.2 * mean_ring_width_px)
+
+    # Convert desired pixel height to OpenCV font scale
+    sample_label = "9999"
+    (_tw, th), _baseline = cv2.getTextSize(
+        sample_label, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 1
+    )
+    font_scale = target_h / max(th, 1)
+
+    # Make text thicker
+    thickness_text = max(3, int(round(font_scale * 3.0)))
+
+    # Thicker black ring separator lines
+    ring_line_thickness = 6  # was 3 (double thickness)
+
+    did_draw = False
+    # Precompute mid-points (in image coords) for each ring polyline
+    mids_rc = []
+    for i, row in df.iterrows():
+        coords = row["RBXY"]
+        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+            mids_rc.append(None)
+            continue
+        mid = coords[len(coords) // 2]  # [row, col]
+        mids_rc.append((float(mid[0]), float(mid[1])))
+
+    # Draw each ring and label
+    for i, row in df.iterrows():
+        coords = row["RBXY"]
+        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+            continue
+
+        # RBXY is [row, col]; OpenCV expects (x=col, y=row)
+        pts = (
+            np.array([[p[1], p[0]] for p in coords], dtype=np.float32)
+            .round()
+            .astype(np.int32)
+            .reshape((-1, 1, 2))
+        )
+
+        cv2.polylines(
+            img,
+            [pts],
+            isClosed=False,
+            color=(0, 0, 0),
+            thickness=ring_line_thickness,
+        )
+
+        year = None
+        if "YEAR" in row.index:
+            year = row["YEAR"]
+        elif "ring_year" in row.index:
+            year = row["ring_year"]
+        if year is None:
+            continue
+
+        # Compute a vertically centered label position between this ring and the next one.
+        # If next ring is missing, fall back to this ring's mid-point.
+        this_mid = mids_rc[i]
+        if this_mid is None:
+            continue
+
+        if i + 1 < len(mids_rc) and mids_rc[i + 1] is not None:
+            next_mid = mids_rc[i + 1]
+            center_r = 0.5 * (this_mid[0] + next_mid[0])
+            center_c = 0.5 * (this_mid[1] + next_mid[1])
+        else:
+            center_r, center_c = this_mid
+
+        label = str(int(year))
+
+        # Center the text around (center_c, center_r)
+        (tw, th), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness_text
+        )
+        x = int(round(center_c - tw / 2))
+        y = int(round(center_r + th / 2))
+
+        # Keep text inside the image bounds
+        x = max(0, min(x, w - tw - 1))
+        y = max(th + 1, min(y, h - 1))
+
+        cv2.putText(
+            img,
+            label,
+            (x, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            thickness_text,
+            cv2.LINE_AA,
+        )
+
+        did_draw = True
+
+    if not did_draw:
+        return
+
+    out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    Image.fromarray(out_rgb).save(annotated_path)
+
+
 
 def write_scan_file(path: str, data: Any, meta: dict) -> str:
     """Writes a scan file.
@@ -132,9 +300,19 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     written_file_paths = []
 
-    dirname = Path(path).parent
-    basename = Path(Path(path).stem).stem
-    sample_path = dirname / basename
+    md = meta.get("metadata") or {}
+
+    stem = md.get("sample_stem_path")
+    if isinstance(stem, str) and stem.strip():
+        project_dir = Path(settings.get("project_directory")).resolve()
+        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+    else:
+        # Fallback: sample_name in current dir of 'path'
+        sample_name = md.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(path).stem).stem
+        sample_path = Path(path).parent / sample_name
+
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -165,16 +343,22 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     Standardize ROXAS-AI rings output table
     """
 
+    df = df.copy()
+
     # Remove internal numeric id if present
     df = df.reset_index(drop=True)
     if "id" in df.columns:
         df = df.drop(columns=["id"])
 
-    df.insert(0, "ID", sample_name)
+    if "ID" in df.columns:
+        df["ID"] = sample_name
+    else:
+        df.insert(0, "ID", sample_name)
 
-    rename_column(df, "ring_year", "YEAR")
-    rename_column(df, "ring_angle_width", "MRW")
-    rename_column(df, "boundary_coordinates", "RBXY")
+    if "MRW" in df.columns and "ring_angle_width" in df.columns:
+        df = df.drop(columns=["ring_angle_width"])
+    elif "MRW" not in df.columns and "ring_angle_width" in df.columns:
+        df = df.rename(columns={"ring_angle_width": "MRW"})
 
     columns_order = [
         "ID",
@@ -209,7 +393,9 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "TB2",
         "CWA",
         "RWD",
-        "RBXY"
+        "RBXY",
+        "cells_above",
+        "enabled"
     ]
 
     # Keep only those that actually exist in df
@@ -256,6 +442,7 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     Standardize ROXAS-AI cells output table
     """
 
+    df = df.copy()
     # Reset index so CID is stable and no index leaks into CSV
     df = df.reset_index(drop=True)
 
@@ -268,10 +455,13 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         df = df.drop(columns=["centroid"])
 
     # Insert ID and CID
-    df.insert(0, "ID", sample_name)
-    df.insert(1, "CID", range(1, len(df) + 1))
+    if "ID" in df.columns:
+        df["ID"] = sample_name
+    else:
+        df.insert(0, "ID", sample_name)
+    if "CID" not in df.columns:
+        df.insert(1, "CID", range(1, len(df) + 1))
 
-    rename_column(df, "ring_year", "YEAR")
     rename_column(df, "lumen_area", "LA")
     rename_column(df, "top_angled_dist", "RADDISTR")
     rename_column(df, "CWT_pith", "CWTPI")
@@ -358,9 +548,19 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    dirname = Path(path).parent
-    basename = Path(Path(path).stem).stem
-    sample_path = dirname / basename
+    md = meta.get("metadata") or {}
+
+    stem = md.get("sample_stem_path")
+    if isinstance(stem, str) and stem.strip():
+        project_dir = Path(settings.get("project_directory")).resolve()
+        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+    else:
+        # Fallback: sample_name in current dir of 'path'
+        sample_name = md.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(path).stem).stem
+        sample_path = Path(path).parent / sample_name
+
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -418,9 +618,19 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
     written_file_paths = []
 
-    dirname = Path(path).parent
-    basename = Path(Path(path).stem).stem
-    sample_path = dirname / basename
+    md = meta.get("metadata") or {}
+
+    stem = md.get("sample_stem_path")
+    if isinstance(stem, str) and stem.strip():
+        project_dir = Path(settings.get("project_directory")).resolve()
+        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+    else:
+        # Fallback: sample_name in current dir of 'path'
+        sample_name = md.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(path).stem).stem
+        sample_path = Path(path).parent / sample_name
+
 
     # Update the metadata file
     metadata_file_extension = "".join(
@@ -454,7 +664,26 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     save_image(rings_file_path, data, rescale=False)
     written_file_paths.append(rings_file_path)
 
-    # return path to any file(s) that were successfully written
+    # --- Save annotated scan image ---
+    basename = sample_path.name  # use for annotated naming
+    scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
+    scan_file_path = f"{sample_path}{scan_file_extension}"
+
+    # annotated filename: <sample>_annotated.<ext>
+    scan_suffix = Path(scan_file_path).suffix  # e.g. ".jpg"
+    annotated_path = str(Path(sample_path).with_name(f"{basename}_annotated{scan_suffix}"))
+
+    try:
+        if Path(scan_file_path).exists() and (not meta["features"].empty):
+            save_annotated_scan_image(
+                scan_path=scan_file_path,
+                annotated_path=annotated_path,
+                rings_features=meta["features"],
+            )
+            written_file_paths.append(annotated_path)
+    except Exception as e:
+        print(f"Annotated image export failed for {basename}: {e}")
+
     return written_file_paths
 
 
@@ -493,7 +722,7 @@ def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
     elif layer_name.endswith(rings_content_ext):
         written_file_paths += write_rings_file(path, data, meta)
     else:
-        written_file_paths += None
+        return written_file_paths
     # return path to any file(s) that were successfully written
     return written_file_paths
 

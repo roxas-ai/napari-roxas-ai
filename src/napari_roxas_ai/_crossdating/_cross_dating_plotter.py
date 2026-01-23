@@ -182,6 +182,16 @@ class CrossDatingPlotterWidget(Container):
         # Create matplotlib canvas widget
         self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
 
+        # Export plot button at bottom-right
+        self._export_plot_button = PushButton(
+            text="Export plot",
+            tooltip="Save current crossdating plot as an image in the project directory",
+        )
+        self._export_plot_button.changed.connect(self._export_plot)
+        self._plot_footer = Container(layout="horizontal")
+        self._plot_footer.append(Container())  # spacer
+        self._plot_footer.append(self._export_plot_button)
+
         # style sliders
         self._style_rangeslider(self._x_range_slider)
         self._style_rangeslider(self._y_range_slider)
@@ -199,6 +209,8 @@ class CrossDatingPlotterWidget(Container):
                 self._offset_apply_button,
                 self._auto_offset_button,
                 self.plot_widget,
+                self.plot_widget,
+                self._plot_footer,
             ]
         )
 
@@ -220,6 +232,48 @@ class CrossDatingPlotterWidget(Container):
         # Connect to viewer events to track layer changes
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
+
+    def _export_plot(self):
+        layer = self._input_layer_combo.value
+        if layer is None:
+            show_info("Export plot failed: no rings layer selected")
+            return
+
+        # Project directory is the anchor for relative stems
+        proj = settings.get("project_directory")
+        project_dir = Path(proj).resolve() if isinstance(proj, str) and proj else None
+
+        # Prefer: project_dir / sample_stem_path.parent
+        out_dir = None
+        stem = layer.metadata.get("sample_stem_path")
+
+        if project_dir is not None and isinstance(stem, str) and stem.strip():
+            stem_path = Path(stem)
+            # sample_stem_path is expected to be relative (e.g. "02_5/MEN.FICU_RAL16A_02_5")
+            # but handle absolute defensively
+            if stem_path.is_absolute():
+                out_dir = stem_path.parent
+            else:
+                out_dir = (project_dir / stem_path).parent
+
+        # Fallbacks
+        if out_dir is None:
+            layer_file = layer.metadata.get("file_path") or layer.metadata.get("path")
+            if isinstance(layer_file, str) and layer_file:
+                out_dir = Path(layer_file).resolve().parent
+            elif project_dir is not None:
+                out_dir = project_dir
+            else:
+                out_dir = Path.cwd()
+
+        sample_name = layer.metadata.get("sample_name") or layer.name
+
+        out_path = self.save_crossdating_plot_image(out_dir, sample_name)
+        if out_path is None:
+            show_info("Export plot failed: plot not ready")
+            return
+
+        show_info(f"Plot exported to: {out_path}")
 
     def _style_rangeslider(self, slider: RangeSlider) -> None:
         # Style magicgui RangeSlider handles to look like thin vertical bars instead of fat circles.
@@ -288,9 +342,27 @@ class CrossDatingPlotterWidget(Container):
 
         pattern = f"*{''.join(settings.get('file_extensions.crossdating_file_extension'))}"
 
-        current_path = Path(
-            self._input_layer_combo.value.metadata["sample_stem_path"]
-        ).parent
+        layer = self._input_layer_combo.value
+        stem = Path(layer.metadata.get("sample_stem_path", layer.name))
+
+        base_dir = None
+
+        # layer file path (if present)
+        layer_file = layer.metadata.get("path")
+        if isinstance(layer_file, str) and layer_file:
+            base_dir = Path(layer_file).parent
+
+        # configured project directory
+        if base_dir is None:
+            proj = settings.get("project_directory")
+            if isinstance(proj, str) and proj:
+                base_dir = Path(proj)
+
+        # Resolve stem if needed
+        if base_dir is not None and not stem.is_absolute():
+            stem = base_dir / stem
+
+        current_path = stem.parent if stem.parent != Path(".") else (base_dir or Path.cwd())
 
         # Walk up the directory tree
         while True:  # Stop at root
@@ -418,6 +490,14 @@ class CrossDatingPlotterWidget(Container):
         # Skip if no crossdating column is selected
         if self._crossdating_column_combo.value is None:
             return
+        layer = self._input_layer_combo.value
+        if layer is None:
+            return
+
+        feats = getattr(layer, "features", None)
+        if feats is None or feats.empty or "YEAR" not in feats.columns:
+            # Features not ready yet (e.g. during segmentation apply)
+            return
 
         # Get reference series
         reference_series = self.crossdating_dataframe[
@@ -429,7 +509,7 @@ class CrossDatingPlotterWidget(Container):
 
         # Get the layer rings series
         layer_df = self._input_layer_combo.value.features.set_index(
-            "ring_year"
+            "YEAR"
         ).copy()
 
         # Compute the difference with previous year
@@ -461,7 +541,7 @@ class CrossDatingPlotterWidget(Container):
                 width_series.rename("layer_series"),
             ],
             axis=1,
-        ).rename_axis("ring_year")
+        ).rename_axis("YEAR")
 
         # Update the plot
         self._plot_crossdating_data()
@@ -668,6 +748,13 @@ class CrossDatingPlotterWidget(Container):
             input_layer.metadata["rings_outmost_complete_year"] + offset
         )
 
+        n = len(input_layer.features) if getattr(input_layer, "features", None) is not None else 0
+        if n > 0 and "YEAR" in input_layer.features.columns:
+            start = int(new_last_year) - n + 1
+            input_layer.features = input_layer.features.copy()
+            input_layer.features["YEAR"] = list(range(start, int(new_last_year) + 1))
+
+
         input_layer.metadata["rings_outmost_complete_year"] = new_last_year
         new_rings_table, new_rings_raster, new_colormap = (
             update_rings_geometries(
@@ -702,20 +789,24 @@ class CrossDatingPlotterWidget(Container):
         self._update_alignment_buttons()
 
     def _apply_alignment(self, candidate: dict):
-        target_start = candidate["start_year"]
-        target_end = candidate["end_year"]
-
         layer = self._input_layer_combo.value
-        rings_table = layer.features.copy().sort_values("ring_year")
+        if layer is None:
+            return
 
-        window = target_end - target_start + 1
+        target_end = int(candidate["end_year"])
+        target_start = int(candidate["start_year"])
 
-        rings_table.loc[rings_table.index[:window], "ring_year"] = np.arange(
-            target_start, target_end + 1
-        )
+        layer.metadata["rings_outmost_complete_year"] = target_end
+
+        n = len(layer.features) if getattr(layer, "features", None) is not None else 0
+        if n > 0 and "YEAR" in layer.features.columns:
+            start = int(target_end) - n + 1
+            layer.features = layer.features.copy()
+            layer.features["YEAR"] = list(range(start, int(target_end) + 1))
+
 
         new_table, new_raster, new_colormap = update_rings_geometries(
-            rings_table=rings_table,
+            rings_table=layer.features,
             last_year=target_end,
             image_shape=layer.data.shape,
         )
@@ -723,7 +814,6 @@ class CrossDatingPlotterWidget(Container):
         layer.data = new_raster
         layer.features = new_table
         layer.colormap = new_colormap
-        layer.metadata["rings_outmost_complete_year"] = target_end
 
         self._offset_slider.value = 0
         self._update_crossdating_plot()
@@ -800,6 +890,28 @@ class CrossDatingPlotterWidget(Container):
                 widget.deleteLater()
 
         container.widgets = []
+
+    def save_crossdating_plot_image(self, out_dir: str | Path, sample_name: str) -> Path | None:
+        """Save the currently displayed crossdating plot as a JPG."""
+        if self.plot_df is None or self.plot_df.empty:
+            return None
+        if self._crossdating_column_combo.value is None:
+            return None
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        out_path = out_dir / f"{sample_name}_ReferenceSeries.jpg"
+
+        # Save the exact figure that is shown in the UI
+        self.plot_widget.figure.savefig(
+            out_path,
+            dpi=200,
+            bbox_inches="tight",
+            facecolor="white",
+        )
+        return out_path
+
 
 
 

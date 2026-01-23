@@ -23,6 +23,9 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
 from ._cells_model import CellsSegmentationModel
+from ._single_sample_segmentation import apply_segmentation_results_to_viewer
+from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
+from .._utils._segmentation_postprocess import remove_border_touching_components
 
 if TYPE_CHECKING:
     import napari
@@ -40,6 +43,7 @@ settings = SettingsManager()
 class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
+    result_ready = Signal(object)
 
     def __init__(
         self,
@@ -146,14 +150,22 @@ class Worker(QObject):
                 "file_extensions.rings_file_extension"
             )[0]
 
-    def run(self):
+            # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+            if self.input_directory_path:
+                fix_sample_stem_paths_in_project(self.input_directory_path)
 
+    def run(self):
         factor = int(self.segment_cells) + int(self.segment_rings)
         total = len(self.scan_file_paths) * factor
         i = 0
 
-        for scan_file_path in self.scan_file_paths:
+        default_rings_year_value = [
+            field["default"]
+            for field in settings.get("samples_metadata.fields")
+            if field["id"] == "rings_outmost_complete_year"
+        ][0]
 
+        for scan_file_path in self.scan_file_paths:
             scan_data, scan_add_kwargs, _ = read_scan_file(scan_file_path)
 
             sample_metadata = {
@@ -171,109 +183,72 @@ class Worker(QObject):
 
                 # Perform inference
                 cells_labels = self.cells_model.infer(scan_data)
+                cells_binary = (cells_labels > 0).astype("uint8")
+                cells_binary = remove_border_touching_components(cells_binary)
+                cells_data = (cells_binary * 255).astype("uint8")
 
-                # Create outputs
-                cells_layer_name = (
-                    f"{sample_metadata['sample_name']}{self.cells_content_ext}"
-                )
-                cells_data = (cells_labels / 255).astype("uint8")
+                cells_layer_name = f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 cells_add_kwargs = {
                     "name": cells_layer_name,
                     "scale": scan_add_kwargs["scale"],
                     "features": pd.DataFrame(),
-                    "metadata": {},
-                }
-                cells_add_kwargs["metadata"].update(sample_metadata)
-                cells_add_kwargs["metadata"].update(
-                    {
-                        "cells_segmentation_model": Path(
-                            self.cells_model_weights_file
-                        ).name,
+                    "metadata": {
+                        **sample_metadata,
+                        "cells_segmentation_model": Path(self.cells_model_weights_file).name,
                         "cells_segmentation_datetime": datetime.now().isoformat(),
-                    }
-                )
+                    },
+                }
 
-                # Save to file (the file extension in the path argument is ignored)
-                write_single_layer(
-                    path=scan_file_path, data=cells_data, meta=cells_add_kwargs
-                )
+                write_single_layer(path=scan_file_path, data=cells_data, meta=cells_add_kwargs)
 
             # Process rings if requested
             if self.segment_rings:
-
-                # Emit progress signal
                 self.progress.emit(i, total)
                 i += 1
 
-                # Perform inference
-                rings_labels, rings_boundaries = self.rings_model.infer(
-                    scan_data
-                )
+                rings_labels, rings_boundaries = self.rings_model.infer(scan_data)
 
-                # Create a DataFrame from boundaries
                 boundary_data = []
-                for _i, boundary in enumerate(rings_boundaries):
-                    # Convert to numpy or list, whichever is more appropriate
+                for boundary in rings_boundaries:
                     if isinstance(boundary, torch.Tensor):
                         coords = boundary.cpu().numpy().tolist()
                     else:
                         coords = boundary
-                    boundary_data.append({"boundary_coordinates": coords})
+                    boundary_data.append({"RBXY": coords})
 
                 boundaries_df = pd.DataFrame(boundary_data)
 
-                # Create outputs
-                rings_layer_name = (
-                    f"{sample_metadata['sample_name']}{self.rings_content_ext}"
-                )
+                rings_layer_name = f"{sample_metadata['sample_name']}{self.rings_content_ext}"
                 rings_data = rings_labels.astype("int32")
-                rings_add_kwargs = {
-                    "name": rings_layer_name,
-                    "scale": scan_add_kwargs["scale"],
-                    "features": boundaries_df,
-                    "metadata": {},
-                }
-                rings_add_kwargs["metadata"].update(sample_metadata)
 
                 metadata_file_contents = get_metadata_from_file(
                     path=sample_metadata["sample_stem_path"], path_is_stem=True
                 )
-                default_rings_year_value = [
-                    field["default"]
-                    for field in settings.get("samples_metadata.fields")
-                    if field["id"] == "rings_outmost_complete_year"
-                ][0]
+                last_year = (
+                    metadata_file_contents.get("rings_outmost_complete_year", default_rings_year_value)
+                    if metadata_file_contents
+                    else default_rings_year_value
+                )
 
-                rings_add_kwargs["metadata"].update(
-                    {
-                        "rings_outmost_complete_year": (
-                            metadata_file_contents[
-                                "rings_outmost_complete_year"
-                            ]
-                            if metadata_file_contents
-                            else default_rings_year_value
-                        ),
-                        "rings_segmentation_model": Path(
-                            self.rings_model_weights_file
-                        ).name,
+                new_rings_table, _rings_raster_tmp, _cmap_tmp = update_rings_geometries(
+                    rings_table=boundaries_df,
+                    last_year=int(last_year),
+                    image_shape=rings_labels.shape,
+                )
+
+                rings_add_kwargs = {
+                    "name": rings_layer_name,
+                    "scale": scan_add_kwargs["scale"],
+                    "features": new_rings_table,
+                    "metadata": {
+                        **sample_metadata,
+                        "rings_outmost_complete_year": int(last_year),
+                        "rings_segmentation_model": Path(self.rings_model_weights_file).name,
                         "rings_segmentation_datetime": datetime.now().isoformat(),
-                    }
-                )
+                    },
+                }
 
-                rings_add_kwargs["features"], rings_data, _ = (
-                    update_rings_geometries(
-                        rings_table=rings_add_kwargs["features"],
-                        last_year=rings_add_kwargs["metadata"][
-                            "rings_outmost_complete_year"
-                        ],
-                        image_shape=rings_data.shape,
-                    )
-                )
-
-                # Save to file (the file extension in the path argument is ignored)
-                write_single_layer(
-                    path=scan_file_path, data=rings_data, meta=rings_add_kwargs
-                )
+                write_single_layer(path=scan_file_path, data=rings_data, meta=rings_add_kwargs)
 
         self.progress.emit(total, total)
         self.finished.emit()
@@ -450,3 +425,4 @@ class BatchSampleSegmentationWidget(Container):
 
         # Run the analysis in a separate thread
         self.worker_thread.start()
+

@@ -19,6 +19,7 @@ from napari_roxas_ai._reader import (
     read_scan_file,
 )
 from napari_roxas_ai._settings._settings_manager import SettingsManager
+from napari_roxas_ai._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from napari_roxas_ai.shortcuts import (
     install_wasd_shortcuts,
     has_shortcuts_applied,
@@ -61,7 +62,16 @@ class Worker(QObject):
 
         total = len(self.samples_stem_paths) * 3
 
+        project_dir = Path(settings.get("project_directory")).resolve()
+
         for i, sample_stem_path in enumerate(self.samples_stem_paths):
+
+            sample_path = Path(sample_stem_path).resolve()
+            try:
+                relative_stem = sample_path.relative_to(project_dir)
+            except Exception as e:
+                relative_stem = sample_path
+
 
             scan_file_path = f"{sample_stem_path}{self.scan_file_extension}"
             if Path(scan_file_path).exists():
@@ -69,6 +79,9 @@ class Worker(QObject):
                 scan_data, scan_add_kwargs, scan_layer_type = read_scan_file(
                     scan_file_path
                 )
+
+                scan_add_kwargs["metadata"]["sample_stem_path"] = str(relative_stem)
+
                 self.layer_data.emit(
                     (scan_data, scan_add_kwargs, scan_layer_type)
                 )
@@ -76,9 +89,12 @@ class Worker(QObject):
             cells_file_path = f"{sample_stem_path}{self.cells_file_extension}"
             if Path(cells_file_path).exists():
                 self.progress.emit(i + 1, total)
-                cells_data, cells_add_kwargs, cells_layer_type = (
-                    read_cells_file(cells_file_path)
+                cells_data, cells_add_kwargs, cells_layer_type = read_cells_file(
+                    cells_file_path
                 )
+
+                cells_add_kwargs["metadata"]["sample_stem_path"] = str(relative_stem)
+
                 self.layer_data.emit(
                     (cells_data, cells_add_kwargs, cells_layer_type)
                 )
@@ -86,9 +102,12 @@ class Worker(QObject):
             rings_file_path = f"{sample_stem_path}{self.rings_file_extension}"
             if Path(rings_file_path).exists():
                 self.progress.emit(i + 2, total)
-                rings_data, rings_add_kwargs, rings_layer_type = (
-                    read_rings_file(rings_file_path)
+                rings_data, rings_add_kwargs, rings_layer_type = read_rings_file(
+                    rings_file_path
                 )
+
+                rings_add_kwargs["metadata"]["sample_stem_path"] = str(relative_stem)
+
                 self.layer_data.emit(
                     (rings_data, rings_add_kwargs, rings_layer_type)
                 )
@@ -111,6 +130,11 @@ class SamplesLoadingWidget(Container):
 
         # Directory selection
         self.project_directory = settings.get("project_directory")
+
+        # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+        if self.project_directory:
+            fix_sample_stem_paths_in_project(self.project_directory)
+
         self._project_dialog_button = PushButton(
             text=f"Project Directory: {self.project_directory}"
         )

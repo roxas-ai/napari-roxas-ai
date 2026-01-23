@@ -1,7 +1,7 @@
 """
 Widget for preparing sample images and metadata for ROXAS analysis.
 """
-
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import napari.layers
@@ -29,17 +29,46 @@ class Worker(QObject):
         self.layers = layers
 
     def run(self):
+        project_dir = settings.get("project_directory")
+        if not project_dir:
+            raise RuntimeError("project_directory is not configured")
+
+        project_dir = Path(project_dir)
 
         total = len(self.layers)
 
         for i, layer in enumerate(self.layers):
             self.progress.emit(i, total)
-            layer_data_tuple = layer.as_layer_data_tuple()
+
+            data, kwargs, layer_type = layer.as_layer_data_tuple()
+            meta = (kwargs.get("metadata") or {}).copy()
+
+            # Prefer explicit per-layer file_path (like SingleSampleMeasurementsWidget)
+            file_path = meta.get("file_path")
+            if isinstance(file_path, str) and file_path.strip():
+                out_path = Path(file_path)
+            else:
+                # Fallback: build from sample_stem_path or sample_name
+                stem = meta.get("sample_stem_path")
+                sample_name = meta.get("sample_name") or layer.name
+
+                if isinstance(stem, str) and stem.strip():
+                    out_path = project_dir / stem
+                else:
+                    # Last resort: put it in project root under sample_name
+                    out_path = project_dir / str(sample_name)
+
+            # Ensure parent exists
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Keep kwargs metadata in sync (optional but helps later)
+            meta["file_path"] = str(out_path)
+            kwargs["metadata"] = meta
 
             write_single_layer(
-                f"{layer_data_tuple[1]['metadata']['sample_stem_path']}.place.holder",  # TODO: Fix writing logic so it doesn't need to be a placeholder
-                layer_data_tuple[0],
-                layer_data_tuple[1],
+                str(out_path),
+                data,
+                kwargs,
             )
 
         self.progress.emit(total, total)

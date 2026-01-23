@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import napari.layers
 import numpy as np
+from scipy import ndimage as ndi
 import pandas as pd
 import torch
 from magicgui.widgets import (
@@ -24,6 +25,8 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
 from ._cells_model import CellsSegmentationModel
+from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
+from .._utils._segmentation_postprocess import remove_border_touching_components
 
 if TYPE_CHECKING:
     import napari
@@ -34,6 +37,158 @@ Image.MAX_IMAGE_PIXELS = None
 MODULE_PATH = Path(__file__).parent.absolute()
 CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
 RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
+
+def apply_segmentation_results_to_viewer(
+    viewer,
+    *,
+    results: Dict[str, Any],
+    settings,
+    input_scale,
+    sample_metadata: Dict[str, Any],
+    sample_stem_path: Optional[str] = None,
+    cells_model_file: Optional[str] = None,
+    rings_model_file: Optional[str] = None,
+) -> None:
+    """Apply segmentation outputs to the napari viewer.
+
+    Fix: ensure layers have sample metadata at *insert time* (viewer.add_labels),
+    so any UI callbacks triggered by layer insertion never see missing keys.
+    """
+
+    sample_metadata = sample_metadata or {}
+
+    # --- CELLS ---
+    if "cells" in results:
+        cells = results["cells"]
+        cells_name = cells["name"]
+
+        cells_metadata = {
+            "cells_segmentation_model": cells_model_file,
+            "cells_segmentation_datetime": datetime.now().isoformat(),
+        }
+
+        cells_md = {}
+        cells_md.update(sample_metadata)
+        cells_md.update(cells_metadata)
+
+        try:
+            cells_layer = viewer.layers[cells_name]
+            cells_layer.data = cells["data"]
+            cells_layer.colormap = make_binary_labels_colormap()
+            # Update metadata for existing layer as well
+            cells_layer.metadata.update(cells_md)
+        except KeyError:
+            # Important: pass metadata at creation time
+            cells_layer = viewer.add_labels(
+                cells["data"],
+                name=cells_name,
+                colormap=make_binary_labels_colormap(),
+                metadata=cells_md,
+            )
+
+        cells_layer.scale = input_scale
+
+    # --- RINGS ---
+    if "rings" in results:
+        rings = results["rings"]
+        rings_name = rings["name"]
+
+        metadata_file_contents = None
+        if sample_stem_path:
+            p = Path(sample_stem_path)
+            if not p.is_absolute():
+                proj = settings.get("project_directory")
+                if isinstance(proj, str) and proj:
+                    p = Path(proj) / p
+            metadata_file_contents = get_metadata_from_file(
+                path=str(p),
+                path_is_stem=True,
+            )
+        default_rings_year_value = [
+            field["default"]
+            for field in settings.get("samples_metadata.fields")
+            if field["id"] == "rings_outmost_complete_year"
+        ][0]
+
+        rings_metadata = {
+            "rings_outmost_complete_year": (
+                metadata_file_contents.get("rings_outmost_complete_year")
+                if metadata_file_contents
+                else default_rings_year_value
+            ),
+            "rings_segmentation_model": rings_model_file,
+            "rings_segmentation_datetime": datetime.now().isoformat(),
+        }
+
+        rings_md = {}
+        rings_md.update(sample_metadata)
+        rings_md.update(rings_metadata)
+
+        try:
+            rings_layer = viewer.layers[rings_name]
+            rings_layer.data = rings["data"]
+            rings_layer.metadata.update(rings_md)
+        except KeyError:
+            # pass metadata at creation time
+            rings_layer = viewer.add_labels(
+                rings["data"],
+                name=rings_name,
+                metadata=rings_md,
+            )
+
+        rings_layer.scale = input_scale
+
+        # Apply / merge features
+        new_df = rings.get("features", None)
+
+        with rings_layer.events.blocker():
+            if new_df is not None and not new_df.empty:
+                df = new_df.copy()
+
+                # Normalize YEAR
+                if "YEAR" not in df.columns:
+                    if "ring_year" in df.columns:
+                        df = df.rename(columns={"ring_year": "YEAR"})
+                    else:
+                        # Pre-fill YEAR based on last_year and number of boundaries
+                        n = len(df)
+                        last_year = int(rings_layer.metadata["rings_outmost_complete_year"])
+                        df["YEAR"] = list(range(last_year - n + 1, last_year + 1))
+
+                # Ensure enabled exists
+                if "enabled" not in df.columns:
+                    df["enabled"] = True
+                    if len(df) > 0:
+                        df.loc[df.index[0], "enabled"] = False
+
+                # If existing features already contain YEAR etc., preserve them and only update RBXY
+                if (
+                        getattr(rings_layer, "features", None) is not None
+                        and not rings_layer.features.empty
+                        and "YEAR" in rings_layer.features.columns
+                        and "RBXY" in df.columns
+                ):
+                    old_df = rings_layer.features.copy()
+                    n = min(len(old_df), len(df))
+                    old_df = old_df.iloc[:n].copy()
+                    old_df.loc[old_df.index[:n], "RBXY"] = df["RBXY"].iloc[:n].values
+                    rings_layer.features = old_df
+                else:
+                    rings_layer.features = df
+
+            # Ensure rings_layer.features exists before update_rings_geometries
+            if getattr(rings_layer, "features", None) is None or rings_layer.features.empty:
+                rings_layer.features = pd.DataFrame({"RBXY": [], "YEAR": [], "enabled": []})
+
+            new_rings_table, new_rings_raster, new_colormap = update_rings_geometries(
+                rings_table=rings_layer.features,
+                last_year=rings_layer.metadata["rings_outmost_complete_year"],
+                image_shape=rings_layer.data.shape,
+            )
+
+            rings_layer.features = new_rings_table
+            rings_layer.data = new_rings_raster
+            rings_layer.colormap = new_colormap
 
 
 class Worker(QObject):
@@ -101,13 +256,16 @@ class Worker(QObject):
             # Perform inference
             cells_labels = cells_model.infer(self.input_array)
 
-            # Add to results
-            suffix = self.settings.get("file_extensions.cells_file_extension")[
-                0
-            ]
+            # Add to results (compute layer name first)
+            suffix = self.settings.get("file_extensions.cells_file_extension")[0]
             name = f"{self.base_name}{suffix}"
+
+            # Normalize to 0/1 and remove border-touching components
+            cells_binary = (cells_labels > 0).astype("uint8")
+            cells_binary = remove_border_touching_components(cells_binary)
+
             results["cells"] = {
-                "data": (cells_labels / 255).astype("uint8"),
+                "data": cells_binary,
                 "name": name,
             }
 
@@ -155,7 +313,7 @@ class Worker(QObject):
                     coords = boundary.cpu().numpy().tolist()
                 else:
                     coords = boundary
-                boundary_data.append({"boundary_coordinates": coords})
+                boundary_data.append({"RBXY": coords})
 
             boundaries_df = pd.DataFrame(boundary_data)
 
@@ -278,6 +436,12 @@ class SingleSampleSegmentationWidget(Container):
 
     def _run_segmentation(self) -> None:
         """Run the segmentation analysis in a separate thread."""
+
+        # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+        proj = self.settings.get("project_directory")
+        if isinstance(proj, str) and proj:
+            fix_sample_stem_paths_in_project(proj)
+
         # Get the selected input layer
         if not self._input_layer_combo.value:
             QMessageBox.warning(None, "Error", "Please select an input layer")
@@ -353,109 +517,26 @@ class SingleSampleSegmentationWidget(Container):
         self.worker_thread.start()
 
     def _add_result_layers(self, results: Dict[str, Any]) -> None:
-        """Add result layers to the viewer or update existing ones."""
-
-        # Get scale and sample metadata from input layer
         input_scale = self.input_layer.scale
-
-        # Extract sample_ metadata fields
         sample_metadata = {
             k: v
             for k, v in self.input_layer.metadata.items()
             if isinstance(k, str) and k.startswith("sample_")
         }
 
-        # Add or update cells layer if available
-        if "cells" in results:
-            cells = results["cells"]
-            cells_name = cells["name"]
+        # Ensure stem is propagated to derived layers
+        stem = self.input_layer.metadata.get("sample_stem_path")
+        if isinstance(stem, str) and stem.strip():
+            sample_metadata["sample_stem_path"] = stem
 
-            # Check if layer with this name already exists
-            try:
-                # Update existing layer
-                existing_layer = self._viewer.layers[cells_name]
-                existing_layer.data = cells["data"]
-                # Set colormap (in case it was changed)
-                existing_layer.colormap = make_binary_labels_colormap()
-                cells_layer = existing_layer
-            except KeyError:
-                # Create new layer
-                cells_layer = self._viewer.add_labels(
-                    cells["data"],
-                    name=cells_name,
-                    colormap=make_binary_labels_colormap(),
-                )
+        apply_segmentation_results_to_viewer(
+            self._viewer,
+            results=results,
+            settings=self.settings,
+            input_scale=input_scale,
+            sample_metadata=sample_metadata,
+            sample_stem_path=stem,
+            cells_model_file=self.cells_model_file,
+            rings_model_file=self.rings_model_file,
+        )
 
-            # Create metadata for segmented cells layer
-            cells_metadata = {
-                "cells_segmentation_model": self.cells_model_file,
-                "cells_segmentation_datetime": datetime.now().isoformat(),
-            }
-
-            # Apply scale and update with sample and cells metadata
-            cells_layer.scale = input_scale
-            cells_layer.metadata.update(sample_metadata)
-            cells_layer.metadata.update(cells_metadata)
-
-        # Add or update rings layer if available
-        if "rings" in results:
-            rings = results["rings"]
-            rings_name = rings["name"]
-
-            # Check if layer with this name already exists
-            try:
-                # Update existing layer
-                existing_layer = self._viewer.layers[rings_name]
-                existing_layer.data = rings["data"]
-                rings_layer = existing_layer
-            except KeyError:
-                # Create new layer
-                rings_layer = self._viewer.add_labels(
-                    rings["data"],
-                    name=rings_name,
-                )
-
-            metadata_file_contents = get_metadata_from_file(
-                path=self.input_layer.metadata["sample_stem_path"],
-                path_is_stem=True,
-            )
-            default_rings_year_value = [
-                field["default"]
-                for field in self.settings.get("samples_metadata.fields")
-                if field["id"] == "rings_outmost_complete_year"
-            ][0]
-
-            # Create metadata for segmented rings layer
-            rings_metadata = {
-                "rings_outmost_complete_year": (
-                    metadata_file_contents["rings_outmost_complete_year"]
-                    if metadata_file_contents
-                    else default_rings_year_value
-                ),
-                "rings_segmentation_model": self.rings_model_file,
-                "rings_segmentation_datetime": datetime.now().isoformat(),
-            }
-
-            # Apply scale and update with sample and rings metadata
-            rings_layer.scale = input_scale
-            rings_layer.metadata.update(sample_metadata)
-            rings_layer.metadata.update(rings_metadata)
-
-            # Assign features to the rings layer
-            if "features" in rings:
-                rings_layer.features = rings["features"]
-
-            # Update the rings layer with the new features
-            new_rings_table, new_rings_raster, new_colormap = (
-                update_rings_geometries(
-                    rings_table=rings_layer.features,
-                    last_year=rings_layer.metadata[
-                        "rings_outmost_complete_year"
-                    ],
-                    image_shape=rings_layer.data.shape,
-                )
-            )
-
-            rings_layer.features = new_rings_table
-            rings_layer.data = new_rings_raster
-            rings_layer.colormap = new_colormap

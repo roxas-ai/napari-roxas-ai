@@ -4,6 +4,7 @@ import cv2
 import napari.layers
 import numpy as np
 import pandas as pd
+from PyQt5.QtCore import QTimer
 from magicgui.widgets import (
     ComboBox,
     Container,
@@ -57,7 +58,7 @@ def outside_rings_deletion(
     """
 
     # Check if any point of the ring is outside the mask
-    for i, coords in rings_table["boundary_coordinates"].items():
+    for i, coords in rings_table["RBXY"].items():
         coords = np.array(coords)
         is_any_valid = np.any(
             (coords[:, 0] > 0)
@@ -150,11 +151,11 @@ def rasterize_rings(
 
     for _i, row in rings_table.iterrows():
         coords = np.flip(
-            np.array(row["boundary_coordinates"]).round().astype("int32"),
+            np.array(row["RBXY"]).round().astype("int32"),
             axis=1,
         )
         value = (
-            row["ring_year"]
+            row["YEAR"]
             if row["enabled"]
             else settings.get("rasterization.uncomplete_ring_value")
         )
@@ -179,25 +180,25 @@ def update_rings_geometries(
     """
 
     # Rearrange coordinates from left to right if needed
-    rings_table["boundary_coordinates"] = rings_table[
-        "boundary_coordinates"
+    rings_table["RBXY"] = rings_table[
+        "RBXY"
     ].apply(rearrange_coordinates)
 
     # Ensure rings are inside the image
     rings_table = outside_rings_deletion(rings_table, image_shape)
 
     # Ensure complete rings
-    rings_table["boundary_coordinates"] = rings_table[
-        "boundary_coordinates"
+    rings_table["RBXY"] = rings_table[
+        "RBXY"
     ].apply(lambda x: horizontal_rings_completion(x, image_shape[1]))
 
     # Clip rings to the image width
-    rings_table["boundary_coordinates"] = rings_table[
-        "boundary_coordinates"
+    rings_table["RBXY"] = rings_table[
+        "RBXY"
     ].apply(lambda x: horizontal_rings_clippping(x, image_shape[1]))
 
     # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
-    rings_table["cells_above"] = rings_table["boundary_coordinates"].apply(
+    rings_table["cells_above"] = rings_table["RBXY"].apply(
         lambda x: calculate_polygon_area(x, image_shape[1])
     )
     rings_table = (
@@ -206,14 +207,15 @@ def update_rings_geometries(
         .rename_axis("id")
     )
 
-    # Assign year
-    rings_table["ring_year"] = [
+    rings_table["YEAR"] = [
         a + 1 for a in range(last_year - len(rings_table), last_year)
     ]
 
     # Disable rings (by default, the first ring is considered uncomplete and is disabled)
-    rings_table["enabled"] = True
-    rings_table.loc[0, "enabled"] = False
+    if "enabled" not in rings_table.columns:
+        rings_table["enabled"] = True
+        # By default, mark the first ring as uncomplete only for legacy inputs
+        rings_table.loc[0, "enabled"] = False
 
     # Rings_rasterization
     rings_raster = rasterize_rings(rings_table, image_shape)
@@ -223,6 +225,38 @@ def update_rings_geometries(
     colormap = make_rings_colormap(unique_rings_raster_values)
 
     return rings_table, rings_raster, colormap
+
+
+def interpolate_row_at_col(coords_rc: list, col_query: float) -> float:
+    # used to place the YEAR label vertically centered *inside* a ring at the left margin:
+    # take each ring boundary polyline, compute its row-position at a fixed column (near the left edge),
+    # then the ring center is halfway between boundary i and i+1 at that same column.
+    pts = np.asarray(coords_rc, dtype=float)
+    if pts.ndim != 2 or pts.shape[0] < 2:
+        return float("nan")
+
+    rows = pts[:, 0]
+    cols = pts[:, 1]
+
+    order = np.argsort(cols)
+    cols = cols[order]
+    rows = rows[order]
+
+    if col_query <= cols[0]:
+        return float(rows[0])
+    if col_query >= cols[-1]:
+        return float(rows[-1])
+
+    j = int(np.searchsorted(cols, col_query) - 1)
+    c0, c1 = float(cols[j]), float(cols[j + 1])
+    r0, r1 = float(rows[j]), float(rows[j + 1])
+
+    if c1 == c0:
+        return float(r0)
+
+    t = (col_query - c0) / (c1 - c0)
+    return float(r0 + t * (r1 - r0))
+
 
 
 class RingsLayerEditorWidget(Container):
@@ -257,6 +291,10 @@ class RingsLayerEditorWidget(Container):
             max=9999,
             step=1,
         )
+
+        self._refresh_button = PushButton(text="Refresh widget", visible=True)
+        self._refresh_button.changed.connect(self._refresh_widget)
+
         self._last_year_update_button = PushButton(
             text="Update Year",
             visible=True,
@@ -296,10 +334,47 @@ class RingsLayerEditorWidget(Container):
                 self._apply_rings_geometries_button,
                 self._last_year_spinbox,
                 self._last_year_update_button,
+                self._refresh_button,
             ]
         )
 
         # Update choices when layers change
+
+    def _deferred_remove_layer(self, name: str) -> None:
+        def _rm():
+            if name in self._viewer.layers:
+                self._viewer.layers.remove(name)
+
+        QTimer.singleShot(0, _rm)
+
+    def _refresh_widget(self) -> None:
+        """Refresh widget state by re-reading layers/metadata and re-binding callbacks."""
+        # Remove helper layers if present
+        for name in ("Rings Years", "Rings Modification"):
+            self._deferred_remove_layer(name)
+
+        current = self._input_layer_combo.value
+
+        new_choices = self._get_valid_layers()
+        self._input_layer_combo.choices = new_choices
+
+        if not new_choices:
+            self._disconnect_layer_callback()
+            # Optional: reset UI to a safe default
+            self._last_year_spinbox.value = 9999
+            show_info("No rings layers found to refresh.")
+            return
+
+        # Keep current selection if still valid, otherwise fall back to first choice
+        if current in new_choices:
+            self._input_layer_combo.value = current
+        else:
+            self._input_layer_combo.value = new_choices[0]
+
+        self._connect_layer_callback()
+        self._update_year_spinbox()
+
+        show_info("Refreshed rings editor")
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the rings file extension."""
@@ -393,32 +468,57 @@ class RingsLayerEditorWidget(Container):
 
         self.input_layer = self._input_layer_combo.value
 
+        # If there is already an edit session open, remove old helper layers first
+        if "Rings Years" in self._viewer.layers:
+            self._deferred_remove_layer("Rings Years")
+        if "Rings Modification" in self._viewer.layers:
+            self._deferred_remove_layer("Rings Modification")
+
+        # Build a DF in the same logical order as the annotated export
+        df = self.input_layer.features.copy()
+
+        # Prefer YEAR ordering; otherwise fall back to cells_above if present
+        if "YEAR" in df.columns:
+            df = df.sort_values("YEAR").reset_index(drop=True)
+        elif "cells_above" in df.columns:
+            df = df.sort_values("cells_above").reset_index(drop=True)
+
+        # Do NOT drop disabled rings; the top "uncomplete" boundary is required
+        # to preserve the red/uncomplete region after rasterization.
+        if "enabled" in df.columns:
+            df["enabled"] = df["enabled"].fillna(True)
+
+        if df.empty or "RBXY" not in df.columns or "YEAR" not in df.columns:
+            show_info("No valid rings to edit")
+            return
+
         # Simplify boundary coordinates using cv2.approxPolyDP
-        simplified_boundary_lines = [
-            cv2.approxPolyDP(
+        simplified_boundary_lines = []
+        keep_rows = []
+        for i, coords in enumerate(df["RBXY"].tolist()):
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                continue
+
+            approx = cv2.approxPolyDP(
                 np.array(coords, dtype=np.float32),
                 epsilon=settings.get("vectorization.rings_tolerance"),
                 closed=False,
             )
-            .squeeze()
-            .tolist()
-            for coords in self.input_layer.features["boundary_coordinates"]
-        ]
 
-        features = {
-            "ring_year": self.input_layer.features["ring_year"].tolist(),
-        }
+            approx = np.squeeze(approx)
+            if approx.ndim != 2 or approx.shape[0] < 2:
+                continue
 
-        text = {
-            "string": "{ring_year}",
-            "anchor": "upper_left",  # "center"
-            "translation": [0, 0],  # [0, -self.input_layer.data.shape[1] // 2]
-            "size": 20,
-            "color": "red",
-            "blending": "opaque",
-        }
+            simplified_boundary_lines.append(approx.tolist())
+            keep_rows.append(i)
 
-        # Create a new Shapes layer with the simplified boundary lines
+        # Ensure features rows match the number of shapes
+        df = df.iloc[keep_rows].reset_index(drop=True)
+        if df.empty:
+            show_info("No valid rings to edit")
+            return
+
+        # Create the editable Shapes layer
         self._viewer.add_shapes(
             simplified_boundary_lines,
             shape_type="path",
@@ -427,14 +527,81 @@ class RingsLayerEditorWidget(Container):
             opacity=1,
             name="Rings Modification",
             scale=self.input_layer.scale,
-            features=features,
-            text=text,
+            features={
+                "YEAR": df["YEAR"].tolist(),
+                "enabled": df["enabled"].fillna(True).tolist() if "enabled" in df.columns else [True] * len(df),
+            },
         )
+
+        # left margin in data coords
+        sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
+        x_left = 10.0 / sx
+
+        # y-value of each boundary line at x_left
+        y_on_left = [interpolate_row_at_col(coords, x_left) for coords in df["RBXY"].tolist()]
+
+        # center of ring i is between boundary i and boundary i+1 at that same x
+        centers_r = []
+        for i in range(len(y_on_left)):
+            if i + 1 < len(y_on_left):
+                centers_r.append(0.5 * (y_on_left[i] + y_on_left[i + 1]))
+            else:
+                centers_r.append(y_on_left[i])
+
+        # left margin in *data coords*
+        sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
+        x_left = 10.0 / sx
+
+        years = [str(int(y)) for y in df["YEAR"].tolist()]
+
+        points_rc = np.column_stack([
+            np.array(centers_r, dtype=float),
+            np.full(len(df), x_left, dtype=float),
+        ])
+
+        self._viewer.add_points(
+            points_rc,
+            name="Rings Years",
+            size=1,
+            opacity=1.0,
+            edge_width=0,
+            face_color=[0, 0, 0, 0],
+            edge_color=[0, 0, 0, 0],
+            scale=self.input_layer.scale,
+            features={"YEAR": years},
+            text={
+                "string": "{YEAR}",
+                "anchor": "upper_left",
+                "translation": [0, 0],
+                "size": 8,
+                "color": "black",
+                "blending": "translucent",
+            },
+        )
+
+        years_layer = self._viewer.layers["Rings Years"]
+        shapes_layer = self._viewer.layers["Rings Modification"]
+
+        layers = self._viewer.layers
+        years_index = layers.index(years_layer)
+        shapes_index = layers.index(shapes_layer)
+
+        # We want years directly below shapes => years should end up at index == shapes_index - 1.
+        dest_index = shapes_index
+        if years_index < shapes_index:
+            dest_index -= 1
+
+        layers.move(years_index, dest_index)
+
+        layers.selection.active = shapes_layer
+        years_layer.editable = False
 
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
         # Remove the working layer
-        self._viewer.layers.remove("Rings Modification")
+        self._deferred_remove_layer("Rings Modification")
+        if "Rings Years" in self._viewer.layers:
+            self._deferred_remove_layer("Rings Years")
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
@@ -449,18 +616,22 @@ class RingsLayerEditorWidget(Container):
     def _apply_rings_geometries(self) -> None:
         """Apply the changes to the input layer."""
 
-        # Recover new shapes data from the viewer
+        layer = self._viewer.layers["Rings Modification"]
+
         rings_table = pd.DataFrame(
-            data={
-                "boundary_coordinates": [
-                    coords.tolist()
-                    for coords in self._viewer.layers[
-                        "Rings Modification"
-                    ].data
-                ]
+            {
+                "RBXY": [coords.tolist() for coords in layer.data],
+                "YEAR": layer.features["YEAR"].astype(int).tolist() if "YEAR" in layer.features else None,
+                "enabled": layer.features["enabled"].tolist() if "enabled" in layer.features else None,
             }
         ).rename_axis("id")
-        self._viewer.layers.remove("Rings Modification")
+        rings_table = rings_table.dropna(axis=1, how="all")
+
+        # Remove helper layers
+        if "Rings Modification" in self._viewer.layers:
+            self._deferred_remove_layer("Rings Modification")
+        if "Rings Years" in self._viewer.layers:
+            self._deferred_remove_layer("Rings Years")
 
         # Update the rings layer with the new geometries
         new_rings_table, new_rings_raster, new_colormap = (

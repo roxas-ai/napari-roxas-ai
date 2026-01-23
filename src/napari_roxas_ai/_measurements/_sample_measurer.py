@@ -675,6 +675,246 @@ class SampleAnalyzer:
         """Return results as pandas DataFrame."""
         self.cells_table = pd.DataFrame(self.cells).T.set_index("id")
 
+    # TODO review needed and add ll_scaling etc. to settings json
+    def _apply_cwt_filters(self) -> None:
+        """
+        Automatic filtering of cell wall thickness (CWT) measurements.
+
+        Implements the exact workflow from the provided screenshot:
+
+        Pre-selection of candidates
+          1) Compute Median, Q1 and Q3 for:
+             i) tangential: CWT_pith & CWT_bark combined
+             ii) radial:    CWT_left & CWT_right combined
+          2) Any CWT measurement within [Q1..Q3] is confirmed.
+             Only measurements outside [Q1..Q3] are "candidates" and are subjected
+             to the following outlier/context filtering.
+
+        Hard limit filtering (applied only to candidates)
+          3) IQR = Q3 - Q1 separately for tangential and radial combined sets.
+          4) Lower hard limit:
+               LL = Q1 - ll_scaling * IQR
+               LL = max(LL, 1/pixels_per_um)   (sub-pixel values are implausible)
+          5) Upper hard limit:
+               UL = Q3 + ul_scaling * IQR
+          6) Candidate measurements outside [LL..UL] are set to NA.
+
+        Context filtering (applied only to candidates; keep order!)
+          7) Opposite sides of lumen:
+               a) CWT_bark  > opp_scaling * CWT_pith  -> remove CWT_bark
+               b) CWT_pith  > opp_scaling * CWT_bark  -> remove CWT_pith
+               c) CWT_left  > opp_scaling * CWT_right -> remove CWT_left
+               d) CWT_right > opp_scaling * CWT_left  -> remove CWT_right
+          8) Adjacent sides of lumen (keep this order!):
+               a) CWT_bark  > adj_scaling * ave(CWT_left,  CWT_right) -> remove CWT_bark
+               b) CWT_pith  > adj_scaling * ave(CWT_left,  CWT_right) -> remove CWT_pith
+               c) CWT_left  > adj_scaling * ave(CWT_bark,  CWT_pith)  -> remove CWT_left
+               d) CWT_right > adj_scaling * ave(CWT_bark,  CWT_pith)  -> remove CWT_right
+
+        Notes
+        -----
+        - This function modifies self.cells_table in-place.
+        - It also recomputes dependent metrics (CWTTAN, CWTRAD, CWTALL, RTSR, CTSR, TB2)
+          to stay consistent with filtered base wall values.
+        """
+
+        if self.cells_table is None or self.cells_table.empty:
+            return
+
+        required = ["CWT_pith", "CWT_bark", "CWT_left", "CWT_right"]
+        for col in required:
+            if col not in self.cells_table.columns:
+                return
+
+        # --- Settings (colored parameters in the screenshot) ---
+        ll_scaling = float(self.config.get("ll_scaling", 1.5))
+        ul_scaling = float(self.config.get("ul_scaling", 3.0))
+        opp_scaling = float(self.config.get("opp_scaling", 1.5))
+        adj_scaling = float(self.config.get("adj_scaling", 2.5))
+
+        px_per_um = float(self.config["pixels_per_um"])
+        min_plausible = 1.0 / px_per_um  # 1 pixel in µm (sub-pixel range is implausible)
+
+        df = self.cells_table
+
+        # --- Pull columns as numeric ---
+        cwt_pi = pd.to_numeric(df["CWT_pith"], errors="coerce")
+        cwt_ba = pd.to_numeric(df["CWT_bark"], errors="coerce")
+        cwt_le = pd.to_numeric(df["CWT_left"], errors="coerce")
+        cwt_ri = pd.to_numeric(df["CWT_right"], errors="coerce")
+
+        # --- Step 1: combined quantiles (tangential + radial) ---
+        tan_all = pd.concat([cwt_pi, cwt_ba], ignore_index=True).dropna()
+        rad_all = pd.concat([cwt_le, cwt_ri], ignore_index=True).dropna()
+
+        if tan_all.empty or rad_all.empty:
+            return
+
+        # Medians computed for completeness (per screenshot), not used downstream
+        _median_tan = float(tan_all.median())
+        _median_rad = float(rad_all.median())
+
+        q1_tan = float(tan_all.quantile(0.25))
+        q3_tan = float(tan_all.quantile(0.75))
+        q1_rad = float(rad_all.quantile(0.25))
+        q3_rad = float(rad_all.quantile(0.75))
+
+        # --- Step 2: confirmed (inside IQR) vs candidate (outside IQR) ---
+        def _inside_iqr(x: pd.Series, q1: float, q3: float) -> pd.Series:
+            return x.notna() & (x >= q1) & (x <= q3)
+
+        confirmed_pi = _inside_iqr(cwt_pi, q1_tan, q3_tan)
+        confirmed_ba = _inside_iqr(cwt_ba, q1_tan, q3_tan)
+        confirmed_le = _inside_iqr(cwt_le, q1_rad, q3_rad)
+        confirmed_ri = _inside_iqr(cwt_ri, q1_rad, q3_rad)
+
+        cand_pi = cwt_pi.notna() & ~confirmed_pi
+        cand_ba = cwt_ba.notna() & ~confirmed_ba
+        cand_le = cwt_le.notna() & ~confirmed_le
+        cand_ri = cwt_ri.notna() & ~confirmed_ri
+
+        # --- Steps 3-6: hard limits (apply only to candidates) ---
+        iqr_tan = q3_tan - q1_tan
+        iqr_rad = q3_rad - q1_rad
+
+        # Guard against pathological cases
+        if not np.isfinite(iqr_tan) or iqr_tan < 0:
+            iqr_tan = 0.0
+        if not np.isfinite(iqr_rad) or iqr_rad < 0:
+            iqr_rad = 0.0
+
+        ll_tan = max(q1_tan - ll_scaling * iqr_tan, min_plausible)
+        ul_tan = q3_tan + ul_scaling * iqr_tan
+
+        ll_rad = max(q1_rad - ll_scaling * iqr_rad, min_plausible)
+        ul_rad = q3_rad + ul_scaling * iqr_rad
+
+        def _apply_hard_limits(x: pd.Series, cand: pd.Series, ll: float, ul: float) -> pd.Series:
+            out = x.copy()
+            mask = cand & (x.notna()) & ((x < ll) | (x > ul))
+            out.loc[mask] = np.nan
+            return out
+
+        cwt_pi_f = _apply_hard_limits(cwt_pi, cand_pi, ll_tan, ul_tan)
+        cwt_ba_f = _apply_hard_limits(cwt_ba, cand_ba, ll_tan, ul_tan)
+        cwt_le_f = _apply_hard_limits(cwt_le, cand_le, ll_rad, ul_rad)
+        cwt_ri_f = _apply_hard_limits(cwt_ri, cand_ri, ll_rad, ul_rad)
+
+        # --- Steps 7-8: context filtering (apply only to candidates; keep order) ---
+        # Use "current" values (after hard limits) for comparisons
+        pi = cwt_pi_f
+        ba = cwt_ba_f
+        le = cwt_le_f
+        ri = cwt_ri_f
+
+        # Step 7: opposite sides
+        # a) CWTba > 1.5 * CWTpi -> remove CWTba
+        mask = cand_ba & ba.notna() & pi.notna() & (ba > (opp_scaling * pi))
+        ba.loc[mask] = np.nan
+
+        # b) CWTpi > 1.5 * CWTba -> remove CWTpi
+        mask = cand_pi & pi.notna() & ba.notna() & (pi > (opp_scaling * ba))
+        pi.loc[mask] = np.nan
+
+        # c) CWTle > 1.5 * CWTri -> remove CWTle
+        mask = cand_le & le.notna() & ri.notna() & (le > (opp_scaling * ri))
+        le.loc[mask] = np.nan
+
+        # d) CWTri > 1.5 * CWTle -> remove CWTri
+        mask = cand_ri & ri.notna() & le.notna() & (ri > (opp_scaling * le))
+        ri.loc[mask] = np.nan
+
+        # Step 8: adjacent sides (keep order!)
+        ave_lr = (le + ri) / 2.0
+        ave_pb = (ba + pi) / 2.0
+
+        # a) CWTba > 2.5 * ave(CWTle, CWTri) -> remove CWTba
+        mask = cand_ba & ba.notna() & ave_lr.notna() & (ba > (adj_scaling * ave_lr))
+        ba.loc[mask] = np.nan
+
+        # b) CWTpi > 2.5 * ave(CWTle, CWTri) -> remove CWTpi
+        mask = cand_pi & pi.notna() & ave_lr.notna() & (pi > (adj_scaling * ave_lr))
+        pi.loc[mask] = np.nan
+
+        # c) CWTle > 2.5 * ave(CWTba, CWTpi) -> remove CWTle
+        mask = cand_le & le.notna() & ave_pb.notna() & (le > (adj_scaling * ave_pb))
+        le.loc[mask] = np.nan
+
+        # d) CWTri > 2.5 * ave(CWTba, CWTpi) -> remove CWTri
+        mask = cand_ri & ri.notna() & ave_pb.notna() & (ri > (adj_scaling * ave_pb))
+        ri.loc[mask] = np.nan
+
+        # --- Write filtered base values back ---
+        df["CWT_pith"] = pi
+        df["CWT_bark"] = ba
+        df["CWT_left"] = le
+        df["CWT_right"] = ri
+
+        # --- Recompute dependent cell-level metrics to stay consistent ---
+        # CWTTAN = (pith + bark)/2 if both positive
+        cwttan = pd.Series(np.nan, index=df.index, dtype="float64")
+        mask = pi.notna() & ba.notna() & (pi > 0) & (ba > 0)
+        cwttan.loc[mask] = (pi.loc[mask] + ba.loc[mask]) / 2.0
+        df["CWTTAN"] = cwttan
+
+        # CWTRAD = (left + right)/2 if both positive
+        cwtrad = pd.Series(np.nan, index=df.index, dtype="float64")
+        mask = le.notna() & ri.notna() & (le > 0) & (ri > 0)
+        cwtrad.loc[mask] = (le.loc[mask] + ri.loc[mask]) / 2.0
+        df["CWTRAD"] = cwtrad
+
+        # CWTALL = (CWTRAD + CWTTAN)/2 if both present
+        cwtall = pd.Series(np.nan, index=df.index, dtype="float64")
+        mask = cwtrad.notna() & cwttan.notna()
+        cwtall.loc[mask] = (cwtrad.loc[mask] + cwttan.loc[mask]) / 2.0
+        df["CWTALL"] = cwtall
+
+        # RTSR = (4 * CWTTAN) / lumen_diam_rad
+        if "lumen_diam_rad" in df.columns:
+            drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
+            rtsr = pd.Series(np.nan, index=df.index, dtype="float64")
+            mask = cwttan.notna() & drad.notna() & (drad > 0)
+            rtsr.loc[mask] = (4.0 * cwttan.loc[mask]) / drad.loc[mask]
+            df["RTSR"] = rtsr
+
+        # CTSR = (4 * CWTALL) / circle_diameter(area-equivalent)
+        if "lumen_area" in df.columns:
+            la = pd.to_numeric(df["lumen_area"], errors="coerce")
+            ctsr = pd.Series(np.nan, index=df.index, dtype="float64")
+            circle_diam = 2.0 * np.sqrt(la / np.pi)
+            mask = cwtall.notna() & la.notna() & (la > 0) & circle_diam.notna() & (circle_diam > 0)
+            ctsr.loc[mask] = (4.0 * cwtall.loc[mask]) / circle_diam.loc[mask]
+            df["CTSR"] = ctsr
+
+        # TB2 = min( (2*CWTRAD/DRAD)^2, (2*CWTTAN/DTAN)^2 )
+        if "lumen_diam_rad" in df.columns and "lumen_diam_tang" in df.columns:
+            drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
+            dtan = pd.to_numeric(df["lumen_diam_tang"], errors="coerce")
+
+            tb2 = pd.Series(np.nan, index=df.index, dtype="float64")
+
+            # radial component
+            rad_val = pd.Series(np.nan, index=df.index, dtype="float64")
+            mask_r = cwtrad.notna() & drad.notna() & (cwtrad > 0) & (drad > 0)
+            rad_val.loc[mask_r] = ((2.0 * cwtrad.loc[mask_r]) / drad.loc[mask_r]) ** 2
+
+            # tangential component
+            tan_val = pd.Series(np.nan, index=df.index, dtype="float64")
+            mask_t = cwttan.notna() & dtan.notna() & (cwttan > 0) & (dtan > 0)
+            tan_val.loc[mask_t] = ((2.0 * cwttan.loc[mask_t]) / dtan.loc[mask_t]) ** 2
+
+            # min of available
+            both = rad_val.notna() & tan_val.notna()
+            tb2.loc[both] = np.minimum(rad_val.loc[both], tan_val.loc[both])
+
+            only_r = rad_val.notna() & ~tan_val.notna()
+            tb2.loc[only_r] = rad_val.loc[only_r]
+
+            only_t = tan_val.notna() & ~rad_val.notna()
+            tb2.loc[only_t] = tan_val.loc[only_t]
+
+            df["TB2"] = tb2
+
     def analyze_cells(self) -> pd.DataFrame:
         """Main method to analyze cells."""
         self._smooth_cells_array()
@@ -683,6 +923,9 @@ class SampleAnalyzer:
         self._compute_cell_walls()
         self._cluster_cells()
         self._get_cells_table()
+
+        # >>> ADD THIS (must be before any ring-level aggregations use cells_table)
+        # self._apply_cwt_filters()
 
         sample_type = self.config.get("sample_type", None)
         print("Sample type: ", sample_type)
@@ -702,7 +945,7 @@ class SampleAnalyzer:
 
         # Compute rings regressions
         self.rings_table[["boundary_slope", "boundary_intercept"]] = (
-            self.rings_table["boundary_coordinates"]
+            self.rings_table["RBXY"]
             .apply(self._rings_linear_regression)
             .apply(pd.Series)
         )
@@ -735,19 +978,21 @@ class SampleAnalyzer:
         h, w = self.cells_array.shape[:2]
         px_per_um = self.config["pixels_per_um"]
 
-        # init RA column
-        self.rings_table["ring_area"] = np.nan
+        # Ensure RA exists and reset
+        self.rings_table["RA"] = np.nan
 
         # ring i exists between boundary i and i+1
         for i in range(len(self.rings_table) - 1):
-            if not self.rings_table.loc[i, "enabled"]:
-                continue
-            if not self.rings_table.loc[i + 1, "enabled"]:
-                continue
+            ring_row = i + 1  # ring is represented by the lower boundary row
+
+            # Only compute RA for enabled rings (not enabled boundary)
+            if "enabled" in self.rings_table.columns:
+                if not bool(self.rings_table.loc[ring_row, "enabled"]):
+                    continue
 
             bounds = np.array(
-                self.rings_table["boundary_coordinates"][i]
-                + self.rings_table["boundary_coordinates"][i + 1][::-1],
+                self.rings_table["RBXY"][i]
+                + self.rings_table["RBXY"][i + 1][::-1],
                 dtype=np.int32
             )
 
@@ -1536,8 +1781,8 @@ class SampleAnalyzer:
             # Get cells in the current ring
             bounds = np.flip(
                 np.array(
-                    self.rings_table["boundary_coordinates"][i]
-                    + self.rings_table["boundary_coordinates"][i + 1][::-1],
+                    self.rings_table["RBXY"][i]
+                    + self.rings_table["RBXY"][i + 1][::-1],
                     dtype=np.int32,
                 ),
                 axis=1,
@@ -1574,14 +1819,24 @@ class SampleAnalyzer:
         self.cells_table[["top_angled_dist", "bot_angled_dist"]] = (
             self.cells_table.apply(self._get_angled_distances, axis=1)
         )
-        self.cells_table["ring_year"] = (
+        self.cells_table["YEAR"] = (
             self.cells_table["bot_ring_id"]
-            .map(self.rings_table["ring_year"])
+            .map(self.rings_table["YEAR"])
         )
-        self.cells_table["ring_year"] = (
-            self.cells_table["ring_year"]
+        self.cells_table["YEAR"] = (
+            self.cells_table["YEAR"]
             .astype("Int64")
         )
+        # cells outside all ring polygons (outermost incomplete band) ---
+        # Those cells have bot_ring_id = NaN -> YEAR becomes NA.
+        # Assign them to last_year + 1 (outermost incomplete ring year).
+        missing_year = self.cells_table["YEAR"].isna()
+        if missing_year.any():
+            last_year = pd.to_numeric(self.rings_table.get("YEAR"), errors="coerce").max()
+            if pd.notna(last_year):
+                self.cells_table.loc[missing_year, "YEAR"] = int(last_year) + 1
+                self.cells_table["YEAR"] = self.cells_table["YEAR"].astype("Int64")
+
 
         self.compute_rraddistr()
 
@@ -1705,7 +1960,7 @@ if __name__ == "__main__":
         ),
         sep="\t",
         index_col=0,
-        converters={"boundary_coordinates": ast.literal_eval},
+        converters={"RBXY": ast.literal_eval},
     )
 
     # Initialize the analyzer

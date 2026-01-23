@@ -109,6 +109,63 @@ def is_supported_file(path: str) -> bool:
         )
     )
 
+def _map_sample_stem_path(
+    meta: dict,
+    *,
+    opened_path: str,
+    path_is_stem: bool,
+) -> dict:
+    """
+    Ensure meta['sample_stem_path'] is a relative path (relative to project_directory)
+    and valid on the current machine.
+
+    Rules:
+    - If metadata contains a relative path: keep it
+    - If metadata contains an absolute path: convert to relative to project_directory
+    - If metadata is missing or invalid: compute relative path from opened_path
+    - Absolute paths must never be written back into metadata
+    """
+
+    project_dir = settings.get("project_directory")
+    if not project_dir:
+        return meta
+
+    project_dir = Path(project_dir).resolve()
+    stored = meta.get("sample_stem_path")
+
+    opened = Path(opened_path)
+
+    # Compute absolute expected stem from opened_path
+    if path_is_stem:
+        expected_abs = opened.resolve()
+    else:
+        base = Path(opened.name).stem
+        base = Path(base).stem
+        expected_abs = (opened.parent / base).resolve()
+
+    def to_relative(abs_path: Path) -> str:
+        try:
+            return abs_path.relative_to(project_dir).as_posix()
+        except ValueError:
+            return abs_path.name
+
+    # missing or invalid metadata -> recompute
+    if not isinstance(stored, str) or not stored.strip():
+        meta["sample_stem_path"] = to_relative(expected_abs)
+        return meta
+
+    p = Path(stored)
+
+    # already relative -> keep as-is
+    if not p.is_absolute():
+        meta["sample_stem_path"] = p.as_posix()
+        return meta
+
+    # absolute path -> map to relative (whether it exists or not)
+    meta["sample_stem_path"] = to_relative(p if p.exists() else expected_abs)
+    return meta
+
+
 
 def get_metadata_from_file(
     path: str, path_is_stem: bool = False
@@ -142,15 +199,42 @@ def get_metadata_from_file(
         )
 
     if not metadata_path.exists():
-        print(
-            f"Error: Could not find metadata file: {metadata_path} for {path}"
-        )
-        return None
+        if path_is_stem:
+            stem_name = Path(path).name
+            project_dir = settings.get("project_directory")
+
+            if project_dir:
+                candidates = list(Path(project_dir).rglob(stem_name + metadata_file_extension))
+                if len(candidates) > 0:
+                    metadata_path = candidates[0]
+                else:
+                    print(
+                        f"Error: Could not find metadata file: {metadata_path} for {path} "
+                        f"(also not found under project_directory={project_dir})"
+                    )
+                    return None
+            else:
+                print(
+                    f"Error: Could not find metadata file: {metadata_path} for {path} "
+                    f"(project_directory not set)"
+                )
+                return None
+        else:
+            print(
+                f"Error: Could not find metadata file: {metadata_path} for {path}"
+            )
+            return None
 
     # Load metadata from JSON file
     try:
         with open(metadata_path) as f:
-            return json.load(f)
+            meta = json.load(f)
+
+        return _map_sample_stem_path(
+            meta,
+            opened_path=path,
+            path_is_stem=path_is_stem,
+        )
     except (json.JSONDecodeError, UnicodeDecodeError):
         print(f"Error: Could not parse JSON metadata file: {metadata_path}")
         return None
@@ -200,12 +284,13 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         Path(layer_name).stem + cells_table_file_extension
     )
     if cells_table_path.exists():
-        add_kwargs["features"] = pd.read_csv(
+        df = pd.read_csv(
             cells_table_path,
             sep=settings.get("tables.separator"),
-            index_col=settings.get("tables.index_column"),
-            converters={"centroid": ast.literal_eval},
+            index_col=None,
+            converters={"centroid": ast.literal_eval},  # legacy
         )
+        add_kwargs["features"] = df
 
     # Try to get sample metadata and cells metadata from metadata file
     add_kwargs["metadata"] = {}
@@ -254,21 +339,60 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         scale_value = 1 / float(metadata["sample_scale"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
-    # Try to get tablular data associated with the rings
-    rings_table_file_extension = "".join(
-        settings.get("file_extensions.rings_table_file_extension")
-    )
+        # Try to get tabular data associated with the rings
+        rings_table_base = Path(path).parent / (Path(layer_name).stem + ".rings_table")
 
-    rings_table_path = Path(path).parent / (
-        Path(layer_name).stem + rings_table_file_extension
-    )
-    if rings_table_path.exists():
-        add_kwargs["features"] = pd.read_csv(
-            rings_table_path,
-            sep=settings.get("tables.separator"),
-            index_col=settings.get("tables.index_column"),
-            converters={"boundary_coordinates": ast.literal_eval},
-        )
+        rings_table_candidates = [
+            Path(str(rings_table_base) + ".csv"),  # modern
+            Path(str(rings_table_base) + ".txt"),  # legacy
+        ]
+
+        rings_table_path = next((p for p in rings_table_candidates if p.exists()), None)
+
+        if rings_table_path is not None:
+            expected_any = {"boundary_coordinates", "RBXY", "ring_year", "YEAR"}
+
+            # try configured separator first
+            df = pd.read_csv(
+                rings_table_path,
+                sep=settings.get("tables.separator"),
+                index_col=None,
+                converters={
+                    "RBXY": ast.literal_eval,
+                    "boundary_coordinates": ast.literal_eval,
+                },
+            )
+
+            # fallback: legacy tab-separated
+            if df.empty or expected_any.isdisjoint(set(df.columns)):
+                df = pd.read_csv(
+                    rings_table_path,
+                    sep="\t",
+                    index_col=None,
+                    converters={
+                        "RBXY": ast.literal_eval,
+                        "boundary_coordinates": ast.literal_eval,
+                    },
+                )
+
+            # normalize column names so downstream code can rely on RBXY + YEAR
+            rename_map = {}
+
+            if "ring_year" in df.columns and "YEAR" not in df.columns:
+                rename_map["ring_year"] = "YEAR"
+
+            # important: keep legacy RBXY if already there; otherwise map boundary_coordinates -> RBXY
+            if "boundary_coordinates" in df.columns and "RBXY" not in df.columns:
+                rename_map["boundary_coordinates"] = "RBXY"
+
+            # legacy
+            if "ring_angle_width" in df.columns and "MRW" not in df.columns:
+                rename_map["ring_angle_width"] = "MRW"
+
+            if rename_map:
+                df = df.rename(columns=rename_map)
+
+            add_kwargs["features"] = df
 
     # Try to get sample metadata and rings metadata from metadata file
     add_kwargs["metadata"] = {}

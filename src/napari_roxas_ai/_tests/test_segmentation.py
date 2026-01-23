@@ -262,7 +262,7 @@ class TestSingleWorkerFunctionality:
                 boundary_data = []
                 for _i, _boundary in enumerate(rings_boundaries):
                     # Since we're using mock data, simplify this part
-                    boundary_data.append({"boundary_coordinates": []})
+                    boundary_data.append({"RBXY": []})
 
                 boundaries_df = pd.DataFrame(boundary_data)
 
