@@ -207,11 +207,9 @@ def update_rings_geometries(
         .rename_axis("id")
     )
 
-    # Assign year only if not already present
-    if "YEAR" not in rings_table.columns:
-        rings_table["YEAR"] = [
-            a + 1 for a in range(last_year - len(rings_table), last_year)
-        ]
+    rings_table["YEAR"] = [
+        a + 1 for a in range(last_year - len(rings_table), last_year)
+    ]
 
     # Disable rings (by default, the first ring is considered uncomplete and is disabled)
     if "enabled" not in rings_table.columns:
