@@ -117,8 +117,9 @@ class CellsLayerEditorWidget(Container):
             colormap = defaultdict(lambda: [0, 0, 0, 0])
             colormap[1] = self.settings.get("vectorization.cells_face_color")
 
+            # Create working layer with a copy - original layer stays untouched
             work_layer = self._viewer.add_labels(
-                self.input_layer.data,
+                self.input_layer.data.copy(),
                 name="Cells Modification",
                 scale=self.input_layer.scale,
                 colormap=colormap,
@@ -178,7 +179,7 @@ class CellsLayerEditorWidget(Container):
 
     def _cancel_cells_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
-        # Remove the working layer
+        # Remove the working layer - original layer was never modified
         self._viewer.layers.remove("Cells Modification")
 
         # Reset the button visibility

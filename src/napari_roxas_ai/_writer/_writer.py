@@ -234,7 +234,7 @@ def save_annotated_scan_image(
             continue
 
         # Compute a vertically centered label position between this ring and the next one.
-        # If next ring is missing, fall back to this ring's mid-point.
+        # If next ring is missing, use the image height as the lower boundary.
         this_mid = mids_rc[i]
         if this_mid is None:
             continue
@@ -244,7 +244,9 @@ def save_annotated_scan_image(
             center_r = 0.5 * (this_mid[0] + next_mid[0])
             center_c = 0.5 * (this_mid[1] + next_mid[1])
         else:
-            center_r, center_c = this_mid
+            # For the last ring, center between the boundary and the image bottom
+            center_r = 0.5 * (this_mid[0] + h)
+            center_c = this_mid[1]
 
         label = str(int(year))
 
