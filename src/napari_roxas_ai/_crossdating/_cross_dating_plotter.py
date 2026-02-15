@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union
 
 import napari.layers
 import numpy as np
@@ -891,7 +891,7 @@ class CrossDatingPlotterWidget(Container):
 
         container.widgets = []
 
-    def save_crossdating_plot_image(self, out_dir: str | Path, sample_name: str) -> Path | None:
+    def save_crossdating_plot_image(self, out_dir: Union[str, Path], sample_name: str) -> Optional[Path]:
         """Save the currently displayed crossdating plot as a JPG."""
         if self.plot_df is None or self.plot_df.empty:
             return None

@@ -2,6 +2,7 @@
 Tests for the writer module functionality.
 """
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -106,24 +107,29 @@ class TestWriterModule:
             "sample_scale": 1.0,
         }
 
-        # Mock file operations
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "builtins.open", create=True
-        ), patch("json.load", return_value=original_metadata), patch(
-            "json.dump"
-        ) as mock_dump:
+        # Write an actual existing metadata file
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(original_metadata, f)
 
-            # New metadata to add
-            new_metadata = {"scan_date": "2023-01-01", "sample_scale": 2.5}
+        # New metadata to add
+        new_metadata = {"scan_date": "2023-01-01", "sample_scale": 2.5}
 
-            # Test updating an existing metadata file
-            result = update_metadata_file(
-                str(metadata_path), new_metadata, "scan_"
-            )
+        # Test updating an existing metadata file
+        result = update_metadata_file(
+            str(metadata_path), new_metadata, "scan_"
+        )
 
-            # Verify results
-            assert result == str(metadata_path)
-            assert mock_dump.called
+        # Verify results
+        assert result == str(metadata_path)
+
+        # Read back and verify the file was updated
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            saved_metadata = json.load(f)
+        # sample_scale is not updated because it doesn't match prefix "scan_"
+        assert saved_metadata["sample_scale"] == 1.0
+        assert saved_metadata["scan_date"] == "2023-01-01"
+        # sample_name is derived from filename when not in new_metadata
+        assert saved_metadata["sample_name"] == "test_sample"
 
     def test_save_image_without_rescale(self, temp_dir):
         """Test save_image function without rescaling."""
