@@ -541,12 +541,14 @@ class RingsLayerEditorWidget(Container):
         y_on_left = [interpolate_row_at_col(coords, x_left) for coords in df["RBXY"].tolist()]
 
         # center of ring i is between boundary i and boundary i+1 at that same x
+        # for the last ring, use the image height as the lower boundary
+        image_height = self.input_layer.data.shape[0]
         centers_r = []
         for i in range(len(y_on_left)):
             if i + 1 < len(y_on_left):
                 centers_r.append(0.5 * (y_on_left[i] + y_on_left[i + 1]))
             else:
-                centers_r.append(y_on_left[i])
+                centers_r.append(0.5 * (y_on_left[i] + image_height))
 
         # left margin in *data coords*
         sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
