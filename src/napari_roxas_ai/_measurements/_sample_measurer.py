@@ -705,7 +705,7 @@ class SampleAnalyzer:
         """Return results as pandas DataFrame."""
         self.cells_table = pd.DataFrame(self.cells).T.set_index("id")
 
-    # TODO review needed and add ll_scaling etc. to settings json
+    # TODO add ll_scaling etc. to settings json
     def _apply_cwt_filters(self) -> None:
         """
         Automatic filtering of cell wall thickness (CWT) measurements using the IQR method for outlier detection. (Tukey’s fences method)
