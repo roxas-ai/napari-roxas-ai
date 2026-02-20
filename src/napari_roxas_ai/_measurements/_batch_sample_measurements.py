@@ -292,7 +292,7 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Rings measurement checkbox and settings
         self._measure_rings_checkbox = CheckBox(
-            value=True, label="Measure Rigns"
+            value=True, label="Measure Rings"
         )
 
         # Create a button to launch the analysis

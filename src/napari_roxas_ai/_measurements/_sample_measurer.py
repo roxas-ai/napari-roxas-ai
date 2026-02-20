@@ -186,7 +186,7 @@ class SampleAnalyzer:
 
         asp = a / b if b != 0 else np.nan
         LA = cell.get("lumen_area", np.nan)
-        KH = self.compute_kh(
+        KH = self._compute_kh(
             lumen_area_um2=LA,
             major_radius_px=a,
             minor_radius_px=b,
@@ -197,7 +197,6 @@ class SampleAnalyzer:
             lumen_area_um2=LA,
             aspect_ratio=asp
         )
-
 
         cell.update(
             {
@@ -213,7 +212,7 @@ class SampleAnalyzer:
             }
         )
 
-    def compute_kh(self, lumen_area_um2: float, major_radius_px: float, minor_radius_px: float, pixels_per_um: float) -> float:
+    def _compute_kh(self, lumen_area_um2: float, major_radius_px: float, minor_radius_px: float, pixels_per_um: float) -> float:
         """
         Compute theoretical hydraulic conductance KH for an elliptical lumen.
 
@@ -334,7 +333,7 @@ class SampleAnalyzer:
         # Get bounding box coordinates
         x, y, w, h = cv2.boundingRect(contour)
 
-        # Make sure it does not got out of the image (a 1 pixel offset is possible)
+        # Make sure it does not get out of the image (a 1 pixel offset is possible)
         h = h - 1 if (y + h) > self.cells_array.shape[0] else h
         w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
@@ -403,7 +402,7 @@ class SampleAnalyzer:
                 np.where(contour_labels == label)[0], :
             ]
 
-            # Crop to keep the middle 75%
+            # Crop to keep the middle % as defined by integration_margin (typically 75%)
             lower_bound = np.ceil(
                 self.integration_margin * wall_pixel_coords.shape[0]
             ).astype("int32")
@@ -432,43 +431,74 @@ class SampleAnalyzer:
         self._compute_rwd(cell_id)
 
     def _compute_cwttan(self, cell_id: int) -> None:
-        """Compute CWTTAN = tangential wall thickness = (CWT_pith + CWT_bark) / 2"""
+        """Compute CWTTAN = tangential wall thickness.
+
+        Rules:
+        - If both CWT_pith and CWT_bark are valid (>0), use their mean.
+        - If only one is valid, use that value.
+        - If neither is valid, set to np.nan.
+        """
 
         cwt_pith = self.cells[cell_id].get("CWT_pith", np.nan)
         cwt_bark = self.cells[cell_id].get("CWT_bark", np.nan)
 
-        if (
-                not np.isnan(cwt_pith) and cwt_pith > 0 and
-                not np.isnan(cwt_bark) and cwt_bark > 0
-        ):
+        valid_pith = not np.isnan(cwt_pith) and cwt_pith > 0
+        valid_bark = not np.isnan(cwt_bark) and cwt_bark > 0
+
+        if valid_pith and valid_bark:
             self.cells[cell_id]["CWTTAN"] = (cwt_pith + cwt_bark) / 2
+        elif valid_pith:
+            self.cells[cell_id]["CWTTAN"] = cwt_pith
+        elif valid_bark:
+            self.cells[cell_id]["CWTTAN"] = cwt_bark
         else:
             self.cells[cell_id]["CWTTAN"] = np.nan
 
-
     def _compute_cwtrad(self, cell_id: int) -> None:
-        """Compute CWTRAD = Thickness of radial cell walls ([CWT_left+CWT_right]/2)"""
+        """Compute CWTRAD = Thickness of radial cell walls.
+
+        Rules:
+        - If both CWT_left and CWT_right are valid (>0), use their mean.
+        - If only one is valid, use that value.
+        - If neither is valid, set to np.nan.
+        """
 
         cwt_left = self.cells[cell_id].get("CWT_left", np.nan)
         cwt_right = self.cells[cell_id].get("CWT_right", np.nan)
 
-        if (
-                not np.isnan(cwt_left) and cwt_left > 0 and
-                not np.isnan(cwt_right) and cwt_right > 0
-        ):
+        valid_left = not np.isnan(cwt_left) and cwt_left > 0
+        valid_right = not np.isnan(cwt_right) and cwt_right > 0
+
+        if valid_left and valid_right:
             self.cells[cell_id]["CWTRAD"] = (cwt_left + cwt_right) / 2
+        elif valid_left:
+            self.cells[cell_id]["CWTRAD"] = cwt_left
+        elif valid_right:
+            self.cells[cell_id]["CWTRAD"] = cwt_right
         else:
             self.cells[cell_id]["CWTRAD"] = np.nan
 
-
     def _compute_cwtall(self, cell_id: int) -> None:
-        """Compute CWTALL = Thickness of all cell walls ([CWTRAD+CWTTAN]/2)"""
+        """Compute CWTALL = Thickness of all cell walls ([CWTRAD+CWTTAN]/2)
+
+        Rules:
+        - If both CWTRAD and CWTTAN are valid, use their mean.
+        - If only one is valid, use that value.
+        - If neither is valid, set to np.nan.
+        """
 
         CWTRAD = self.cells[cell_id].get("CWTRAD", np.nan)
         CWTTAN = self.cells[cell_id].get("CWTTAN", np.nan)
 
-        if not np.isnan(CWTRAD)  and not np.isnan(CWTTAN):
+        valid_rad = not np.isnan(CWTRAD)
+        valid_tan = not np.isnan(CWTTAN)
+
+        if valid_rad and valid_tan:
             self.cells[cell_id]["CWTALL"] = (CWTRAD + CWTTAN) / 2
+        elif valid_rad:
+            self.cells[cell_id]["CWTALL"] = CWTRAD
+        elif valid_tan:
+            self.cells[cell_id]["CWTALL"] = CWTTAN
         else:
             self.cells[cell_id]["CWTALL"] = np.nan
 
@@ -562,18 +592,18 @@ class SampleAnalyzer:
         # Radial TB2
         if (
                 not np.isnan(cwtrad) and cwtrad > 0 and
-                not np.isnan(drad) and drad > 0
+                not np.isnan(dtan) and dtan > 0
         ):
             t_rad = 2.0 * cwtrad
-            values.append((t_rad / drad) ** 2)
+            values.append((t_rad / dtan) ** 2)
 
         # Tangential TB2
         if (
                 not np.isnan(cwttan) and cwttan > 0 and
-                not np.isnan(dtan) and dtan > 0
+                not np.isnan(drad) and drad > 0
         ):
             t_tan = 2.0 * cwttan
-            values.append((t_tan / dtan) ** 2)
+            values.append((t_tan / drad) ** 2)
 
         self.cells[cell_id]["TB2"] = min(values) if values else np.nan
 
@@ -678,7 +708,7 @@ class SampleAnalyzer:
     # TODO review needed and add ll_scaling etc. to settings json
     def _apply_cwt_filters(self) -> None:
         """
-        Automatic filtering of cell wall thickness (CWT) measurements.
+        Automatic filtering of cell wall thickness (CWT) measurements using the IQR method for outlier detection. (Tukey’s fences method)
 
         Implements the exact workflow from the provided screenshot:
 
@@ -699,13 +729,13 @@ class SampleAnalyzer:
                UL = Q3 + ul_scaling * IQR
           6) Candidate measurements outside [LL..UL] are set to NA.
 
-        Context filtering (applied only to candidates; keep order!)
+        Context filtering (applied only to candidates; keep order! Make sure averages are computed only on confirmed values):
           7) Opposite sides of lumen:
                a) CWT_bark  > opp_scaling * CWT_pith  -> remove CWT_bark
                b) CWT_pith  > opp_scaling * CWT_bark  -> remove CWT_pith
                c) CWT_left  > opp_scaling * CWT_right -> remove CWT_left
                d) CWT_right > opp_scaling * CWT_left  -> remove CWT_right
-          8) Adjacent sides of lumen (keep this order!):
+          8) Adjacent sides of lumen (keep this order! Make sure averages are computed only on confirmed values):
                a) CWT_bark  > adj_scaling * ave(CWT_left,  CWT_right) -> remove CWT_bark
                b) CWT_pith  > adj_scaling * ave(CWT_left,  CWT_right) -> remove CWT_pith
                c) CWT_left  > adj_scaling * ave(CWT_bark,  CWT_pith)  -> remove CWT_left
@@ -730,7 +760,7 @@ class SampleAnalyzer:
         ll_scaling = float(self.config.get("ll_scaling", 1.5))
         ul_scaling = float(self.config.get("ul_scaling", 3.0))
         opp_scaling = float(self.config.get("opp_scaling", 1.5))
-        adj_scaling = float(self.config.get("adj_scaling", 2.5))
+        adj_scaling = float(self.config.get("adj_scaling", 3.0))
 
         px_per_um = float(self.config["pixels_per_um"])
         min_plausible = 1.0 / px_per_um  # 1 pixel in µm (sub-pixel range is implausible)
@@ -750,10 +780,7 @@ class SampleAnalyzer:
         if tan_all.empty or rad_all.empty:
             return
 
-        # Medians computed for completeness (per screenshot), not used downstream
-        _median_tan = float(tan_all.median())
-        _median_rad = float(rad_all.median())
-
+        # Q1 and Q3 computed for tangential and radial walls separately
         q1_tan = float(tan_all.quantile(0.25))
         q3_tan = float(tan_all.quantile(0.75))
         q1_rad = float(rad_all.quantile(0.25))
@@ -809,72 +836,120 @@ class SampleAnalyzer:
 
         # Step 7: opposite sides
         # a) CWTba > 1.5 * CWTpi -> remove CWTba
-        mask = cand_ba & ba.notna() & pi.notna() & (ba > (opp_scaling * pi))
-        ba.loc[mask] = np.nan
+        mask_ba_opp_pi = cand_ba & ba.notna() & pi.notna() & (ba > (opp_scaling * pi))
+        ba.loc[mask_ba_opp_pi] = np.nan
 
         # b) CWTpi > 1.5 * CWTba -> remove CWTpi
-        mask = cand_pi & pi.notna() & ba.notna() & (pi > (opp_scaling * ba))
-        pi.loc[mask] = np.nan
+        mask_pi_opp_ba = cand_pi & pi.notna() & ba.notna() & (pi > (opp_scaling * ba))
+        pi.loc[mask_pi_opp_ba] = np.nan
 
         # c) CWTle > 1.5 * CWTri -> remove CWTle
-        mask = cand_le & le.notna() & ri.notna() & (le > (opp_scaling * ri))
-        le.loc[mask] = np.nan
+        mask_le_opp_ri = cand_le & le.notna() & ri.notna() & (le > (opp_scaling * ri))
+        le.loc[mask_le_opp_ri] = np.nan
 
         # d) CWTri > 1.5 * CWTle -> remove CWTri
-        mask = cand_ri & ri.notna() & le.notna() & (ri > (opp_scaling * le))
-        ri.loc[mask] = np.nan
+        mask_ri_opp_le = cand_ri & ri.notna() & le.notna() & (ri > (opp_scaling * le))
+        ri.loc[mask_ri_opp_le] = np.nan
 
         # Step 8: adjacent sides (keep order!)
-        ave_lr = (le + ri) / 2.0
-        ave_pb = (ba + pi) / 2.0
+        # Use nanmean to handle NA values: if one side is NA, use the other; if both NA, result is NA
+        ave_lr = pd.Series(
+            [np.nanmean([le.iloc[i], ri.iloc[i]]) if not (np.isnan(le.iloc[i]) and np.isnan(ri.iloc[i])) else np.nan
+             for i in range(len(le))],
+            index=le.index
+        )
+        ave_pb = pd.Series(
+            [np.nanmean([ba.iloc[i], pi.iloc[i]]) if not (np.isnan(ba.iloc[i]) and np.isnan(pi.iloc[i])) else np.nan
+             for i in range(len(ba))],
+            index=ba.index
+        )
 
-        # a) CWTba > 2.5 * ave(CWTle, CWTri) -> remove CWTba
-        mask = cand_ba & ba.notna() & ave_lr.notna() & (ba > (adj_scaling * ave_lr))
-        ba.loc[mask] = np.nan
+         # a) CWTba > 2.5 * ave(CWTle, CWTri) -> remove CWTba
+        mask_ba_adj_lr = cand_ba & ba.notna() & ave_lr.notna() & (ba > (adj_scaling * ave_lr))
+        ba.loc[mask_ba_adj_lr] = np.nan
 
         # b) CWTpi > 2.5 * ave(CWTle, CWTri) -> remove CWTpi
-        mask = cand_pi & pi.notna() & ave_lr.notna() & (pi > (adj_scaling * ave_lr))
-        pi.loc[mask] = np.nan
+        mask_pi_adj_lr = cand_pi & pi.notna() & ave_lr.notna() & (pi > (adj_scaling * ave_lr))
+        pi.loc[mask_pi_adj_lr] = np.nan
 
         # c) CWTle > 2.5 * ave(CWTba, CWTpi) -> remove CWTle
-        mask = cand_le & le.notna() & ave_pb.notna() & (le > (adj_scaling * ave_pb))
-        le.loc[mask] = np.nan
+        mask_le_adj_pb = cand_le & le.notna() & ave_pb.notna() & (le > (adj_scaling * ave_pb))
+        le.loc[mask_le_adj_pb] = np.nan
 
         # d) CWTri > 2.5 * ave(CWTba, CWTpi) -> remove CWTri
-        mask = cand_ri & ri.notna() & ave_pb.notna() & (ri > (adj_scaling * ave_pb))
-        ri.loc[mask] = np.nan
+        mask_ri_adj_pb = cand_ri & ri.notna() & ave_pb.notna() & (ri > (adj_scaling * ave_pb))
+        ri.loc[mask_ri_adj_pb] = np.nan
 
-        # --- Write filtered base values back ---
+# --- Write filtered base values back ---
         df["CWT_pith"] = pi
         df["CWT_bark"] = ba
         df["CWT_left"] = le
         df["CWT_right"] = ri
 
         # --- Recompute dependent cell-level metrics to stay consistent ---
-        # CWTTAN = (pith + bark)/2 if both positive
+        # CWTTAN = (pith + bark)/2 if both positive; otherwise use the one available and > 0
         cwttan = pd.Series(np.nan, index=df.index, dtype="float64")
-        mask = pi.notna() & ba.notna() & (pi > 0) & (ba > 0)
-        cwttan.loc[mask] = (pi.loc[mask] + ba.loc[mask]) / 2.0
+
+        # both valid and positive -> mean
+        mask_both_tan = pi.notna() & ba.notna() & (pi > 0) & (ba > 0)
+        cwttan.loc[mask_both_tan] = (pi.loc[mask_both_tan] + ba.loc[mask_both_tan]) / 2.0
+
+        # only pith valid and positive -> use pith
+        mask_pi_only = pi.notna() & (pi > 0) & ~(ba.notna() & (ba > 0))
+        cwttan.loc[mask_pi_only] = pi.loc[mask_pi_only]
+
+        # only bark valid and positive -> use bark
+        mask_ba_only = ba.notna() & (ba > 0) & ~(pi.notna() & (pi > 0))
+        cwttan.loc[mask_ba_only] = ba.loc[mask_ba_only]
+
         df["CWTTAN"] = cwttan
 
-        # CWTRAD = (left + right)/2 if both positive
+        # CWTRAD = (left + right)/2 if both positive; otherwise use the one available and > 0
         cwtrad = pd.Series(np.nan, index=df.index, dtype="float64")
-        mask = le.notna() & ri.notna() & (le > 0) & (ri > 0)
-        cwtrad.loc[mask] = (le.loc[mask] + ri.loc[mask]) / 2.0
+
+        valid_left = le.notna() & (le > 0)
+        valid_right = ri.notna() & (ri > 0)
+
+        # both valid -> mean
+        mask_both_rad = valid_left & valid_right
+        cwtrad.loc[mask_both_rad] = (le.loc[mask_both_rad] + ri.loc[mask_both_rad]) / 2.0
+
+        # only left valid -> use left
+        mask_left_only = valid_left & ~valid_right
+        cwtrad.loc[mask_left_only] = le.loc[mask_left_only]
+
+        # only right valid -> use right
+        mask_right_only = valid_right & ~valid_left
+        cwtrad.loc[mask_right_only] = ri.loc[mask_right_only]
+
         df["CWTRAD"] = cwtrad
 
-        # CWTALL = (CWTRAD + CWTTAN)/2 if both present
+        # CWTALL = (CWTRAD + CWTTAN)/2 if both positive; otherwise use the one available and > 0
         cwtall = pd.Series(np.nan, index=df.index, dtype="float64")
-        mask = cwtrad.notna() & cwttan.notna()
-        cwtall.loc[mask] = (cwtrad.loc[mask] + cwttan.loc[mask]) / 2.0
+
+        valid_rad = cwtrad.notna() & (cwtrad > 0)
+        valid_tan = cwttan.notna() & (cwttan > 0)
+
+        # both valid -> mean
+        mask_both_all = valid_rad & valid_tan
+        cwtall.loc[mask_both_all] = (cwtrad.loc[mask_both_all] + cwttan.loc[mask_both_all]) / 2.0
+
+        # only radial valid -> use radial
+        mask_rad_only = valid_rad & ~valid_tan
+        cwtall.loc[mask_rad_only] = cwtrad.loc[mask_rad_only]
+
+        # only tangential valid -> use tangential
+        mask_tan_only = valid_tan & ~valid_rad
+        cwtall.loc[mask_tan_only] = cwttan.loc[mask_tan_only]
+
         df["CWTALL"] = cwtall
 
         # RTSR = (4 * CWTTAN) / lumen_diam_rad
         if "lumen_diam_rad" in df.columns:
             drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
             rtsr = pd.Series(np.nan, index=df.index, dtype="float64")
-            mask = cwttan.notna() & drad.notna() & (drad > 0)
-            rtsr.loc[mask] = (4.0 * cwttan.loc[mask]) / drad.loc[mask]
+            mask_rtsr = cwttan.notna() & drad.notna() & (drad > 0)
+            rtsr.loc[mask_rtsr] = (4.0 * cwttan.loc[mask_rtsr]) / drad.loc[mask_rtsr]
             df["RTSR"] = rtsr
 
         # CTSR = (4 * CWTALL) / circle_diameter(area-equivalent)
@@ -882,11 +957,11 @@ class SampleAnalyzer:
             la = pd.to_numeric(df["lumen_area"], errors="coerce")
             ctsr = pd.Series(np.nan, index=df.index, dtype="float64")
             circle_diam = 2.0 * np.sqrt(la / np.pi)
-            mask = cwtall.notna() & la.notna() & (la > 0) & circle_diam.notna() & (circle_diam > 0)
-            ctsr.loc[mask] = (4.0 * cwtall.loc[mask]) / circle_diam.loc[mask]
+            mask_ctsr = cwtall.notna() & la.notna() & (la > 0) & circle_diam.notna() & (circle_diam > 0)
+            ctsr.loc[mask_ctsr] = (4.0 * cwtall.loc[mask_ctsr]) / circle_diam.loc[mask_ctsr]
             df["CTSR"] = ctsr
 
-        # TB2 = min( (2*CWTRAD/DRAD)^2, (2*CWTTAN/DTAN)^2 )
+        # TB2 = min( (2*CWTRAD/DTAN)^2, (2*CWTTAN/DRAD)^2 )
         if "lumen_diam_rad" in df.columns and "lumen_diam_tang" in df.columns:
             drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
             dtan = pd.to_numeric(df["lumen_diam_tang"], errors="coerce")
@@ -895,13 +970,13 @@ class SampleAnalyzer:
 
             # radial component
             rad_val = pd.Series(np.nan, index=df.index, dtype="float64")
-            mask_r = cwtrad.notna() & drad.notna() & (cwtrad > 0) & (drad > 0)
-            rad_val.loc[mask_r] = ((2.0 * cwtrad.loc[mask_r]) / drad.loc[mask_r]) ** 2
+            mask_r = cwtrad.notna() & dtan.notna() & (cwtrad > 0) & (dtan > 0)
+            rad_val.loc[mask_r] = ((2.0 * cwtrad.loc[mask_r]) / dtan.loc[mask_r]) ** 2
 
             # tangential component
             tan_val = pd.Series(np.nan, index=df.index, dtype="float64")
-            mask_t = cwttan.notna() & dtan.notna() & (cwttan > 0) & (dtan > 0)
-            tan_val.loc[mask_t] = ((2.0 * cwttan.loc[mask_t]) / dtan.loc[mask_t]) ** 2
+            mask_t = cwttan.notna() & drad.notna() & (cwttan > 0) & (drad > 0)
+            tan_val.loc[mask_t] = ((2.0 * cwttan.loc[mask_t]) / drad.loc[mask_t]) ** 2
 
             # min of available
             both = rad_val.notna() & tan_val.notna()
@@ -925,7 +1000,7 @@ class SampleAnalyzer:
         self._get_cells_table()
 
         # >>> ADD THIS (must be before any ring-level aggregations use cells_table)
-        # self._apply_cwt_filters()
+        self._apply_cwt_filters()
 
         sample_type = self.config.get("sample_type", None)
         print("Sample type: ", sample_type)
