@@ -70,97 +70,22 @@ class SettingsManager:
         If the file exists, loads settings from it.
         If the file doesn't exist or is corrupted, creates default settings.
         """
+        # Always initialize with default settings first
+        self._set_defaults()
+
         if self.settings_file.exists():
             try:
                 # Try to load existing settings
                 with open(self.settings_file) as f:
-                    self._settings = json.load(f)
-            except json.JSONDecodeError:
-                # If file is corrupted, use default settings
-                self.reset()
-        else:
-            # Create default settings if file doesn't exist
-            self.reset()
+                    user_settings = json.load(f)
+                    self._merge_settings(self._settings, user_settings)
+            except (json.JSONDecodeError, OSError):
+                # If file is corrupted, we keep the default settings from _set_defaults()
+                pass
 
-    def save_settings(self):
+    def _set_defaults(self):
         """
-        Save current settings to the JSON file.
-
-        Writes the settings dictionary to the settings file with pretty formatting.
-        """
-        with open(self.settings_file, "w") as f:
-            json.dump(self._settings, f, indent=4)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """
-        Get a setting value by key.
-        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
-
-        Args:
-            key: The setting key to retrieve
-            default: Value to return if key doesn't exist
-
-        Returns:
-            The setting value or the default if key doesn't exist
-        """
-        if "." not in key:
-            return self._settings.get(key, default)
-
-        # Handle nested keys
-        keys = key.split(".")
-        current = self._settings
-
-        for k in keys[:-1]:
-            if k not in current:
-                return default
-            current = current[k]
-
-        if not isinstance(current, dict) or keys[-1] not in current:
-            return default
-
-        return current.get(keys[-1], default)
-
-    def set(self, key: str, value: Any):
-        """
-        Set a setting value and save to file.
-        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
-
-        Args:
-            key: The setting key to set
-            value: The value to assign to the setting
-        """
-        if "." not in key:
-            self._settings[key] = value
-            self.save_settings()
-            return
-
-        # Handle nested keys
-        keys = key.split(".")
-        current = self._settings
-
-        # Navigate to the correct nested dictionary
-        for k in keys[:-1]:
-            if k not in current:
-                current[k] = {}
-            current = current[k]
-
-        # Set the value
-        current[keys[-1]] = value
-        self.save_settings()
-
-    def update(self, settings_dict: Dict[str, Any]):
-        """
-        Update multiple settings at once and save to file.
-
-        Args:
-            settings_dict: Dictionary of settings to update
-        """
-        self._settings.update(settings_dict)
-        self.save_settings()
-
-    def reset(self):
-        """
-        Reset all settings to default values and save to file.
+        Set all settings to default values.
         """
         self._settings = {
             # Metadata settings with fields for UI
@@ -326,6 +251,106 @@ class SettingsManager:
             },
             "project_directory": None,  # Current project directory
         }
+
+    def _merge_settings(self, target: Dict[str, Any], source: Dict[str, Any]):
+        """
+        Recursively merge source dictionary into target dictionary.
+
+        Args:
+            target: The dictionary to merge into
+            source: The dictionary to merge from
+        """
+        for key, value in source.items():
+            if (
+                key in target
+                and isinstance(target[key], dict)
+                and isinstance(value, dict)
+            ):
+                self._merge_settings(target[key], value)
+            else:
+                target[key] = value
+
+    def save_settings(self):
+        """
+        Save current settings to the JSON file.
+
+        Writes the settings dictionary to the settings file with pretty formatting.
+        """
+        with open(self.settings_file, "w") as f:
+            json.dump(self._settings, f, indent=4)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Get a setting value by key.
+        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
+
+        Args:
+            key: The setting key to retrieve
+            default: Value to return if key doesn't exist
+
+        Returns:
+            The setting value or the default if key doesn't exist
+        """
+        if "." not in key:
+            return self._settings.get(key, default)
+
+        # Handle nested keys
+        keys = key.split(".")
+        current = self._settings
+
+        for k in keys[:-1]:
+            if k not in current:
+                return default
+            current = current[k]
+
+        if not isinstance(current, dict) or keys[-1] not in current:
+            return default
+
+        return current.get(keys[-1], default)
+
+    def set(self, key: str, value: Any):
+        """
+        Set a setting value and save to file.
+        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
+
+        Args:
+            key: The setting key to set
+            value: The value to assign to the setting
+        """
+        if "." not in key:
+            self._settings[key] = value
+            self.save_settings()
+            return
+
+        # Handle nested keys
+        keys = key.split(".")
+        current = self._settings
+
+        # Navigate to the correct nested dictionary
+        for k in keys[:-1]:
+            if k not in current:
+                current[k] = {}
+            current = current[k]
+
+        # Set the value
+        current[keys[-1]] = value
+        self.save_settings()
+
+    def update(self, settings_dict: Dict[str, Any]):
+        """
+        Update multiple settings at once and save to file.
+
+        Args:
+            settings_dict: Dictionary of settings to update
+        """
+        self._settings.update(settings_dict)
+        self.save_settings()
+
+    def reset(self):
+        """
+        Reset all settings to default values and save to file.
+        """
+        self._set_defaults()
         self.save_settings()
 
 

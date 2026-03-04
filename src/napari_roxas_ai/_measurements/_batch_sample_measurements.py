@@ -368,10 +368,10 @@ class BatchSampleMeasurementsWidget(Container):
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
-            "ll_scaling": settings.get("measurements.cells_cwt_ll_scaling"),
-            "ul_scaling": settings.get("measurements.cells_cwt_ul_scaling"),
-            "opp_scaling": settings.get("measurements.cells_cwt_opp_scaling"),
-            "adj_scaling": settings.get("measurements.cells_cwt_adj_scaling"),
+            "ll_scaling": settings.get("measurements.cells_cwt_ll_scaling", 1.5),
+            "ul_scaling": settings.get("measurements.cells_cwt_ul_scaling", 3.0),
+            "opp_scaling": settings.get("measurements.cells_cwt_opp_scaling", 1.5),
+            "adj_scaling": settings.get("measurements.cells_cwt_adj_scaling", 3.0),
         }
 
         # Prepare worker to run the analysis in a separate thread
