@@ -319,6 +319,10 @@ class SettingsManager:
                 "cells_smoothing_kernel_size": 5,  # Default smoothing kernel size (1 to disable)
                 "cells_integration_interval": 0.75,  # Default wall fraction for thickness measurement
                 "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
+                "cells_cwt_ll_scaling": 1.5,
+                "cells_cwt_ul_scaling": 3.0,
+                "cells_cwt_opp_scaling": 1.5,
+                "cells_cwt_adj_scaling": 3.0,
             },
             "project_directory": None,  # Current project directory
         }
