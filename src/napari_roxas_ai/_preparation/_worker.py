@@ -450,10 +450,12 @@ class Worker(QObject):
 
             # Load data from old roxas file formats if needed
             if self.default_loading_params.get("load_cells_from_roxas", False):
-                self.load_cells_from_roxas_scl(file_path, metadata)
+                self.load_cells_from_roxas_scl(str(file_path_obj), metadata)
 
             if self.default_loading_params.get("load_rings_from_roxas", False):
-                self.load_rings_from_roxas_ringtraces(file_path, metadata)
+                self.load_rings_from_roxas_ringtraces(
+                    str(file_path_obj), metadata
+                )
 
             # Move to next file
             self.current_file_index += 1
