@@ -82,6 +82,9 @@ class SettingsManager:
             except (json.JSONDecodeError, OSError):
                 # If file is corrupted, we keep the default settings from _set_defaults()
                 pass
+        else:
+            # If file doesn't exist, create it from the defaults
+            self.save_settings()
 
     def _set_defaults(self):
         """
