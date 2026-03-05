@@ -128,6 +128,12 @@ class PreparationWidget(Container):
         self._handpick_files_checkbox.changed.connect(
             self._toggle_file_selection
         )
+        self._ignore_roxas_output_checkbox = CheckBox(
+            value=True, label="Ignore ROXAS Output files"
+        )
+        self._ignore_roxas_output_checkbox.changed.connect(
+            self._refresh_file_list
+        )
 
         # File selection container (initially hidden)
         self._file_selection_container = Container(
@@ -236,6 +242,22 @@ class PreparationWidget(Container):
         # Sort files for consistent display
         self.source_files = sorted(self.source_files)
 
+        # Filter out roxas output files if the checkbox is checked
+        if self._ignore_roxas_output_checkbox.value:
+            roxas_output_suffixes = (
+                "_annotated.jpg",
+                "_annotated_cells.jpg",
+                "_annotated_twin.jpg",
+                "_ReferenceSeries.gif",
+                "_ReferenceSeriesLong.jpg",
+                "_Preview.jpg",
+            )
+            self.source_files = [
+                f
+                for f in self.source_files
+                if not f.endswith(roxas_output_suffixes)
+            ]
+
         # Update the file selection widget if it's visible
         if self._handpick_files_checkbox.value:
             self._update_file_selection_widget()
@@ -273,10 +295,14 @@ class PreparationWidget(Container):
 
             # Add the widget to the container
             self._file_selection_container.append(self._file_select_widget)
+            self._file_selection_container.append(
+                self._ignore_roxas_output_checkbox
+            )
 
             # Make container and reverse button visible
             self._file_selection_container.visible = True
             self._reverse_selection_button.visible = True
+            self._ignore_roxas_output_checkbox.visible = True
         else:
             # Hide container and reverse button if no files
             self._file_selection_container.visible = False
@@ -291,6 +317,7 @@ class PreparationWidget(Container):
             # Turn off file selection mode
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
+            self._ignore_roxas_output_checkbox.visible = False
             # Reset file selection
             self.selected_files = []
 
@@ -469,10 +496,12 @@ class PreparationWidget(Container):
 
         if result:
             # User confirmed the dialog - get metadata and apply_to_all flag
-            metadata, apply_to_all = metadata_dialog.get_result()
+            metadata, apply_to_all, loading_params = (
+                metadata_dialog.get_result()
+            )
 
             # Send metadata back to worker
-            self.worker.set_metadata(metadata, apply_to_all)
+            self.worker.set_metadata(metadata, apply_to_all, loading_params)
         else:
             # User cancelled - stop processing
             self._cancel_processing()
