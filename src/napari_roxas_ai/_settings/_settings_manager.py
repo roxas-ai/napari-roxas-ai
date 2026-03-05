@@ -89,6 +89,15 @@ class SettingsManager:
     def _set_defaults(self):
         """
         Set all settings to default values.
+
+        IMPORTANT for developers:
+        This method is the SINGLE SOURCE OF TRUTH for default settings.
+        When adding a new setting:
+        1. Add it here in _set_defaults().
+        2. (Optional but recommended) Update settings.json in the repository to match.
+        
+        At runtime, any keys missing from the user's settings.json will be 
+        automatically populated from these defaults.
         """
         self._settings = {
             # Metadata settings with fields for UI
