@@ -1,4 +1,5 @@
 import struct
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -169,9 +170,11 @@ def ring_labels_from_roxas(
     This is needed to create the instance segmentation mask with the correct shape.
     If return_img_coordinates is True, this parameter is ignored.
     """
-    trace_file = image_file.replace(".jpg", "_RingTraces.txt")
-    cal_file = image_file.replace(".jpg", ".cal")
-    settings_file = image_file.replace(".jpg", "_ROXAS_Settings.txt")
+    trace_file = image_file.replace(Path(image_file).suffix, "_RingTraces.txt")
+    cal_file = image_file.replace(Path(image_file).suffix, ".cal")
+    settings_file = image_file.replace(
+        Path(image_file).suffix, "_ROXAS_Settings.txt"
+    )
     img_coords = paths_to_image_coordinates(
         trace_file, cal_file, xls_file=None, settings_file=settings_file
     )

@@ -226,7 +226,9 @@ class Worker(QObject):
             last_year = (
                 max(
                     pd.read_csv(
-                        file_path.replace(".jpg", "_Output_Rings.txt"),
+                        file_path.replace(
+                            Path(file_path).suffix, "_Output_Rings.txt"
+                        ),
                         sep="\t",
                     )["YEAR"]
                 )
