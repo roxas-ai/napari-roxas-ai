@@ -220,7 +220,6 @@ class Worker(QObject):
             rings_layer_name = (
                 f"{metadata['sample_name']}{self.rings_content_ext}"
             )
-            rings_data = rings_labels.astype("int32")
 
             # Get ring years from the ROXAS output file and determine the last complete year based on the maximum year found in the file.
             last_year = (
@@ -259,7 +258,7 @@ class Worker(QObject):
                 / f"{Path(file_path).stem}{self.rings_content_ext}{self.rings_ext}"
             )
             write_single_layer(
-                path=ring_path, data=rings_data, meta=rings_add_kwargs
+                path=ring_path, data=_rings_raster_tmp, meta=rings_add_kwargs
             )
             print(
                 f"Successfully loaded rings from ROXAS RingTraces for {file_path}"
