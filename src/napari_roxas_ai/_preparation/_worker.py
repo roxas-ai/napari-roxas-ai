@@ -541,8 +541,7 @@ class Worker(QObject):
             # Add image metadata fields without overwriting existing metadata
             # This preserves the sample_ fields from the dialog
             for key, value in img_metadata.items():
-                if key not in metadata:
-                    metadata[key] = value
+                metadata[key] = value
 
     def _extract_image_metadata(self, image_path: str) -> Dict:
         """
