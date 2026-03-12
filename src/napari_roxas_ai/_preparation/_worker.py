@@ -142,6 +142,14 @@ class Worker(QObject):
             file_path: Path to the image file
         """
         print(f"Attempting to load cells from ROXAS SCL for {file_path}")
+        if file_path.endswith(
+            self.scan_content_extension + Path(file_path).suffix
+        ):
+            file_path = file_path.replace(
+                self.scan_content_extension + Path(file_path).suffix,
+                Path(file_path).suffix,
+            )
+            print(f"Adjusted file path for SCL loading: {file_path}")
         try:
 
             if os.path.exists(
@@ -197,6 +205,14 @@ class Worker(QObject):
         print(
             f"Attempting to load rings from ROXAS RingTraces for {file_path}"
         )
+        if file_path.endswith(
+            self.scan_content_extension + Path(file_path).suffix
+        ):
+            file_path = file_path.replace(
+                self.scan_content_extension + Path(file_path).suffix,
+                Path(file_path).suffix,
+            )
+            print(f"Adjusted file path for RingTraces loading: {file_path}")
         try:
             rings_boundaries = ring_labels_from_roxas(
                 file_path,
