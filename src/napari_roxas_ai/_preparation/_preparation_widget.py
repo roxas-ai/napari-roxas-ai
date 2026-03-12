@@ -249,6 +249,7 @@ class PreparationWidget(Container):
                 "_annotated_cells.jpg",
                 "_annotated_twin.jpg",
                 "_ReferenceSeries.gif",
+                "_ReferenceSeries.jpg",
                 "_ReferenceSeriesLong.jpg",
                 "_Preview.jpg",
             )
