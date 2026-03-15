@@ -41,7 +41,7 @@ dependencies = [
     "torchvision>=0.17.0,<0.24.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
     # Windows (CUDA 12.1)
     "torch>=2.2.0,<2.9.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
-    "torchvision>=0.17.0,<0.22.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "torchvision>=0.17.0,<0.24.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
     # macOS/ARM (CPU-only fallback)
     "torch>=2.4.0,<2.9.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
     "torchvision>=0.17.0,<0.22.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
