@@ -814,13 +814,16 @@ class RingsLayerEditorWidget(Container):
         # Interpolate at every pixel column from 0 to width-1
         w = self.input_layer.data.shape[1]
         downsample_factor = 4.0
-        all_cols = np.arange(w // downsample_factor, step=downsample_factor)
+        all_cols = np.arange(0, w, downsample_factor, dtype=float)
+
         interpolated_rows = np.ceil(
             np.interp(all_cols, cols_sorted, rows_sorted) / downsample_factor
         )
 
         # Result: shape (width, 2) with [row, col] at every pixel
-        start_boundary = np.column_stack([interpolated_rows, all_cols])
+        start_boundary = np.column_stack(
+            [interpolated_rows, all_cols // downsample_factor]
+        )
 
         show_info(
             f"Rerunning model from year {selected_year} "
