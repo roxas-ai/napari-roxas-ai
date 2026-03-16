@@ -238,18 +238,14 @@ class Worker(QObject):
             )
 
             # Get ring years from the ROXAS output file and determine the last complete year based on the maximum year found in the file.
-            last_year = (
-                max(
-                    pd.read_csv(
-                        file_path.replace(
-                            Path(file_path).suffix, "_Output_Rings.txt"
-                        ),
-                        sep="\t",
-                    )["YEAR"]
-                )
-                + 1
+            last_year = max(
+                pd.read_csv(
+                    file_path.replace(
+                        Path(file_path).suffix, "_Output_Rings.txt"
+                    ),
+                    sep="\t",
+                )["YEAR"]
             )
-            # add 1 since roxas does not count partial year at the end
 
             new_rings_table, _rings_raster_tmp, _cmap_tmp = (
                 update_rings_geometries(
