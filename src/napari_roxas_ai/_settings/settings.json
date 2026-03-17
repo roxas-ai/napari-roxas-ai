@@ -115,8 +115,8 @@
         "progressive": false
     },
     "processing": {
-        "try_to_use_gpu": false,
-        "try_to_use_autocast": false
+        "try_to_use_gpu": true,
+        "try_to_use_autocast": true
     },
     "vectorization": {
         "cells_tolerance": 1,
@@ -154,5 +154,5 @@
         "cells_cwt_opp_scaling": 1.5,
         "cells_cwt_adj_scaling": 3.0
     },
-    "project_directory": null
+    "project_directory": "C:/Users/vonarx/Desktop/ROXAS_AI_Crossdating/AI"
 }
