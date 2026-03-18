@@ -296,6 +296,7 @@ class SettingsManager:
                 "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
                 "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
                 "rings_edge_color": "red",  # Default color for vector shapes visualization
+                "rerun_interactive_edge_color": "lime",  # Default color for vector shapes visualization
             },
             "rasterization": {
                 "uncomplete_ring_value": -1,

@@ -1,10 +1,11 @@
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
 import napari.layers
 import numpy as np
 import pandas as pd
-from PyQt5.QtCore import QTimer
+import torch
 from magicgui.widgets import (
     ComboBox,
     Container,
@@ -13,7 +14,9 @@ from magicgui.widgets import (
 )
 from napari.utils.notifications import show_info
 from PIL import Image
+from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
+from torch.package import PackageImporter
 
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
@@ -29,6 +32,11 @@ if TYPE_CHECKING:
 Image.MAX_IMAGE_PIXELS = None
 
 settings = SettingsManager()
+
+SEGMENTATION_MODULE_PATH = (
+    Path(__file__).parent.parent.absolute() / "_segmentation"
+)
+RINGS_MODELS_PATH = SEGMENTATION_MODULE_PATH / "_models" / "_rings"
 
 
 def rearrange_coordinates(coords: list) -> list:
@@ -180,22 +188,20 @@ def update_rings_geometries(
     """
 
     # Rearrange coordinates from left to right if needed
-    rings_table["RBXY"] = rings_table[
-        "RBXY"
-    ].apply(rearrange_coordinates)
+    rings_table["RBXY"] = rings_table["RBXY"].apply(rearrange_coordinates)
 
     # Ensure rings are inside the image
     rings_table = outside_rings_deletion(rings_table, image_shape)
 
     # Ensure complete rings
-    rings_table["RBXY"] = rings_table[
-        "RBXY"
-    ].apply(lambda x: horizontal_rings_completion(x, image_shape[1]))
+    rings_table["RBXY"] = rings_table["RBXY"].apply(
+        lambda x: horizontal_rings_completion(x, image_shape[1])
+    )
 
     # Clip rings to the image width
-    rings_table["RBXY"] = rings_table[
-        "RBXY"
-    ].apply(lambda x: horizontal_rings_clippping(x, image_shape[1]))
+    rings_table["RBXY"] = rings_table["RBXY"].apply(
+        lambda x: horizontal_rings_clippping(x, image_shape[1])
+    )
 
     # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
     rings_table["cells_above"] = rings_table["RBXY"].apply(
@@ -256,7 +262,6 @@ def interpolate_row_at_col(coords_rc: list, col_query: float) -> float:
 
     t = (col_query - c0) / (c1 - c0)
     return float(r0 + t * (r1 - r0))
-
 
 
 class RingsLayerEditorWidget(Container):
@@ -325,6 +330,39 @@ class RingsLayerEditorWidget(Container):
             self._apply_rings_geometries
         )
 
+        # Create a horizontal container for the "Rerun Model" button and year selector
+        self._rerun_model_year_spinbox = SpinBox(
+            value=9999,
+            label="Year",
+            min=-10000,
+            max=10000,
+            step=1,
+        )
+
+        self._rings_model_weights_file = ComboBox(
+            choices=tuple(
+                path.name for path in Path(RINGS_MODELS_PATH).iterdir()
+            ),
+            label="Rings Model",
+        )
+        self._rerun_model_button = PushButton(
+            text="Run",
+        )
+
+        self._rerun_model_button.changed.connect(self._rerun_model_from_year)
+        self._rerun_model_container = Container(
+            widgets=[
+                # self.label_rerun_model,
+                self._rerun_model_year_spinbox,
+                self._rings_model_weights_file,
+                self._rerun_model_button,
+            ],
+            layout="Vertical",
+            visible=False,
+            labels=True,
+            label="Rerun Model from year:",
+        )
+
         # Append the widgets to the container
         self.extend(
             [
@@ -332,14 +370,14 @@ class RingsLayerEditorWidget(Container):
                 self._edit_rings_geometries_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
+                self._rerun_model_container,
                 self._last_year_spinbox,
                 self._last_year_update_button,
                 self._refresh_button,
             ]
         )
 
-        # Update choices when layers change
-
+    # Update choices when layers change
     def _deferred_remove_layer(self, name: str) -> None:
         def _rm():
             if name in self._viewer.layers:
@@ -465,6 +503,7 @@ class RingsLayerEditorWidget(Container):
         self._last_year_update_button.visible = False
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
+        self._rerun_model_container.visible = True
 
         self.input_layer = self._input_layer_combo.value
 
@@ -480,6 +519,8 @@ class RingsLayerEditorWidget(Container):
         # Prefer YEAR ordering; otherwise fall back to cells_above if present
         if "YEAR" in df.columns:
             df = df.sort_values("YEAR").reset_index(drop=True)
+            # set value here to run model from the first year in the table by default
+            self._rerun_model_year_spinbox.value = df["YEAR"].iloc[0]
         elif "cells_above" in df.columns:
             df = df.sort_values("cells_above").reset_index(drop=True)
 
@@ -529,37 +570,53 @@ class RingsLayerEditorWidget(Container):
             scale=self.input_layer.scale,
             features={
                 "YEAR": df["YEAR"].tolist(),
-                "enabled": df["enabled"].fillna(True).tolist() if "enabled" in df.columns else [True] * len(df),
+                "enabled": (
+                    df["enabled"].fillna(True).tolist()
+                    if "enabled" in df.columns
+                    else [True] * len(df)
+                ),
             },
         )
 
         # left margin in data coords
-        sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
+        sx = (
+            float(self.input_layer.scale[1])
+            if hasattr(self.input_layer, "scale")
+            else 1.0
+        )
         x_left = 10.0 / sx
 
         # y-value of each boundary line at x_left
-        y_on_left = [interpolate_row_at_col(coords, x_left) for coords in df["RBXY"].tolist()]
+        y_on_left = [
+            interpolate_row_at_col(coords, x_left)
+            for coords in df["RBXY"].tolist()
+        ]
 
-        # center of ring i is between boundary i and boundary i+1 at that same x
-        # for the last ring, use the image height as the lower boundary
-        image_height = self.input_layer.data.shape[0]
+        # Each boundary's YEAR labels the ring *above* it (between the previous
+        # boundary and this one).  So the label for boundary[i] should sit
+        # between boundary[i-1] and boundary[i].  For boundary[0] the upper
+        # edge is the top of the image (row 0).
         centers_r = []
         for i in range(len(y_on_left)):
-            if i + 1 < len(y_on_left):
-                centers_r.append(0.5 * (y_on_left[i] + y_on_left[i + 1]))
-            else:
-                centers_r.append(0.5 * (y_on_left[i] + image_height))
-
-        # left margin in *data coords*
-        sx = float(self.input_layer.scale[1]) if hasattr(self.input_layer, "scale") else 1.0
-        x_left = 10.0 / sx
+            upper = y_on_left[i - 1] if i > 0 else 0.0
+            centers_r.append(0.5 * (upper + y_on_left[i]))
 
         years = [str(int(y)) for y in df["YEAR"].tolist()]
 
-        points_rc = np.column_stack([
-            np.array(centers_r, dtype=float),
-            np.full(len(df), x_left, dtype=float),
-        ])
+        # left margin in *data coords*
+        sx = (
+            float(self.input_layer.scale[1])
+            if hasattr(self.input_layer, "scale")
+            else 1.0
+        )
+        x_left = 10.0 / sx
+
+        points_rc = np.column_stack(
+            [
+                np.array(centers_r, dtype=float),
+                np.full(len(df), x_left, dtype=float),
+            ]
+        )
 
         self._viewer.add_points(
             points_rc,
@@ -598,6 +655,8 @@ class RingsLayerEditorWidget(Container):
         layers.selection.active = shapes_layer
         years_layer.editable = False
 
+        self._update_year_spinbox()
+
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
         # Remove the working layer
@@ -611,6 +670,7 @@ class RingsLayerEditorWidget(Container):
         self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
+        self._rerun_model_container.visible = False
 
         # Show confirmation message
         show_info("Rings geometries modification cancelled")
@@ -623,8 +683,16 @@ class RingsLayerEditorWidget(Container):
         rings_table = pd.DataFrame(
             {
                 "RBXY": [coords.tolist() for coords in layer.data],
-                "YEAR": layer.features["YEAR"].astype(int).tolist() if "YEAR" in layer.features else None,
-                "enabled": layer.features["enabled"].tolist() if "enabled" in layer.features else None,
+                "YEAR": (
+                    layer.features["YEAR"].astype(int).tolist()
+                    if "YEAR" in layer.features
+                    else None
+                ),
+                "enabled": (
+                    layer.features["enabled"].tolist()
+                    if "enabled" in layer.features
+                    else None
+                ),
             }
         ).rename_axis("id")
         rings_table = rings_table.dropna(axis=1, how="all")
@@ -656,6 +724,331 @@ class RingsLayerEditorWidget(Container):
         self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
+        self._rerun_model_container.visible = False
 
         # Show confirmation message
         show_info("Ring geometries successfully updated")
+
+    def _update_year_spinbox(self) -> None:
+        """Update the year spinbox value based on the selected layer."""
+        if self._input_layer_combo.value:
+            layer = self._input_layer_combo.value
+            if "rings_outmost_complete_year" in layer.metadata:
+                self._last_year_spinbox.value = layer.metadata[
+                    "rings_outmost_complete_year"
+                ]
+            # Update the rerun model year spinbox with the first year in the table
+            if hasattr(layer, "features") and "YEAR" in layer.features.columns:
+                first_year = layer.features["YEAR"].min()
+                self._rerun_model_year_spinbox.value = int(first_year)
+
+    def _rerun_model_from_year(self) -> None:
+        """Rerun the ring detection model starting from the selected year."""
+        selected_year = self._rerun_model_year_spinbox.value
+
+        if not self._input_layer_combo.value:
+            show_info("No layer selected")
+            return
+
+        # Read from the Shapes editing layer, not the original Labels layer
+        if "Rings Modification" not in self._viewer.layers:
+            show_info(
+                "No editing session active — click 'Edit Rings Geometries' first"
+            )
+            return
+
+        edit_layer = self._viewer.layers["Rings Modification"]
+
+        # Build rings_table from the current Shapes layer data
+        rings_table = pd.DataFrame(
+            {
+                "RBXY": [
+                    coords.tolist() if hasattr(coords, "tolist") else coords
+                    for coords in edit_layer.data
+                ],
+                "YEAR": (
+                    edit_layer.features["YEAR"].astype(int).tolist()
+                    if "YEAR" in edit_layer.features
+                    else None
+                ),
+                "enabled": (
+                    edit_layer.features["enabled"].tolist()
+                    if "enabled" in edit_layer.features
+                    else None
+                ),
+            }
+        ).rename_axis("id")
+        rings_table = rings_table.dropna(axis=1, how="all")
+
+        if (
+            "YEAR" not in rings_table.columns
+            or "RBXY" not in rings_table.columns
+        ):
+            show_info("No valid rings data found")
+            return
+
+        # Sort by YEAR to ensure correct ordering
+        rings_table = rings_table.sort_values("YEAR").reset_index(drop=True)
+
+        # Find the boundary index for the selected year
+        matching = rings_table[rings_table["YEAR"] == selected_year]
+        if matching.empty:
+            show_info(
+                f"Year {selected_year-1} not found in rings table or does not have a valid end boundary"
+            )
+            return
+
+        boundary_idx = matching.index[0]
+
+        start_boundary = np.array(rings_table.loc[boundary_idx, "RBXY"])
+
+        # start_boundary is an array of shape (N, 2) with [row, col] coordinates
+        cols = start_boundary[:, 1]
+        rows = start_boundary[:, 0]
+
+        # Sort by column to ensure monotonic x for np.interp
+        sort_idx = np.argsort(cols)
+        cols_sorted = cols[sort_idx]
+        rows_sorted = rows[sort_idx]
+
+        # Interpolate at every pixel column from 0 to width-1
+        w = self.input_layer.data.shape[1]
+        downsample_factor = 4.0
+        all_cols = np.arange(0, w, downsample_factor, dtype=float)
+
+        interpolated_rows = np.ceil(
+            np.interp(all_cols, cols_sorted, rows_sorted) / downsample_factor
+        )
+
+        # Result: shape (width, 2) with [row, col] at every pixel
+        start_boundary = np.column_stack(
+            [interpolated_rows, all_cols // downsample_factor]
+        )
+
+        show_info(
+            f"Rerunning model from year {selected_year} "
+            f"(boundary with {len(start_boundary)} vertices)"
+        )
+
+        # Set up rings model
+        rings_model = PackageImporter(
+            f"{RINGS_MODELS_PATH}/{self._rings_model_weights_file.value}"
+        ).load_pickle("LinearRingModel", "model.pkl")
+        rings_model.available_device = (
+            "cuda"
+            if torch.cuda.is_available()
+            and self.settings.get("processing.try_to_use_gpu")
+            else (
+                "mps"
+                if torch.mps.is_available()
+                and self.settings.get("processing.try_to_use_gpu")
+                else "cpu"
+            )
+        )
+        rings_model.to(device=rings_model.available_device)
+        # Fix for problem with model object; device attribute is not updated with to()
+        rings_model.device = rings_model.available_device
+        rings_model.use_autocast = bool(
+            torch.amp.autocast_mode.is_autocast_available(rings_model.device)
+            and self.settings.get("processing.try_to_use_gpu")
+            and (rings_model.device == "cuda" or rings_model.device == "mps")
+        )
+
+        # Perform inference
+        scan_extension = self.settings.get(
+            "file_extensions.scan_file_extension"
+        )[0]
+        rings_extension = self.settings.get(
+            "file_extensions.rings_file_extension"
+        )[0]
+
+        image_layer_name = str(self._input_layer_combo.value).replace(
+            rings_extension, scan_extension
+        )  # get from the viewer
+        image = (
+            self._viewer.layers[image_layer_name].data
+            if image_layer_name in self._viewer.layers
+            else None
+        )
+        if image is None:
+            show_info(
+                f"Corresponding image layer '{image_layer_name}' not found for rings layer '{self._input_layer_combo.value.name}'"
+            )
+            return
+        import inspect
+
+        # Check if the model's infer method accepts start_boundary
+        if "start_boundary" in inspect.signature(rings_model.infer).parameters:
+            _, rings_boundaries = rings_model.infer(
+                image, start_boundary=start_boundary
+            )
+        else:
+            show_info(
+                "Model does not support starting boundary selection; running model on the whole image"
+            )
+            _, rings_boundaries = rings_model.infer(image)
+
+        # approximate the boundary to reduce number of vertices
+        boundary_approx = []
+        for _i, boundary in enumerate(rings_boundaries):
+            # Convert to numpy or list, whichever is more appropriate
+            if isinstance(boundary, torch.Tensor):
+                coords = boundary.cpu().numpy().tolist()
+            else:
+                coords = boundary
+
+            # simplify the new boundaries using cv2.approxPolyDP
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                continue
+
+            approx = cv2.approxPolyDP(
+                np.array(coords, dtype=np.float32),
+                epsilon=settings.get("vectorization.rings_tolerance"),
+                closed=False,
+            )
+
+            approx = np.squeeze(approx)
+            if approx.ndim != 2 or approx.shape[0] < 2:
+                continue
+
+            boundary_approx.append(approx)
+
+        layer = self._viewer.layers["Rings Modification"]
+        years = layer.features["YEAR"].astype(int)
+
+        # Find indices of shapes with YEAR > selected_year
+        indices_to_remove = set(years[years > selected_year].index.tolist())
+
+        # Select and remove them
+        layer.selected_data = indices_to_remove
+        layer.remove_selected()
+
+        # Set all boundaries to the standard edge color
+        layer.edge_color = [
+            settings.get("vectorization.rings_edge_color")
+        ] * len(layer.data)
+
+        # Add the new boundaries as new shapes
+        layer.add(
+            boundary_approx,
+            shape_type="path",
+            edge_color=settings.get(
+                "vectorization.rerun_interactive_edge_color"
+            ),
+            edge_width=settings.get("vectorization.rings_edge_width"),
+        )
+
+        # Reassign YEAR values for all shapes based on spatial ordering
+        # Keep the same approach as update_rings_geometries: sort by cells_above
+        # area, then assign years as (last_year - n + 1) .. last_year
+        last_year = self.input_layer.metadata["rings_outmost_complete_year"]
+        all_coords = [
+            coords.tolist() if hasattr(coords, "tolist") else coords
+            for coords in layer.data
+        ]
+        n_shapes = len(all_coords)
+
+        # Compute cells_above for spatial ordering
+        image_width = self.input_layer.data.shape[1]
+        areas = [calculate_polygon_area(c, image_width) for c in all_coords]
+        order = np.argsort(areas)
+
+        # Assign years: range is (last_year - n_shapes + 1) .. last_year
+        # rank 0 = smallest area = topmost boundary = oldest year
+        assigned_years = np.zeros(n_shapes, dtype=int)
+        for rank, idx in enumerate(order):
+            assigned_years[idx] = (last_year - n_shapes) + rank + 1
+
+        # Preserve enabled flags for kept shapes, mark new ones as enabled
+        n_kept = n_shapes - len(boundary_approx)
+        existing_features = layer.features.copy()
+        enabled = []
+        for i in range(n_shapes):
+            if i < n_kept and "enabled" in existing_features.columns:
+                enabled.append(existing_features["enabled"].iloc[i])
+            else:
+                enabled.append(True)
+
+        layer.features = pd.DataFrame(
+            {
+                "YEAR": assigned_years.tolist(),
+                "enabled": enabled,
+            }
+        )
+
+        # --- Redraw the "Rings Years" label layer ---
+        if "Rings Years" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Years")
+
+        # Reorder coords by YEAR for label placement
+        df_labels = (
+            pd.DataFrame(
+                {
+                    "YEAR": assigned_years.tolist(),
+                    "RBXY": all_coords,
+                }
+            )
+            .sort_values("YEAR")
+            .reset_index(drop=True)
+        )
+
+        sx = (
+            float(self.input_layer.scale[1])
+            if hasattr(self.input_layer, "scale")
+            else 1.0
+        )
+        x_left = 10.0 / sx
+
+        y_on_left = [
+            interpolate_row_at_col(c, x_left)
+            for c in df_labels["RBXY"].tolist()
+        ]
+        centers_r = []
+        for i in range(len(y_on_left)):
+            upper = y_on_left[i - 1] if i > 0 else 0.0
+            centers_r.append(0.5 * (upper + y_on_left[i]))
+
+        year_strings = [str(int(y)) for y in df_labels["YEAR"].tolist()]
+        points_rc = np.column_stack(
+            [
+                np.array(centers_r, dtype=float),
+                np.full(len(df_labels), x_left, dtype=float),
+            ]
+        )
+
+        self._viewer.add_points(
+            points_rc,
+            name="Rings Years",
+            size=1,
+            opacity=1.0,
+            edge_width=0,
+            face_color=[0, 0, 0, 0],
+            edge_color=[0, 0, 0, 0],
+            scale=self.input_layer.scale,
+            features={"YEAR": year_strings},
+            text={
+                "string": "{YEAR}",
+                "anchor": "upper_left",
+                "translation": [0, 0],
+                "size": 8,
+                "color": "black",
+                "blending": "translucent",
+            },
+        )
+
+        # Position years layer just below shapes layer
+        years_layer = self._viewer.layers["Rings Years"]
+        shapes_layer = self._viewer.layers["Rings Modification"]
+        layers = self._viewer.layers
+        years_index = layers.index(years_layer)
+        shapes_index = layers.index(shapes_layer)
+        dest_index = shapes_index
+        if years_index < shapes_index:
+            dest_index -= 1
+        layers.move(years_index, dest_index)
+        layers.selection.active = shapes_layer
+        years_layer.editable = False
+
+        show_info(
+            f"Model rerun complete: {len(boundary_approx)} new boundaries added"
+        )
