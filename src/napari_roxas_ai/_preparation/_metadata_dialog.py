@@ -98,6 +98,15 @@ class MetadataDialog(QDialog):
                     "definition": field_def,
                 }
 
+        self.load_cells_form_roxas = QCheckBox()
+        self.load_rings_form_roxas = QCheckBox()
+        form_layout.addRow(
+            "Load Cells from ROXAS output:", self.load_cells_form_roxas
+        )
+        form_layout.addRow(
+            "Load Rings from ROXAS output:", self.load_rings_form_roxas
+        )
+
         # Add form layout to main layout
         layout.addLayout(form_layout)
 
@@ -234,4 +243,9 @@ class MetadataDialog(QDialog):
         # Get apply_to_all flag
         apply_to_all = self.apply_to_all_checkbox.isChecked()
 
-        return metadata, apply_to_all
+        loading_params = {
+            "load_rings_from_roxas": self.load_rings_form_roxas.isChecked(),
+            "load_cells_from_roxas": self.load_cells_form_roxas.isChecked(),
+        }
+
+        return metadata, apply_to_all, loading_params
