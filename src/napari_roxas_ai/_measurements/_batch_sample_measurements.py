@@ -292,7 +292,7 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Rings measurement checkbox and settings
         self._measure_rings_checkbox = CheckBox(
-            value=True, label="Measure Rings"
+            value=True, label="Measure Rigns"
         )
 
         # Create a button to launch the analysis
@@ -368,10 +368,6 @@ class BatchSampleMeasurementsWidget(Container):
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
-            "ll_scaling": settings.get("measurements.cells_cwt_ll_scaling", 1.5),
-            "ul_scaling": settings.get("measurements.cells_cwt_ul_scaling", 3.0),
-            "opp_scaling": settings.get("measurements.cells_cwt_opp_scaling", 1.5),
-            "adj_scaling": settings.get("measurements.cells_cwt_adj_scaling", 3.0),
         }
 
         # Prepare worker to run the analysis in a separate thread

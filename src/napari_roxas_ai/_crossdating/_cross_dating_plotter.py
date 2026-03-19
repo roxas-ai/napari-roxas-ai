@@ -1323,38 +1323,46 @@ class CrossDatingPlotterWidget(Container):
                      f"(r={candidate['corr']:.3f}{glk_text})"
             )
 
-            def make_callback(index):
+            def make_callback(index, button):
                 def callback(_):
-                    # Current candidate for this button
-                    cand = self._alignment_candidates[index + 1]
+                    try:
+                        # Check if the button still exists
+                        if not hasattr(button, "native") or button.native is None:
+                            return
+                        
+                        # Current candidate for this button
+                        cand = self._alignment_candidates[index + 1]
 
-                    # Data of the alignment we are about to replace
-                    old_data = self._current_alignment_data
+                        # Data of the alignment we are about to replace
+                        old_data = self._current_alignment_data
 
-                    # Apply the new alignment
-                    self._apply_alignment(cand)
+                        # Apply the new alignment
+                        self._apply_alignment(cand)
 
-                    # Ensure plot is updated with correct y-scaling for new alignment
-                    target_range = (int(cand["start_year"]) - 10, int(cand["end_year"]) + 10)
-                    self._x_range_slider.native.blockSignals(True)
-                    self._x_range_slider.value = target_range
-                    self._x_range_slider.native.blockSignals(False)
-                    self._plot_crossdating_data(target_range=target_range)
+                        # Ensure plot is updated with correct y-scaling for new alignment
+                        target_range = (int(cand["start_year"]) - 10, int(cand["end_year"]) + 10)
+                        self._x_range_slider.native.blockSignals(True)
+                        self._x_range_slider.value = target_range
+                        self._x_range_slider.native.blockSignals(False)
+                        self._plot_crossdating_data(target_range=target_range)
 
-                    # Update the button text with the replaced alignment's data
-                    if old_data:
-                        old_glk_text = f", glk={old_data['glk']:.0f}" if not np.isnan(old_data["glk"]) else ""
-                        new_text = (
-                            f"{old_data['start_year']}–{old_data['end_year']} "
-                            f"(r={old_data['corr']:.3f}{old_glk_text})"
-                        )
-                        self._alignment_buttons_container[index].text = new_text
-                        # Update the candidate stored for next click
-                        self._alignment_candidates[index + 1] = old_data
+                        # Update the button text with the replaced alignment's data
+                        if old_data:
+                            old_glk_text = f", glk={old_data['glk']:.0f}" if not np.isnan(old_data["glk"]) else ""
+                            new_text = (
+                                f"{old_data['start_year']}–{old_data['end_year']} "
+                                f"(r={old_data['corr']:.3f}{old_glk_text})"
+                            )
+                            button.text = new_text
+                            # Update the candidate stored for next click
+                            self._alignment_candidates[index + 1] = old_data
+                    except RuntimeError:
+                        # Catch the case where the C++ object was deleted
+                        pass
 
                 return callback
 
-            btn.changed.connect(make_callback(i))
+            btn.changed.connect(make_callback(i, btn))
 
             self._alignment_buttons_container.append(btn)
 
