@@ -7,7 +7,9 @@
 [![codecov](https://codecov.io/gh/roxas-ai/napari-roxas-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/roxas-ai/napari-roxas-ai)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-roxas-ai)](https://napari-hub.org/plugins/napari-roxas-ai)
 
-A plugin that integrates the ROXAS AI analysis methods for quantitative wood anatomy in the napari platform
+A plugin that integrates the ROXAS AI analysis methods for quantitative wood anatomy in the napari platform.
+
+Note: This plugin is currently under development and not yet stable nor officially released.
 
 ----------------------------------
 
