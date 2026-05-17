@@ -276,6 +276,7 @@ class RingsLayerEditorWidget(Container):
         self.settings = SettingsManager()
 
         self._layer_callback = None
+        self._is_editing = False
 
         # Create spinbox for the last year
         year_value = (
@@ -372,10 +373,6 @@ class RingsLayerEditorWidget(Container):
             ]
         )
 
-        # Connect to viewer events to track layer changes
-        self._viewer.layers.events.inserted.connect(self._refresh_widget)
-        self._viewer.layers.events.removed.connect(self._refresh_widget)
-
         self._connect_layer_callback()
 
         # Update choices when layers change
@@ -388,17 +385,16 @@ class RingsLayerEditorWidget(Container):
 
     def _refresh_widget(self, event=None) -> None:
         """Refresh widget state by re-reading layers/metadata and re-binding callbacks."""
-        # Remove helper layers if present
+        if self._is_editing:
+            return
+
         for name in ("Rings Years", "Rings Modification"):
             self._deferred_remove_layer(name)
 
         if not self._get_valid_layers():
             self._disconnect_layer_callback()
-            # Optional: reset UI to a safe default
             self._last_year_spinbox.value = 9999
             return
-
-        self._connect_layer_callback()
 
         self._connect_layer_callback()
         self._update_year_spinbox()
@@ -482,6 +478,8 @@ class RingsLayerEditorWidget(Container):
             QMessageBox.warning(None, "Error", "No valid rings layer found")
             return
 
+        self._is_editing = True
+
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
         self._last_year_spinbox.visible = False
@@ -495,9 +493,9 @@ class RingsLayerEditorWidget(Container):
 
         # If there is already an edit session open, remove old helper layers first
         if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
+            self._viewer.layers.remove("Rings Years")
         if "Rings Modification" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Modification")
+            self._viewer.layers.remove("Rings Modification")
 
         # Build a DF in the same logical order as the annotated export
         df = input_layer.features.copy()
@@ -645,10 +643,12 @@ class RingsLayerEditorWidget(Container):
 
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
-        # Remove the working layer
-        self._deferred_remove_layer("Rings Modification")
+        self._is_editing = False
+
+        if "Rings Modification" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Modification")
         if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
+            self._viewer.layers.remove("Rings Years")
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
@@ -658,11 +658,11 @@ class RingsLayerEditorWidget(Container):
         self._apply_rings_geometries_button.visible = False
         self._rerun_model_container.visible = False
 
-        # Show confirmation message
         show_info("Rings geometries modification cancelled")
 
     def _apply_rings_geometries(self) -> None:
         """Apply the changes to the input layer."""
+        self._is_editing = False
 
         layer = self._viewer.layers["Rings Modification"]
 
@@ -683,11 +683,10 @@ class RingsLayerEditorWidget(Container):
         ).rename_axis("id")
         rings_table = rings_table.dropna(axis=1, how="all")
 
-        # Remove helper layers
         if "Rings Modification" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Modification")
+            self._viewer.layers.remove("Rings Modification")
         if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
+            self._viewer.layers.remove("Rings Years")
 
         input_layer = self._input_layer
         if input_layer is None:
@@ -722,8 +721,8 @@ class RingsLayerEditorWidget(Container):
 
     def _update_year_spinbox(self) -> None:
         """Update the year spinbox value based on the selected layer."""
-        if self._input_layer_combo.value:
-            layer = self._input_layer_combo.value
+        if self._input_layer:
+            layer = self._input_layer
             if "rings_outmost_complete_year" in layer.metadata:
                 self._last_year_spinbox.value = layer.metadata[
                     "rings_outmost_complete_year"
@@ -737,7 +736,7 @@ class RingsLayerEditorWidget(Container):
         """Rerun the ring detection model starting from the selected year."""
         selected_year = self._rerun_model_year_spinbox.value
 
-        if not self._input_layer_combo.value:
+        if not self._input_layer:
             show_info("No layer selected")
             return
 
@@ -853,9 +852,9 @@ class RingsLayerEditorWidget(Container):
             "file_extensions.rings_file_extension"
         )[0]
 
-        image_layer_name = str(self._input_layer_combo.value).replace(
+        image_layer_name = self._input_layer.name.replace(
             rings_extension, scan_extension
-        )  # get from the viewer
+        )
         image = (
             self._viewer.layers[image_layer_name].data
             if image_layer_name in self._viewer.layers
@@ -863,7 +862,7 @@ class RingsLayerEditorWidget(Container):
         )
         if image is None:
             show_info(
-                f"Corresponding image layer '{image_layer_name}' not found for rings layer '{self._input_layer_combo.value.name}'"
+                f"Corresponding image layer '{image_layer_name}' not found for rings layer '{self._input_layer.name}'"
             )
             return
         import inspect
