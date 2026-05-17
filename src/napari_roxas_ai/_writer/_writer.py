@@ -379,8 +379,6 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "RVGI",
         "RVSF",
         "RGSGV",
-        "AOIAR",
-        "RAOIAR",
         "CWTPI",
         "CWTBA",
         "CWTLE",
@@ -390,8 +388,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "CWTALL",
         "RTSR",
         "CTSR",
-        "DHW",
-        "DHM",
+        "DH",
+        "DH2",
         "DRAD",
         "DTAN",
         "TB2",
@@ -413,34 +411,30 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
 
     # round columns with column name and number of decimals
     df = (df
-          .pipe(round_column, "MRW", 0, integer=True)       # round MRW to 0 decimals
-          #.pipe(round_column, "AOIAR", 3)                   # round AOIAR to 3 decimals
-          #.pipe(round_column, "RAOIAR", 3)                  # round RAOIAR to 3 decimals
-          .pipe(round_column, "RA", 3)                      # round RA to 3 decimals
-          .pipe(round_column, "CD", 2)                      # round CD to 2 decimals
-          .pipe(round_column, "CTA", 3)                     # round CTA to 3 decimals
-          .pipe(round_column, "RCTA", 2)                    # round RCTA to 2 decimals
-          .pipe(round_column, "MLA", 2)                     # round MLA to 2 decimals
-          .pipe(round_column, "MINLA", 2)                   # round MINLA to 2 decimals
-          .pipe(round_column, "MAXLA", 2)                   # round MAXLA to 2 decimals
-          .pipe(round_column_sci, "KH", 5)                  # round KH to 5 decimals keeping a scientific notation format
-          .pipe(round_column_sci, "KS", 5)                  # round KS to 5 decimals keeping a scientific notation format
-          .pipe(round_column, "CWTPI", 2)                   # round CWTPI to 2 decimals
-          .pipe(round_column, "CWTBA", 2)                   # round CWTBA to 2 decimals
-          .pipe(round_column, "CWTLE", 2)                   # round CWTLE to 2 decimals
-          .pipe(round_column, "CWTRI", 2)                   # round CWTRI to 2 decimals
-          .pipe(round_column, "CWTTAN", 2)                  # round CWTTAN to 2 decimals
-          .pipe(round_column, "CWTRAD", 2)                  # round CWTRAD to 2 decimals
-          .pipe(round_column, "CWTALL", 2)                  # round CWTALL to 2 decimals
-          .pipe(round_column, "RTSR", 3)                    # round RTSR to 3 decimals
-          .pipe(round_column, "CTSR", 3)                    # round CTSR to 3 decimals
-          .pipe(round_column, "DHW", 2)                      # round DHW to 2 decimals
-          .pipe(round_column, "DHM", 2)                     # round DHM to 2 decimals
-          .pipe(round_column, "DRAD", 2)                    # round DRAD to 2 decimals
-          .pipe(round_column, "DTAN", 2)                    # round DTAN to 2 decimals
-          .pipe(round_column, "TB2", 4)                     # round TB2 to 4 decimals
-          .pipe(round_column, "CWA", 2)                     # round CWA to 2 decimals
-          .pipe(round_column, "RWD", 3)                     # round RWD to 3 decimals
+          .pipe(round_column, "MRW", 2)
+          .pipe(round_column, "RA", 3)
+          .pipe(round_column, "CD", 2)
+          .pipe(round_column, "CTA", 3)
+          .pipe(round_column, "RCTA", 2)
+          .pipe(round_column, "MLA", 2)
+          .pipe(round_column, "MINLA", 2)
+          .pipe(round_column, "MAXLA", 2)
+          .pipe(round_column, "CWTPI", 2)
+          .pipe(round_column, "CWTBA", 2)
+          .pipe(round_column, "CWTLE", 2)
+          .pipe(round_column, "CWTRI", 2)
+          .pipe(round_column, "CWTTAN", 2)
+          .pipe(round_column, "CWTRAD", 2)
+          .pipe(round_column, "CWTALL", 2)
+          .pipe(round_column, "RTSR", 2)
+          .pipe(round_column, "CTSR", 2)
+          .pipe(round_column, "DH", 2)
+          .pipe(round_column, "DH2", 2)
+          .pipe(round_column, "DRAD", 2)
+          .pipe(round_column, "DTAN", 2)
+          .pipe(round_column, "TB2", 2)
+          .pipe(round_column, "CWA", 2)
+          .pipe(round_column, "RWD", 2)
           )
 
     return df
@@ -493,7 +487,6 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "ASP",
         "MAJAX",
         "KH",
-        "AOI",
         "CWTPI",
         "CWTBA",
         "CWTLE",
@@ -522,26 +515,9 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     df = (df
           .pipe(round_column, "LA", 2)                          # round LA to 2 decimals
           .pipe(round_column, "RADDISTR", 0, integer=True)      # round RADDISTR to 0 decimals
-          .pipe(round_column, "RRADDISTR", 2)     # round RRADDISTR to 2 decimals
-          .pipe(round_column, "ASP", 2)                         # round ASP to 2 decimals
-          .pipe(round_column, "MAJAX", 2)                       # round MAJAX to 2 decimals
-          .pipe(round_column_sci, "KH", 5)                      # round KH to 5 decimals keeping a scientific notation format
-          .pipe(round_column, "CWTPI", 2)                       # round CWTPI to 2 decimals
-          .pipe(round_column, "CWTBA", 2)                       # round CWTBA to 2 decimals
-          .pipe(round_column, "CWTLE", 2)                       # round CWTLE to 2 decimals
-          .pipe(round_column, "CWTRI", 2)                       # round CWTRI to 2 decimals
-          .pipe(round_column, "CWTTAN", 2)                      # round CWTTAN to 2 decimals
-          .pipe(round_column, "CWTRAD", 2)                      # round CWTRAD to 2 decimals
-          .pipe(round_column, "CWTALL", 2)                      # round CWTALL to 2 decimals
-          .pipe(round_column, "RTSR", 3)                        # round RTSR to 3 decimals
-          .pipe(round_column, "CTSR", 3)                        # round CTSR to 3 decimals
-          .pipe(round_column, "DH", 2)                          # round DH to 2 decimals
-          .pipe(round_column, "DRAD", 2)                        # round DRAD to 2 decimals
-          .pipe(round_column, "DTAN", 2)                        # round DTAN to 2 decimals
-          .pipe(round_column, "TB2", 4)                         # round TB2 to 4 decimals
-          .pipe(round_column, "CWA", 2)                         # round CWA to 2 decimals
-          .pipe(round_column, "RWD", 3)                         # round RWD to 3 decimals
-          .pipe(round_column, "AOI", 3)                         # round AOI to 3 decimals
+          .pipe(round_column, "RRADDISTR", 0, integer=True)     # round RRADDISTR to 0 decimals
+          .pipe(round_column, "ASP", 3)                         # round ASP to 3 decimals
+          .pipe(round_column, "MAJAX", 0, integer=True)         # round MAJAX to 0 decimals
           )
 
     return df
@@ -553,13 +529,6 @@ def round_column(df, col, decimals, integer=False):
             df[col] = df[col].astype("Int64")
     return df
 
-def round_column_sci(df, col, decimals):
-    if col in df.columns:
-        df[col] = (
-            pd.to_numeric(df[col], errors="coerce")
-            .apply(lambda x: float(f"{x:.{decimals}e}") if pd.notna(x) else np.nan)
-        )
-    return df
 
 def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     """Writes a cells file.
