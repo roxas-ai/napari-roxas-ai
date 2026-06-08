@@ -13,8 +13,9 @@ from magicgui.widgets import (
     RangeSlider,
     Slider,
 )
-from matplotlib.backends.backend_qt5agg import FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.ticker import MultipleLocator
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
@@ -61,9 +62,19 @@ class MatplotlibCanvas(Container):
     """A Container widget that wraps a matplotlib canvas."""
 
     def __init__(self, figsize=(6, 4), dpi=100):
-        self.figure = Figure(figsize=figsize, dpi=dpi)
+        # Set dark theme for the figure
+        self.figure = Figure(figsize=figsize, dpi=dpi, facecolor='black')
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111)
+        
+        # Set dark theme for the axes
+        self.ax.set_facecolor('black')
+        self.ax.tick_params(axis='both', colors='lightgrey')
+        self.ax.xaxis.label.set_color('lightgrey')
+        self.ax.yaxis.label.set_color('lightgrey')
+        
+        for spine in self.ax.spines.values():
+            spine.set_edgecolor('lightgrey')
 
         # Create a Qt widget to hold the canvas
         widget = QWidget()
@@ -86,6 +97,12 @@ class MatplotlibCanvas(Container):
 
 
 class CrossDatingPlotterWidget(Container):
+    @property
+    def _input_layer(self) -> Optional["napari.layers.Labels"]:
+        """Get the single valid ring layer currently in the viewer."""
+        valid_layers = self._get_valid_layers()
+        return valid_layers[0] if valid_layers else None
+
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
@@ -96,22 +113,11 @@ class CrossDatingPlotterWidget(Container):
         self.plot_df = None
         self._layer_callback = None
 
-        # Create a layer selection widget filtered by layer type
-        self._input_layer_combo = ComboBox(
-            label="Rings Layer",
-            annotation="napari.layers.Labels",  # This enables basic type filtering
-            choices=self._get_valid_layers,  # Custom filtering function
-        )
-
         self._auto_offset_button = PushButton(
             text="Find best overlap",
             tooltip="Automatically align Reference and Sample",
         )
         self._auto_offset_button.changed.connect(self._auto_align_sample)
-
-
-        # Get the crossdating file for the selected layer
-        self._input_layer_combo.changed.connect(self._on_new_input_layer)
 
         # Make a combobox to choose the crossdating file path
         self._crossdating_file_combo = ComboBox(
@@ -128,16 +134,7 @@ class CrossDatingPlotterWidget(Container):
             choices=lambda widget: self.crossdating_columns,
         )
         self._crossdating_column_combo.changed.connect(
-            self._update_crossdating_plot
-        )
-
-        # Checkbox to show/hide the average of the crossdating file columns
-        self._plot_average_checkbox = CheckBox(
-            label="Plot Columns Average",
-            value=True,
-        )
-        self._plot_average_checkbox.changed.connect(
-            self._update_crossdating_plot
+            self._on_new_crossdating_column
         )
 
         # Range slider for x-axis limits
@@ -148,7 +145,7 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=(0, 100),
         )
-        self._x_range_slider.changed.connect(self._update_plot_limits)
+        self._x_range_slider.changed.connect(self._on_x_range_changed)
         self._x_range_slider_was_set = False
 
         # Range slider for y-axis limits
@@ -156,10 +153,10 @@ class CrossDatingPlotterWidget(Container):
             label="Width Range",
             min=0,
             max=100,
-            step=0.01,
+            step=1,
             value=(0, 100),
         )
-        self._y_range_slider.changed.connect(self._update_plot_limits)
+        self._y_range_slider.changed.connect(self._on_y_range_changed)
         self._y_range_slider_was_set = False
 
         # Slider for offset
@@ -171,13 +168,13 @@ class CrossDatingPlotterWidget(Container):
             value=0,
         )
         self._offset_slider.changed.connect(
-            self._update_crossdating_plot
-        )  # Update the plot when the offset changes
-        self._offset_apply_button = PushButton(
-            text="Apply Offset",
-            tooltip="Apply the offset to the current input layer",
+            lambda: self._plot_crossdating_data()
+        )  # Update only the plot when the offset changes
+        self._apply_changes_button = PushButton(
+            text="Apply Changes",
+            tooltip="Apply all current changes (offset, alignment) to the rings layer",
         )
-        self._offset_apply_button.changed.connect(self._apply_offset_to_layer)
+        self._apply_changes_button.changed.connect(self._apply_offset_to_layer)
 
         # Create matplotlib canvas widget
         self.plot_widget = MatplotlibCanvas(figsize=(6, 4), dpi=100)
@@ -199,22 +196,23 @@ class CrossDatingPlotterWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_layer_combo,
                 self._crossdating_file_combo,
                 self._crossdating_column_combo,
-                self._plot_average_checkbox,
                 self._x_range_slider,
                 self._y_range_slider,
                 self._offset_slider,
-                self._offset_apply_button,
+                self._apply_changes_button,
                 self._auto_offset_button,
-                self.plot_widget,
                 self.plot_widget,
                 self._plot_footer,
             ]
         )
 
         self._alignment_candidates = []
+        self._current_alignment_data = None
+        self._base_offset = 0  # Offset accumulated by auto-alignment or candidate selection
+        self._reference_scaling_factor = 1.0
+        self._file_scaling_factor = 1.0
         self._alignment_buttons_container = Container()
         self._alignment_buttons_container.native.setSizePolicy(
             self._alignment_buttons_container.native.sizePolicy().Expanding,
@@ -226,15 +224,15 @@ class CrossDatingPlotterWidget(Container):
             self._alignment_buttons_container
         )
 
-        self._on_new_input_layer()
-        self._on_new_crossdating_file()
-
         # Connect to viewer events to track layer changes
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
 
+        self._on_new_input_layer()
+        self._on_new_crossdating_file()
+
     def _export_plot(self):
-        layer = self._input_layer_combo.value
+        layer = self._input_layer
         if layer is None:
             show_info("Export plot failed: no rings layer selected")
             return
@@ -332,7 +330,7 @@ class CrossDatingPlotterWidget(Container):
 
     def _on_new_input_layer(self):
         # Skip if no layer is selected
-        if self._input_layer_combo.value is None:
+        if self._input_layer is None:
             # Clean up any previous layer callback
             self._disconnect_layer_callback()
             return
@@ -340,9 +338,17 @@ class CrossDatingPlotterWidget(Container):
         # Connect to this layer's events
         self._connect_layer_callback()
 
+        # Reset the range sliders for the new layer
+        self._x_range_slider_was_set = False
+        self._y_range_slider_was_set = False
+        self._base_offset = 0
+        self._offset_slider.native.blockSignals(True)
+        self._offset_slider.value = 0
+        self._offset_slider.native.blockSignals(False)
+
         pattern = f"*{''.join(settings.get('file_extensions.crossdating_file_extension'))}"
 
-        layer = self._input_layer_combo.value
+        layer = self._input_layer
         stem = Path(layer.metadata.get("sample_stem_path", layer.name))
 
         base_dir = None
@@ -374,7 +380,7 @@ class CrossDatingPlotterWidget(Container):
             # Stop if we reach the root directory
             if current_path == current_path.parent:
                 show_info(
-                    f"No crossdating file found in the directory tree for layer {self._input_layer_combo.value}."
+                    f"No crossdating file found in the directory tree for layer {self._input_layer}."
                 )
                 break
 
@@ -388,58 +394,59 @@ class CrossDatingPlotterWidget(Container):
         # Clean up any previous callback first
         self._disconnect_layer_callback()
 
-        if self._input_layer_combo.value is not None:
+        if self._input_layer is not None:
             # Connect to the layer's events using the shared callback manager
             self._layer_callback = register_layer_callback(
-                self._input_layer_combo.value, self, self._on_layer_data_change
+                self._input_layer, self, self._on_layer_data_change
             )
 
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
         if (
-            self._input_layer_combo.value is not None
-            and self._layer_callback is not None
+                self._input_layer is not None
+                and self._layer_callback is not None
         ):
-            unregister_layer_callback(self._input_layer_combo.value, self)
+            unregister_layer_callback(self._input_layer, self)
             self._layer_callback = None
 
     def _on_layer_change(self, event=None):
         """Called when layers are added/removed in the viewer."""
-        # Update the combo box choices
-        self._input_layer_combo.reset_choices()
-
         # Get valid layers
         valid_layers = self._get_valid_layers()
 
-        # If our current selection is no longer valid, update it
-        if self._input_layer_combo.value not in valid_layers:
-            if valid_layers:
-                # If we have valid layers, select the first one
-                self._input_layer_combo.value = valid_layers[0]
-            else:
-                # If no valid layers, don't try to set to None directly
-                # Instead disconnect any callbacks and clear the plot
-                self._disconnect_layer_callback()
-                if (
+        # Update layer callback if needed
+        # We always want to be connected to the single valid layer if it exists
+        current_layer = self._input_layer
+        if current_layer:
+             # This will disconnect old and connect to new if it changed
+             self._on_new_input_layer()
+        else:
+            # If no valid layers, disconnect any callbacks and clear the plot
+            self._disconnect_layer_callback()
+            if (
                     hasattr(self, "plot_widget")
                     and self.plot_widget is not None
-                ):
-                    self.plot_widget.ax.clear()
-                    self.plot_widget.canvas.draw()
-                # Clear other dependent widgets
-                self.crossdating_files = []
-                self.crossdating_columns = []
-                self._crossdating_file_combo.reset_choices()
-                self._crossdating_column_combo.reset_choices()
+            ):
+                self.plot_widget.ax.clear()
+                self.plot_widget.canvas.draw()
+            # Clear other dependent widgets
+            self.crossdating_files = []
+            self.crossdating_columns = []
+            self._crossdating_file_combo.reset_choices()
+            self._crossdating_column_combo.reset_choices()
 
     def _on_layer_data_change(self, event=None):
         """Called when the data in the selected layer changes."""
         # Only respond to data, metadata, or features changes
-        if (
-            event.type == "data"
-            or event.type == "metadata"
-            or event.type == "features"
-        ) and self._crossdating_column_combo.value is not None:
+        if event is not None:
+            if event.type not in ["data", "metadata", "features"]:
+                return
+
+        if self._crossdating_column_combo.value is not None:
+            # If the metadata (e.g. outmost year) changed, we want to force re-centering
+            if event is not None and event.type == "metadata":
+                self._x_range_slider_was_set = False
+                self._y_range_slider_was_set = False
 
             # Update the plot if we have a valid column selected
             self._update_crossdating_plot()
@@ -448,6 +455,14 @@ class CrossDatingPlotterWidget(Container):
         # Skip if no crossdating file is selected
         if self._crossdating_file_combo.value is None:
             return
+
+        # Reset the range sliders for the new crossdating file
+        self._x_range_slider_was_set = False
+        self._y_range_slider_was_set = False
+        self._base_offset = 0
+        self._offset_slider.native.blockSignals(True)
+        self._offset_slider.value = 0
+        self._offset_slider.native.blockSignals(False)
 
         # Read the crossdating file
         self.crossdating_dataframe = read_crossdating_file(
@@ -471,127 +486,383 @@ class CrossDatingPlotterWidget(Container):
             name
             for name in column_names
             if simplify_string(name)
-            in simplify_string(self._input_layer_combo.value.name)
+               in simplify_string(self._input_layer.name)
         ]
 
-        # We provice the matching columns first, and then remaining columns
+        # We provide the matching columns first, and then remaining columns
         self.crossdating_columns = matching_columns + [
             name for name in column_names if name not in matching_columns
         ]
 
+        # Reset choices for column combo and select first matching or first available column
+        self._crossdating_column_combo.reset_choices()
+        if matching_columns:
+            self._crossdating_column_combo.value = matching_columns[0]
+        elif self.crossdating_columns:
+            self._crossdating_column_combo.value = self.crossdating_columns[0]
+
         if not self.crossdating_columns:
             show_info(
-                f"No data found in the crossdating file {self._crossdating_file_combo.value} for layer {self._input_layer_combo.value}."
+                f"No data found in the crossdating file {self._crossdating_file_combo.value} for layer {self._input_layer}."
             )
 
+        # Compute file-level scaling factor once for the entire crossdating file
+        self._file_scaling_factor = self._compute_file_scaling_factor()
+
+        self._update_crossdating_plot()
+
+    def _compute_file_scaling_factor(self, candidate_alignment: Optional[dict] = None):
+        """
+        Compute file-level scaling factor once for the entire crossdating file.
+        We use the average series as the reference for this calculation.
+        """
+        layer = self._input_layer
+        if layer is not None and hasattr(layer, "data") and "sample_scale" in layer.metadata:
+            # Re-calculating width_series here briefly to get its scale
+            layer_df = layer.features.set_index("YEAR").copy()
+            if "cells_above" in layer_df.columns:
+                layer_df = layer_df.sort_index()
+                
+                # If we have a candidate alignment, shift the sample to that position
+                # to ensure we have an overlap for scaling calculation.
+                if candidate_alignment is not None:
+                    target_end = candidate_alignment["end_year"]
+                    current_end = layer_df.index.max()
+                    layer_df.index = layer_df.index + (int(target_end) - int(current_end))
+
+                idx = layer_df.columns.get_loc("cells_above")
+                layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
+                width_series = layer_df["cells_above"] / (
+                        layer.data.shape[1]
+                        * layer.metadata["sample_scale"]
+                )
+
+                # 1. Scaling based on average series
+                avg_scaling = self.compute_reference_scaling(
+                    sample=width_series,
+                    reference=self.crossdating_dataframe["average"],
+                    return_raw=True
+                )
+
+                # 2. Scaling based on best matching single reference series
+                # We reuse the alignment logic to find the best match across all columns
+                best_ref_scaling = 1.0
+                best_corr = -1.0
+
+                # Create a temporary plot_df for alignment computation
+                temp_plot_df = pd.DataFrame(index=self.crossdating_dataframe.index)
+                temp_plot_df["layer_series"] = width_series
+
+                # Iterate through all columns (except 'average') to find the best matching one
+                for col in self.crossdating_columns:
+                    temp_plot_df["reference_series"] = self.crossdating_dataframe[col]
+                    candidates = self._compute_alignment_candidates(plot_df=temp_plot_df, top_k=1)
+                    if candidates:
+                        cand = candidates[0]
+                        if cand["corr"] > best_corr:
+                            best_corr = cand["corr"]
+                            # For the best candidate, calculate its raw scaling factor
+                            # Shift the sample to the best matching position
+                            shifted_sample = width_series.copy()
+                            shifted_sample.index = shifted_sample.index + (cand["end_year"] - width_series.index.max())
+                            best_ref_scaling = self.compute_reference_scaling(
+                                sample=shifted_sample,
+                                reference=self.crossdating_dataframe[col],
+                                return_raw=True
+                            )
+
+                # 50/50 blend of both raw factors
+                if best_corr > 0:
+                    raw_factor = 0.5 * avg_scaling + 0.5 * best_ref_scaling
+                else:
+                    raw_factor = avg_scaling
+
+                # Choose the best fit among 1, 10, 100
+                factors = [1.0, 10.0, 100.0]
+                return min(factors, key=lambda x: abs(np.log10(raw_factor) - np.log10(x)))
+        return 1.0
+
+    def _on_new_crossdating_column(self):
+        """Called when a new reference series is selected."""
+        if self._crossdating_column_combo.value is None:
+            return
+
+        # Reset the range sliders for the new reference series
+        # Note: we keep the year range (x-axis) persistent as requested by the user,
+        # but the y-axis (width) should autoscale to the new series' range.
+        self._y_range_slider_was_set = False
+
+        # Clear any existing alignment candidates as they were for the previous reference
+        self._clear_alignment_buttons()
+        self._alignment_candidates = []
+        self._current_alignment_data = None
+
+        # Update the plot
         self._update_crossdating_plot()
 
     def _update_crossdating_plot(self):
         # Skip if no crossdating column is selected
         if self._crossdating_column_combo.value is None:
+            if hasattr(self, "plot_widget") and self.plot_widget is not None:
+                self.plot_widget.ax.clear()
+                self.plot_widget.canvas.draw()
             return
-        layer = self._input_layer_combo.value
+
+        layer = self._input_layer
         if layer is None:
             return
 
+        # Ensure features are present
         feats = getattr(layer, "features", None)
         if feats is None or feats.empty or "YEAR" not in feats.columns:
-            # Features not ready yet (e.g. during segmentation apply)
+            # If no features yet, clear plot and return
+            if hasattr(self, "plot_widget") and self.plot_widget is not None:
+                self.plot_widget.ax.clear()
+                self.plot_widget.canvas.draw()
             return
 
         # Get reference series
-        reference_series = self.crossdating_dataframe[
-            self._crossdating_column_combo.value
-        ]
+        try:
+            reference_series = self.crossdating_dataframe[
+                self._crossdating_column_combo.value
+            ]
+        except (KeyError, AttributeError):
+            show_info(f"Reference series '{self._crossdating_column_combo.value}' not found in data.")
+            return
 
         # Get the average series
-        average_series = self.crossdating_dataframe["average"]
+        average_series = self.crossdating_dataframe.get("average", pd.Series(dtype=float))
 
         # Get the layer rings series
-        layer_df = self._input_layer_combo.value.features.set_index(
-            "YEAR"
-        ).copy()
+        layer_df = layer.features.set_index("YEAR").copy()
 
         # Compute the difference with previous year
-        layer_df.iloc[1:, layer_df.columns.tolist().index("cells_above")] = (
-            np.diff(layer_df["cells_above"].values)
-        )
+        if "cells_above" in layer_df.columns:
+            # Sort by year to ensure correct diff
+            layer_df = layer_df.sort_index()
+
+            # The first value in cells_above is the area above the first ring.
+            # The ring width for year Y is cells_above(Y) - cells_above(Y-1).
+            # For the first ring in the table, it doesn't have a predecessor in the table.
+            # However, the table usually contains all rings.
+
+            # If we want to mirror the previous logic:
+            vals = layer_df["cells_above"].values
+            diffs = np.diff(vals, prepend=vals[0])  # prepend to keep same length
+            layer_df["ring_width"] = diffs
+
+            # Note: the previous logic did:
+            # layer_df.iloc[1:, layer_df.columns.tolist().index("cells_above")] = np.diff(layer_df["cells_above"].values)
+            # which modified cells_above in place and left the first one as is (which is area, not width).
+            # This seems slightly inconsistent but let's stick to a cleaner version if possible,
+            # or keep it if it's what's expected.
+
+            # Actually, the previous logic was:
+            # layer_df.iloc[1:, index] = np.diff(...)
+            # This means layer_df["cells_above"].iloc[0] remained the TOTAL area above the first ring.
+            # Subsequent ones became widths.
+
+            # Let's keep it exactly as it was but more robustly:
+            idx = layer_df.columns.get_loc("cells_above")
+            layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
+        else:
+            show_info("Layer features missing 'cells_above' column.")
+            return
 
         # Removed values of disabled years
-        layer_df.loc[~layer_df["enabled"], "cells_above"] = None
+        if "enabled" in layer_df.columns:
+            layer_df.loc[~layer_df["enabled"], "cells_above"] = np.nan
 
         # Create ring width series
+        # Ensure data and metadata are present
+        if not hasattr(layer, "data") or "sample_scale" not in layer.metadata:
+            return
+
         width_series = layer_df["cells_above"] / (
-            self._input_layer_combo.value.data.shape[1]
-            * self._input_layer_combo.value.metadata["sample_scale"]
+                layer.data.shape[1]
+                * layer.metadata["sample_scale"]
         )
 
-        # adapt for reference graph
-        width_series = self.align_graphs(
-            sample=width_series,
-            reference=reference_series,
-        )
+        # Clear plot_df and rebuild it to ensure no stale data
+        self.plot_df = pd.DataFrame(index=self.crossdating_dataframe.index)
+        self.plot_df["reference_series"] = reference_series
+        self.plot_df["average"] = average_series
 
-        self.plot_df = pd.DataFrame()
-        self.plot_df = pd.concat(
-            [
-                self.plot_df,
-                reference_series.rename("reference_series"),
-                average_series.rename("average"),
-                width_series.rename("layer_series"),
-            ],
-            axis=1,
-        ).rename_axis("YEAR")
+        # Merge layer_series (width_series) - it might have different years
+        self.plot_df = self.plot_df.join(width_series.rename("layer_series"), how="outer")
+        self.plot_df.index.name = "YEAR"
 
         # Update the plot
         self._plot_crossdating_data()
 
-    def _plot_crossdating_data(self):
+    def _plot_crossdating_data(self, target_range: Optional[tuple[int, int]] = None):
         """Plot the crossdating data comparison"""
         if self.plot_df is None or self.plot_df.empty:
             return
 
+        # Calculate correlation and overlapping period
+        # The ROXAS series is shifted by the total offset
+        total_offset = self._base_offset + self._offset_slider.value
+
+        # Create a shifted version of layer_series for correlation calculation and scaling
+        # This aligns the ROXAS data with the reference data at the new (offset) position
+        shifted_layer_series = self.plot_df["layer_series"].copy()
+        shifted_layer_series.index = shifted_layer_series.index + total_offset
+
+        # Calculate correlation and overlapping period for labels
+        corr_df = pd.concat([
+            self.plot_df["reference_series"],
+            shifted_layer_series,
+            self.plot_df["average"]
+        ], axis=1)
+        corr_df.columns = ["reference", "roxas", "average"]
+
+        mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
+        overlap_years_ref = corr_df.index[mask_ref].tolist()
+
+        if overlap_years_ref:
+            overlap_min_ref = min(overlap_years_ref)
+            overlap_max_ref = max(overlap_years_ref)
+            r_ref = corr_df["reference"].corr(corr_df["roxas"])
+            glk_ref = self.calculate_glk(
+                corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
+                corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
+            )
+            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
+        else:
+            r_ref = np.nan
+            glk_ref = np.nan
+            period_ref = "no overlap"
+
+        # Calculate for Average
+        mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
+        overlap_years_avg = corr_df.index[mask_avg].tolist()
+        if overlap_years_avg:
+            r_avg = corr_df["average"].corr(corr_df["roxas"])
+            glk_avg = self.calculate_glk(
+                corr_df.loc[overlap_years_avg, "average"].to_numpy(),
+                corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
+            )
+        else:
+            r_avg = np.nan
+            glk_avg = np.nan
+
+        # Use the pre-computed file scaling factor
+        self._reference_scaling_factor = self._file_scaling_factor
+
         # Clear the previous plot
         self.plot_widget.ax.clear()
 
+        # Build labels
+        layer = self._input_layer
+        image_id = layer.metadata.get("sample_name") or layer.name
+        roxas_label = f"RXS: {image_id} ({period_ref})"
+
+        ref_name = str(self._crossdating_column_combo.value)
+        glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
+        r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
+        ref_label = f"{ref_name}{r_ref_text}"
+        
+        glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
+        r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
+        avg_label = f"Average{r_avg_text}"
+
+        if abs(self._reference_scaling_factor - 1.0) > 1e-5:
+            # Format scaling factor nicely: if it's an integer, show it as such
+            if abs(self._reference_scaling_factor - round(self._reference_scaling_factor)) < 1e-5:
+                scaling_text = f" * {int(round(self._reference_scaling_factor))}"
+            else:
+                scaling_text = f" * {self._reference_scaling_factor:.2f}"
+            
+            # Insert scaling factor before the colon
+            if ":" in ref_label:
+                ref_label = ref_label.replace(":", f"{scaling_text}:", 1)
+            else:
+                ref_label += scaling_text
+            
+            if ":" in avg_label:
+                avg_label = avg_label.replace(":", f"{scaling_text}:", 1)
+            else:
+                avg_label += scaling_text
+
         # Plot both series
-        years = self.plot_df.index.astype(int).tolist()
+        years = self.plot_df.index.to_numpy(dtype=int)
+
+        # Plot the ROXAS series first (top layer in legend)
+        self.plot_widget.ax.plot(
+            years + total_offset,
+            self.plot_df["layer_series"],
+            color='red',
+            linestyle='-',
+            label=roxas_label,
+            zorder=3,
+        )
+
+        # Plot the reference second (middle layer in legend)
         self.plot_widget.ax.plot(
             years,
-            self.plot_df["reference_series"],
-            "b-",
-            label="Reference Series",
-        )
-        self.plot_widget.ax.plot(
-            np.array(years) + self._offset_slider.value,
-            self.plot_df["layer_series"],
-            "r-",
-            label="Current Sample",
+            self.plot_df["reference_series"] * self._reference_scaling_factor,
+            color='yellow',
+            linestyle='-',
+            label=ref_label,
+            zorder=2,
         )
 
-        # Plot the average if checkbox is checked
-        if self._plot_average_checkbox.value:
-            self.plot_widget.ax.plot(
-                years,
-                self.plot_df["average"],
-                "g-",
-                label="Average",
-            )
+        # Plot the average last (bottom layer in legend)
+        self.plot_widget.ax.plot(
+            years,
+            self.plot_df["average"] * self._reference_scaling_factor,
+            color='white',
+            linestyle='-',
+            label=avg_label,
+            zorder=1,
+        )
 
         # Set labels and title
-        self.plot_widget.ax.set_xlabel("Year")
-        self.plot_widget.ax.set_ylabel("Width")
-        self.plot_widget.ax.set_title("Cross-dating Comparison")
-        self.plot_widget.ax.legend()
-        self.plot_widget.ax.grid(True)
+        #self.plot_widget.ax.set_xlabel("Year")
+        self.plot_widget.ax.set_ylabel("Width (\u03BCm)", color='lightgrey')
+
+        legend = self.plot_widget.ax.legend(
+            loc="best",
+            facecolor='black',
+            edgecolor='lightgrey'
+        )
+        
+        # Color each legend text according to its series
+        # We assume the order: ROXAS, Reference, Average
+        series_colors = ['red', 'yellow', 'white']
+        for text, color in zip(legend.get_texts(), series_colors):
+            text.set_color(color)
+
+        # Configure grid: 5-year vertical lines (minor), 10-year labels (major)
+        self.plot_widget.ax.xaxis.set_major_locator(MultipleLocator(10))
+        self.plot_widget.ax.xaxis.set_minor_locator(MultipleLocator(5))
+        
+        # Major vertical grid lines (every 10 years) - solid
+        self.plot_widget.ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey')
+        # Minor vertical grid lines (every 5 years) - dashed
+        self.plot_widget.ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey')
+        # Horizontal main grid lines - solid
+        self.plot_widget.ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey')
 
         # Get the min and max years for x-axis
-        min_year = min(years) - 10
-        max_year = max(years) + 10
+        # We need to account for both the reference series and the shifted ROXAS series
+        total_offset = self._base_offset + self._offset_slider.value
+        roxas_years_raw = self.plot_df["layer_series"].dropna().index.to_numpy()
+        roxas_years = roxas_years_raw + total_offset
+
+        if len(roxas_years) > 0:
+            min_year = int(min(min(years), min(roxas_years)) - 10)
+            max_year = int(max(max(years), max(roxas_years)) + 10)
+        else:
+            min_year = int(min(years) - 10)
+            max_year = int(max(years) + 10)
 
         # Update x slider range but preserve values if possible
+        self._x_range_slider.native.blockSignals(True)
         self._x_range_slider.min = min_year
         self._x_range_slider.max = max_year
+        self._x_range_slider.native.blockSignals(False)
 
         # If the value of the slider has been initialized
         if self._x_range_slider_was_set:
@@ -599,153 +870,205 @@ class CrossDatingPlotterWidget(Container):
             # Get current x slider values
             current_x_low, current_x_high = self._x_range_slider.value
 
+            # Check if the current view still contains the ROXAS series
+            # If it doesn't, we should probably re-center anyway
+            roxas_visible = False
+            if len(roxas_years) > 0:
+                roxas_min = min(roxas_years)
+                roxas_max = max(roxas_years)
+                # Overlap between [current_x_low, current_x_high] and [roxas_min, roxas_max]
+                if not (roxas_max < current_x_low or roxas_min > current_x_high):
+                    roxas_visible = True
+
             # Compute new x view range that preserves as much of previous view as possible
-            new_x_low = (
-                current_x_low
-                if (current_x_low >= min_year) and (current_x_low < max_year)
-                else min_year
-            )
-            new_x_high = (
-                current_x_high
-                if (current_x_high <= max_year) and (current_x_high > min_year)
-                else max_year
-            )
+            if roxas_visible:
+                new_x_low = (
+                    current_x_low
+                    if (current_x_low >= min_year) and (current_x_low < max_year)
+                    else (min(roxas_years) - 10 if len(roxas_years) > 0 else min_year)
+                )
+                new_x_high = (
+                    current_x_high
+                    if (current_x_high <= max_year) and (current_x_high > min_year)
+                    else (max(roxas_years) + 10 if len(roxas_years) > 0 else max_year)
+                )
+            else:
+                # Force re-center if ROXAS is not visible in current view
+                new_x_low = min(roxas_years) - 10 if len(roxas_years) > 0 else min_year
+                new_x_high = max(roxas_years) + 10 if len(roxas_years) > 0 else max_year
 
             # Only update if the previous x range isn't valid anymore
             if new_x_low != current_x_low or new_x_high != current_x_high:
+                self._x_range_slider.native.blockSignals(True)
                 self._x_range_slider.value = (new_x_low, new_x_high)
+                self._x_range_slider.native.blockSignals(False)
         # Otherwise, we don't want to consider the current values as they are defaults with no meaning
         else:
-            self._x_range_slider.value = (min_year, max_year)
-            self._x_range_slider_was_set = True
+            # We want to center the initial view on the ROXAS series if possible
+            if len(roxas_years) > 0:
+                self._x_range_slider.native.blockSignals(True)
+                self._x_range_slider.value = (min(roxas_years) - 10, max(roxas_years) + 10)
+                self._x_range_slider.native.blockSignals(False)
+                self._x_range_slider_was_set = True
+            else:
+                self._x_range_slider.native.blockSignals(True)
+                self._x_range_slider.value = (min_year, max_year)
+                self._x_range_slider.native.blockSignals(False)
+                # We don't mark it as set yet, because roxas_years were empty.
+                # It should try again once data is available.
 
-        # Get the min and max values for y-axis
-        all_values = pd.concat(
-            [
-                self.plot_df["reference_series"].dropna(),
-                self.plot_df["layer_series"].dropna(),
-            ]
-        )
-        min_value = all_values.min() - 10
-        max_value = all_values.max() + 10
+        # Set the x axis limits before calculating y limits
+        self.plot_widget.ax.set_xlim(self._x_range_slider.value)
 
-        # Update y slider range but preserve values if possible
+        # UPDATED: We use the target_range (if provided) or the slider's value to determine visible range.
+        # This is crucial for first-time auto-alignment where the slider isn't yet visually updated.
+        if target_range is not None:
+            x_min, x_max = target_range
+        else:
+            x_min, x_max = self._x_range_slider.value
+
+        # Calculate ROXAS years with offset
+        # roxas_years was already calculated above as np.array(years) + total_offset
+        # We reuse it here.
+
+        # Filter visible values
+        visible_roxas = self.plot_df["layer_series"].copy()
+        visible_roxas.index = np.array(years) + total_offset
+        visible_roxas = visible_roxas[(visible_roxas.index >= x_min) & (visible_roxas.index <= x_max)].dropna()
+
+        visible_ref = (self.plot_df["reference_series"] * self._reference_scaling_factor).copy()
+        visible_ref = visible_ref[(visible_ref.index >= x_min) & (visible_ref.index <= x_max)].dropna()
+
+        all_visible_series = [visible_roxas, visible_ref]
+
+        visible_avg = (self.plot_df["average"] * self._reference_scaling_factor).copy()
+        visible_avg = visible_avg[(visible_avg.index >= x_min) & (visible_avg.index <= x_max)].dropna()
+        all_visible_series.append(visible_avg)
+
+        all_visible_values = pd.concat(all_visible_series)
+
+        if not all_visible_values.empty:
+            min_value = float(all_visible_values.min())
+            max_value = float(all_visible_values.max())
+            padding = (max_value - min_value) * 0.1 if max_value > min_value else 10.0
+            min_value = int(np.floor(max(0.0, min_value - padding)))
+            max_value = int(np.ceil(max_value + padding))
+        else:
+            min_value = 0
+            max_value = 100
+
+        # Reset y slider range to new visible data bounds
+        self._y_range_slider.native.blockSignals(True)
+        # We ensure min is always <= max to avoid issues during update
+        if min_value > max_value:
+            min_value, max_value = max_value, min_value
+        
         self._y_range_slider.min = min_value
         self._y_range_slider.max = max_value
+        self._y_range_slider.native.blockSignals(False)
 
-        # If the value of the slider has been initialized
-        if self._y_range_slider_was_set:
+        if not self._y_range_slider_was_set:
+            self._y_range_slider.native.blockSignals(True)
+            self._y_range_slider.value = (min_value, max_value)
+            self._y_range_slider.native.blockSignals(False)
+            # Do NOT set self._y_range_slider_was_set = True here.
+            # It should only be set to True by manual user interaction.
 
-            # Get current y slider values
-            current_y_low, current_y_high = self._y_range_slider.value
-
-            # Compute new y view range that preserves as much of previous view as possible
-            new_y_low = (
-                current_y_low
-                if (current_y_low >= min_value) and (current_y_low < max_value)
-                else min_value
-            )
-            new_y_high = (
-                current_y_high
-                if (current_y_high <= max_value)
-                and (current_y_high > min_value)
-                else max_value
-            )
-
-            # Only update if the previous y range isn't valid anymore
-            if new_y_low != current_y_low or new_y_high != current_y_high:
-                self._y_range_slider.value = (new_y_low, new_y_high)
-        # Otherwise, we don't want to consider the current values as they are defaults with no meaning
-        else:
-            self._y_range_slider.value = (
-                min_value,
-                min(max_value, self._y_range_slider.max),
-            )
-
-            self._y_range_slider_was_set = True
-
-        # Set the x and y axis limits according to the sliders
-        self.plot_widget.ax.set_xlim(self._x_range_slider.value)
-        self.plot_widget.ax.set_ylim(self._y_range_slider.value)
+        # Set the y axis limits
+        self.plot_widget.ax.set_ylim(min_value, max_value)
 
         # Redraw the canvas
         self.plot_widget.figure.tight_layout()
         self.plot_widget.canvas.draw()
 
-    def align_graphs(self,
-            sample: pd.Series,
-            reference: pd.Series,
-            min_overlap: int = 5,
-    ) -> pd.Series:
+    def compute_reference_scaling(self,
+                                  sample: pd.Series,
+                                  reference: pd.Series,
+                                  min_overlap: int = 5,
+                                  return_raw: bool = False,
+                                  ) -> float:
         """
-        Align sample series to reference series by affine transformation:
-        y' = a * y + b
-
-        This is a VISUAL alignment only.
+        Compute scaling factor for reference series to fit sample series.
+        The user asked to restrict factors to: 1, 10, or 100.
+        We find the best option among these.
         """
 
         # common years
         common = sample.index.intersection(reference.index)
 
         if len(common) < min_overlap:
-            return sample
+            return 1.0
 
-        s = sample.loc[common].astype(float)
-        r = reference.loc[common].astype(float)
-
-        s = s.dropna()
-        r = r.dropna()
+        s = sample.loc[common].astype(float).dropna()
+        r = reference.loc[common].astype(float).dropna()
 
         common = s.index.intersection(r.index)
         if len(common) < min_overlap:
-            return sample
+            return 1.0
 
         s = s.loc[common]
         r = r.loc[common]
 
-        # 1) Amplitude
+        # Use median ratio or ratio of amplitudes for scaling factor
         s_amp = np.nanpercentile(s, 75) - np.nanpercentile(s, 25)
         r_amp = np.nanpercentile(r, 75) - np.nanpercentile(r, 25)
 
         if s_amp <= 0 or r_amp <= 0:
-            return sample
+            # Fallback to medians if amplitude is zero
+            s_med = np.nanmedian(s)
+            r_med = np.nanmedian(r)
+            if r_med <= 0:
+                raw_factor = 1.0
+            else:
+                raw_factor = float(s_med / r_med)
+        else:
+            raw_factor = float(s_amp / r_amp)
 
-        a = r_amp / s_amp
+        if return_raw:
+            return raw_factor
 
-        # 2) vertical shift
-        s_med = np.nanmedian(s * a)
-        r_med = np.nanmedian(r)
+        # Choose the best fit among 1, 10, 100
+        # We can do this by minimizing the difference in magnitude
+        factors = [1.0, 10.0, 100.0]
+        best_factor = min(factors, key=lambda x: abs(np.log10(raw_factor) - np.log10(x)))
 
-        b = r_med - s_med
-        return sample * a + b
+        return best_factor
 
-    def _update_plot_limits(self):
-        """Update the axis limits based on the range sliders"""
+    def _on_x_range_changed(self):
+        """Called when the Year Range slider is manually adjusted."""
         if self.plot_df is None or self.plot_df.empty:
             return
 
-        # Get values from both sliders
-        x_min, x_max = self._x_range_slider.value
+        # Mark X as manually set
+        self._x_range_slider_was_set = True
+
+        # Refresh the plot (this will handle y-axis auto-scaling if not locked)
+        self._plot_crossdating_data()
+
+    def _on_y_range_changed(self):
+        """Called when the Width Range slider is manually adjusted."""
+        if self.plot_df is None or self.plot_df.empty:
+            return
+
+        # Mark Y as manually set
+        self._y_range_slider_was_set = True
+
+        # Directly update the plot y-axis limits
         y_min, y_max = self._y_range_slider.value
-
-        # Update both axes limits
-        self.plot_widget.ax.set_xlim(x_min, x_max)
         self.plot_widget.ax.set_ylim(y_min, y_max)
-
-        # Redraw the canvas
         self.plot_widget.canvas.draw()
 
     def _apply_offset_to_layer(self):
         """Apply the offset to the current input layer."""
-        if self._input_layer_combo.value is None:
+        if self._input_layer is None:
             return
 
-        input_layer = self._input_layer_combo.value
+        input_layer = self._input_layer
 
-        # Get the current offset value
-        offset = self._offset_slider.value
+        # Get the current total offset value
+        total_offset = self._base_offset + self._offset_slider.value
         new_last_year = (
-            input_layer.metadata["rings_outmost_complete_year"] + offset
+                input_layer.metadata["rings_outmost_complete_year"] + total_offset
         )
 
         n = len(input_layer.features) if getattr(input_layer, "features", None) is not None else 0
@@ -753,7 +1076,6 @@ class CrossDatingPlotterWidget(Container):
             start = int(new_last_year) - n + 1
             input_layer.features = input_layer.features.copy()
             input_layer.features["YEAR"] = list(range(start, int(new_last_year) + 1))
-
 
         input_layer.metadata["rings_outmost_complete_year"] = new_last_year
         new_rings_table, new_rings_raster, new_colormap = (
@@ -767,8 +1089,82 @@ class CrossDatingPlotterWidget(Container):
         input_layer.features = new_rings_table
         input_layer.colormap = new_colormap
 
-        # Reset the offset slider to 0
+        # Re-establish x-range to +/- 10 years of the now shifted ROXAS series
+        if n > 0:
+            # We set the slider value BEFORE resetting the offset to ensure
+            # _plot_crossdating_data (triggered by offset reset) has the final X range.
+            self._x_range_slider.native.blockSignals(True)
+            self._x_range_slider.value = (start - 10, int(new_last_year) + 10)
+            self._x_range_slider.native.blockSignals(False)
+
+        # Reset the base offset and the offset slider to 0 and center its range to -50, 50 (triggers _plot_crossdating_data)
+        self._base_offset = 0
+        self._offset_slider.min = -50
+        self._offset_slider.max = 50
+        self._offset_slider.native.blockSignals(True)
         self._offset_slider.value = 0
+        self._offset_slider.native.blockSignals(False)
+
+        # Ensure plot data is updated (re-calculates width_series and triggers _plot_crossdating_data)
+        self._update_crossdating_plot()
+
+        # Update the RingsLayerEditorWidget spinbox if it exists
+        self._sync_rings_editor_year()
+
+    def _sync_rings_editor_year(self):
+        """Find the RingsLayerEditorWidget and update its year spinbox."""
+        from napari_roxas_ai._edition._rings_layer_editor import (
+            RingsLayerEditorWidget,
+        )
+
+        # Look for the widget in the viewer's window
+        if hasattr(self._viewer.window, "_qt_window"):
+            for dock in self._viewer.window._qt_window.findChildren(QWidget):
+                # Using QWidget as a broad search, then checking class name
+                # magicgui widgets are wrapped in QWidget
+                if "RingsLayerEditorWidget" in str(type(dock)):
+                    # If it's the right widget class, it might be the magicgui container or its native widget
+                    # Let's try to find the actual container object if possible.
+                    # Usually, dock widgets have the container as an attribute or it's the 'dock' itself if it was added via add_dock_widget
+                    pass
+
+            # Alternative: iterate through dock widgets
+            for name, dock_widget in self._viewer.window._dock_widgets.items():
+                widget = dock_widget.widget()
+                if isinstance(widget, RingsLayerEditorWidget):
+                    widget._update_year_spinbox()
+                # Also check if it's a magicgui container wrapping it
+                elif hasattr(widget, "_magic_widget") and isinstance(widget._magic_widget, RingsLayerEditorWidget):
+                    widget._magic_widget._update_year_spinbox()
+
+    @staticmethod
+    def calculate_glk(ref: np.ndarray, rox: np.ndarray) -> float:
+        """
+        Calculate the "Gleichläufigkeit" (GLK), an index of synchronous growth changes.
+        """
+        k = len(ref)
+        if k < 2:
+            return np.nan
+
+        # Directions of change: Ref(i) - Ref(i-1)
+        # Using np.diff: diff[i] = x[i+1] - x[i]
+        d_ref = np.diff(ref)
+        d_rox = np.diff(rox)
+
+        # iref = 0.5 if > 0, -0.5 if < 0, 0 if == 0
+        iref = np.zeros_like(d_ref, dtype=float)
+        iref[d_ref > 0] = 0.5
+        iref[d_ref < 0] = -0.5
+
+        irox = np.zeros_like(d_rox, dtype=float)
+        irox[d_rox > 0] = 0.5
+        irox[d_rox < 0] = -0.5
+
+        glk = np.sum(np.abs(iref + irox))
+        glk = glk / (k - 1)
+
+        # Convert to percentage (0-100)
+        return glk * 100
 
     def _auto_align_sample(self):
         if self.plot_df is None or self.plot_df.empty:
@@ -784,49 +1180,62 @@ class CrossDatingPlotterWidget(Container):
             return
 
         best = self._alignment_candidates[0]
+        self._current_alignment_data = best
         self._apply_alignment(best)
 
         self._update_alignment_buttons()
 
     def _apply_alignment(self, candidate: dict):
-        layer = self._input_layer_combo.value
+        layer = self._input_layer
         if layer is None:
             return
+
+        self._current_alignment_data = candidate
 
         target_end = int(candidate["end_year"])
         target_start = int(candidate["start_year"])
 
-        layer.metadata["rings_outmost_complete_year"] = target_end
+        # Calculate required offset relative to current layer state
+        current_end = layer.metadata.get("rings_outmost_complete_year", 0)
+        offset = target_end - current_end
 
-        n = len(layer.features) if getattr(layer, "features", None) is not None else 0
-        if n > 0 and "YEAR" in layer.features.columns:
-            start = int(target_end) - n + 1
-            layer.features = layer.features.copy()
-            layer.features["YEAR"] = list(range(start, int(target_end) + 1))
+        # If the image was undated (year 9999), we might need to re-assess scaling
+        # because the initial assessment likely had no overlap.
+        if current_end == 9999:
+            self._file_scaling_factor = self._compute_file_scaling_factor(
+                candidate_alignment=candidate
+            )
 
-
-        new_table, new_raster, new_colormap = update_rings_geometries(
-            rings_table=layer.features,
-            last_year=target_end,
-            image_shape=layer.data.shape,
-        )
-
-        layer.data = new_raster
-        layer.features = new_table
-        layer.colormap = new_colormap
-
+        # Store the found offset as base_offset and reset the slider to 0
+        self._base_offset = offset
+        self._offset_slider.min = -50
+        self._offset_slider.max = 50
+        self._offset_slider.native.blockSignals(True)
         self._offset_slider.value = 0
-        self._update_crossdating_plot()
-        self._x_range_slider.value = (target_start - 10, target_end + 10)
+        self._offset_slider.native.blockSignals(False)
 
-    def _compute_alignment_candidates(self, top_k: int = 4):
+        # Updating the sliders will trigger plot updates via their connected callbacks.
+        # This is instantaneous as it avoids redundant layer rasterization and table updates.
+
+        target_range = (target_start - 10, target_end + 10)
+        self._x_range_slider.native.blockSignals(True)
+        self._x_range_slider.value = target_range
+        self._x_range_slider.native.blockSignals(False)
+
+        # Explicitly trigger plot update with target_range for correct y-axis auto-scaling
+        self._plot_crossdating_data(target_range=target_range)
+
+    def _compute_alignment_candidates(self, plot_df=None, top_k: int = 4):
+        if plot_df is None:
+            plot_df = self.plot_df
+
         sample_series = (
-            self.plot_df["layer_series"]
+            plot_df["layer_series"]
             .dropna()
             .sort_index()
         )
         reference_series = (
-            self.plot_df["reference_series"]
+            plot_df["reference_series"]
             .dropna()
             .sort_index()
         )
@@ -835,29 +1244,70 @@ class CrossDatingPlotterWidget(Container):
         ref_vals = reference_series.to_numpy(dtype=float)
         ref_years = reference_series.index.to_numpy()
 
-        if len(sample_vals) < 5 or len(ref_vals) < len(sample_vals):
+        n_sample = len(sample_vals)
+        n_ref = len(ref_vals)
+
+        if n_sample < 5 or n_ref < n_sample:
             return []
 
-        sample_norm = (sample_vals - sample_vals.mean()) / sample_vals.std()
-        ref_norm = (ref_vals - ref_vals.mean()) / ref_vals.std()
+        # Pearson correlation vectorized:
+        # r = sum((x - mx) * (y - my)) / sqrt(sum((x - mx)^2) * sum((y - my)^2))
+        #   = sum(x' * y) / sqrt(sum(x'^2) * sum((y - my)^2))
+        # where x' = x - mx (demeaned sample)
+        # my is the rolling mean of y (reference window)
 
-        window = len(sample_norm)
-        max_pos = len(ref_norm) - window + 1
+        x = sample_vals
+        mx = np.mean(x)
+        x_prime = x - mx
+        sum_x_prime_sq = np.sum(x_prime ** 2)
 
+        if sum_x_prime_sq == 0:
+            return []
+
+        # Numerator: sum(x' * y)
+        # np.correlate(ref, sample_demeaned, mode='valid') gives sum(ref[i:i+W] * x_prime)
+        numerator = np.correlate(ref_vals, x_prime, mode='valid')
+
+        # Denominator: sqrt(sum_x_prime_sq * sum((y - my)^2))
+        # sum((y - my)^2) = sum(y^2) - n_sample * my^2
+        # where my = sum(y) / n_sample
+
+        # Use rolling sums for y and y^2
+        cumsum_y = np.cumsum(np.insert(ref_vals, 0, 0))
+        cumsum_y_sq = np.cumsum(np.insert(ref_vals ** 2, 0, 0))
+
+        sum_y = cumsum_y[n_sample:] - cumsum_y[:-n_sample]
+        sum_y_sq = cumsum_y_sq[n_sample:] - cumsum_y_sq[:-n_sample]
+
+        my = sum_y / n_sample
+        sum_y_centered_sq = sum_y_sq - n_sample * (my ** 2)
+
+        # Handle numerical precision issues (e.g. slightly negative due to floating point)
+        sum_y_centered_sq = np.maximum(sum_y_centered_sq, 0)
+
+        denominator = np.sqrt(sum_x_prime_sq * sum_y_centered_sq)
+
+        # Avoid division by zero
+        with np.errstate(divide='ignore', invalid='ignore'):
+            corrs = numerator / denominator
+
+        # Build candidates
         candidates = []
-
-        for start in range(max_pos):
-            ref_win = ref_norm[start:start + window]
-            corr = np.corrcoef(sample_norm, ref_win)[0, 1]
-
+        for i, corr in enumerate(corrs):
             if np.isnan(corr):
                 continue
 
+            # Calculate GLK for this candidate
+            # ref_vals[i : i + n_sample] is the window of the reference
+            ref_window = ref_vals[i: i + n_sample]
+            glk = self.calculate_glk(ref_window, sample_vals)
+
             candidates.append({
-                "start_index": start,
-                "start_year": int(ref_years[start]),
-                "end_year": int(ref_years[start] + window - 1),
+                "start_index": i,
+                "start_year": int(ref_years[i]),
+                "end_year": int(ref_years[i + n_sample - 1]),
                 "corr": float(corr),
+                "glk": float(glk),
             })
 
         candidates.sort(key=lambda x: x["corr"], reverse=True)
@@ -866,15 +1316,53 @@ class CrossDatingPlotterWidget(Container):
     def _update_alignment_buttons(self):
         self._alignment_buttons_container.widgets = []
 
-        for candidate in self._alignment_candidates[1:4]:
+        for i, candidate in enumerate(self._alignment_candidates[1:4]):
+            glk_text = f", glk={candidate['glk']:.0f}" if not np.isnan(candidate["glk"]) else ""
             btn = PushButton(
                 text=f"{candidate['start_year']}–{candidate['end_year']} "
-                     f"(corr={candidate['corr']:.3f})"
+                     f"(r={candidate['corr']:.3f}{glk_text})"
             )
 
-            btn.changed.connect(
-                lambda _, c=candidate: self._apply_alignment(c)
-            )
+            def make_callback(index, button):
+                def callback(_):
+                    try:
+                        # Check if the button still exists
+                        if not hasattr(button, "native") or button.native is None:
+                            return
+                        
+                        # Current candidate for this button
+                        cand = self._alignment_candidates[index + 1]
+
+                        # Data of the alignment we are about to replace
+                        old_data = self._current_alignment_data
+
+                        # Apply the new alignment
+                        self._apply_alignment(cand)
+
+                        # Ensure plot is updated with correct y-scaling for new alignment
+                        target_range = (int(cand["start_year"]) - 10, int(cand["end_year"]) + 10)
+                        self._x_range_slider.native.blockSignals(True)
+                        self._x_range_slider.value = target_range
+                        self._x_range_slider.native.blockSignals(False)
+                        self._plot_crossdating_data(target_range=target_range)
+
+                        # Update the button text with the replaced alignment's data
+                        if old_data:
+                            old_glk_text = f", glk={old_data['glk']:.0f}" if not np.isnan(old_data["glk"]) else ""
+                            new_text = (
+                                f"{old_data['start_year']}–{old_data['end_year']} "
+                                f"(r={old_data['corr']:.3f}{old_glk_text})"
+                            )
+                            button.text = new_text
+                            # Update the candidate stored for next click
+                            self._alignment_candidates[index + 1] = old_data
+                    except RuntimeError:
+                        # Catch the case where the C++ object was deleted
+                        pass
+
+                return callback
+
+            btn.changed.connect(make_callback(i, btn))
 
             self._alignment_buttons_container.append(btn)
 
@@ -908,7 +1396,7 @@ class CrossDatingPlotterWidget(Container):
             out_path,
             dpi=200,
             bbox_inches="tight",
-            facecolor="white",
+            facecolor="black",
         )
         return out_path
 

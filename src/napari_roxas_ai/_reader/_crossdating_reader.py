@@ -69,28 +69,35 @@ def read_tabular_file(
 ) -> pd.DataFrame:
     """
     Read a tabular file and return it as a pandas DataFrame.
-    Parameters
-    ----------
-    path : str
-        Path to the tabular file
-    separators : Optional[List[str]]
-        List of separators to try when reading the file
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing the tabular data
-    Raises
-    -------
-    ValueError
-        If the file cannot be read with any of the provided separators
     """
     if separators is None:
         separators = ["\t", ",", ";"]
 
     for sep in separators:
-        df = pd.read_csv(path, sep=sep, index_col=0)
-        if len(df.columns) > 0:
-            return df
+        # Try reading with headers
+        try:
+            df = pd.read_csv(path, sep=sep, index_col=0)
+            
+            # If the index name or first column name looks like a year, it likely has headers
+            index_name = str(df.index.name).lower() if df.index.name else ""
+            first_col = str(df.columns[0]).lower() if len(df.columns) > 0 else ""
+            
+            # If the index is numeric and first column is also numeric, maybe it has NO headers
+            # OR if the index name itself is a number
+            try:
+                float(index_name)
+                has_no_headers = True
+            except ValueError:
+                has_no_headers = False
+                
+            if has_no_headers:
+                # Re-read without headers
+                df = pd.read_csv(path, sep=sep, header=None, index_col=0)
+            
+            if len(df.columns) > 0:
+                return df
+        except Exception:
+            continue
 
     raise ValueError(
         f"Could not read the file with any of the provided separators: {separators}"

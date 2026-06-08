@@ -1,6 +1,6 @@
 """
 Module for analyzing segmented wood cells and rings images to measure cell wall thickness, rings width and related metrics.
-Based on code by github user triyan-b https://github.com/triyan-b
+Based on code by GitHub user triyan-b https://github.com/triyan-b
 Refactored and adapted to large images by github user tha-santacruz https://github.com/tha-santacruz
 """
 
@@ -47,15 +47,21 @@ class SampleAnalyzer:
         self.dist_transform = None
 
         # Derived parameters
+        self.pixels_per_um = float(config["pixels_per_um"])
         self.cluster_separation_px = (
-            config["cluster_separation_threshold"] * config["pixels_per_um"]
+            config["cluster_separation_threshold"] * self.pixels_per_um
         )
         self.kernel = np.ones(
             (config["smoothing_kernel_size"], config["smoothing_kernel_size"])
         )
         self.integration_margin = (1 - config["integration_interval"]) / 2
         self.radial_angle = config["tangential_angle"] - 90
+        self.ll_scaling = float(config.get("ll_scaling", 1.5))
+        self.ul_scaling = float(config.get("ul_scaling", 3.0))
+        self.opp_scaling = float(config.get("opp_scaling", 1.5))
+        self.adj_scaling = float(config.get("adj_scaling", 3.0))
 
+    # TODO: Check whether smoothing is necessary / desired after DL cell detection
     def _smooth_cells_array(self) -> None:
         """Apply morphological smoothing"""
         self.cells_array = cv2.dilate(
@@ -98,10 +104,8 @@ class SampleAnalyzer:
                         "centroid": (cy, cx),
                         "XPIX": cx,
                         "YPIX": cy,
-                        "lumen_area": M["m00"]
-                        / self.config["pixels_per_um"] ** 2,
-                        "lumen_peri": cv2.arcLength(contour, True)
-                        / self.config["pixels_per_um"],
+                        "lumen_area": M["m00"] / self.pixels_per_um ** 2,
+                        "lumen_peri": cv2.arcLength(contour, True) / self.pixels_per_um,
                     }
                 )
             else:
@@ -121,12 +125,9 @@ class SampleAnalyzer:
             else:
                 cell.update(
                     {
-                        "lumen_aoma_rad": np.nan,
-                        "lumen_diam_rad": np.nan,
-                        "lumen_diam_tang": np.nan,
-                        "ASP": np.nan,
-                        "MAJAX": np.nan,
-                        "KH": np.nan,
+                        "major_axis_px": np.nan,
+                        "minor_axis_px": np.nan,
+                        "angle_major": np.nan,
                     }
                 )
 
@@ -143,134 +144,84 @@ class SampleAnalyzer:
         # TODO : Figure out what's up with the /2, and remove if appropriate
         if w >= h:
             a, b = w / 2, h / 2
-            aoma_rad = angle - self.radial_angle
             angle_major = angle
         else:
             a, b = h / 2, w / 2
-            aoma_rad = angle - self.radial_angle - 90
             angle_major = angle + 90
-
-        # Normalize major axis angle to [0,180)
-        angle_major = angle_major % 180
-
-        # Compute MAJAX: deviation from the image vertical (90°)
-        majax = abs(angle_major - 90)
-        if majax > 90:
-            majax = 180 - majax  # fold into [0,90]
-
-        aoma_tang = aoma_rad + 90
-
-        # Calculate diameters using polar form of ellipse equation
-        lumen_diam_rad = (
-            2
-            * a
-            * b
-            / np.linalg.norm(
-                [
-                    b * np.cos(np.deg2rad(aoma_rad)),
-                    a * np.sin(np.deg2rad(aoma_rad)),
-                ]
-            )
-        )
-        lumen_diam_tang = (
-            2
-            * a
-            * b
-            / np.linalg.norm(
-                [
-                    b * np.cos(np.deg2rad(aoma_tang)),
-                    a * np.sin(np.deg2rad(aoma_tang)),
-                ]
-            )
-        )
-
-        asp = a / b if b != 0 else np.nan
-        LA = cell.get("lumen_area", np.nan)
-        KH = self.compute_kh(
-            lumen_area_um2=LA,
-            major_radius_px=a,
-            minor_radius_px=b,
-            pixels_per_um=self.config["pixels_per_um"]
-        )
-
-        DH = self.compute_dh(
-            lumen_area_um2=LA,
-            aspect_ratio=asp
-        )
-
 
         cell.update(
             {
-                "lumen_aoma_rad": aoma_rad,
-                "lumen_diam_rad": lumen_diam_rad
-                / self.config["pixels_per_um"],
-                "lumen_diam_tang": lumen_diam_tang
-                / self.config["pixels_per_um"],
-                "ASP": asp,
-                "MAJAX": majax,
-                "KH": KH,
-                "DH": DH,
+                "major_axis_px": a,
+                "minor_axis_px": b,
+                "angle_major": angle_major,
             }
         )
 
-    def compute_kh(self, lumen_area_um2: float, major_radius_px: float, minor_radius_px: float, pixels_per_um: float) -> float:
+    def _compute_lumen_metrics(self) -> None:
         """
-        Compute theoretical hydraulic conductance KH for an elliptical lumen.
-
-        Parameters
-        ----------
-        lumen_area_um2 : Lumen area in µm².
-        major_radius_px : Major semi-axis (a) in pixels.
-        minor_radius_px : Minor semi-axis (b) in pixels.
-        pixels_per_um : Conversion factor: pixels per micrometer.
+        Vectorized computation of lumen-based metrics:
+        KH, DH, MAJAX, ASP, and diameters (DRAD, DTAN).
         """
-        if (
-                lumen_area_um2 is None or np.isnan(lumen_area_um2) or
-                major_radius_px is None or minor_radius_px is None or
-                np.isnan(major_radius_px) or np.isnan(minor_radius_px) or
-                major_radius_px <= 0 or minor_radius_px <= 0
-        ):
-            return np.nan
+        if self.cells_table is None or self.cells_table.empty:
+            return
 
-        # Convert radii to µm
-        a_um = major_radius_px / pixels_per_um
-        b_um = minor_radius_px / pixels_per_um
+        df = self.cells_table
 
-        a_um = a_um / 1000000
-        b_um = b_um / 1000000
+        # Ensure we have the required base columns from ellipse fitting
+        if not all(col in df.columns for col in ["major_axis_px", "minor_axis_px", "angle_major"]):
+            return
 
-        if a_um <= 0 or b_um <= 0:
-            return np.nan
+        a_px = pd.to_numeric(df["major_axis_px"], errors="coerce")
+        b_px = pd.to_numeric(df["minor_axis_px"], errors="coerce")
+        angle_major = pd.to_numeric(df["angle_major"], errors="coerce")
+        la_um2 = pd.to_numeric(df.get("lumen_area"), errors="coerce")
 
-        # calculate Eccentricity
-        diff = a_um * a_um - b_um * b_um
-        e = np.sqrt(max(diff, 0)) / a_um
+        # 1. MAJAX: deviation from image vertical (90°) normalized to [0, 90]
+        norm_angle = angle_major % 180
+        majax = (norm_angle - 90).abs()
+        df["MAJAX"] = majax.where(majax <= 90, 180 - majax)
 
-        # calculate Lumen circumference C
-        C = np.pi * (3 * (a_um + b_um) - np.sqrt((3 * a_um + b_um) * (a_um + 3 * b_um)))
-        if C <= 0:
-            return np.nan
+        # 2. ASP: Aspect ratio a/b
+        df["ASP"] = (a_px / b_px).where(b_px > 0)
 
-        # calculate Mean hydraulic radius m
-        m = (np.pi * a_um * b_um) / C
+        # 3. Diameters DRAD and DTAN
+        aoma_rad_deg = angle_major - self.radial_angle
+        aoma_tang_deg = aoma_rad_deg + 90
 
-        # calculate Form factor k
-        term = 1 - e ** 4
-        if term < 0:
-            return np.nan
+        def _calc_diam(a, b, angle_deg):
+            rad = np.deg2rad(angle_deg)
+            denom = np.sqrt((b * np.cos(rad))**2 + (a * np.sin(rad))**2)
+            return (2.0 * a * b / denom).where(denom > 0)
 
-        k = 4.0 / (1.0 + np.sqrt(term))
-        if k <= 0:
-            return np.nan
+        df["lumen_diam_rad"] = _calc_diam(a_px, b_px, aoma_rad_deg) / self.pixels_per_um
+        df["lumen_diam_tang"] = _calc_diam(a_px, b_px, aoma_tang_deg) / self.pixels_per_um
 
-        # Convert LA from µm² → m²
-        LA_m2 = lumen_area_um2 * 1e-12
+        # 4. DH: Hydraulic diameter for elliptical conduit (Lewis & Boose 1995)
+        asp = (a_px / b_px).where(b_px > 0)
+        a_semi_um = np.sqrt(asp * la_um2 / np.pi)
+        b_semi_um = (la_um2 / (np.pi * a_semi_um)).where(a_semi_um > 0)
 
-        # calculate KH final formula
-        nu = 1.002e-9  # viscosity of water (MPa·s)
-        KH = (LA_m2 * (m * m)) / (nu * k)
+        a_um = 2 * a_semi_um
+        b_um = 2 * b_semi_um
+        a2, b2 = a_um**2, b_um**2
+        df["DH"] = np.sqrt((2.0 * a2 * b2) / (a2 + b2)).where((a2 + b2) > 0)
 
-        return KH
+        # 5. KH: Theoretical hydraulic conductance
+        la_m2 = la_um2 * 1e-12
+        a_m = np.sqrt(asp * la_m2 / np.pi)
+        b_m = (la_m2 / (np.pi * a_m)).where(a_m > 0)
+
+        # Eccentricity
+        e2 = (a_m**2 - b_m**2) / (a_m**2).where(a_m > 0)
+        e4 = e2**2
+        # Circumference C (Ramanujan approximation)
+        C = np.pi * (3 * (a_m + b_m) - np.sqrt((3 * a_m + b_m) * (a_m + 3 * b_m)))
+        # Mean hydraulic radius m = Area / Circumference
+        m = la_m2 / C.where(C > 0)
+        # Form factor k
+        k = 4.0 / (1.0 + np.sqrt((1.0 - e4).where(e4 <= 1, 0)))
+        nu = 1.002e-9 # viscosity of water (MPa·s)
+        df["KH"] = (la_m2 * m**2) / (nu * k.where(k > 0))
 
     def _compute_cell_walls(self) -> None:
         """Calculate cell wall metrics."""
@@ -302,9 +253,9 @@ class SampleAnalyzer:
         if M["m00"] != 0:
             self.cells[cell_id].update(
                 {
-                    "cell_area": M["m00"] / self.config["pixels_per_um"] ** 2,
+                    "cell_area": M["m00"] / self.pixels_per_um ** 2,
                     "cw_peri": cv2.arcLength(contour, True)
-                    / self.config["pixels_per_um"],
+                    / self.pixels_per_um,
                 }
             )
 
@@ -315,7 +266,7 @@ class SampleAnalyzer:
         """Find cell ID contained within the wall contour."""
         x, y, w, h = cv2.boundingRect(contour)
 
-        # Make sure it does not got out of the image (a 1 pixel offset is possible)
+        # Make sure it does not get out of the image (a 1 pixel offset is possible)
         h = h - 1 if (y + h) > self.cells_array.shape[0] else h
         w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
@@ -334,7 +285,7 @@ class SampleAnalyzer:
         # Get bounding box coordinates
         x, y, w, h = cv2.boundingRect(contour)
 
-        # Make sure it does not got out of the image (a 1 pixel offset is possible)
+        # Make sure it does not get out of the image (a 1 pixel offset is possible)
         h = h - 1 if (y + h) > self.cells_array.shape[0] else h
         w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
@@ -398,12 +349,12 @@ class SampleAnalyzer:
 
         # And we compute the thickness
         for label in label_map:
-            # Get wall pixels where the label cooresponds
+            # Get wall pixels where the label corresponds
             wall_pixel_coords = contour_points[
                 np.where(contour_labels == label)[0], :
             ]
 
-            # Crop to keep the middle 75%
+            # Crop to keep the middle % as defined by integration_margin (typically 75%)
             lower_bound = np.ceil(
                 self.integration_margin * wall_pixel_coords.shape[0]
             ).astype("int32")
@@ -419,203 +370,15 @@ class SampleAnalyzer:
             self.cells[cell_id].update(
                 {
                     f"CWT_{label_map[label]}": avg_dist
-                    / self.config["pixels_per_um"],
+                    / self.pixels_per_um,
                 }
             )
-        self._compute_cwttan(cell_id)
-        self._compute_cwtrad(cell_id)
-        self._compute_cwtall(cell_id)
-        self._compute_rtsr(cell_id)
-        self._compute_ctsr(cell_id)
-        self._compute_tb2(cell_id)
-        self._compute_cwa(cell_id)
-        self._compute_rwd(cell_id)
-
-    def _compute_cwttan(self, cell_id: int) -> None:
-        """Compute CWTTAN = tangential wall thickness = (CWT_pith + CWT_bark) / 2"""
-
-        cwt_pith = self.cells[cell_id].get("CWT_pith", np.nan)
-        cwt_bark = self.cells[cell_id].get("CWT_bark", np.nan)
-
-        if (
-                not np.isnan(cwt_pith) and cwt_pith > 0 and
-                not np.isnan(cwt_bark) and cwt_bark > 0
-        ):
-            self.cells[cell_id]["CWTTAN"] = (cwt_pith + cwt_bark) / 2
-        else:
-            self.cells[cell_id]["CWTTAN"] = np.nan
-
-
-    def _compute_cwtrad(self, cell_id: int) -> None:
-        """Compute CWTRAD = Thickness of radial cell walls ([CWT_left+CWT_right]/2)"""
-
-        cwt_left = self.cells[cell_id].get("CWT_left", np.nan)
-        cwt_right = self.cells[cell_id].get("CWT_right", np.nan)
-
-        if (
-                not np.isnan(cwt_left) and cwt_left > 0 and
-                not np.isnan(cwt_right) and cwt_right > 0
-        ):
-            self.cells[cell_id]["CWTRAD"] = (cwt_left + cwt_right) / 2
-        else:
-            self.cells[cell_id]["CWTRAD"] = np.nan
-
-
-    def _compute_cwtall(self, cell_id: int) -> None:
-        """Compute CWTALL = Thickness of all cell walls ([CWTRAD+CWTTAN]/2)"""
-
-        CWTRAD = self.cells[cell_id].get("CWTRAD", np.nan)
-        CWTTAN = self.cells[cell_id].get("CWTTAN", np.nan)
-
-        if not np.isnan(CWTRAD)  and not np.isnan(CWTTAN):
-            self.cells[cell_id]["CWTALL"] = (CWTRAD + CWTTAN) / 2
-        else:
-            self.cells[cell_id]["CWTALL"] = np.nan
-
-    def _compute_rtsr(self, cell_id: int) -> None:
-        """Compute RTSR = Radial Thickness-to-span ratio, Mork's index: ratio between 4x single cell wall
-           thickness (CWTtan) and tracheid diameter (lumen_diam_rad) in radial direction (pith to bark)
-        """
-
-        cwttan = self.cells[cell_id].get("CWTTAN", np.nan)
-        lumen_diam_rad = self.cells[cell_id].get("lumen_diam_rad", np.nan)
-
-        if not np.isnan(lumen_diam_rad) and lumen_diam_rad > 0:
-            self.cells[cell_id]["RTSR"] = (4 * cwttan) / lumen_diam_rad
-        else:
-            self.cells[cell_id]["RTSR"] = np.nan
-
-    def _compute_ctsr(self, cell_id: int) -> None:
-        """Compute CTSR = Circular Thickness-to-span ratio: ratio between 4x single cell wall
-           thickness (CWTall) and tracheid diameter (assuming a circle area-equivalent to the lumen area)
-        """
-
-        cwtall = self.cells[cell_id].get("CWTALL", np.nan)
-        la = self.cells[cell_id].get("lumen_area", np.nan)
-
-        if (
-                cwtall is None or np.isnan(cwtall) or cwtall <= 0 or
-                la is None or np.isnan(la) or la <= 0
-        ):
-            self.cells[cell_id]["CTSR"] = np.nan
-            return
-
-        # Circle diameter from area-equivalent circle
-        circle_diameter = 2.0 * np.sqrt(la / np.pi)
-
-        self.cells[cell_id]["CTSR"] = (4.0 * cwtall) / circle_diameter
-
-    def compute_dh(self, lumen_area_um2: float, aspect_ratio: float) -> float:
-        """
-        Compute hydraulic diameter Dh (µm) following Lewis & Boose (1995)
-        for an elliptical conduit.
-
-        Dh = sqrt( (2 a² b²) / (a² + b²) )
-
-        where:
-            a, b = semi-axes of an ellipse derived from
-                   lumen area and aspect ratio (a / b).
-        """
-
-        if (
-                lumen_area_um2 is None or np.isnan(lumen_area_um2) or lumen_area_um2 <= 0 or
-                aspect_ratio is None or np.isnan(aspect_ratio) or aspect_ratio <= 0
-        ):
-            return np.nan
-
-        a = 2.0 * np.sqrt(aspect_ratio * lumen_area_um2 / np.pi)
-        b = a / aspect_ratio
-
-        a2 = a * a
-        b2 = b * b
-
-        denom = a2 + b2
-        if denom <= 0:
-            return np.nan
-
-        Dh = np.sqrt((2.0 * a2 * b2) / denom)
-        return Dh
-
-    def _compute_tb2(self, cell_id: int) -> None:
-        """
-        Compute TB2 = Cell wall reinforcement index (t/b)^2
-        following Hacke et al. (2001).
-
-        t = double cell wall thickness
-            - radial: 2 * CWTRAD
-            - tangential: 2 * CWTTAN
-
-        b = lumen diameter in the same direction
-            - radial:      DRAD  (lumen_diam_rad)
-            - tangential: DTAN  (lumen_diam_tang)
-
-        TB2 is the smaller of the radial or tangential value.
-        """
-
-        cwtrad = self.cells[cell_id].get("CWTRAD", np.nan)
-        cwttan = self.cells[cell_id].get("CWTTAN", np.nan)
-        drad = self.cells[cell_id].get("lumen_diam_rad", np.nan)
-        dtan = self.cells[cell_id].get("lumen_diam_tang", np.nan)
-
-        values = []
-
-        # Radial TB2
-        if (
-                not np.isnan(cwtrad) and cwtrad > 0 and
-                not np.isnan(drad) and drad > 0
-        ):
-            t_rad = 2.0 * cwtrad
-            values.append((t_rad / drad) ** 2)
-
-        # Tangential TB2
-        if (
-                not np.isnan(cwttan) and cwttan > 0 and
-                not np.isnan(dtan) and dtan > 0
-        ):
-            t_tan = 2.0 * cwttan
-            values.append((t_tan / dtan) ** 2)
-
-        self.cells[cell_id]["TB2"] = min(values) if values else np.nan
-
-    def _compute_cwa(self, cell_id: int) -> None:
-        """Compute Cell wall area = cell_area - lumen_area
-        """
-
-        cell_area = self.cells[cell_id].get("cell_area", np.nan)
-        lumen_area = self.cells[cell_id].get("lumen_area", np.nan)
-
-        if (
-                not np.isnan(cell_area) and cell_area > 0 and
-                not np.isnan(lumen_area) and lumen_area > 0 and
-                cell_area > lumen_area
-        ):
-            CWA = cell_area - lumen_area
-        else:
-            CWA = np.nan
-
-
-        self.cells[cell_id]["CWA"] = CWA
-
-    def _compute_rwd(self, cell_id: int) -> None:
-        """Compute RWD = Relative anatomical cell density = CWA / (CWA + LA)"""
-
-        cwa = self.cells[cell_id].get("CWA", np.nan)
-        la = self.cells[cell_id].get("lumen_area", np.nan)
-
-        if (
-                not np.isnan(cwa) and cwa > 0 and
-                not np.isnan(la) and la > 0 and
-                (cwa + la) > 0
-        ):
-            self.cells[cell_id]["RWD"] = cwa / (cwa + la)
-        else:
-            self.cells[cell_id]["RWD"] = np.nan
 
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""
         # Threshold distance transform for clustering
         _, dist_thresh = cv2.threshold(
-            self.dist_transform / self.config["pixels_per_um"],
+            self.dist_transform / self.pixels_per_um,
             self.config["cluster_separation_threshold"],
             255,
             cv2.THRESH_BINARY,
@@ -670,118 +433,58 @@ class SampleAnalyzer:
             self.cells_table["NBRNO"] = np.nan
             self.cells_table["NBRID"] = np.nan
 
-
     def _get_cells_table(self) -> pd.DataFrame:
         """Return results as pandas DataFrame."""
-        self.cells_table = pd.DataFrame(self.cells).T.set_index("id")
+        self.cells_table = pd.DataFrame(self.cells).T
+        if not self.cells_table.empty:
+            self.cells_table.index.name = "id"
+        return self.cells_table
 
-    # TODO review needed and add ll_scaling etc. to settings json
+    # TODO add ll_scaling etc. to settings json
     def _apply_cwt_filters(self) -> None:
         """
-        Automatic filtering of cell wall thickness (CWT) measurements.
-
-        Implements the exact workflow from the provided screenshot:
-
-        Pre-selection of candidates
-          1) Compute Median, Q1 and Q3 for:
-             i) tangential: CWT_pith & CWT_bark combined
-             ii) radial:    CWT_left & CWT_right combined
-          2) Any CWT measurement within [Q1..Q3] is confirmed.
-             Only measurements outside [Q1..Q3] are "candidates" and are subjected
-             to the following outlier/context filtering.
-
-        Hard limit filtering (applied only to candidates)
-          3) IQR = Q3 - Q1 separately for tangential and radial combined sets.
-          4) Lower hard limit:
-               LL = Q1 - ll_scaling * IQR
-               LL = max(LL, 1/pixels_per_um)   (sub-pixel values are implausible)
-          5) Upper hard limit:
-               UL = Q3 + ul_scaling * IQR
-          6) Candidate measurements outside [LL..UL] are set to NA.
-
-        Context filtering (applied only to candidates; keep order!)
-          7) Opposite sides of lumen:
-               a) CWT_bark  > opp_scaling * CWT_pith  -> remove CWT_bark
-               b) CWT_pith  > opp_scaling * CWT_bark  -> remove CWT_pith
-               c) CWT_left  > opp_scaling * CWT_right -> remove CWT_left
-               d) CWT_right > opp_scaling * CWT_left  -> remove CWT_right
-          8) Adjacent sides of lumen (keep this order!):
-               a) CWT_bark  > adj_scaling * ave(CWT_left,  CWT_right) -> remove CWT_bark
-               b) CWT_pith  > adj_scaling * ave(CWT_left,  CWT_right) -> remove CWT_pith
-               c) CWT_left  > adj_scaling * ave(CWT_bark,  CWT_pith)  -> remove CWT_left
-               d) CWT_right > adj_scaling * ave(CWT_bark,  CWT_pith)  -> remove CWT_right
+        Automatic filtering of cell wall thickness (CWT) measurements using the IQR method for outlier detection. (Tukey's fences method)
 
         Notes
         -----
         - This function modifies self.cells_table in-place.
-        - It also recomputes dependent metrics (CWTTAN, CWTRAD, CWTALL, RTSR, CTSR, TB2)
-          to stay consistent with filtered base wall values.
         """
 
         if self.cells_table is None or self.cells_table.empty:
             return
 
         required = ["CWT_pith", "CWT_bark", "CWT_left", "CWT_right"]
-        for col in required:
-            if col not in self.cells_table.columns:
-                return
+        if not all(col in self.cells_table.columns for col in required):
+            return
 
-        # --- Settings (colored parameters in the screenshot) ---
-        ll_scaling = float(self.config.get("ll_scaling", 1.5))
-        ul_scaling = float(self.config.get("ul_scaling", 3.0))
-        opp_scaling = float(self.config.get("opp_scaling", 1.5))
-        adj_scaling = float(self.config.get("adj_scaling", 2.5))
-
-        px_per_um = float(self.config["pixels_per_um"])
-        min_plausible = 1.0 / px_per_um  # 1 pixel in µm (sub-pixel range is implausible)
+        # --- Settings ---
+        ll_scaling = self.ll_scaling
+        ul_scaling = self.ul_scaling
+        opp_scaling = self.opp_scaling
+        adj_scaling = self.adj_scaling
+        min_plausible = 1.0 / self.pixels_per_um  # 1 pixel in µm (sub-pixel range is implausible)
 
         df = self.cells_table
 
-        # --- Pull columns as numeric ---
-        cwt_pi = pd.to_numeric(df["CWT_pith"], errors="coerce")
-        cwt_ba = pd.to_numeric(df["CWT_bark"], errors="coerce")
-        cwt_le = pd.to_numeric(df["CWT_left"], errors="coerce")
-        cwt_ri = pd.to_numeric(df["CWT_right"], errors="coerce")
+        # Pull columns as numeric
+        pi = pd.to_numeric(df["CWT_pith"], errors="coerce")
+        ba = pd.to_numeric(df["CWT_bark"], errors="coerce")
+        le = pd.to_numeric(df["CWT_left"], errors="coerce")
+        ri = pd.to_numeric(df["CWT_right"], errors="coerce")
 
-        # --- Step 1: combined quantiles (tangential + radial) ---
-        tan_all = pd.concat([cwt_pi, cwt_ba], ignore_index=True).dropna()
-        rad_all = pd.concat([cwt_le, cwt_ri], ignore_index=True).dropna()
+        # --- combined quantiles ---
+        tan_all = pd.concat([pi, ba], ignore_index=True).dropna()
+        rad_all = pd.concat([le, ri], ignore_index=True).dropna()
 
         if tan_all.empty or rad_all.empty:
             return
 
-        # Medians computed for completeness (per screenshot), not used downstream
-        _median_tan = float(tan_all.median())
-        _median_rad = float(rad_all.median())
+        q1_tan, q3_tan = tan_all.quantile([0.25, 0.75])
+        q1_rad, q3_rad = rad_all.quantile([0.25, 0.75])
 
-        q1_tan = float(tan_all.quantile(0.25))
-        q3_tan = float(tan_all.quantile(0.75))
-        q1_rad = float(rad_all.quantile(0.25))
-        q3_rad = float(rad_all.quantile(0.75))
-
-        # --- Step 2: confirmed (inside IQR) vs candidate (outside IQR) ---
-        def _inside_iqr(x: pd.Series, q1: float, q3: float) -> pd.Series:
-            return x.notna() & (x >= q1) & (x <= q3)
-
-        confirmed_pi = _inside_iqr(cwt_pi, q1_tan, q3_tan)
-        confirmed_ba = _inside_iqr(cwt_ba, q1_tan, q3_tan)
-        confirmed_le = _inside_iqr(cwt_le, q1_rad, q3_rad)
-        confirmed_ri = _inside_iqr(cwt_ri, q1_rad, q3_rad)
-
-        cand_pi = cwt_pi.notna() & ~confirmed_pi
-        cand_ba = cwt_ba.notna() & ~confirmed_ba
-        cand_le = cwt_le.notna() & ~confirmed_le
-        cand_ri = cwt_ri.notna() & ~confirmed_ri
-
-        # --- Steps 3-6: hard limits (apply only to candidates) ---
-        iqr_tan = q3_tan - q1_tan
-        iqr_rad = q3_rad - q1_rad
-
-        # Guard against pathological cases
-        if not np.isfinite(iqr_tan) or iqr_tan < 0:
-            iqr_tan = 0.0
-        if not np.isfinite(iqr_rad) or iqr_rad < 0:
-            iqr_rad = 0.0
+        # --- Apply hard limits ---
+        iqr_tan = max(0.0, q3_tan - q1_tan)
+        iqr_rad = max(0.0, q3_rad - q1_rad)
 
         ll_tan = max(q1_tan - ll_scaling * iqr_tan, min_plausible)
         ul_tan = q3_tan + ul_scaling * iqr_tan
@@ -789,147 +492,123 @@ class SampleAnalyzer:
         ll_rad = max(q1_rad - ll_scaling * iqr_rad, min_plausible)
         ul_rad = q3_rad + ul_scaling * iqr_rad
 
-        def _apply_hard_limits(x: pd.Series, cand: pd.Series, ll: float, ul: float) -> pd.Series:
-            out = x.copy()
-            mask = cand & (x.notna()) & ((x < ll) | (x > ul))
-            out.loc[mask] = np.nan
-            return out
+        def _apply_limits(s, ll, ul):
+            s = s.copy()
+            s.loc[(s < ll) | (s > ul)] = np.nan
+            return s
 
-        cwt_pi_f = _apply_hard_limits(cwt_pi, cand_pi, ll_tan, ul_tan)
-        cwt_ba_f = _apply_hard_limits(cwt_ba, cand_ba, ll_tan, ul_tan)
-        cwt_le_f = _apply_hard_limits(cwt_le, cand_le, ll_rad, ul_rad)
-        cwt_ri_f = _apply_hard_limits(cwt_ri, cand_ri, ll_rad, ul_rad)
+        pi = _apply_limits(pi, ll_tan, ul_tan)
+        ba = _apply_limits(ba, ll_tan, ul_tan)
+        le = _apply_limits(le, ll_rad, ul_rad)
+        ri = _apply_limits(ri, ll_rad, ul_rad)
 
-        # --- Steps 7-8: context filtering (apply only to candidates; keep order) ---
-        # Use "current" values (after hard limits) for comparisons
-        pi = cwt_pi_f
-        ba = cwt_ba_f
-        le = cwt_le_f
-        ri = cwt_ri_f
+        # --- Filter larger value of opposite sides if much larger ---
+        ba.loc[ba > (opp_scaling * pi)] = np.nan
+        pi.loc[pi > (opp_scaling * ba)] = np.nan
+        le.loc[le > (opp_scaling * ri)] = np.nan
+        ri.loc[ri > (opp_scaling * le)] = np.nan
 
-        # Step 7: opposite sides
-        # a) CWTba > 1.5 * CWTpi -> remove CWTba
-        mask = cand_ba & ba.notna() & pi.notna() & (ba > (opp_scaling * pi))
-        ba.loc[mask] = np.nan
+        # --- Filter larger value compared to adjacent sides if much larger ---
+        ave_lr = pd.concat([le, ri], axis=1).mean(axis=1, skipna=True)
+        ave_pb = pd.concat([pi, ba], axis=1).mean(axis=1, skipna=True)
 
-        # b) CWTpi > 1.5 * CWTba -> remove CWTpi
-        mask = cand_pi & pi.notna() & ba.notna() & (pi > (opp_scaling * ba))
-        pi.loc[mask] = np.nan
+        ba.loc[ba > (adj_scaling * ave_lr)] = np.nan
+        pi.loc[pi > (adj_scaling * ave_lr)] = np.nan
+        le.loc[le > (adj_scaling * ave_pb)] = np.nan
+        ri.loc[ri > (adj_scaling * ave_pb)] = np.nan
 
-        # c) CWTle > 1.5 * CWTri -> remove CWTle
-        mask = cand_le & le.notna() & ri.notna() & (le > (opp_scaling * ri))
-        le.loc[mask] = np.nan
-
-        # d) CWTri > 1.5 * CWTle -> remove CWTri
-        mask = cand_ri & ri.notna() & le.notna() & (ri > (opp_scaling * le))
-        ri.loc[mask] = np.nan
-
-        # Step 8: adjacent sides (keep order!)
-        ave_lr = (le + ri) / 2.0
-        ave_pb = (ba + pi) / 2.0
-
-        # a) CWTba > 2.5 * ave(CWTle, CWTri) -> remove CWTba
-        mask = cand_ba & ba.notna() & ave_lr.notna() & (ba > (adj_scaling * ave_lr))
-        ba.loc[mask] = np.nan
-
-        # b) CWTpi > 2.5 * ave(CWTle, CWTri) -> remove CWTpi
-        mask = cand_pi & pi.notna() & ave_lr.notna() & (pi > (adj_scaling * ave_lr))
-        pi.loc[mask] = np.nan
-
-        # c) CWTle > 2.5 * ave(CWTba, CWTpi) -> remove CWTle
-        mask = cand_le & le.notna() & ave_pb.notna() & (le > (adj_scaling * ave_pb))
-        le.loc[mask] = np.nan
-
-        # d) CWTri > 2.5 * ave(CWTba, CWTpi) -> remove CWTri
-        mask = cand_ri & ri.notna() & ave_pb.notna() & (ri > (adj_scaling * ave_pb))
-        ri.loc[mask] = np.nan
-
-        # --- Write filtered base values back ---
+        # Write back filtered base values
         df["CWT_pith"] = pi
         df["CWT_bark"] = ba
         df["CWT_left"] = le
         df["CWT_right"] = ri
 
-        # --- Recompute dependent cell-level metrics to stay consistent ---
-        # CWTTAN = (pith + bark)/2 if both positive
-        cwttan = pd.Series(np.nan, index=df.index, dtype="float64")
-        mask = pi.notna() & ba.notna() & (pi > 0) & (ba > 0)
-        cwttan.loc[mask] = (pi.loc[mask] + ba.loc[mask]) / 2.0
-        df["CWTTAN"] = cwttan
+    def _compute_cwt_metrics(self) -> None:
+        """
+        Compute dependent CWT metrics (CWTTAN, CWTRAD, CWTALL, RTSR, CTSR, TB2, CWA, RWD)
+        based on current base wall thickness values.
+        """
+        if self.cells_table is None or self.cells_table.empty:
+            return
 
-        # CWTRAD = (left + right)/2 if both positive
-        cwtrad = pd.Series(np.nan, index=df.index, dtype="float64")
-        mask = le.notna() & ri.notna() & (le > 0) & (ri > 0)
-        cwtrad.loc[mask] = (le.loc[mask] + ri.loc[mask]) / 2.0
-        df["CWTRAD"] = cwtrad
+        required = ["CWT_pith", "CWT_bark", "CWT_left", "CWT_right"]
+        if not all(col in self.cells_table.columns for col in required):
+            return
 
-        # CWTALL = (CWTRAD + CWTTAN)/2 if both present
-        cwtall = pd.Series(np.nan, index=df.index, dtype="float64")
-        mask = cwtrad.notna() & cwttan.notna()
-        cwtall.loc[mask] = (cwtrad.loc[mask] + cwttan.loc[mask]) / 2.0
-        df["CWTALL"] = cwtall
+        df = self.cells_table
 
-        # RTSR = (4 * CWTTAN) / lumen_diam_rad
+        pi = pd.to_numeric(df["CWT_pith"], errors="coerce")
+        ba = pd.to_numeric(df["CWT_bark"], errors="coerce")
+        le = pd.to_numeric(df["CWT_left"], errors="coerce")
+        ri = pd.to_numeric(df["CWT_right"], errors="coerce")
+
+        def _get_avg_positive(s1, s2):
+            v1 = s1.where(s1 > 0)
+            v2 = s2.where(s2 > 0)
+            return pd.concat([v1, v2], axis=1).mean(axis=1, skipna=True)
+
+        df["CWTTAN"] = _get_avg_positive(pi, ba)
+        df["CWTRAD"] = _get_avg_positive(le, ri)
+        df["CWTALL"] = _get_avg_positive(df["CWTTAN"], df["CWTRAD"])
+
         if "lumen_diam_rad" in df.columns:
             drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
-            rtsr = pd.Series(np.nan, index=df.index, dtype="float64")
-            mask = cwttan.notna() & drad.notna() & (drad > 0)
-            rtsr.loc[mask] = (4.0 * cwttan.loc[mask]) / drad.loc[mask]
-            df["RTSR"] = rtsr
+            df["RTSR"] = (4.0 * df["CWTTAN"]) / drad.where(drad > 0)
 
-        # CTSR = (4 * CWTALL) / circle_diameter(area-equivalent)
         if "lumen_area" in df.columns:
             la = pd.to_numeric(df["lumen_area"], errors="coerce")
-            ctsr = pd.Series(np.nan, index=df.index, dtype="float64")
             circle_diam = 2.0 * np.sqrt(la / np.pi)
-            mask = cwtall.notna() & la.notna() & (la > 0) & circle_diam.notna() & (circle_diam > 0)
-            ctsr.loc[mask] = (4.0 * cwtall.loc[mask]) / circle_diam.loc[mask]
-            df["CTSR"] = ctsr
+            df["CTSR"] = (4.0 * df["CWTALL"]) / circle_diam.where(circle_diam > 0)
 
-        # TB2 = min( (2*CWTRAD/DRAD)^2, (2*CWTTAN/DTAN)^2 )
         if "lumen_diam_rad" in df.columns and "lumen_diam_tang" in df.columns:
-            drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
             dtan = pd.to_numeric(df["lumen_diam_tang"], errors="coerce")
+            drad = pd.to_numeric(df["lumen_diam_rad"], errors="coerce")
 
-            tb2 = pd.Series(np.nan, index=df.index, dtype="float64")
+            rad_comp = (2.0 * df["CWTRAD"].where(df["CWTRAD"] > 0) / drad.where(drad > 0))**2
+            tan_comp = (2.0 * df["CWTTAN"].where(df["CWTTAN"] > 0) / dtan.where(dtan > 0))**2
+            df["TB2"] = pd.concat([rad_comp, tan_comp], axis=1).min(axis=1, skipna=True)
 
-            # radial component
-            rad_val = pd.Series(np.nan, index=df.index, dtype="float64")
-            mask_r = cwtrad.notna() & drad.notna() & (cwtrad > 0) & (drad > 0)
-            rad_val.loc[mask_r] = ((2.0 * cwtrad.loc[mask_r]) / drad.loc[mask_r]) ** 2
+        if all(col in df.columns for col in ["cell_area", "lumen_area"]):
+            ca = pd.to_numeric(df["cell_area"], errors="coerce")
+            la = pd.to_numeric(df["lumen_area"], errors="coerce")
 
-            # tangential component
-            tan_val = pd.Series(np.nan, index=df.index, dtype="float64")
-            mask_t = cwttan.notna() & dtan.notna() & (cwttan > 0) & (dtan > 0)
-            tan_val.loc[mask_t] = ((2.0 * cwttan.loc[mask_t]) / dtan.loc[mask_t]) ** 2
+            # CWA and RWD only if all 4 base CWT measurements are not NaN
+            all_cwt_present = pi.notna() & ba.notna() & le.notna() & ri.notna()
 
-            # min of available
-            both = rad_val.notna() & tan_val.notna()
-            tb2.loc[both] = np.minimum(rad_val.loc[both], tan_val.loc[both])
-
-            only_r = rad_val.notna() & ~tan_val.notna()
-            tb2.loc[only_r] = rad_val.loc[only_r]
-
-            only_t = tan_val.notna() & ~rad_val.notna()
-            tb2.loc[only_t] = tan_val.loc[only_t]
-
-            df["TB2"] = tb2
+            cwa = (ca - la).where(all_cwt_present & (ca > la) & (ca > 0) & (la > 0))
+            df["CWA"] = cwa
+            df["RWD"] = (cwa / ca).where(cwa.notna() & (ca > 0))
 
     def analyze_cells(self) -> pd.DataFrame:
         """Main method to analyze cells."""
         self._smooth_cells_array()
         self._find_cells_contours()
         self._compute_cells_lumina()
-        self._compute_cell_walls()
-        self._cluster_cells()
+
+        # Initial table creation
         self._get_cells_table()
 
-        # >>> ADD THIS (must be before any ring-level aggregations use cells_table)
-        # self._apply_cwt_filters()
+        self._compute_cell_walls()
 
-        sample_type = self.config.get("sample_type", None)
-        print("Sample type: ", sample_type)
+        # Sync updates from self.cells (from _compute_cell_walls) back to cells_table
+        self._get_cells_table()
 
+        self._cluster_cells()
+
+        # Sync updates from self.cells (from _cluster_cells) back to cells_table
+        self._get_cells_table()
+
+        # Compute lumen metrics (needs lumen_area, major_axis_px, etc. from _get_cells_table)
+        self._compute_lumen_metrics()
+
+        # Initialize empty column for "AOI"
+        self.cells_table["AOI"] = np.nan
+
+        # Filter CWT base measurements and compute dependent metrics
+        self._apply_cwt_filters()
+        self._compute_cwt_metrics()
+
+        # Compute NBRNO and NBRID
         self._compute_cluster_sizes()
 
         return self.cells_table
@@ -960,7 +639,7 @@ class SampleAnalyzer:
         ] = np.diff(self.rings_table["cells_above"].values)
         self.rings_table["ring_vert_width"] = self.rings_table[
             "ring_vert_width"
-        ] / (self.config["pixels_per_um"] * self.cells_array.shape[1])
+        ] / (self.pixels_per_um * self.cells_array.shape[1])
         self.rings_table.loc[
             ~self.rings_table["enabled"], "ring_vert_width"
         ] = np.nan
@@ -972,11 +651,14 @@ class SampleAnalyzer:
             np.deg2rad(self.rings_table["boundary_angle"].rolling(2).mean())
         )
 
+        # Initialize empty columns for "AOIAR" and "RAOIAR"
+        self.rings_table["AOIAR"] = np.nan
+        self.rings_table["RAOIAR"] = np.nan
+
     def _compute_ring_area(self) -> None:
         # Compute ring area (RA) in mm² and store in rings_table["RA"].
 
         h, w = self.cells_array.shape[:2]
-        px_per_um = self.config["pixels_per_um"]
 
         # Ensure RA exists and reset
         self.rings_table["RA"] = np.nan
@@ -1004,7 +686,7 @@ class SampleAnalyzer:
 
             area_px = int(canvas.sum())
             # px² → µm²
-            area_um2 = area_px / (px_per_um ** 2)
+            area_um2 = area_px / (self.pixels_per_um ** 2)
             # µm² → mm²
             area_mm2 = area_um2 / 1e6
             self.rings_table.loc[i + 1, "RA"] = area_mm2
@@ -1186,6 +868,9 @@ class SampleAnalyzer:
 
         self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
 
+
+        return self.rings_table
+
     def _compute_vessel_grouping_metrics(self) -> None:
         """
         Compute vessel grouping metrics per ring:
@@ -1261,6 +946,34 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             disabled = self.rings_table["enabled"] == False
             self.rings_table.loc[disabled, ["RVGI", "RVSF", "RGSGV"]] = np.nan
+
+    def _compute_mean_cwtpi(self) -> None:
+        # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
+        self.rings_table["CWTPI"] = np.nan
+
+        if self.cells_table.empty:
+            return
+        if "bot_ring_id" not in self.cells_table.columns:
+            return
+        if "CWT_pith" not in self.cells_table.columns:
+            return
+
+        df = self.cells_table[["bot_ring_id", "CWT_pith"]].copy()
+        df = df.dropna(subset=["bot_ring_id", "CWT_pith"])
+
+        if df.empty:
+            return
+
+        # group by ring id and compute mean
+        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_pith"].mean()
+
+        for ring_id, val in ring_mean.items():
+            if ring_id in self.rings_table.index:
+                self.rings_table.loc[ring_id, "CWTPI"] = float(val)
+
+        # disabled rings -> NaN
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "CWTPI"] = np.nan
 
     def _compute_mean_cwtba(self) -> None:
         # CWTBA = Mean thickness of outer (bark-facing) cell wall per ring [µm]. Uses cell-level CWT_bark and aggregates by bot_ring_id.
@@ -1431,7 +1144,7 @@ class SampleAnalyzer:
             self.rings_table.loc[~self.rings_table["enabled"], "CWTALL"] = np.nan
 
     def _compute_mean_rtsr(self) -> None:
-        # RTSR = Mean radial Thickness-to-span ratio per ring (Mork’s index). Uses cell-level RTSR and aggregates by bot_ring_id.
+        # RTSR = Mean radial Thickness-to-span ratio per ring (Mork's index). Uses cell-level RTSR and aggregates by bot_ring_id.
         self.rings_table["RTSR"] = np.nan
 
         if self.cells_table.empty:
@@ -1487,8 +1200,8 @@ class SampleAnalyzer:
             self.rings_table.loc[~self.rings_table["enabled"], "CTSR"] = np.nan
 
     def _compute_mean_dh(self) -> None:
-        # DH = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
-        self.rings_table["DH"] = np.nan
+        # DHW = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
+        self.rings_table["DHW"] = np.nan
 
         if self.cells_table.empty:
             return
@@ -1521,15 +1234,15 @@ class SampleAnalyzer:
                 continue
 
             num = np.sum(dh ** 5)
-            self.rings_table.loc[ring_id, "DH"] = float(num / denom)
+            self.rings_table.loc[ring_id, "DHW"] = float(num / denom)
 
         # disabled rings -> NaN
         if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DH"] = np.nan
+            self.rings_table.loc[~self.rings_table["enabled"], "DHW"] = np.nan
 
     def _compute_mean_dh2(self) -> None:
-        # DH2 = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
-        self.rings_table["DH2"] = np.nan
+        # DHM = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
+        self.rings_table["DHM"] = np.nan
 
         if self.cells_table.empty:
             return
@@ -1551,7 +1264,7 @@ class SampleAnalyzer:
         if df.empty:
             return
 
-        # group by ring id and compute DH2
+        # group by ring id and compute DHM
         for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
             if ring_id not in self.rings_table.index:
                 continue
@@ -1565,11 +1278,11 @@ class SampleAnalyzer:
             if mean_dh4 <= 0 or np.isnan(mean_dh4):
                 continue
 
-            self.rings_table.loc[ring_id, "DH2"] = float(mean_dh4 ** 0.25)
+            self.rings_table.loc[ring_id, "DHM"] = float(mean_dh4 ** 0.25)
 
         # disabled rings -> NaN
         if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DH2"] = np.nan
+            self.rings_table.loc[~self.rings_table["enabled"], "DHM"] = np.nan
 
     def _compute_mean_drad(self) -> None:
         # DRAD = Mean radial cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_rad and aggregates by bot_ring_id.
@@ -1711,57 +1424,6 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "RWD"] = np.nan
 
-    def _compute_mean_cwtpi(self) -> None:
-        # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
-        self.rings_table["CWTPI"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_pith" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_pith"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_pith"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_pith"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTPI"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTPI"] = np.nan
-
-    def _get_angled_distances(self, entry):
-        """Compute angled distances for top and bottom rings."""
-
-        if np.isnan(entry["bot_ring_id"]):
-            return pd.Series(
-                [np.nan, np.nan], index=["top_angled_dist", "bot_angled_dist"]
-            )
-
-        top_ring_angle = self.rings_table.loc[
-            entry["bot_ring_id"] - 1, "boundary_angle"
-        ]
-        bot_ring_angle = self.rings_table.loc[
-            entry["bot_ring_id"], "boundary_angle"
-        ]
-
-        avg_angle = (top_ring_angle + bot_ring_angle) / 2
-
-        top_dist = entry["top_vert_dist"] * np.cos(np.deg2rad(avg_angle))
-        bot_dist = entry["bot_vert_dist"] * np.cos(np.deg2rad(avg_angle))
-        return pd.Series(
-            [top_dist, bot_dist], index=["top_angled_dist", "bot_angled_dist"]
-        )
-
     def _compute_cells_to_rings_distances(self):
         """Compute distances from cells to rings."""
 
@@ -1771,7 +1433,7 @@ class SampleAnalyzer:
             if not np.isnan(centroid).any():
                 centroids_map[centroid] = i
 
-        # Iitialize columns
+        # Initialize columns
         self.cells_table["bot_ring_id"] = np.nan
         self.cells_table["top_vert_dist"] = np.nan
         self.cells_table["bot_vert_dist"] = np.nan
@@ -1795,52 +1457,64 @@ class SampleAnalyzer:
                     np.logical_and(centroids_map >= 0, canvas.astype(bool))
                 )
             ]
+            if len(ids) == 0:
+                continue
+
             self.cells_table.loc[ids, "bot_ring_id"] = i + 1
-            centroids = np.array(
-                self.cells_table.loc[ids, "centroid"].tolist()
-            )
+            centroids_list = self.cells_table.loc[ids, "centroid"].tolist()
+            centroids = np.array(centroids_list)
+
+            if centroids.ndim == 1:
+                centroids = centroids.reshape(-1, 2)
 
             diff = np.diff(canvas.astype("int32"), axis=0)
-            complete_top_ring = np.all(np.any(diff > 0, axis=0))
-            complete_bottom_ring = np.all(np.any(diff < 0, axis=0))
 
-            if complete_top_ring:
-                self.cells_table.loc[ids, "top_vert_dist"] = (
-                    centroids[:, 0]
-                    - np.argmax(diff > 0, axis=0)[centroids[:, 1]]
-                ) / self.config["pixels_per_um"]
+            self.cells_table.loc[ids, "top_vert_dist"] = (
+                centroids[:, 0]
+                - np.argmax(diff > 0, axis=0)[centroids[:, 1]]
+            ) / self.pixels_per_um
 
-            if complete_bottom_ring:
-                self.cells_table.loc[ids, "bot_vert_dist"] = (
-                    np.argmax(diff < 0, axis=0)[centroids[:, 1]]
-                    - centroids[:, 0]
-                ) / self.config["pixels_per_um"]
+            self.cells_table.loc[ids, "bot_vert_dist"] = (
+                np.argmax(diff < 0, axis=0)[centroids[:, 1]]
+                - centroids[:, 0]
+            ) / self.pixels_per_um
 
-        self.cells_table[["top_angled_dist", "bot_angled_dist"]] = (
-            self.cells_table.apply(self._get_angled_distances, axis=1)
-        )
-        self.cells_table["YEAR"] = (
-            self.cells_table["bot_ring_id"]
+        # --- Vectorized Angled Distances ---
+        df = self.cells_table
+        if "bot_ring_id" in df.columns and not df["bot_ring_id"].isna().all():
+            bot_ids = pd.to_numeric(df["bot_ring_id"], errors="coerce")
+
+            top_ring_angles = (bot_ids - 1).map(self.rings_table["boundary_angle"])
+            bot_ring_angles = bot_ids.map(self.rings_table["boundary_angle"])
+
+            avg_angles = (top_ring_angles + bot_ring_angles) / 2.0
+            cos_avg = np.cos(np.deg2rad(avg_angles))
+
+            df["top_angled_dist"] = df["top_vert_dist"] * cos_avg
+            df["bot_angled_dist"] = df["bot_vert_dist"] * cos_avg
+
+        df["YEAR"] = (
+            df["bot_ring_id"]
             .map(self.rings_table["YEAR"])
         )
-        self.cells_table["YEAR"] = (
-            self.cells_table["YEAR"]
+        df["YEAR"] = (
+            df["YEAR"]
             .astype("Int64")
         )
         # cells outside all ring polygons (outermost incomplete band) ---
         # Those cells have bot_ring_id = NaN -> YEAR becomes NA.
         # Assign them to last_year + 1 (outermost incomplete ring year).
-        missing_year = self.cells_table["YEAR"].isna()
+        missing_year = df["YEAR"].isna()
         if missing_year.any():
             last_year = pd.to_numeric(self.rings_table.get("YEAR"), errors="coerce").max()
             if pd.notna(last_year):
-                self.cells_table.loc[missing_year, "YEAR"] = int(last_year) + 1
-                self.cells_table["YEAR"] = self.cells_table["YEAR"].astype("Int64")
+                df.loc[missing_year, "YEAR"] = int(last_year) + 1
+                df["YEAR"] = df["YEAR"].astype("Int64")
 
 
-        self.compute_rraddistr()
+        self._compute_rraddistr()
 
-    def compute_rraddistr(self) -> None:
+    def _compute_rraddistr(self) -> None:
         """
         Compute RRADDISTR (relative radial distance within the annual ring).
 

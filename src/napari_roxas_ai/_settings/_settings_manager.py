@@ -152,6 +152,13 @@ class SettingsManager:
         """
         Update multiple settings at once and save to file.
 
+        IMPORTANT for developers:
+        This method is the SINGLE SOURCE OF TRUTH for default settings.
+        When adding a new setting:
+        --> Add it here in _set_defaults().
+
+        At runtime, any keys missing from the user's settings.json will be 
+        automatically populated from these defaults.
         Args:
             settings_dict: Dictionary of settings to update
         """

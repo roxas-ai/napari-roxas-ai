@@ -388,8 +388,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "CWTALL",
         "RTSR",
         "CTSR",
-        "DH",
-        "DH2",
+        "DHW",
+        "DHM",
         "DRAD",
         "DTAN",
         "TB2",
@@ -428,8 +428,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
           .pipe(round_column, "CWTALL", 2)
           .pipe(round_column, "RTSR", 2)
           .pipe(round_column, "CTSR", 2)
-          .pipe(round_column, "DH", 2)
-          .pipe(round_column, "DH2", 2)
+          .pipe(round_column, "DHW", 2)
+          .pipe(round_column, "DHM", 2)
           .pipe(round_column, "DRAD", 2)
           .pipe(round_column, "DTAN", 2)
           .pipe(round_column, "TB2", 2)

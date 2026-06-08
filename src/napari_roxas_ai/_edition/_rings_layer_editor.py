@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import cv2
 import napari.layers
@@ -65,18 +65,17 @@ def outside_rings_deletion(
         pd.DataFrame: Updated rings table with only valid rings.
     """
 
-    # Check if any point of the ring is outside the mask
+    # Check if any point of the ring is inside the mask
     for i, coords in rings_table["RBXY"].items():
         coords = np.array(coords)
         is_any_valid = np.any(
-            (coords[:, 0] > 0)
+            (coords[:, 0] >= 0)
             & (coords[:, 0] <= shape[0])
-            & (coords[:, 1] > 0)
-            & (coords[:, 1] < shape[1])
+            & (coords[:, 1] >= 0)
+            & (coords[:, 1] <= shape[1])
         )
         if not is_any_valid:
             rings_table.drop(i, inplace=True)
-
     return rings_table
 
 
@@ -127,7 +126,7 @@ def calculate_polygon_area(coords: list, width: int) -> int:
     for a polygon defined by the given coordinates using the Shoelace formula.
     Args:
         coords (list): List of coordinates.
-        canvas_width (int): Width of the canvas.
+        width (int): Width of the canvas.
     Returns:
         int: Number of pixels that would be drawn for the polygon.
     """
@@ -265,28 +264,26 @@ def interpolate_row_at_col(coords_rc: list, col_query: float) -> float:
 
 
 class RingsLayerEditorWidget(Container):
+    @property
+    def _input_layer(self) -> Optional["napari.layers.Labels"]:
+        """Get the single valid ring layer currently in the viewer."""
+        valid_layers = self._get_valid_layers()
+        return valid_layers[0] if valid_layers else None
+
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
         self.settings = SettingsManager()
 
         self._layer_callback = None
-
-        # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = ComboBox(
-            label="Rings Layer",
-            annotation="napari.layers.Labels",
-            choices=self._get_valid_layers,
-        )
-        # Connect the layer selection to update the year spinbox
-        self._input_layer_combo.changed.connect(self._connect_layer_callback)
+        self._is_editing = False
 
         # Create spinbox for the last year
         year_value = (
-            self._input_layer_combo.value.metadata[
+            self._input_layer.metadata[
                 "rings_outmost_complete_year"
             ]
-            if self._input_layer_combo.value
+            if self._input_layer
             else 9999
         )
         self._last_year_spinbox = SpinBox(
@@ -366,7 +363,6 @@ class RingsLayerEditorWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_layer_combo,
                 self._edit_rings_geometries_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
@@ -377,7 +373,9 @@ class RingsLayerEditorWidget(Container):
             ]
         )
 
-    # Update choices when layers change
+        self._connect_layer_callback()
+
+        # Update choices when layers change
     def _deferred_remove_layer(self, name: str) -> None:
         def _rm():
             if name in self._viewer.layers:
@@ -385,29 +383,18 @@ class RingsLayerEditorWidget(Container):
 
         QTimer.singleShot(0, _rm)
 
-    def _refresh_widget(self) -> None:
+    def _refresh_widget(self, event=None) -> None:
         """Refresh widget state by re-reading layers/metadata and re-binding callbacks."""
-        # Remove helper layers if present
+        if self._is_editing:
+            return
+
         for name in ("Rings Years", "Rings Modification"):
             self._deferred_remove_layer(name)
 
-        current = self._input_layer_combo.value
-
-        new_choices = self._get_valid_layers()
-        self._input_layer_combo.choices = new_choices
-
-        if not new_choices:
+        if not self._get_valid_layers():
             self._disconnect_layer_callback()
-            # Optional: reset UI to a safe default
             self._last_year_spinbox.value = 9999
-            show_info("No rings layers found to refresh.")
             return
-
-        # Keep current selection if still valid, otherwise fall back to first choice
-        if current in new_choices:
-            self._input_layer_combo.value = current
-        else:
-            self._input_layer_combo.value = new_choices[0]
 
         self._connect_layer_callback()
         self._update_year_spinbox()
@@ -434,20 +421,20 @@ class RingsLayerEditorWidget(Container):
         # Clean up any previous callback first
         self._disconnect_layer_callback()
 
-        if self._input_layer_combo.value is not None:
+        if self._input_layer is not None:
             # Connect to the layer's events using the shared callback manager
             self._layer_callback = register_layer_callback(
-                self._input_layer_combo.value, self, self._on_layer_data_change
+                self._input_layer, self, self._on_layer_data_change
             )
             self._update_year_spinbox()
 
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
         if (
-            self._input_layer_combo.value is not None
+            self._input_layer is not None
             and self._layer_callback is not None
         ):
-            unregister_layer_callback(self._input_layer_combo.value, self)
+            unregister_layer_callback(self._input_layer, self)
             self._layer_callback = None
 
     def _on_layer_data_change(self, event=None):
@@ -462,40 +449,36 @@ class RingsLayerEditorWidget(Container):
             # Update the spinbox value
             self._update_year_spinbox()
 
-    def _update_year_spinbox(self) -> None:
-        """Update the year spinbox value based on the selected layer."""
-        if self._input_layer_combo.value:
-            layer = self._input_layer_combo.value
-            if "rings_outmost_complete_year" in layer.metadata:
-                self._last_year_spinbox.value = layer.metadata[
-                    "rings_outmost_complete_year"
-                ]
 
     def _update_layer_year(self) -> None:
         """Update the last year value in the layer metadata."""
-        if self._input_layer_combo.value:
-
-            self.input_layer = self._input_layer_combo.value
-            self.input_layer.metadata["rings_outmost_complete_year"] = (
+        if self._input_layer:
+            layer = self._input_layer
+            layer.metadata["rings_outmost_complete_year"] = (
                 self._last_year_spinbox.value
             )
             new_rings_table, new_rings_raster, new_colormap = (
                 update_rings_geometries(
-                    rings_table=self.input_layer.features,
+                    rings_table=layer.features,
                     last_year=self._last_year_spinbox.value,
-                    image_shape=self.input_layer.data.shape,
+                    image_shape=layer.data.shape,
                 )
             )
-            self.input_layer.data = new_rings_raster
-            self.input_layer.features = new_rings_table
-            self.input_layer.colormap = new_colormap
+            layer.data = new_rings_raster
+            layer.features = new_rings_table
+            layer.colormap = new_colormap
+            layer.events.metadata()
+            layer.events.data()
+            layer.events.features()
 
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
         # Get the selected input layer
-        if not self._input_layer_combo.value:
-            QMessageBox.warning(None, "Error", "Please select an input layer")
+        if not self._input_layer:
+            QMessageBox.warning(None, "Error", "No valid rings layer found")
             return
+
+        self._is_editing = True
 
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
@@ -505,16 +488,17 @@ class RingsLayerEditorWidget(Container):
         self._apply_rings_geometries_button.visible = True
         self._rerun_model_container.visible = True
 
-        self.input_layer = self._input_layer_combo.value
+        input_layer = self._input_layer
+        self.input_layer = input_layer
 
         # If there is already an edit session open, remove old helper layers first
         if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
+            self._viewer.layers.remove("Rings Years")
         if "Rings Modification" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Modification")
+            self._viewer.layers.remove("Rings Modification")
 
         # Build a DF in the same logical order as the annotated export
-        df = self.input_layer.features.copy()
+        df = input_layer.features.copy()
 
         # Prefer YEAR ordering; otherwise fall back to cells_above if present
         if "YEAR" in df.columns:
@@ -659,10 +643,12 @@ class RingsLayerEditorWidget(Container):
 
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
-        # Remove the working layer
-        self._deferred_remove_layer("Rings Modification")
+        self._is_editing = False
+
+        if "Rings Modification" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Modification")
         if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
+            self._viewer.layers.remove("Rings Years")
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
@@ -672,11 +658,11 @@ class RingsLayerEditorWidget(Container):
         self._apply_rings_geometries_button.visible = False
         self._rerun_model_container.visible = False
 
-        # Show confirmation message
         show_info("Rings geometries modification cancelled")
 
     def _apply_rings_geometries(self) -> None:
         """Apply the changes to the input layer."""
+        self._is_editing = False
 
         layer = self._viewer.layers["Rings Modification"]
 
@@ -697,26 +683,30 @@ class RingsLayerEditorWidget(Container):
         ).rename_axis("id")
         rings_table = rings_table.dropna(axis=1, how="all")
 
-        # Remove helper layers
         if "Rings Modification" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Modification")
+            self._viewer.layers.remove("Rings Modification")
         if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
+            self._viewer.layers.remove("Rings Years")
+
+        input_layer = self._input_layer
+        if input_layer is None:
+            show_info("No valid rings layer found to apply geometries")
+            return
 
         # Update the rings layer with the new geometries
         new_rings_table, new_rings_raster, new_colormap = (
             update_rings_geometries(
                 rings_table=rings_table,
-                last_year=self.input_layer.metadata[
+                last_year=input_layer.metadata[
                     "rings_outmost_complete_year"
                 ],
-                image_shape=self.input_layer.data.shape,
+                image_shape=input_layer.data.shape,
             )
         )
 
-        self.input_layer.data = new_rings_raster
-        self.input_layer.features = new_rings_table
-        self.input_layer.colormap = new_colormap
+        input_layer.data = new_rings_raster
+        input_layer.features = new_rings_table
+        input_layer.colormap = new_colormap
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
@@ -731,8 +721,8 @@ class RingsLayerEditorWidget(Container):
 
     def _update_year_spinbox(self) -> None:
         """Update the year spinbox value based on the selected layer."""
-        if self._input_layer_combo.value:
-            layer = self._input_layer_combo.value
+        if self._input_layer:
+            layer = self._input_layer
             if "rings_outmost_complete_year" in layer.metadata:
                 self._last_year_spinbox.value = layer.metadata[
                     "rings_outmost_complete_year"
@@ -746,7 +736,7 @@ class RingsLayerEditorWidget(Container):
         """Rerun the ring detection model starting from the selected year."""
         selected_year = self._rerun_model_year_spinbox.value
 
-        if not self._input_layer_combo.value:
+        if not self._input_layer:
             show_info("No layer selected")
             return
 
@@ -862,9 +852,9 @@ class RingsLayerEditorWidget(Container):
             "file_extensions.rings_file_extension"
         )[0]
 
-        image_layer_name = str(self._input_layer_combo.value).replace(
+        image_layer_name = self._input_layer.name.replace(
             rings_extension, scan_extension
-        )  # get from the viewer
+        )
         image = (
             self._viewer.layers[image_layer_name].data
             if image_layer_name in self._viewer.layers
@@ -872,7 +862,7 @@ class RingsLayerEditorWidget(Container):
         )
         if image is None:
             show_info(
-                f"Corresponding image layer '{image_layer_name}' not found for rings layer '{self._input_layer_combo.value.name}'"
+                f"Corresponding image layer '{image_layer_name}' not found for rings layer '{self._input_layer.name}'"
             )
             return
         import inspect

@@ -6,11 +6,14 @@ import glob
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDialog,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QPushButton,
@@ -22,7 +25,7 @@ from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 
 class CrossdatingSelectionDialog(QDialog):
     """
-    Dialog for selecting crossdating files to process.
+    Dialog for selecting crossdating files to process and their scaling.
     """
 
     def __init__(
@@ -51,10 +54,11 @@ class CrossdatingSelectionDialog(QDialog):
         self.text_file_extensions = text_file_extensions
         self.project_file_path = project_file_path
         self.selected_files = []
+        self.selected_scaling = 10.0  # Default to 1/100 mm (10 um)
 
-        self.setWindowTitle("Select Crossdating Files")
+        self.setWindowTitle("Prepare Crossdating Files")
         self.setMinimumWidth(500)
-        self.setMinimumHeight(400)
+        self.setMinimumHeight(450)
 
         self._create_ui()
         self._populate_file_list()
@@ -81,6 +85,16 @@ class CrossdatingSelectionDialog(QDialog):
         self.select_all_checkbox.stateChanged.connect(self._toggle_select_all)
         layout.addWidget(self.select_all_checkbox)
 
+        # Scaling selection
+        scaling_layout = QHBoxLayout()
+        scaling_label = QLabel("Units of selected cross-dating files:")
+        self.scaling_combo = QComboBox()
+        self.scaling_combo.addItems(["1 / 10 mm", "1 / 100 mm", "1 / 1000 mm", "divide values by 10"])
+        self.scaling_combo.setCurrentText("1 / 100 mm")
+        scaling_layout.addWidget(scaling_label)
+        scaling_layout.addWidget(self.scaling_combo)
+        layout.addLayout(scaling_layout)
+
         # Buttons
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self._ok_clicked)
@@ -88,7 +102,7 @@ class CrossdatingSelectionDialog(QDialog):
         self.cancel_button.clicked.connect(self.reject)
 
         # Add buttons to layout
-        button_layout = QVBoxLayout()
+        button_layout = QHBoxLayout()
         button_layout.addWidget(self.ok_button)
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
@@ -97,34 +111,28 @@ class CrossdatingSelectionDialog(QDialog):
 
     def _populate_file_list(self):
         """Find and populate the list with available text files."""
-        text_files = []
+        text_files = set()
 
         # Find all text files in the project directory (including subdirectories)
         for ext in self.text_file_extensions:
-            text_files.extend(
-                glob.glob(
-                    str(Path(self.project_directory) / "**" / f"*{ext}"),
+            for pattern in [f"*{ext}", f"*{ext.upper()}"]:
+                found_files = glob.glob(
+                    str(Path(self.project_directory) / "**" / pattern),
                     recursive=True,
                 )
-            )
-            text_files.extend(
-                glob.glob(
-                    str(
-                        Path(self.project_directory) / "**" / f"*{ext.upper()}"
-                    ),
-                    recursive=True,
-                )
-            )
+                for f in found_files:
+                    text_files.add(str(Path(f).resolve()))
 
         # Exclude the project crossdating file
-        if self.project_file_path in text_files:
-            text_files.remove(self.project_file_path)
+        project_file_path = str(Path(self.project_file_path).resolve())
+        if project_file_path in text_files:
+            text_files.remove(project_file_path)
 
         # Sort files for consistent display
-        text_files = sorted(text_files)
+        sorted_text_files = sorted(list(text_files))
 
         # Add files to the list widget
-        for file_path in text_files:
+        for file_path in sorted_text_files:
             # Display relative path for better readability
             try:
                 display_name = str(
@@ -161,11 +169,26 @@ class CrossdatingSelectionDialog(QDialog):
                     item.data(1)
                 )  # Get full path from item data
 
+        # Get scaling factor (target is micrometers)
+        scaling_text = self.scaling_combo.currentText()
+        if scaling_text == "1 / 10 mm":
+            self.selected_scaling = 100.0  # 0.1 mm = 100 um
+        elif scaling_text == "1 / 100 mm":
+            self.selected_scaling = 10.0   # 0.01 mm = 10 um
+        elif scaling_text == "divide values by 10":
+            self.selected_scaling = 0.1    # divide values by 10
+        else:  # 1 / 1000 mm
+            self.selected_scaling = 1.0    # 0.001 mm = 1 um
+
         self.accept()
 
     def get_selected_files(self) -> List[str]:
         """Return the list of selected file paths."""
         return self.selected_files
+
+    def get_selected_scaling(self) -> float:
+        """Return the selected scaling factor to micrometers."""
+        return self.selected_scaling
 
 
 def process_crossdating_files(
@@ -217,9 +240,11 @@ def process_crossdating_files(
         # No files selected
         return None
 
+    scaling_factor = dialog.get_selected_scaling()
+
     # Process selected files and merge with project file
     merged_df = merge_crossdating_files(
-        selected_files, str(crossdating_file_path)
+        selected_files, str(crossdating_file_path), scaling_factor
     )
 
     # Save merged data back to the project file
@@ -259,74 +284,101 @@ def _try_read_dataframe(filepath: str) -> Tuple[bool, Optional[pd.DataFrame]]:
 
 
 def merge_crossdating_files(
-    source_files: List[str], target_file: str
+    source_files: List[str], target_file: str, scaling_factor: float = 1.0
 ) -> Optional[pd.DataFrame]:
     """
-    Read and merge multiple crossdating files.
+    Read and merge multiple crossdating files to replace the existing target.
 
     Parameters
     ----------
     source_files : List[str]
-        List of source crossdating files to merge
+        List of source crossdating files to process and merge
     target_file : str
-        Target crossdating file to merge with
+        Target crossdating file (will be replaced by new data)
+    scaling_factor : float
+        Scaling factor to apply to source files to convert them to micrometers.
+        Defaults to 1.0 (no scaling).
 
     Returns
     -------
     Optional[pd.DataFrame]
         The merged DataFrame if successful, None otherwise
     """
-    dfs = []
+    dfs_to_scale = []
     error_files = []
 
-    # Read the target file
-    success, target_df = _try_read_dataframe(target_file)
-    if success and target_df is not None:
-        dfs.append(target_df)
-
-    # Read all source files
+    # Read and scale source files
     for file_path in source_files:
         success, source_df = _try_read_dataframe(file_path)
         if success and source_df is not None:
-            dfs.append(source_df)
+            # Apply scaling to numeric columns (excluding year-like columns)
+            if scaling_factor != 1.0:
+                # Ensure it's numeric
+                for col in source_df.columns:
+                    source_df[col] = pd.to_numeric(source_df[col], errors='coerce')
+                
+                numeric_cols = source_df.select_dtypes(include=[np.number]).columns
+                series_cols = [
+                    col
+                    for col in numeric_cols
+                    if "year" not in str(col).lower() and "index" not in str(col).lower()
+                ]
+                source_df[series_cols] = source_df[series_cols] * scaling_factor
+            
+            dfs_to_scale.append(source_df)
         else:
             error_files.append(Path(file_path).name)
             print(f"Error reading file {file_path}")
 
-    if not dfs:
+    if not dfs_to_scale:
         return None
 
-    # Different approach to merging to prevent data loss
-    if len(dfs) == 1:
-        # If only one dataframe, just use it
-        merged_df = dfs[0]
-    else:
-        # Handle potential mixed index types (int, str)
-        # Convert all indices to strings for comparison
-        for i in range(len(dfs)):
-            # Convert index to string if not already
-            if not all(isinstance(idx, str) for idx in dfs[i].index):
-                dfs[i].index = dfs[i].index.astype(str)
+    # Merge everything into a fresh DataFrame
+    # All DataFrames to combine (only from source files)
+    all_dfs = dfs_to_scale
 
-        # Start with an empty dataframe with all possible years from all files
-        # Use string representation for all indices to avoid type comparison issues
-        all_years = sorted(set().union(*[df.index for df in dfs]))
-        all_series = sorted(set().union(*[df.columns for df in dfs]))
+    # Collect all years and series names from selected files
+    all_years_raw = set().union(*[df.index for df in all_dfs])
+    all_years = []
+    for y in all_years_raw:
+        if pd.isna(y): continue
+        try:
+            all_years.append(int(float(y)))
+        except (ValueError, TypeError):
+            all_years.append(str(y))
+    all_years = list(set(all_years))
+    # Sort all_years to ensure numeric sorting if possible
+    def try_int(val):
+        try:
+            return (0, int(float(val)))
+        except (ValueError, TypeError):
+            return (1, str(val))
+    all_years = sorted(all_years, key=try_int)
+        
+    all_series = []
+    for df in all_dfs:
+        for col in df.columns:
+            if col not in all_series:
+                all_series.append(col)
 
-        # Create an empty dataframe with all years and all series
-        merged_df = pd.DataFrame(index=all_years, columns=all_series)
+    # Initialize merged_df with correct types if possible
+    merged_df = pd.DataFrame(index=all_years, columns=all_series, dtype=float)
+    merged_df.index.name = "YEAR"
 
-        # Fill the dataframe with values from each source
-        for df in dfs:
-            for series in df.columns:
-                # Only update non-NaN values
-                series_data = df[series].dropna()
-                if not series_data.empty:
-                    # For each year in this series, update the merged dataframe
-                    # only if the value in the merged dataframe is NaN
-                    for year, value in series_data.items():
-                        if pd.isna(merged_df.at[year, series]):
-                            merged_df.at[year, series] = value
+    for df in all_dfs:
+        # Ensure df index matches merged_df index type for alignment
+        new_index = []
+        for y in df.index:
+            try:
+                new_index.append(int(float(y)))
+            except (ValueError, TypeError):
+                new_index.append(str(y))
+        df.index = new_index
+
+        for series in df.columns:
+            series_data = df[series].dropna()
+            for year, value in series_data.items():
+                merged_df.at[year, series] = value
 
     # Report any files that couldn't be read
     if error_files:

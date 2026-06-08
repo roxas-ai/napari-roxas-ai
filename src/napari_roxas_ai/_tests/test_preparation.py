@@ -489,12 +489,12 @@ class TestCrossdatingHandler:
         target_df.to_csv(target_file, sep="\t")
 
         # Define expected column set for verification
+        # Target file is replaced, not merged — only source columns expected
         expected_columns = {
             "Series1",
             "Series2",
             "Series3",
             "Series4",
-            "Series5",
         }
 
         # Mock the _try_read_dataframe function to return our test data
@@ -525,12 +525,10 @@ class TestCrossdatingHandler:
             assert isinstance(result, pd.DataFrame)
             assert set(result.columns) == expected_columns
             assert len(result) == 3
-            # Check that each series from each dataframe is present in the merged result
+            # Check that each series from source dataframes is present in the merged result
             for series in df1.columns:
                 assert series in result.columns
             for series in df2.columns:
-                assert series in result.columns
-            for series in target_df.columns:
                 assert series in result.columns
 
 
