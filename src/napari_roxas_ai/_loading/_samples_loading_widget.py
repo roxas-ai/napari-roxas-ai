@@ -44,9 +44,11 @@ class Worker(QObject):
     def __init__(
         self,
         samples_stem_paths: list[str],
+        project_directory: str,
     ):
         super().__init__()
         self.samples_stem_paths = samples_stem_paths
+        self.project_directory = project_directory
 
         self.scan_file_extension = "".join(
             settings.get("file_extensions.scan_file_extension")
@@ -62,7 +64,7 @@ class Worker(QObject):
 
         total = len(self.samples_stem_paths) * 3
 
-        project_dir = Path(settings.get("project_directory")).resolve()
+        project_dir = Path(self.project_directory).resolve()
 
         for i, sample_stem_path in enumerate(self.samples_stem_paths):
 
@@ -136,7 +138,7 @@ class SamplesLoadingWidget(Container):
             fix_sample_stem_paths_in_project(self.project_directory)
 
         self._project_dialog_button = PushButton(
-            text=f"Project Directory: {self.project_directory}"
+            text=f"Project Directory: {self.project_directory or 'Not set'}"
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
 
@@ -197,6 +199,7 @@ class SamplesLoadingWidget(Container):
         )
         if directory:
             self.project_directory = directory
+            settings.set("project_directory", directory)
             self._project_dialog_button.text = (
                 f"Project Directory: {directory}"
             )
@@ -282,10 +285,12 @@ class SamplesLoadingWidget(Container):
             # Make container and buttons visible
             self._samples_selection_container.visible = True
             self._buttons_container.visible = True
+            self._load_samples_button.visible = True
         else:
             # Hide container and buttons if no files
             self._samples_selection_container.visible = False
             self._buttons_container.visible = False
+            self._load_samples_button.visible = False
 
     def _reverse_sample_selection(self):
         """Reverse the current sample selection."""
@@ -311,6 +316,9 @@ class SamplesLoadingWidget(Container):
 
     def _load_selected_samples(self):
         """Load selected samples and add them to the viewer."""
+        if not self.project_directory or not hasattr(self, "_sample_select_widget"):
+            return
+
         # Disable the run button while processing
         self._load_samples_button.enabled = False
 
@@ -319,7 +327,8 @@ class SamplesLoadingWidget(Container):
             samples_stem_paths=[
                 str(Path(self.project_directory) / sample)
                 for sample in self._sample_select_widget.value
-            ]
+            ],
+            project_directory=self.project_directory,
         )
         self.worker.moveToThread(self.worker_thread)
 
