@@ -76,6 +76,16 @@ class SampleAnalyzer:
             self.cells_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
+        # Sort contours by centroid (YPIX, XPIX) ascending so cell ID 0
+        # starts at the image top-left, consistent with ring ordering.
+        def _centroid_key(contour):
+            M = cv2.moments(contour)
+            if M["m00"] != 0:
+                return (int(M["m01"] / M["m00"]), int(M["m10"] / M["m00"]))
+            return (float("inf"), float("inf"))
+
+        self.lumen_contours = sorted(self.lumen_contours, key=_centroid_key)
+
         # Find cell wall contours using distance transform
         _, comps = cv2.distanceTransformWithLabels(
             cv2.bitwise_not(self.cells_array),
@@ -1501,14 +1511,26 @@ class SampleAnalyzer:
             df["YEAR"]
             .astype("Int64")
         )
-        # cells outside all ring polygons (outermost incomplete band) ---
+        # Cells outside all ring polygons (incomplete bands at top / bottom).
         # Those cells have bot_ring_id = NaN -> YEAR becomes NA.
-        # Assign them to last_year + 1 (outermost incomplete ring year).
+        # Distinguish top vs bottom by comparing YPIX to the mean
+        # y-coordinate of the first and last ring boundaries.
         missing_year = df["YEAR"].isna()
         if missing_year.any():
-            last_year = pd.to_numeric(self.rings_table.get("YEAR"), errors="coerce").max()
-            if pd.notna(last_year):
-                df.loc[missing_year, "YEAR"] = int(last_year) + 1
+            years = pd.to_numeric(self.rings_table.get("YEAR"), errors="coerce")
+            first_year = years.min()
+            last_year = years.max()
+
+            if pd.notna(first_year) and pd.notna(last_year):
+                top_boundary_y = np.mean([pt[0] for pt in self.rings_table["RBXY"].iloc[0]])
+                bot_boundary_y = np.mean([pt[0] for pt in self.rings_table["RBXY"].iloc[-1]])
+                mid_y = (top_boundary_y + bot_boundary_y) / 2
+
+                ypix = pd.to_numeric(df.loc[missing_year, "YPIX"], errors="coerce")
+                is_top = ypix <= mid_y
+
+                df.loc[missing_year & is_top.reindex(df.index, fill_value=False), "YEAR"] = int(first_year)
+                df.loc[missing_year & (~is_top).reindex(df.index, fill_value=False), "YEAR"] = int(last_year) + 1
                 df["YEAR"] = df["YEAR"].astype("Int64")
 
 
