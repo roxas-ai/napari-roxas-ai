@@ -224,10 +224,12 @@ class TestReaderModule:
             mock_open.return_value = mock_img
             mock_img.format = "TIFF"
 
-            # Mock the np.array conversion
+            # Mock the np.array conversion and colormap creation
             with patch(
                 "numpy.array",
                 return_value=np.zeros((100, 100), dtype=np.uint8),
+            ), patch(
+                "napari_roxas_ai._reader._reader.make_binary_labels_colormap"
             ):
                 # Mock metadata
                 mock_get_metadata.return_value = {

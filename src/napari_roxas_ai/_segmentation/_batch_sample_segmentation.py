@@ -155,6 +155,9 @@ class Worker(QObject):
                 fix_sample_stem_paths_in_project(self.input_directory_path)
 
     def run(self):
+        # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
+        torch.set_num_threads(1)
+
         factor = int(self.segment_cells) + int(self.segment_rings)
         total = len(self.scan_file_paths) * factor
         i = 0

@@ -607,9 +607,9 @@ class RingsLayerEditorWidget(Container):
             name="Rings Years",
             size=1,
             opacity=1.0,
-            edge_width=0,
+            border_width=0,
             face_color=[0, 0, 0, 0],
-            edge_color=[0, 0, 0, 0],
+            border_color=[0, 0, 0, 0],
             scale=self.input_layer.scale,
             features={"YEAR": years},
             text={
@@ -1011,9 +1011,9 @@ class RingsLayerEditorWidget(Container):
             name="Rings Years",
             size=1,
             opacity=1.0,
-            edge_width=0,
+            border_width=0,
             face_color=[0, 0, 0, 0],
-            edge_color=[0, 0, 0, 0],
+            border_color=[0, 0, 0, 0],
             scale=self.input_layer.scale,
             features={"YEAR": year_strings},
             text={
