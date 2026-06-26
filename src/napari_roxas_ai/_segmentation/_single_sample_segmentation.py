@@ -223,6 +223,9 @@ class Worker(QObject):
         self.base_name = base_name
 
     def run(self):
+        # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
+        torch.set_num_threads(1)
+
         results = {}
 
         # Process cells if requested

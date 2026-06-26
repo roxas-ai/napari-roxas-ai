@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import napari.layers
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import QSizePolicy
+from qtpy.QtWidgets import QSizePolicy
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -13,7 +13,7 @@ from magicgui.widgets import (
     RangeSlider,
     Slider,
 )
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import MultipleLocator
 from napari.utils.notifications import show_info
