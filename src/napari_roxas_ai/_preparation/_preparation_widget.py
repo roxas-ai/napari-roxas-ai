@@ -99,7 +99,7 @@ class PreparationWidget(Container):
         # Project directory selector
         self.project_directory = self.settings_manager.get("project_directory")
         self._project_dialog_button = PushButton(
-            text=f"Project Directory: {self.project_directory}"
+            text=f"Project Directory: {self.project_directory or 'Not set'}"
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
 

@@ -233,19 +233,19 @@ def save_annotated_scan_image(
         if year is None:
             continue
 
-        # Compute a vertically centered label position between this ring and the next one.
-        # If next ring is missing, use the image height as the lower boundary.
+        # Place the year label in the band above this ring boundary
+        # (between the previous ring and this one).
         this_mid = mids_rc[i]
         if this_mid is None:
             continue
 
-        if i + 1 < len(mids_rc) and mids_rc[i + 1] is not None:
-            next_mid = mids_rc[i + 1]
-            center_r = 0.5 * (this_mid[0] + next_mid[0])
-            center_c = 0.5 * (this_mid[1] + next_mid[1])
+        if i - 1 >= 0 and mids_rc[i - 1] is not None:
+            prev_mid = mids_rc[i - 1]
+            center_r = 0.5 * (prev_mid[0] + this_mid[0])
+            center_c = 0.5 * (prev_mid[1] + this_mid[1])
         else:
-            # For the last ring, center between the boundary and the image bottom
-            center_r = 0.5 * (this_mid[0] + h)
+            # For the first ring, center between image top and this boundary
+            center_r = 0.5 * this_mid[0]
             center_c = this_mid[1]
 
         label = str(int(year))
