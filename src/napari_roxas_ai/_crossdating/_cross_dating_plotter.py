@@ -518,6 +518,8 @@ class CrossDatingPlotterWidget(Container):
         """
         layer = self._input_layer
         if layer is not None and hasattr(layer, "data") and "sample_scale" in layer.metadata:
+            if getattr(layer, "features", None) is None or layer.features.empty or "YEAR" not in layer.features.columns:
+                return 1.0
             # Re-calculating width_series here briefly to get its scale
             layer_df = layer.features.set_index("YEAR").copy()
             if "cells_above" in layer_df.columns:
