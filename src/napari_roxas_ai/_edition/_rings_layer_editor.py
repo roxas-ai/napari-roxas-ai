@@ -5,7 +5,6 @@ import cv2
 import napari.layers
 import numpy as np
 import pandas as pd
-import torch
 from magicgui.widgets import (
     ComboBox,
     Container,
@@ -16,7 +15,6 @@ from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
-from torch.package import PackageImporter
 
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
@@ -819,6 +817,13 @@ class RingsLayerEditorWidget(Container):
             f"Rerunning model from year {selected_year} "
             f"(boundary with {len(start_boundary)} vertices)"
         )
+
+        # Heavy ML imports are deferred to run time: importing torch at module
+        # level would drag the whole ML stack into every widget that imports
+        # this module (e.g. update_rings_geometries is used by the segmentation
+        # widgets), slowing widget opening. Import only when actually running.
+        import torch
+        from torch.package import PackageImporter
 
         # Set up rings model
         rings_model = PackageImporter(

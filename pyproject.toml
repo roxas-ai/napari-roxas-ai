@@ -35,15 +35,22 @@ dependencies = [
     "rasterio==1.4.3",
     "scikit-image>=0.24.0,<=0.25.2",
     "matplotlib>=3.9.4,<=3.10.1",
-    # Linux (CUDA 12.1)
+    # NOTE: the CPU vs CUDA build is selected at install time via the wheel
+    # source (the default PyPI wheels are CPU-only on Linux/Windows). For
+    # NVIDIA GPUs reinstall from the matching PyTorch index, e.g. Blackwell
+    # (RTX 50-series, sm_120) needs CUDA 12.8:
+    #   pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+    # The torch/torchvision version pairs below must stay compatible
+    # (e.g. torch 2.8 <-> torchvision 0.23).
+    # Linux
     "torch>=2.2.0,<2.9.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "torchvision>=0.17.0,<0.24.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
-    # Windows (CUDA 12.1)
+    # Windows
     "torch>=2.2.0,<2.9.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
-    "torchvision>=0.17.0,<0.22.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
-    # macOS/ARM (CPU-only fallback)
+    "torchvision>=0.17.0,<0.24.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    # macOS/ARM (CPU/MPS)
     "torch>=2.4.0,<2.9.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
-    "torchvision>=0.17.0,<0.22.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
+    "torchvision>=0.17.0,<0.24.0 ; sys_platform == 'darwin' or platform_machine == 'arm64'",
     "pytorch-lightning==2.6.0",
     "segmentation-models-pytorch==0.4.0",
     "albumentations==2.0.5",
