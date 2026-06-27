@@ -166,7 +166,11 @@ class SingleSampleMeasurementsWidget(Container):
 
         # Get the selected label layer
         if self._input_sample_combo.value is None:
-            raise ValueError("Input sample is not set.")
+            show_info("Input sample is not set.")
+            self._spinner_timer.stop()
+            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.enabled = True
+            return
 
         # Check if the layers exists
         self._cells_layer_name = (
@@ -174,18 +178,26 @@ class SingleSampleMeasurementsWidget(Container):
             + settings.get("file_extensions.cells_file_extension")[0]
         )
         if self._cells_layer_name not in self._viewer.layers:
-            raise ValueError(
+            show_info(
                 f"Layer {self._cells_layer_name} not found in the viewer. Please load the sample first or disable cells processing."
             )
+            self._spinner_timer.stop()
+            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.enabled = True
+            return
 
         self._rings_layer_name = (
             self._input_sample_combo.value
             + settings.get("file_extensions.rings_file_extension")[0]
         )
         if self._rings_layer_name not in self._viewer.layers:
-            raise ValueError(
+            show_info(
                 f"Layer {self._rings_layer_name} not found in the viewer. Please load the sample first or disable rings processing."
             )
+            self._spinner_timer.stop()
+            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.enabled = True
+            return
 
         if (
             self._measure_cells_checkbox.value
