@@ -59,18 +59,19 @@ To check if the plugin is working correctly:
 3. After the downloads, a sample made of three layers should open in the viewer
 
 ### GPU Support
-If you want to use GPU acceleration for model inference...
+Model inference runs on the CPU by default. CPU inference works everywhere but is slow on large images; enabling GPU acceleration is strongly recommended if you have a compatible GPU.
 
-**On Linux and Windows systems:**
-1. Ensure you have the proper GPU drivers and CUDA installed for your system:
-   - [NVIDIA CUDA Installation Guide Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)
-   - [NVIDIA CUDA Installation Guide Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)
+**On Linux and Windows systems (NVIDIA GPUs):**
+The default installation ships a CPU-only build of PyTorch. To enable your NVIDIA GPU, reinstall PyTorch from the CUDA wheel index:
 
-2. You may need to reinstall PyTorch with CUDA support for your specific hardware:
-   Visit the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) to find the appropriate installation command for your setup.
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
+
+This single command covers all recent NVIDIA GPUs (RTX 20-series and newer, including the RTX 50-series); the CUDA runtime is bundled with the wheels, so no separate CUDA toolkit installation is required. You only need an up-to-date NVIDIA driver ([Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/), [Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)). For older GPUs or drivers, pick the matching command from the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) instead.
 
 **On macOS:**
-1. CUDA is not available for macOS, however, PyTorch is supporting GPU acceleration for Apple Silicon devices (M1 and newer) via MPS. There is no need to install drivers or CUDA. Note that the MPS acceleration can currently only be leveraged for the cell segmentation model.
+CUDA is not available for macOS, however, PyTorch is supporting GPU acceleration for Apple Silicon devices (M1 and newer) via MPS. There is no need to install drivers or CUDA. Note that the MPS acceleration can currently only be leveraged for the cell segmentation model.
 
 Finally, enable GPU support in the napari-roxas-ai settings within the napari interface. Go to `Plugins > ROXAS AI > ZZ - Settings` and under `processing` change the variables `try_to_use_gpu` and `try_to_use_autocast` to `true`. You may need to restart the application for changes to take effect.
 

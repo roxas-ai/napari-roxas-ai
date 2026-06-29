@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
-import torch
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -15,17 +14,22 @@ from magicgui.widgets import (
 from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog, QMessageBox
-from torch.package import PackageImporter
 
+from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file, read_scan_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
-from ._cells_model import CellsSegmentationModel
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._segmentation_postprocess import remove_border_touching_components
+
+# NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
+# are intentionally imported lazily inside Worker.__init__ / Worker.run() instead of
+# at module level. They pull in the heavy ML stack (torch / pytorch-lightning /
+# segmentation-models-pytorch) which is the dominant import cost, so deferring it
+# keeps opening this widget fast; the cost is paid only when segmentation runs.
 
 if TYPE_CHECKING:
     import napari
@@ -54,6 +58,13 @@ class Worker(QObject):
         rings_model_weights_file: Optional[str] = None,
     ):
         super().__init__()
+
+        # Heavy ML imports are deferred to worker construction (see module note).
+        import torch
+        from torch.package import PackageImporter
+
+        from ._cells_model import CellsSegmentationModel
+
         self.input_directory_path = input_directory_path
         self.segment_cells = segment_cells
         self.segment_rings = segment_rings
@@ -155,6 +166,9 @@ class Worker(QObject):
                 fix_sample_stem_paths_in_project(self.input_directory_path)
 
     def run(self):
+        # Heavy ML imports are deferred to run time (see module note).
+        import torch
+
         # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
         torch.set_num_threads(1)
 
@@ -261,6 +275,11 @@ class BatchSampleSegmentationWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
+
+        # Ensure model weights are present before listing them below.
+        # (Moved out of import time; only downloads if the dirs are missing.)
+        check_assets_and_download(str(CELLS_MODELS_PATH), "cells_models.zip")
+        check_assets_and_download(str(RINGS_MODELS_PATH), "rings_models.zip")
 
         # Get input directory
         self.input_directory_path = settings.get("project_directory")

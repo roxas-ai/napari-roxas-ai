@@ -6,7 +6,6 @@ import napari.layers
 import numpy as np
 from scipy import ndimage as ndi
 import pandas as pd
-import torch
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -17,16 +16,21 @@ from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
-from torch.package import PackageImporter
 
+from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
-from ._cells_model import CellsSegmentationModel
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._segmentation_postprocess import remove_border_touching_components
+
+# NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
+# are intentionally imported lazily inside Worker.run() instead of at module level.
+# They pull in the heavy ML stack (torch / pytorch-lightning /
+# segmentation-models-pytorch) which is the dominant import cost, so deferring it
+# keeps opening this widget fast; the cost is paid only when segmentation runs.
 
 if TYPE_CHECKING:
     import napari
@@ -223,6 +227,12 @@ class Worker(QObject):
         self.base_name = base_name
 
     def run(self):
+        # Heavy ML imports are deferred to run time (see module-level note).
+        import torch
+        from torch.package import PackageImporter
+
+        from ._cells_model import CellsSegmentationModel
+
         # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
         torch.set_num_threads(1)
 
@@ -341,6 +351,11 @@ class SingleSampleSegmentationWidget(Container):
         super().__init__()
         self._viewer = viewer
         self.settings = SettingsManager()
+
+        # Ensure model weights are present before listing them below.
+        # (Moved out of import time; only downloads if the dirs are missing.)
+        check_assets_and_download(str(CELLS_MODELS_PATH), "cells_models.zip")
+        check_assets_and_download(str(RINGS_MODELS_PATH), "rings_models.zip")
 
         # Create a layer selection widget filtered by scan extension
         self._input_layer_combo = ComboBox(
