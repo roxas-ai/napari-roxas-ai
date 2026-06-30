@@ -292,9 +292,6 @@ class RingsLayerEditorWidget(Container):
             step=1,
         )
 
-        self._refresh_button = PushButton(text="Refresh widget", visible=True)
-        self._refresh_button.changed.connect(self._refresh_widget)
-
         self._last_year_update_button = PushButton(
             text="Update Year",
             visible=True,
@@ -367,27 +364,18 @@ class RingsLayerEditorWidget(Container):
                 self._rerun_model_container,
                 self._last_year_spinbox,
                 self._last_year_update_button,
-                self._refresh_button,
             ]
         )
 
+        self._viewer.layers.events.inserted.connect(self._on_layer_change)
+        self._viewer.layers.events.removed.connect(self._on_layer_change)
+
         self._connect_layer_callback()
 
-        # Update choices when layers change
-    def _deferred_remove_layer(self, name: str) -> None:
-        def _rm():
-            if name in self._viewer.layers:
-                self._viewer.layers.remove(name)
-
-        QTimer.singleShot(0, _rm)
-
-    def _refresh_widget(self, event=None) -> None:
-        """Refresh widget state by re-reading layers/metadata and re-binding callbacks."""
+    def _on_layer_change(self, event=None):
+        """Called when layers are added/removed in the viewer."""
         if self._is_editing:
             return
-
-        for name in ("Rings Years", "Rings Modification"):
-            self._deferred_remove_layer(name)
 
         if not self._get_valid_layers():
             self._disconnect_layer_callback()
@@ -395,9 +383,13 @@ class RingsLayerEditorWidget(Container):
             return
 
         self._connect_layer_callback()
-        self._update_year_spinbox()
 
-        show_info("Refreshed rings editor")
+    def _deferred_remove_layer(self, name: str) -> None:
+        def _rm():
+            if name in self._viewer.layers:
+                self._viewer.layers.remove(name)
+
+        QTimer.singleShot(0, _rm)
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the rings file extension."""
