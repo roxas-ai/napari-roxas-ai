@@ -265,18 +265,16 @@ class BatchSampleMeasurementsWidget(Container):
         # self._measure_cells_checkbox.visible = False
 
         # Create input fields for the config parameters
-        self._cluster_separation_threshold = FloatSpinBox(
-            value=settings.get(
-                "measurements.cells_cluster_separation_threshold"
-            ),
-            label="Cluster Separation Threshold (µm)",
+        self._cluster_dbl_cwt_threshold = FloatSpinBox(
+            value=settings.get("measurements.cluster_dbl_cwt_threshold"),
+            label="Cluster DBL CWT Threshold (µm)",
         )
         self._smoothing_kernel_size = SpinBox(
             value=settings.get("measurements.cells_smoothing_kernel_size"),
             label="Smoothing Kernel Size (1 to disable)",
         )
-        self._integration_interval = FloatSpinBox(
-            value=settings.get("measurements.cells_integration_interval"),
+        self._relwidth_cwt_integration = FloatSpinBox(
+            value=settings.get("measurements.relwidth_cwt_integration"),
             label="Wall Fraction for Thickness Measurement",
         )
 
@@ -284,9 +282,9 @@ class BatchSampleMeasurementsWidget(Container):
         self._cells_measurements_settings = Container()
         self._cells_measurements_settings.extend(
             [
-                self._cluster_separation_threshold,
+                self._cluster_dbl_cwt_threshold,
                 self._smoothing_kernel_size,
-                self._integration_interval,
+                self._relwidth_cwt_integration,
             ]
         )
 
@@ -362,11 +360,23 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Get other parameters
         config = {
-            "cluster_separation_threshold": self._cluster_separation_threshold.value,
+            "cluster_dbl_cwt_threshold": self._cluster_dbl_cwt_threshold.value,
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "integration_interval": self._integration_interval.value,
+            "relwidth_cwt_integration": self._relwidth_cwt_integration.value,
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
+            ),
+            "lower_limit_cwt_iqr_multiplier": settings.get(
+                "measurements.lower_limit_cwt_iqr_multiplier"
+            ),
+            "upper_limit_cwt_iqr_multiplier": settings.get(
+                "measurements.upper_limit_cwt_iqr_multiplier"
+            ),
+            "opposite_cwt_ratio_limit": settings.get(
+                "measurements.opposite_cwt_ratio_limit"
+            ),
+            "adjacent_cwt_ratio_limit": settings.get(
+                "measurements.adjacent_cwt_ratio_limit"
             ),
         }
 

@@ -323,10 +323,14 @@ class SettingsManager:
                 "cells_color": "lime",
             },
             "measurements": {
-                "cells_cluster_separation_threshold": 3.0,  # Default cluster separation threshold in µm
+                "cluster_dbl_cwt_threshold": 3.0,  # Default cluster DBL/CWT threshold in µm
                 "cells_smoothing_kernel_size": 5,  # Default smoothing kernel size (1 to disable)
-                "cells_integration_interval": 0.75,  # Default wall fraction for thickness measurement
+                "relwidth_cwt_integration": 0.75,  # Default wall fraction for thickness measurement
                 "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
+                "lower_limit_cwt_iqr_multiplier": 1.5,  # IQR multiplier for the lower CWT outlier fence
+                "upper_limit_cwt_iqr_multiplier": 3.0,  # IQR multiplier for the upper CWT outlier fence
+                "opposite_cwt_ratio_limit": 1.5,  # Max CWT ratio between opposite cell sides
+                "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
             },
             "project_directory": None,  # Current project directory
         }
