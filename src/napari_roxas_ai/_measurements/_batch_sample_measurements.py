@@ -151,7 +151,7 @@ class Worker(QObject):
                 )
 
                 self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
-                    "sample_scale"
+                    "spatial_resolution"
                 ]
                 self.config["sample_type"] = (
                         (cells_add_kwargs.get("metadata") or {}).get("sample_type")
@@ -197,7 +197,7 @@ class Worker(QObject):
                     cells_file_path
                 )
                 self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
-                    "sample_scale"
+                    "spatial_resolution"
                 ]
                 self.config["sample_type"] = (
                         (cells_add_kwargs.get("metadata") or {}).get("sample_type")
@@ -232,7 +232,7 @@ class Worker(QObject):
                     rings_file_path
                 )
                 self.config["pixels_per_um"] = rings_add_kwargs["metadata"][
-                    "sample_scale"
+                    "spatial_resolution"
                 ]
                 self.config["sample_type"] = (
                         (rings_add_kwargs.get("metadata") or {}).get("sample_type")

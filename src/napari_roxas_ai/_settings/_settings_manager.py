@@ -205,8 +205,8 @@ class SettingsManager:
                         "required": True,
                     },
                     {
-                        "id": "sample_scale",
-                        "label": "Scale (px/µm)",
+                        "id": "spatial_resolution",
+                        "label": "Spatial Resolution (px/µm)",
                         "widget_type": "QDoubleSpinBox",
                         "default": 2.2675,
                         "min": 0.001,

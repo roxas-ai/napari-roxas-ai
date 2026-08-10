@@ -29,10 +29,10 @@ if TYPE_CHECKING:
 # Get file extensions from settings
 settings = SettingsManager()
 
-# Metadata keys describing the run that produced the output, rather than one
-# specific content type. They are accepted alongside every content prefix, so
-# that they reach the shared metadata file no matter which layer is written.
-RUN_METADATA_PREFIXES = ("meas_", "sw_")
+from napari_roxas_ai._utils._metadata_keys import (
+    RUN_METADATA_PREFIXES,
+    SAMPLE_METADATA_PREFIXES,
+)
 
 
 def update_metadata_file(
@@ -65,7 +65,8 @@ def update_metadata_file(
     else:
         existing_metadata = {
             k: v for k, v in (metadata or {}).items()
-            if isinstance(k, str) and k.startswith("sample_")
+            if isinstance(k, str)
+            and k.startswith(SAMPLE_METADATA_PREFIXES)
         }
 
     src_meta = metadata or {}

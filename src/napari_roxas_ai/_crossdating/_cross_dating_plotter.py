@@ -517,7 +517,7 @@ class CrossDatingPlotterWidget(Container):
         We use the average series as the reference for this calculation.
         """
         layer = self._input_layer
-        if layer is not None and hasattr(layer, "data") and "sample_scale" in layer.metadata:
+        if layer is not None and hasattr(layer, "data") and "spatial_resolution" in layer.metadata:
             if getattr(layer, "features", None) is None or layer.features.empty or "YEAR" not in layer.features.columns:
                 return 1.0
             # Re-calculating width_series here briefly to get its scale
@@ -536,7 +536,7 @@ class CrossDatingPlotterWidget(Container):
                 layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
                 width_series = layer_df["cells_above"] / (
                         layer.data.shape[1]
-                        * layer.metadata["sample_scale"]
+                        * layer.metadata["spatial_resolution"]
                 )
 
                 # 1. Scaling based on average series
@@ -677,12 +677,12 @@ class CrossDatingPlotterWidget(Container):
 
         # Create ring width series
         # Ensure data and metadata are present
-        if not hasattr(layer, "data") or "sample_scale" not in layer.metadata:
+        if not hasattr(layer, "data") or "spatial_resolution" not in layer.metadata:
             return
 
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
-                * layer.metadata["sample_scale"]
+                * layer.metadata["spatial_resolution"]
         )
 
         # Clear plot_df and rebuild it to ensure no stale data

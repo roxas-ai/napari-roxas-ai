@@ -356,7 +356,7 @@ class TestMetadataDialog:
                 "sample_name": "test_sample",
                 "sample_type": "conifer",
                 "sample_geometry": "linear",
-                "sample_scale": 2.5,
+                "spatial_resolution": 2.5,
                 "sample_angle": 45.0,
                 "rings_outmost_complete_year": 2020,
             }, True

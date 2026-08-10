@@ -210,7 +210,7 @@ class SingleSampleMeasurementsWidget(Container):
             self._rings_input_layer = self._viewer.layers[
                 self._rings_layer_name
             ]
-            scale = self._cells_input_layer.metadata["sample_scale"]
+            scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = self._rings_input_layer.features
             cells_table = self._cells_input_layer.features
@@ -223,7 +223,7 @@ class SingleSampleMeasurementsWidget(Container):
             self._cells_input_layer = self._viewer.layers[
                 self._cells_layer_name
             ]
-            scale = self._cells_input_layer.metadata["sample_scale"]
+            scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = pd.DataFrame()
             cells_table = pd.DataFrame()
@@ -236,7 +236,7 @@ class SingleSampleMeasurementsWidget(Container):
             self._rings_input_layer = self._viewer.layers[
                 self._rings_layer_name
             ]
-            scale = self._rings_input_layer.metadata["sample_scale"]
+            scale = self._rings_input_layer.metadata["spatial_resolution"]
             cells_array = np.zeros_like(self._rings_input_layer.data)
             rings_table = self._rings_input_layer.features
             cells_table = pd.DataFrame()
