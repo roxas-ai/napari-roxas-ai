@@ -17,7 +17,13 @@ SAMPLE_METADATA_PREFIXES = (
     "sample_",
     "spatial_resolution",
     "meas_geometry",
+    "reference_series",
 )
+
+# The stored reference series value meaning "none selected". Treated as absent
+# when restoring, so that a sample saved without a reference can still be
+# detected by name pattern matching later on.
+NO_REFERENCE_SERIES = "NA"
 
 # Measurement parameters recorded alongside the results so that a run can be
 # reproduced. All of them describe cell wall thickness processing and are
