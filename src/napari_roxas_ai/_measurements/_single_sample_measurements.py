@@ -14,6 +14,7 @@ from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
 from napari_roxas_ai._settings import SettingsManager
 from ._sample_measurer import SampleAnalyzer
+from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import get_software_version
 from napari_roxas_ai._writer import write_single_layer
 
@@ -259,7 +260,9 @@ class SingleSampleMeasurementsWidget(Container):
                 self._cluster_dbl_cwt_threshold.value, 6
             ),
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "relwidth_cwt_integration": self._relwidth_cwt_integration.value,
+            "relwidth_cwt_integration": round(
+                self._relwidth_cwt_integration.value, 6
+            ),
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
@@ -332,10 +335,9 @@ class SingleSampleMeasurementsWidget(Container):
                 meas_created_at
             )
             self._cells_input_layer.metadata["sw_version"] = sw_version
-            # Cells-only parameter, recorded so the run can be reproduced
-            self._cells_input_layer.metadata[
-                "cluster_dbl_cwt_threshold"
-            ] = self._run_config["cluster_dbl_cwt_threshold"]
+            # Cells-only parameters, recorded so the run can be reproduced
+            for key in MEASUREMENT_PARAMETER_KEYS:
+                self._cells_input_layer.metadata[key] = self._run_config[key]
 
             cells_path = self._cells_input_layer.metadata.get("file_path")
 

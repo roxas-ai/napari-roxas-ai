@@ -19,6 +19,20 @@ SAMPLE_METADATA_PREFIXES = (
     "meas_geometry",
 )
 
+# Measurement parameters recorded alongside the results so that a run can be
+# reproduced. All of them describe cell wall thickness processing and are
+# therefore written with the cells output only. The keys are also the config
+# keys passed to SampleAnalyzer, which is what lets the widgets copy them
+# straight from the config of the run.
+MEASUREMENT_PARAMETER_KEYS = (
+    "cluster_dbl_cwt_threshold",
+    "relwidth_cwt_integration",
+    "lower_limit_cwt_iqr_multiplier",
+    "upper_limit_cwt_iqr_multiplier",
+    "opposite_cwt_ratio_limit",
+    "adjacent_cwt_ratio_limit",
+)
+
 # Keys describing the run that produced the output rather than one content type.
 # Listed explicitly rather than as a broad "meas_" prefix, because the meas_
 # namespace also holds sample properties such as meas_geometry, which must not
@@ -26,5 +40,5 @@ SAMPLE_METADATA_PREFIXES = (
 RUN_METADATA_PREFIXES = (
     "meas_created_at",
     "sw_",
-    "cluster_dbl_cwt_threshold",
+    *MEASUREMENT_PARAMETER_KEYS,
 )

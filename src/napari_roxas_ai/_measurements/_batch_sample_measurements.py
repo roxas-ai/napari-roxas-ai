@@ -21,6 +21,7 @@ from napari_roxas_ai._reader import read_cells_file, read_rings_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
+from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import get_software_version
 from ._sample_measurer import SampleAnalyzer
 
@@ -174,10 +175,9 @@ class Worker(QObject):
                 for add_kwargs in (cells_add_kwargs, rings_add_kwargs):
                     add_kwargs["metadata"]["meas_created_at"] = meas_created_at
                     add_kwargs["metadata"]["sw_version"] = sw_version
-                # Cells-only parameter, recorded so the run can be reproduced
-                cells_add_kwargs["metadata"][
-                    "cluster_dbl_cwt_threshold"
-                ] = self.config["cluster_dbl_cwt_threshold"]
+                # Cells-only parameters, recorded so the run can be reproduced
+                for key in MEASUREMENT_PARAMETER_KEYS:
+                    cells_add_kwargs["metadata"][key] = self.config[key]
 
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
@@ -219,10 +219,9 @@ class Worker(QObject):
                     "meas_created_at"
                 ] = datetime.now().isoformat()
                 cells_add_kwargs["metadata"]["sw_version"] = sw_version
-                # Cells-only parameter, recorded so the run can be reproduced
-                cells_add_kwargs["metadata"][
-                    "cluster_dbl_cwt_threshold"
-                ] = self.config["cluster_dbl_cwt_threshold"]
+                # Cells-only parameters, recorded so the run can be reproduced
+                for key in MEASUREMENT_PARAMETER_KEYS:
+                    cells_add_kwargs["metadata"][key] = self.config[key]
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=cells_file_path,
@@ -395,7 +394,9 @@ class BatchSampleMeasurementsWidget(Container):
                 self._cluster_dbl_cwt_threshold.value, 6
             ),
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "relwidth_cwt_integration": self._relwidth_cwt_integration.value,
+            "relwidth_cwt_integration": round(
+                self._relwidth_cwt_integration.value, 6
+            ),
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
