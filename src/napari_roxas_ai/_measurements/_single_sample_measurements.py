@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any, Dict
+from datetime import datetime
 from pathlib import Path
 from qtpy.QtCore import QTimer
 from magicgui.widgets import (
@@ -13,6 +14,7 @@ from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
 from napari_roxas_ai._settings import SettingsManager
 from ._sample_measurer import SampleAnalyzer
+from .._utils._version_utils import get_software_version
 from napari_roxas_ai._writer import write_single_layer
 
 
@@ -306,12 +308,21 @@ class SingleSampleMeasurementsWidget(Container):
         project_dir = Path(settings.get("project_directory"))
         project_dir.mkdir(parents=True, exist_ok=True)
 
+        # One timestamp per measurement run, so that cells and rings written by
+        # the same run carry the identical value.
+        meas_created_at = datetime.now().isoformat()
+        sw_version = get_software_version()
+
         # ---------------------------
         # Export Cells
         # ---------------------------
         if not cells_table.empty:
             print("[Cells] Updating layer features...")
             self._cells_input_layer.features = cells_table
+            self._cells_input_layer.metadata["meas_created_at"] = (
+                meas_created_at
+            )
+            self._cells_input_layer.metadata["sw_version"] = sw_version
 
             cells_path = self._cells_input_layer.metadata.get("file_path")
 
@@ -341,6 +352,10 @@ class SingleSampleMeasurementsWidget(Container):
         if not rings_table.empty:
             print("[Rings] Updating layer features...")
             self._rings_input_layer.features = rings_table
+            self._rings_input_layer.metadata["meas_created_at"] = (
+                meas_created_at
+            )
+            self._rings_input_layer.metadata["sw_version"] = sw_version
 
             rings_path = self._rings_input_layer.metadata.get("file_path")
 

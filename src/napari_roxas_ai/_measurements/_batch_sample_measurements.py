@@ -1,4 +1,5 @@
 import glob
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict
 
@@ -20,6 +21,7 @@ from napari_roxas_ai._reader import read_cells_file, read_rings_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
+from .._utils._version_utils import get_software_version
 from ._sample_measurer import SampleAnalyzer
 
 if TYPE_CHECKING:
@@ -130,6 +132,9 @@ class Worker(QObject):
         )
         i = 0
 
+        # Constant for the whole batch run
+        sw_version = get_software_version()
+
         if self.measurement == "both":
             for cells_file_path, rings_file_path in zip(
                 self.cells_file_paths, self.rings_file_paths
@@ -163,6 +168,13 @@ class Worker(QObject):
 
                 cells_add_kwargs["features"] = cells_table
                 rings_add_kwargs["features"] = rings_table
+
+                # One timestamp per sample, shared by its cells and rings output
+                meas_created_at = datetime.now().isoformat()
+                for add_kwargs in (cells_add_kwargs, rings_add_kwargs):
+                    add_kwargs["metadata"]["meas_created_at"] = meas_created_at
+                    add_kwargs["metadata"]["sw_version"] = sw_version
+
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=cells_file_path,
@@ -199,6 +211,10 @@ class Worker(QObject):
                 cells_table = analyzer.analyze_cells()
 
                 cells_add_kwargs["features"] = cells_table
+                cells_add_kwargs["metadata"][
+                    "meas_created_at"
+                ] = datetime.now().isoformat()
+                cells_add_kwargs["metadata"]["sw_version"] = sw_version
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=cells_file_path,
@@ -230,6 +246,10 @@ class Worker(QObject):
                 rings_table = analyzer.analyze_rings()
 
                 rings_add_kwargs["features"] = rings_table
+                rings_add_kwargs["metadata"][
+                    "meas_created_at"
+                ] = datetime.now().isoformat()
+                rings_add_kwargs["metadata"]["sw_version"] = sw_version
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=rings_file_path,

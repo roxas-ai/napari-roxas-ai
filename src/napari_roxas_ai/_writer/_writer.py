@@ -29,8 +29,15 @@ if TYPE_CHECKING:
 # Get file extensions from settings
 settings = SettingsManager()
 
+# Metadata keys describing the run that produced the output, rather than one
+# specific content type. They are accepted alongside every content prefix, so
+# that they reach the shared metadata file no matter which layer is written.
+RUN_METADATA_PREFIXES = ("meas_", "sw_")
 
-def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
+
+def update_metadata_file(
+    path: str, metadata: dict, keys_prefix: Union[str, tuple[str, ...]]
+) -> str:
     """
     Update the metadata file with new metadata.
     If the metadata file does not exist, it will be created.
@@ -41,8 +48,10 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
         The path to the metadata file.
     metadata : dict
         The metadata to be added to the file.
-    keys_prefix : str
-        The prefix of the keys to be included in the metadata file.
+    keys_prefix : str or tuple of str
+        The prefix(es) of the keys to be included in the metadata file. Keys
+        that match none of them are dropped, so any new metadata key must be
+        covered by a prefix passed here to end up in the file.
     Returns
     -------
     str
@@ -569,7 +578,9 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
         settings.get("file_extensions.metadata_file_extension")
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
-    update_metadata_file(metadata_file_path, meta["metadata"], "cells_")
+    update_metadata_file(
+        metadata_file_path, meta["metadata"], ("cells_", *RUN_METADATA_PREFIXES)
+    )
     written_file_paths.append(metadata_file_path)
 
     # Save the tabular data
@@ -639,7 +650,9 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
         settings.get("file_extensions.metadata_file_extension")
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
-    update_metadata_file(metadata_file_path, meta["metadata"], "rings_")
+    update_metadata_file(
+        metadata_file_path, meta["metadata"], ("rings_", *RUN_METADATA_PREFIXES)
+    )
     written_file_paths.append(metadata_file_path)
 
     # Save the tabular data
