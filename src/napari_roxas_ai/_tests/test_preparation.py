@@ -355,7 +355,7 @@ class TestMetadataDialog:
             return {
                 "sample_name": "test_sample",
                 "sample_type": "conifer",
-                "sample_geometry": "linear",
+                "meas_geometry": "linear",
                 "spatial_resolution": 2.5,
                 "sample_angle": 45.0,
                 "rings_outmost_complete_year": 2020,

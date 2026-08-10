@@ -197,7 +197,7 @@ class SettingsManager:
                         "required": True,
                     },
                     {
-                        "id": "sample_geometry",
+                        "id": "meas_geometry",
                         "label": "Geometry",
                         "widget_type": "QComboBox",
                         "items": ["linear", "circular"],
