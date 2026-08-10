@@ -174,6 +174,10 @@ class Worker(QObject):
                 for add_kwargs in (cells_add_kwargs, rings_add_kwargs):
                     add_kwargs["metadata"]["meas_created_at"] = meas_created_at
                     add_kwargs["metadata"]["sw_version"] = sw_version
+                # Cells-only parameter, recorded so the run can be reproduced
+                cells_add_kwargs["metadata"][
+                    "cluster_dbl_cwt_threshold"
+                ] = self.config["cluster_dbl_cwt_threshold"]
 
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
@@ -215,6 +219,10 @@ class Worker(QObject):
                     "meas_created_at"
                 ] = datetime.now().isoformat()
                 cells_add_kwargs["metadata"]["sw_version"] = sw_version
+                # Cells-only parameter, recorded so the run can be reproduced
+                cells_add_kwargs["metadata"][
+                    "cluster_dbl_cwt_threshold"
+                ] = self.config["cluster_dbl_cwt_threshold"]
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=cells_file_path,
@@ -380,7 +388,12 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Get other parameters
         config = {
-            "cluster_dbl_cwt_threshold": self._cluster_dbl_cwt_threshold.value,
+            # Rounded to drop the float noise that spin box stepping produces
+            # (e.g. 3.5000000000000004), since this value is also recorded in
+            # the sample metadata.
+            "cluster_dbl_cwt_threshold": round(
+                self._cluster_dbl_cwt_threshold.value, 6
+            ),
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
             "relwidth_cwt_integration": self._relwidth_cwt_integration.value,
             "tangential_angle": settings.get(

@@ -23,4 +23,8 @@ SAMPLE_METADATA_PREFIXES = (
 # Listed explicitly rather than as a broad "meas_" prefix, because the meas_
 # namespace also holds sample properties such as meas_geometry, which must not
 # be rewritten by a content save.
-RUN_METADATA_PREFIXES = ("meas_created_at", "sw_")
+RUN_METADATA_PREFIXES = (
+    "meas_created_at",
+    "sw_",
+    "cluster_dbl_cwt_threshold",
+)

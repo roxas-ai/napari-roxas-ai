@@ -252,7 +252,12 @@ class SingleSampleMeasurementsWidget(Container):
 
         config = {
             "pixels_per_um": scale,
-            "cluster_dbl_cwt_threshold": self._cluster_dbl_cwt_threshold.value,
+            # Rounded to drop the float noise that spin box stepping produces
+            # (e.g. 3.5000000000000004), since this value is also recorded in
+            # the sample metadata.
+            "cluster_dbl_cwt_threshold": round(
+                self._cluster_dbl_cwt_threshold.value, 6
+            ),
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
             "relwidth_cwt_integration": self._relwidth_cwt_integration.value,
             "tangential_angle": settings.get(
@@ -272,6 +277,10 @@ class SingleSampleMeasurementsWidget(Container):
             ),
             "sample_type": sample_type,
         }
+
+        # Keep the config of this run so that _add_result_layers records the
+        # values actually used, even if a widget is changed while it runs.
+        self._run_config = config
 
         # Run the analysis in a separate thread
 
@@ -323,6 +332,10 @@ class SingleSampleMeasurementsWidget(Container):
                 meas_created_at
             )
             self._cells_input_layer.metadata["sw_version"] = sw_version
+            # Cells-only parameter, recorded so the run can be reproduced
+            self._cells_input_layer.metadata[
+                "cluster_dbl_cwt_threshold"
+            ] = self._run_config["cluster_dbl_cwt_threshold"]
 
             cells_path = self._cells_input_layer.metadata.get("file_path")
 
