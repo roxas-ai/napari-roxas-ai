@@ -566,11 +566,16 @@ class Worker(QObject):
         """
         try:
             with Image.open(image_path) as img:
-                # Store scan image information for metadata
+                # Store scan image information for metadata.
+                # img_size is the size of the image file on disk, formatted with
+                # its unit (MB = 10^6 bytes). Preparation renames/copies the
+                # scan without re-encoding it, so this holds for the resulting
+                # scan file too.
                 img_metadata = {
                     "scan_format": img.format,
                     "scan_size": [img.width, img.height],
                     "scan_mode": img.mode,
+                    "img_size": f"{Path(image_path).stat().st_size / 1_000_000:.2f} MB",
                 }
 
                 # Extract and preserve EXIF data if available
