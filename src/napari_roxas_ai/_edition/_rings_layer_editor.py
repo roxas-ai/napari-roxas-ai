@@ -276,18 +276,14 @@ class RingsLayerEditorWidget(Container):
         self._layer_callback = None
         self._is_editing = False
 
-        # Create spinbox for the last year
-        year_value = (
-            self._input_layer.metadata[
-                "rings_outmost_complete_year"
-            ]
-            if self._input_layer
-            else 9999
-        )
+        year_value = 9999
+        if self._input_layer and "rings_outmost_complete_year" in self._input_layer.metadata:
+            year_value = self._input_layer.metadata["rings_outmost_complete_year"]
+
         self._last_year_spinbox = SpinBox(
-            value=year_value,
+            value=max(-99999, min(9999, int(year_value))),
             label="Last Complete Ring Year",
-            min=-999999,
+            min=-99999,
             max=9999,
             step=1,
         )
@@ -323,11 +319,12 @@ class RingsLayerEditorWidget(Container):
         )
 
         # Create a horizontal container for the "Rerun Model" button and year selector
+        # min value by 1000 smaller than the allowed user input of -99999 to allow for maximum 1000 rings in the analyzed image
         self._rerun_model_year_spinbox = SpinBox(
             value=9999,
             label="Year",
-            min=-10000,
-            max=10000,
+            min=-100999,
+            max=9999,
             step=1,
         )
 
@@ -494,7 +491,12 @@ class RingsLayerEditorWidget(Container):
         if "YEAR" in df.columns:
             df = df.sort_values("YEAR").reset_index(drop=True)
             # set value here to run model from the first year in the table by default
-            self._rerun_model_year_spinbox.value = df["YEAR"].iloc[0]
+            first_year = df["YEAR"].iloc[0]
+            # Ensure the value is within spinbox bounds to avoid ValueError
+            self._rerun_model_year_spinbox.value = max(
+                self._rerun_model_year_spinbox.min,
+                min(self._rerun_model_year_spinbox.max, first_year),
+            )
         elif "cells_above" in df.columns:
             df = df.sort_values("cells_above").reset_index(drop=True)
 
@@ -714,13 +716,18 @@ class RingsLayerEditorWidget(Container):
         if self._input_layer:
             layer = self._input_layer
             if "rings_outmost_complete_year" in layer.metadata:
-                self._last_year_spinbox.value = layer.metadata[
-                    "rings_outmost_complete_year"
-                ]
+                year = layer.metadata["rings_outmost_complete_year"]
+                self._last_year_spinbox.value = max(
+                    self._last_year_spinbox.min,
+                    min(self._last_year_spinbox.max, int(year)),
+                )
             # Update the rerun model year spinbox with the first year in the table
             if hasattr(layer, "features") and "YEAR" in layer.features.columns:
                 first_year = layer.features["YEAR"].min()
-                self._rerun_model_year_spinbox.value = int(first_year)
+                self._rerun_model_year_spinbox.value = max(
+                    self._rerun_model_year_spinbox.min,
+                    min(self._rerun_model_year_spinbox.max, int(first_year)),
+                )
 
     def _rerun_model_from_year(self) -> None:
         """Rerun the ring detection model starting from the selected year."""
