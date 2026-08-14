@@ -128,6 +128,13 @@ class Worker(QObject):
 
         # Setup for rings segmentation
         if self.segment_rings:
+
+            # Monkeypatch np.Inf for NumPy 2.0 compatibility
+            # (The rings model package uses np.Inf which was removed in NumPy 2.0)
+            import numpy as np
+            if not hasattr(np, "Inf"):
+                np.Inf = np.inf
+
             # Set up rings model
             self.rings_model = PackageImporter(
                 self.rings_model_weights_file
@@ -145,15 +152,15 @@ class Worker(QObject):
             )
             self.rings_model.to(device=self.rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
-            self.rings_model.device = self.rings_model.available_device
+            self.rings_model.device = torch.device(self.rings_model.available_device)
             self.rings_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.rings_model.device
+                    self.rings_model.device.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.rings_model.device == "cuda"
-                    or self.rings_model.device == "mps"
+                    self.rings_model.device.type == "cuda"
+                    or self.rings_model.device.type == "mps"
                 )
             )
 

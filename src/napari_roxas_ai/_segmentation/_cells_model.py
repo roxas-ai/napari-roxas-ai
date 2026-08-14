@@ -21,6 +21,8 @@ class CellsSegmentationModel(pl.LightningModule):
         self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
             self.available_device
         )
+        if not hasattr(np, "Inf"):
+            np.Inf = np.inf
         self.net = smp.Unet(
             encoder_weights=None, classes=2, encoder_name="resnet50"
         ).to(device=self.available_device)
