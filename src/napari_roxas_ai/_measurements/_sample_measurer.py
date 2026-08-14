@@ -1624,7 +1624,7 @@ class SampleAnalyzer:
 if __name__ == "__main__":
     # Example configuration
     CONFIG = {
-        "pixels_per_um": 2.2675,
+        "pixels_per_um": 2.267574,
         "cluster_separation_threshold": 3,  # µm
         "smoothing_kernel_size": 5,
         "integration_interval": 0.75,
