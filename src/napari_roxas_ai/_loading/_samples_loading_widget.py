@@ -59,6 +59,12 @@ class Worker(QObject):
         self.rings_file_extension = "".join(
             settings.get("file_extensions.rings_file_extension")
         )
+        self.image_file_extensions = settings.get(
+            "file_extensions.image_file_extensions"
+        )
+        self.scan_content_extension = settings.get(
+            "file_extensions.scan_file_extension"
+        )[0]
 
     def run(self):
 
@@ -76,6 +82,14 @@ class Worker(QObject):
 
 
             scan_file_path = f"{sample_stem_path}{self.scan_file_extension}"
+            if not Path(scan_file_path).exists():
+                # Try alternative extensions
+                for ext in self.image_file_extensions:
+                    alt_path = f"{sample_stem_path}{self.scan_content_extension}{ext}"
+                    if Path(alt_path).exists():
+                        scan_file_path = alt_path
+                        break
+
             if Path(scan_file_path).exists():
                 self.progress.emit(i, total)
                 scan_data, scan_add_kwargs, scan_layer_type = read_scan_file(
