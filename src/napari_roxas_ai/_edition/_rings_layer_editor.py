@@ -276,14 +276,16 @@ class RingsLayerEditorWidget(Container):
         self._layer_callback = None
         self._is_editing = False
 
+        # Create spinbox for the user-facing "Last Complete Ring Year".
+        # We enforce a limit of -100,000 as requested, while internal buffers go further.
         year_value = 9999
         if self._input_layer and "rings_outmost_complete_year" in self._input_layer.metadata:
             year_value = self._input_layer.metadata["rings_outmost_complete_year"]
 
         self._last_year_spinbox = SpinBox(
-            value=max(-99999, min(9999, int(year_value))),
+            value=max(-100000, min(9999, int(year_value))),
             label="Last Complete Ring Year",
-            min=-99999,
+            min=-100000,
             max=9999,
             step=1,
         )
@@ -318,12 +320,13 @@ class RingsLayerEditorWidget(Container):
             self._apply_rings_geometries
         )
 
-        # Create a horizontal container for the "Rerun Model" button and year selector
-        # min value by 1000 smaller than the allowed user input of -99999 to allow for maximum 1000 rings in the analyzed image
+        # Create a horizontal container for the "Rerun Model" button and year selector.
+        # The minimum value is set to -1,001,000 to provide a 1,000-year internal buffer
+        # relative to the user limit (-100,000), supporting long series and padding.
         self._rerun_model_year_spinbox = SpinBox(
             value=9999,
             label="Year",
-            min=-100999,
+            min=-1001000,
             max=9999,
             step=1,
         )
@@ -438,25 +441,32 @@ class RingsLayerEditorWidget(Container):
 
 
     def _update_layer_year(self) -> None:
-        """Update the last year value in the layer metadata."""
+        """Update the metadata and features year of the current layer."""
         if self._input_layer:
             layer = self._input_layer
-            layer.metadata["rings_outmost_complete_year"] = (
-                self._last_year_spinbox.value
-            )
-            new_rings_table, new_rings_raster, new_colormap = (
-                update_rings_geometries(
-                    rings_table=layer.features,
-                    last_year=self._last_year_spinbox.value,
-                    image_shape=layer.data.shape,
+            new_outmost_year = self._last_year_spinbox.value
+
+            # ATOMIC-LIKE UPDATE WITH EVENT BLOCKER:
+            # We block events during the update to prevent feedback loops with other widgets
+            # (like the cross-dating plotter) while the data is in an intermediate state.
+            with layer.events.blocker():
+                layer.metadata["rings_outmost_complete_year"] = new_outmost_year
+                new_rings_table, new_rings_raster, new_colormap = (
+                    update_rings_geometries(
+                        rings_table=layer.features,
+                        last_year=new_outmost_year,
+                        image_shape=layer.data.shape,
+                    )
                 )
-            )
-            layer.data = new_rings_raster
-            layer.features = new_rings_table
-            layer.colormap = new_colormap
+                layer.data = new_rings_raster
+                layer.features = new_rings_table
+                layer.colormap = new_colormap
+
+            # Manually trigger events after the update is complete and consistent
             layer.events.metadata()
-            layer.events.data()
             layer.events.features()
+            layer.events.data()
+            show_info(f"Year successfully updated to {new_outmost_year}")
 
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
@@ -495,7 +505,7 @@ class RingsLayerEditorWidget(Container):
             # Ensure the value is within spinbox bounds to avoid ValueError
             self._rerun_model_year_spinbox.value = max(
                 self._rerun_model_year_spinbox.min,
-                min(self._rerun_model_year_spinbox.max, first_year),
+                min(self._rerun_model_year_spinbox.max, int(first_year)),
             )
         elif "cells_above" in df.columns:
             df = df.sort_values("cells_above").reset_index(drop=True)
@@ -717,6 +727,7 @@ class RingsLayerEditorWidget(Container):
             layer = self._input_layer
             if "rings_outmost_complete_year" in layer.metadata:
                 year = layer.metadata["rings_outmost_complete_year"]
+                # Clip value to spinbox range to prevent ValueError
                 self._last_year_spinbox.value = max(
                     self._last_year_spinbox.min,
                     min(self._last_year_spinbox.max, int(year)),
@@ -724,6 +735,7 @@ class RingsLayerEditorWidget(Container):
             # Update the rerun model year spinbox with the first year in the table
             if hasattr(layer, "features") and "YEAR" in layer.features.columns:
                 first_year = layer.features["YEAR"].min()
+                # Clip value to spinbox range to prevent ValueError
                 self._rerun_model_year_spinbox.value = max(
                     self._rerun_model_year_spinbox.min,
                     min(self._rerun_model_year_spinbox.max, int(first_year)),

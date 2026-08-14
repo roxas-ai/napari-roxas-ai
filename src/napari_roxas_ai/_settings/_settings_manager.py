@@ -220,7 +220,7 @@ class SettingsManager:
                         "label": "Outmost Complete Ring Year",
                         "widget_type": "QSpinBox",
                         "default": 9999,
-                        "min": -99999,
+                        "min": -1000000,
                         "max": 9999,
                         "special_value_text": "Not set",
                         "required": True,
