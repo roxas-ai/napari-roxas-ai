@@ -211,7 +211,7 @@ class CrossDatingPlotterWidget(Container):
         self._alignment_candidates = []
         self._current_alignment_data = None
         self._base_offset = 0  # Offset accumulated by auto-alignment or candidate selection
-        self._roxas_visibility_threshold = 0.67  # Re-center if less than this fraction is visible
+        self._roxas_visibility_threshold = 0.90  # Re-center if less than this fraction is visible
         self._alignment_buttons_container = Container()
         self._alignment_buttons_container.native.setSizePolicy(
             self._alignment_buttons_container.native.sizePolicy().Expanding,
