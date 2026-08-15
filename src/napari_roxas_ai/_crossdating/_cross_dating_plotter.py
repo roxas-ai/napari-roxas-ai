@@ -211,6 +211,7 @@ class CrossDatingPlotterWidget(Container):
         self._alignment_candidates = []
         self._current_alignment_data = None
         self._base_offset = 0  # Offset accumulated by auto-alignment or candidate selection
+        self._roxas_visibility_threshold = 0.67  # Re-center if less than this fraction is visible
         self._alignment_buttons_container = Container()
         self._alignment_buttons_container.native.setSizePolicy(
             self._alignment_buttons_container.native.sizePolicy().Expanding,
@@ -773,15 +774,27 @@ class CrossDatingPlotterWidget(Container):
             # Get current x slider values
             current_x_low, current_x_high = self._x_range_slider.value
 
-            # Check if the current view still contains the ROXAS series
-            # If it doesn't, we should probably re-center anyway
+            # Check if enough of the ROXAS series is still visible
+            # If it isn't, we should re-center
             roxas_visible = False
             if len(roxas_years) > 0:
                 roxas_min = min(roxas_years)
                 roxas_max = max(roxas_years)
-                # Overlap between [current_x_low, current_x_high] and [roxas_min, roxas_max]
-                if not (roxas_max < current_x_low or roxas_min > current_x_high):
-                    roxas_visible = True
+                roxas_width = roxas_max - roxas_min
+
+                if roxas_width > 0:
+                    # Calculate intersection of [roxas_min, roxas_max] and [current_x_low, current_x_high]
+                    visible_min = max(roxas_min, current_x_low)
+                    visible_max = min(roxas_max, current_x_high)
+                    visible_width = max(0, visible_max - visible_min)
+
+                    # Trigger re-centering if visible width is less than threshold
+                    if visible_width >= (self._roxas_visibility_threshold * roxas_width):
+                        roxas_visible = True
+                else:
+                    # Single point curve is visible if within range
+                    if current_x_low <= roxas_min <= current_x_high:
+                        roxas_visible = True
 
             # Compute new x view range that preserves as much of previous view as possible
             if roxas_visible:
