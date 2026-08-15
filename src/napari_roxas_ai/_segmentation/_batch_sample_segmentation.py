@@ -129,8 +129,10 @@ class Worker(QObject):
         # Setup for rings segmentation
         if self.segment_rings:
 
-            # Monkeypatch np.Inf for NumPy 2.0 compatibility
-            # (The rings model package uses np.Inf which was removed in NumPy 2.0)
+            # NUMPY 2.0 COMPATIBILITY MONKEYPATCH:
+            # The rings model package (packaged with torch.package) uses np.Inf,
+            # which was deprecated and finally removed in NumPy 2.0.
+            # We monkeypatch it back to np.inf to ensure legacy model code remains functional.
             import numpy as np
             if not hasattr(np, "Inf"):
                 np.Inf = np.inf

@@ -21,6 +21,8 @@ class CellsSegmentationModel(pl.LightningModule):
         self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
             self.available_device
         )
+        # NUMPY 2.0 COMPATIBILITY MONKEYPATCH:
+        # Some underlying segmentation model packages use np.Inf, which was removed in NumPy 2.0.
         if not hasattr(np, "Inf"):
             np.Inf = np.inf
         self.net = smp.Unet(
