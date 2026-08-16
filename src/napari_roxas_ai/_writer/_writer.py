@@ -32,6 +32,7 @@ settings = SettingsManager()
 from napari_roxas_ai._utils._metadata_keys import (
     RUN_METADATA_PREFIXES,
     SAMPLE_METADATA_PREFIXES,
+    migrate_legacy_metadata_keys,
 )
 
 
@@ -62,6 +63,10 @@ def update_metadata_file(
     if path_p.exists():
         with path_p.open("r", encoding="utf-8") as f:
             existing_metadata = json.load(f)
+        # Rewrite legacy key names, so that saving a sample prepared with an
+        # older version upgrades its metadata file instead of keeping both
+        # spellings side by side
+        existing_metadata = migrate_legacy_metadata_keys(existing_metadata)
     else:
         existing_metadata = {
             k: v for k, v in (metadata or {}).items()

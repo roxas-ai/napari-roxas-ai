@@ -45,6 +45,52 @@ MEASUREMENT_PARAMETER_KEYS = (
 # be rewritten by a content save.
 RUN_METADATA_PREFIXES = (
     "meas_created_at",
+    "meas_by",
     "sw_",
     *MEASUREMENT_PARAMETER_KEYS,
 )
+
+# Metadata keys that earlier ROXAS AI versions wrote under a different name.
+# Samples prepared with those versions are still read back, so every entry here
+# is renamed on load and on save; the file is rewritten under the current name
+# the next time the sample is saved. Keep old names in this map forever, since
+# a project directory can hold samples from any past version.
+LEGACY_METADATA_KEY_RENAMES = {
+    "sample_geometry": "meas_geometry",
+    "sample_scale": "spatial_resolution",
+}
+
+
+def migrate_legacy_metadata_keys(metadata: dict) -> dict:
+    """
+    Rename legacy metadata keys to their current names.
+
+    The renamed key keeps the position of the legacy key, so a migrated file
+    keeps the field order of a freshly written one. If both the legacy and the
+    current name are present, the current one wins and the legacy one is
+    dropped.
+
+    Parameters
+    ----------
+    metadata : dict
+        Metadata as read from a ``.metadata.json`` file.
+
+    Returns
+    -------
+    dict
+        A new dict with legacy keys renamed. Non-dict input is returned as-is.
+    """
+    if not isinstance(metadata, dict):
+        return metadata
+
+    if not any(key in metadata for key in LEGACY_METADATA_KEY_RENAMES):
+        return metadata
+
+    migrated = {}
+    for key, value in metadata.items():
+        new_key = LEGACY_METADATA_KEY_RENAMES.get(key, key)
+        if new_key != key and new_key in metadata:
+            # The current key is already there and takes precedence
+            continue
+        migrated[new_key] = value
+    return migrated

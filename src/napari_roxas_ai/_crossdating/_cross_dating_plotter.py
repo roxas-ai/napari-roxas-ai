@@ -393,6 +393,18 @@ class CrossDatingPlotterWidget(Container):
             # Move up to parent directory
             current_path = current_path.parent
 
+        # Refresh the crossdating file combo. Its choices are read from
+        # self.crossdating_files, which napari only re-evaluates on a layer
+        # event: opening the widget while the sample is already loaded fires no
+        # such event, so without this the combo stays empty, no reference
+        # series is ever selected and the plot silently stays empty.
+        self._crossdating_file_combo.reset_choices()
+        if (
+            self._crossdating_file_combo.value is None
+            and self.crossdating_files
+        ):
+            self._crossdating_file_combo.value = self.crossdating_files[0]
+
         self._update_crossdating_plot()
 
     def _connect_layer_callback(self):

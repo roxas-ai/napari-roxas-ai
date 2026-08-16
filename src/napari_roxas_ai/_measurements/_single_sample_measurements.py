@@ -15,7 +15,10 @@ from qtpy.QtCore import QObject, QThread, Signal
 from napari_roxas_ai._settings import SettingsManager
 from ._sample_measurer import SampleAnalyzer
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
-from .._utils._version_utils import get_software_version
+from .._utils._version_utils import (
+    get_measurement_operator,
+    get_software_version,
+)
 from napari_roxas_ai._writer import write_single_layer
 
 
@@ -324,6 +327,7 @@ class SingleSampleMeasurementsWidget(Container):
         # the same run carry the identical value.
         meas_created_at = datetime.now().isoformat()
         sw_version = get_software_version()
+        meas_by = get_measurement_operator()
 
         # ---------------------------
         # Export Cells
@@ -335,6 +339,7 @@ class SingleSampleMeasurementsWidget(Container):
                 meas_created_at
             )
             self._cells_input_layer.metadata["sw_version"] = sw_version
+            self._cells_input_layer.metadata["meas_by"] = meas_by
             # Cells-only parameters, recorded so the run can be reproduced
             for key in MEASUREMENT_PARAMETER_KEYS:
                 self._cells_input_layer.metadata[key] = self._run_config[key]
@@ -371,6 +376,7 @@ class SingleSampleMeasurementsWidget(Container):
                 meas_created_at
             )
             self._rings_input_layer.metadata["sw_version"] = sw_version
+            self._rings_input_layer.metadata["meas_by"] = meas_by
 
             rings_path = self._rings_input_layer.metadata.get("file_path")
 

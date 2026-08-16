@@ -22,7 +22,10 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
-from .._utils._version_utils import get_software_version
+from .._utils._version_utils import (
+    get_measurement_operator,
+    get_software_version,
+)
 from ._sample_measurer import SampleAnalyzer
 
 if TYPE_CHECKING:
@@ -135,6 +138,7 @@ class Worker(QObject):
 
         # Constant for the whole batch run
         sw_version = get_software_version()
+        meas_by = get_measurement_operator()
 
         if self.measurement == "both":
             for cells_file_path, rings_file_path in zip(
@@ -175,6 +179,7 @@ class Worker(QObject):
                 for add_kwargs in (cells_add_kwargs, rings_add_kwargs):
                     add_kwargs["metadata"]["meas_created_at"] = meas_created_at
                     add_kwargs["metadata"]["sw_version"] = sw_version
+                    add_kwargs["metadata"]["meas_by"] = meas_by
                 # Cells-only parameters, recorded so the run can be reproduced
                 for key in MEASUREMENT_PARAMETER_KEYS:
                     cells_add_kwargs["metadata"][key] = self.config[key]
@@ -219,6 +224,7 @@ class Worker(QObject):
                     "meas_created_at"
                 ] = datetime.now().isoformat()
                 cells_add_kwargs["metadata"]["sw_version"] = sw_version
+                cells_add_kwargs["metadata"]["meas_by"] = meas_by
                 # Cells-only parameters, recorded so the run can be reproduced
                 for key in MEASUREMENT_PARAMETER_KEYS:
                     cells_add_kwargs["metadata"][key] = self.config[key]
@@ -257,6 +263,7 @@ class Worker(QObject):
                     "meas_created_at"
                 ] = datetime.now().isoformat()
                 rings_add_kwargs["metadata"]["sw_version"] = sw_version
+                rings_add_kwargs["metadata"]["meas_by"] = meas_by
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=rings_file_path,

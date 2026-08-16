@@ -17,7 +17,10 @@ from napari_roxas_ai._utils import (
     make_binary_labels_colormap,
     make_rings_colormap,
 )
-from napari_roxas_ai._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
+from napari_roxas_ai._utils._metadata_keys import (
+    SAMPLE_METADATA_PREFIXES,
+    migrate_legacy_metadata_keys,
+)
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -230,6 +233,9 @@ def get_metadata_from_file(
     try:
         with open(metadata_path) as f:
             meta = json.load(f)
+
+        # Samples prepared with an older version still carry the old key names
+        meta = migrate_legacy_metadata_keys(meta)
 
         return _map_sample_stem_path(
             meta,

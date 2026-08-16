@@ -22,6 +22,7 @@ from .._utils._ringtraces_utils import (
     get_instance_labels_linear,
     ring_labels_from_roxas,
 )
+from .._utils._metadata_keys import NO_REFERENCE_SERIES
 from .._utils._scl_utils import read_scl
 from .._utils._segmentation_postprocess import (
     remove_border_touching_components,
@@ -634,6 +635,11 @@ class Worker(QObject):
             metadata_path: Path to save the JSON file
         """
         try:
+            # A sample has no reference series until one is picked in the
+            # crossdating widget, but the key is written from the start so that
+            # every prepared sample carries it
+            metadata.setdefault("reference_series", NO_REFERENCE_SERIES)
+
             # Ensure all data is JSON serializable
             sanitized_metadata = self._sanitize_for_json(metadata)
 
