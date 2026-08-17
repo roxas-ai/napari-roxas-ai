@@ -8,18 +8,20 @@ repo_url: https://github.com/roxas-ai/napari-roxas-ai
 
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/logo.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: indigo
+      primary: red
+      accent: red
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: indigo
+      primary: red
+      accent: red
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
