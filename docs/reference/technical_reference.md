@@ -136,6 +136,7 @@ The metadata file ensures traceability and reproducibility of your analysis. It 
 
 ### 4. Analysis Parameters & Quality Control
 These parameters define how cell walls are measured and how clusters are handled:
+
 - **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters.
 - **`relwidth_cwt_integration`**: The relative width along the cell wall used for integrating thickness measurements.
 - **`opposite_cwt_ratio_limit`** & **`adjacent_cwt_ratio_limit`**: Quality control factors used to flag or correct suspicious wall thickness measurements.
