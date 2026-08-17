@@ -72,11 +72,10 @@ Unlike ROXAS classic, which uses numeric error codes (e.g., `-99`, `-9999`), ROX
 | **CID** | Cell ID | - | Unique cell identifier within the sample. |
 | **YEAR** | Ring Affiliation | - | Calendar year of cell formation. |
 | **LA** | Cell Lumen Area | $ \mu m^2 $ | - |
-| **RADDISTR** | Radial Distance (Origin) | $ \mu m $ | Distance from X/Y origin. |
 | **XPIX** | X-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
 | **YPIX** | Y-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
-| **RADDISTR_R** | Radial Distance (Ring) | $ \mu m $ | Distance of cell center from inner ring boundary. |
-| **RRADDISTR_R** | Relative Radial Position | % | 0.00 (proximal boundary) to 99.99 (distal boundary). |
+| **RADDISTR** | Radial Distance (Ring) | $ \mu m $ | Distance of cell center from inner ring boundary. |
+| **RRADDISTR** | Relative Radial Position | % | 0.00 (proximal boundary) to 99.99 (distal boundary). |
 | **NBRNO** | Neighbor Number | count | Number of cells in the group this cell belongs to. |
 | **NBRID** | Neighbor IDs | - | IDs of all cells in the same group (blank if solitary). |
 | **ASP** | Aspect Ratio | ratio | Major axis / minor axis of equivalent ellipse. |
