@@ -151,7 +151,7 @@ While the `.metadata.json` is unique to each sample, the `settings.json` file st
 The settings are organized into several logical blocks:
 
 ### 1. File Extensions
-    Defines how ROXAS AI recognizes and names files (e.g., using `.scan.jpg` for images and `.cells_table.csv` for measurements). This ensures consistency across your projects.
+Defines how ROXAS AI recognizes and names files (e.g., using `.scan.jpg` for images and `.cells_table.csv` for measurements). This ensures consistency across your projects.
 
 ### 2. Processing & GPU
 Allows you to toggle hardware acceleration. By setting `try_to_use_gpu` to `true`, you can significantly speed up the AI segmentation process if a compatible graphics card is available.
