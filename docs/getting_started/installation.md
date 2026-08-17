@@ -71,4 +71,4 @@ After installing the correct version of PyTorch:
 
 ## Your First Analysis
 
-Once installation is verified, you are ready to start. You can either use the sample data provided or load your own scans via the **Loading** widget.
+Once installation is verified, you are ready to start. You can either use the sample data provided or load your own images via the **Loading** widget.
