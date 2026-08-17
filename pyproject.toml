@@ -66,6 +66,10 @@ testing = [
     "napari==0.7.1",
     "pyqt6",
 ]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
 
 [project.entry-points."napari.manifest"]
 napari-roxas-ai = "napari_roxas_ai:napari.yaml"

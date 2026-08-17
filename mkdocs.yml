@@ -1,0 +1,55 @@
+site_name: napari-roxas-ai
+site_url: https://roxas-ai.github.io/napari-roxas-ai/
+site_description: Documentation for the napari-roxas-ai plugin.
+site_author: The WSL Dendrosciences Group
+
+repo_name: roxas-ai/napari-roxas-ai
+repo_url: https://github.com/roxas-ai/napari-roxas-ai
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting_started/installation.md
+  - User Guide:
+      - Widgets: user_guide/widgets.md
+  - Tutorials:
+      - Workflows: tutorials/workflows.md
+  - Reference:
+      - Technical Reference: reference/technical_reference.md
