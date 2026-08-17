@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - develop
+      - feature/initial-user-documentation
 permissions:
   contents: write
 jobs:
