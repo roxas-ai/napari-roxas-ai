@@ -46,9 +46,10 @@ markdown_extensions:
       permalink: true
   - pymdownx.arithmatex:
       generic: true
+      smart_dollar: false
 
 extra_javascript:
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
