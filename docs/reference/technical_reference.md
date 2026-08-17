@@ -163,13 +163,14 @@ Controls how data appears in the napari viewer:
 
 ### 4. Measurement Defaults
 Contains the default thresholds for anatomical analysis. These values are used to populate the metadata for new samples:
-- **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits).
-- **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
-- **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
-- **`cells_tangential_angle`**: Default angle for tangential orientation.
-- **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
-- **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
-- **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
+
+*   **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits).
+*   **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
+*   **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
+*   **`cells_tangential_angle`**: Default angle for tangential orientation.
+*   **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
+*   **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
+*   **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
 ### 5. Metadata Field Definitions
 Defines the structure of the input forms you see in the plugin widgets, ensuring that required information like `sample_type` or `spatial_resolution` is always captured correctly.
