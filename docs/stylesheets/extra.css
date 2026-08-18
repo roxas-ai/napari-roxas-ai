@@ -1,27 +1,27 @@
 /* Increase site title font size */
 .md-header__title {
-  font-size: 1.8rem; /* Increased slightly more */
+  font-size: 1.8rem;
   line-height: 2.4rem;
 }
 
 /* Increase logo size and align it */
 .md-logo img {
-  height: 3.0rem !important; /* Force larger height */
+  height: 2.4rem !important; /* Adjusted to user preference */
   width: auto !important;
   display: block;
 }
 
 .md-logo {
-  height: 4.8rem !important;
-  margin: 0.4rem 0.8rem 0.4rem 0 !important; /* Add some top margin to move it down */
+  height: 2.4rem !important;
+  margin: 0.8rem 0.8rem 0.8rem 0 !important;
   padding: 0 !important;
   display: flex !important;
-  align-items: flex-end !important; /* Align to bottom of its container */
+  align-items: center !important;
 }
 
-/* Ensure header has enough height for the larger logo */
+/* Ensure header has enough height */
 .md-header__inner {
-  height: 5.6rem;
+  height: 4.0rem;
   display: flex;
   align-items: center;
 }
