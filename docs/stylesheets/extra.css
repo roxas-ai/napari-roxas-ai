@@ -3,15 +3,19 @@
   font-size: 1.6rem; /* Default is usually 1rem or slightly less */
 }
 
-/* Increase logo size */
+/* Increase logo size and align it */
 .md-logo img {
-  height: 2.5rem; /* Default is 1.2rem */
+  height: 4.0rem; /* Increased from 3.0rem */
   width: auto;
+  margin-top: 0.5rem; /* Move it lower to align with text bottom */
+  margin-bottom: 0rem;
 }
 
 .md-logo {
-    height: 3.0rem;
+    height: 4.5rem; /* Increased to accommodate larger image and margin */
     padding: 0;
     margin-top: 0.0rem;
     margin-bottom: 0.0rem;
+    display: flex;
+    align-items: center; /* Helper for vertical alignment */
 }
