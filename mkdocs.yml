@@ -1,4 +1,4 @@
-site_name: napari-roxas-ai
+site_name: ROXAS AI
 site_url: https://roxas-ai.github.io/napari-roxas-ai/
 site_description: Documentation for the napari-roxas-ai plugin.
 site_author: The WSL Dendrosciences Group
@@ -51,6 +51,9 @@ markdown_extensions:
 extra_javascript:
   - javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+extra_css:
+  - stylesheets/extra.css
 
 nav:
   - Home: index.md

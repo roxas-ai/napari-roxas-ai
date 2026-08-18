@@ -1,0 +1,17 @@
+/* Increase site title font size */
+.md-header__title {
+  font-size: 1.2rem; /* Default is usually 1rem or slightly less */
+}
+
+/* Increase logo size */
+.md-logo img {
+  height: 2.5rem; /* Default is 1.2rem */
+  width: auto;
+}
+
+.md-logo {
+    height: 2.5rem;
+    padding: 0;
+    margin-top: 0.2rem;
+    margin-bottom: 0.2rem;
+}
