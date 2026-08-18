@@ -6,7 +6,7 @@
 
 /* Increase logo size and align it */
 .md-logo img {
-  height: 4.8rem !important; /* Force larger height */
+  height: 3.0rem !important; /* Force larger height */
   width: auto !important;
   display: block;
 }
