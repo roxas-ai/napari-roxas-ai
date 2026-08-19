@@ -8,7 +8,7 @@ repo_url: https://github.com/roxas-ai/napari-roxas-ai
 
 theme:
   name: material
-  logo: assets/logo.png
+  #logo: assets/logo.png
   favicon: assets/logo.png
   palette:
     - media: "(prefers-color-scheme: light)"
