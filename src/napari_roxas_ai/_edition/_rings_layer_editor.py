@@ -6,6 +6,7 @@ import napari.layers
 import numpy as np
 import pandas as pd
 from magicgui.widgets import (
+    CheckBox,
     ComboBox,
     Container,
     PushButton,
@@ -275,6 +276,8 @@ class RingsLayerEditorWidget(Container):
 
         self._layer_callback = None
         self._is_editing = False
+        self._selected_vertices = {}  # shape_index -> set of vertex_indices
+        self._layer_visibility_states = {}  # layer_name -> visibility (bool)
 
         # Create spinbox for the last year
         year_value = (
@@ -342,6 +345,25 @@ class RingsLayerEditorWidget(Container):
         )
 
         self._rerun_model_button.changed.connect(self._rerun_model_from_year)
+
+        # Lasso selection mode checkbox
+        self._lasso_selection_checkbox = CheckBox(
+            text="Lasso Selection Mode",
+            value=False,
+            visible=False,
+        )
+        self._lasso_selection_checkbox.changed.connect(
+            self._toggle_lasso_selection_mode
+        )
+
+        self._delete_lasso_vertices_button = PushButton(
+            text="Delete Vertices in Lasso",
+            visible=False,
+        )
+        self._delete_lasso_vertices_button.changed.connect(
+            self._execute_lasso_deletion
+        )
+
         self._rerun_model_container = Container(
             widgets=[
                 # self.label_rerun_model,
@@ -361,6 +383,8 @@ class RingsLayerEditorWidget(Container):
                 self._edit_rings_geometries_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
+                self._lasso_selection_checkbox,
+                self._delete_lasso_vertices_button,
                 self._rerun_model_container,
                 self._last_year_spinbox,
                 self._last_year_update_button,
@@ -470,12 +494,20 @@ class RingsLayerEditorWidget(Container):
 
         self._is_editing = True
 
+        # Store visibility of .cells and .rings layers and hide them
+        self._layer_visibility_states = {}
+        for layer in self._viewer.layers:
+            if layer.name.endswith(".cells") or layer.name.endswith(".rings"):
+                self._layer_visibility_states[layer.name] = layer.visible
+                layer.visible = False
+
         # Update button visibility
         self._edit_rings_geometries_button.visible = False
         self._last_year_spinbox.visible = False
         self._last_year_update_button.visible = False
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
+        self._lasso_selection_checkbox.visible = True
         self._rerun_model_container.visible = True
 
         input_layer = self._input_layer
@@ -561,10 +593,13 @@ class RingsLayerEditorWidget(Container):
         x_left = 10.0 / sx
 
         # y-value of each boundary line at x_left
-        y_on_left = [
-            interpolate_row_at_col(coords, x_left)
-            for coords in df["RBXY"].tolist()
-        ]
+        y_on_left = []
+        for coords in df["RBXY"].tolist():
+            try:
+                y = interpolate_row_at_col(coords, x_left)
+                y_on_left.append(y)
+            except Exception:
+                y_on_left.append(0.0)
 
         # Each boundary's YEAR labels the ring *above* it (between the previous
         # boundary and this one).  So the label for boundary[i] should sit
@@ -629,16 +664,30 @@ class RingsLayerEditorWidget(Container):
         layers.selection.active = shapes_layer
         years_layer.editable = False
 
+        self._selected_vertices = {}
+        self._setup_selection_callbacks(shapes_layer)
+
         self._update_year_spinbox()
 
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
         self._is_editing = False
 
+        # Restore visibility of .cells and .rings layers
+        for layer_name, visible in self._layer_visibility_states.items():
+            if layer_name in self._viewer.layers:
+                self._viewer.layers[layer_name].visible = visible
+        self._layer_visibility_states = {}
+
         if "Rings Modification" in self._viewer.layers:
             self._viewer.layers.remove("Rings Modification")
         if "Rings Years" in self._viewer.layers:
             self._viewer.layers.remove("Rings Years")
+        if "Lasso Selection" in self._viewer.layers:
+            self._viewer.layers.remove("Lasso Selection")
+        if "Selected Vertices" in self._viewer.layers:
+            self._viewer.layers.remove("Selected Vertices")
+        self._selected_vertices = {}
 
         # Reset the button visibility
         self._edit_rings_geometries_button.visible = True
@@ -646,6 +695,7 @@ class RingsLayerEditorWidget(Container):
         self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
+        self._lasso_selection_checkbox.visible = False
         self._rerun_model_container.visible = False
 
         show_info("Rings geometries modification cancelled")
@@ -653,6 +703,12 @@ class RingsLayerEditorWidget(Container):
     def _apply_rings_geometries(self) -> None:
         """Apply the changes to the input layer."""
         self._is_editing = False
+
+        # Restore visibility of .cells and .rings layers
+        for layer_name, visible in self._layer_visibility_states.items():
+            if layer_name in self._viewer.layers:
+                self._viewer.layers[layer_name].visible = visible
+        self._layer_visibility_states = {}
 
         layer = self._viewer.layers["Rings Modification"]
 
@@ -704,10 +760,239 @@ class RingsLayerEditorWidget(Container):
         self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
+        self._lasso_selection_checkbox.visible = False
         self._rerun_model_container.visible = False
+
+        if "Lasso Selection" in self._viewer.layers:
+            self._viewer.layers.remove("Lasso Selection")
+        if "Selected Vertices" in self._viewer.layers:
+            self._viewer.layers.remove("Selected Vertices")
+        self._selected_vertices = {}
 
         # Show confirmation message
         show_info("Ring geometries successfully updated")
+
+    def _toggle_lasso_selection_mode(self, enabled: bool) -> None:
+        """Toggle the lasso selection mode."""
+        if enabled:
+            if "Lasso Selection" not in self._viewer.layers:
+                self._viewer.add_shapes(
+                    name="Lasso Selection",
+                    shape_type="polygon",
+                    edge_color="yellow",
+                    face_color=[1, 1, 0, 0.3],
+                    edge_width=2,
+                    scale=self.input_layer.scale,
+                )
+            self._viewer.layers.selection.active = self._viewer.layers[
+                "Lasso Selection"
+            ]
+            self._viewer.layers["Lasso Selection"].mode = "add_polygon"
+            self._delete_lasso_vertices_button.visible = True
+            show_info("Lasso Mode: Draw polygons and click 'Delete Vertices in Lasso' (or press 'Delete')")
+        else:
+            if "Lasso Selection" in self._viewer.layers:
+                self._viewer.layers.remove("Lasso Selection")
+            if "Rings Modification" in self._viewer.layers:
+                self._viewer.layers.selection.active = self._viewer.layers[
+                    "Rings Modification"
+                ]
+                self._viewer.layers["Rings Modification"].mode = "direct"
+            self._delete_lasso_vertices_button.visible = False
+
+    def _setup_selection_callbacks(self, layer: "napari.layers.Shapes") -> None:
+        """Set up mouse callbacks for vertex selection."""
+
+        @layer.mouse_drag_callbacks.append
+        def _on_click(layer, event):
+            if self._lasso_selection_checkbox.value:
+                return
+
+        @self._viewer.bind_key("Delete", overwrite=True)
+        def _delete_selected(viewer):
+            if not self._is_editing:
+                # Fallback to default delete if not in editing mode
+                return
+
+            if self._lasso_selection_checkbox.value:
+                # When in lasso mode, we want to intercept Delete
+                # We deselect all shapes in lasso layer to prevent napari's default deletion
+                if "Lasso Selection" in self._viewer.layers:
+                    self._viewer.layers["Lasso Selection"].selected_data = set()
+                
+                self._execute_lasso_deletion()
+                return
+
+            # Default behavior for Rings Modification layer if not in lasso mode
+            # (Napari handles direct vertex deletion automatically if selected)
+
+    def _execute_lasso_deletion(self) -> None:
+        """Process the lasso selection and delete vertices."""
+        if not self._is_editing or not self._lasso_selection_checkbox.value:
+            return
+
+        self._select_vertices_in_lasso()
+        
+        if self._selected_vertices:
+            self._delete_selected_vertices()
+        else:
+            # Even if no vertices found, clear the lasso polygons
+            if "Lasso Selection" in self._viewer.layers:
+                self._viewer.layers["Lasso Selection"].data = []
+            show_info("No vertices found inside the lasso area")
+
+    def _identify_vertex(self, layer, position) -> Optional[tuple]:
+        """Find the vertex at the given position."""
+        if not hasattr(layer, "data") or len(layer.data) == 0:
+            return None
+        
+        # position is (y, x)
+        pos = np.array(position)
+        
+        # Scale position if needed (layer.scale)
+        scale = np.array(layer.scale)
+        
+        min_dist = float("inf")
+        best_res = None
+        
+        # threshold for selection in pixels
+        threshold = 10.0
+        
+        for i, shape_data in enumerate(layer.data):
+            # shape_data is (N, 2)
+            dists = np.linalg.norm((shape_data - pos), axis=1)
+            idx = np.argmin(dists)
+            if dists[idx] < min_dist:
+                min_dist = dists[idx]
+                best_res = (i, idx)
+        
+        if min_dist < threshold / np.mean(scale):
+            return best_res
+        return None
+
+    def _select_vertices_in_lasso(self) -> None:
+        """Select all vertices inside the lasso polygon."""
+        if "Lasso Selection" not in self._viewer.layers:
+            return
+        
+        lasso_layer = self._viewer.layers["Lasso Selection"]
+        if len(lasso_layer.data) == 0:
+            return
+        
+        # We process all polygons in the lasso layer
+        # as the user might have drawn multiple polygons
+        
+        edit_layer = self._viewer.layers["Rings Modification"]
+        
+        for lasso_poly in lasso_layer.data:
+            for i, shape_data in enumerate(edit_layer.data):
+                if i not in self._selected_vertices:
+                    self._selected_vertices[i] = set()
+                
+                for j, vertex in enumerate(shape_data):
+                    if self._is_point_in_polygon(vertex, lasso_poly):
+                        self._selected_vertices[i].add(j)
+        
+        self._highlight_selected_vertices()
+
+    def _is_point_in_polygon(self, point, polygon) -> bool:
+        """Check if a point is inside a polygon using OpenCV."""
+        # point is (y, x), polygon is list of (y, x)
+        # napari uses (y, x) consistently.
+        # cv2.pointPolygonTest(contour, pt, measureDist)
+        # contour should be (N, 1, 2) or (N, 2)
+        # pt should be (x, y) if we want to follow standard opencv, 
+        # but as long as we are consistent with (y, x) it works too.
+        # However, to be safe and clear:
+        poly_pts = np.array(polygon, dtype=np.float32)
+        # pt = (y, x)
+        return cv2.pointPolygonTest(poly_pts, (float(point[0]), float(point[1])), False) >= 0
+
+    def _highlight_selected_vertices(self) -> None:
+        """Visual feedback for selected vertices."""
+        # This is tricky in napari without being invasive.
+        # We could add a temporary Points layer to show selected vertices.
+        if "Selected Vertices" in self._viewer.layers:
+            self._viewer.layers.remove("Selected Vertices")
+        
+        points = []
+        edit_layer = self._viewer.layers["Rings Modification"]
+        for shape_idx, vertex_indices in self._selected_vertices.items():
+            if shape_idx >= len(edit_layer.data):
+                continue
+            shape_data = edit_layer.data[shape_idx]
+            for v_idx in vertex_indices:
+                if v_idx < len(shape_data):
+                    points.append(shape_data[v_idx])
+        
+        if points:
+            points_layer = self._viewer.add_points(
+                points,
+                name="Selected Vertices",
+                size=5,
+                face_color="red",
+                border_color="white",
+                scale=edit_layer.scale,
+            )
+            # Ensure it stays on top
+            self._viewer.layers.move(self._viewer.layers.index(points_layer), -1)
+            # Make sure active selection remains the editor layer or lasso
+            if self._lasso_selection_checkbox.value:
+                self._viewer.layers.selection.active = self._viewer.layers["Lasso Selection"]
+            else:
+                self._viewer.layers.selection.active = edit_layer
+
+    def _delete_selected_vertices(self) -> None:
+        """Delete all selected vertices from the Rings Modification layer."""
+        if not self._selected_vertices:
+            return
+
+        edit_layer = self._viewer.layers["Rings Modification"]
+        new_data = []
+        new_features_dict = {k: [] for k in edit_layer.features.keys()}
+        
+        # We must be careful to keep features in sync
+        # Track if any changes were actually made
+        changed = False
+        for i, shape_data in enumerate(edit_layer.data):
+            indices_to_delete = self._selected_vertices.get(i, set())
+            
+            if indices_to_delete:
+                changed = True
+                # Filter out vertices
+                shape_list = shape_data.tolist() if hasattr(shape_data, "tolist") else list(shape_data)
+                updated_shape = [p for j, p in enumerate(shape_list) if j not in indices_to_delete]
+                
+                if len(updated_shape) >= 2:
+                    new_data.append(np.array(updated_shape))
+                    for k in new_features_dict:
+                        new_features_dict[k].append(edit_layer.features[k][i])
+                else:
+                    # Shape becomes invalid (less than 2 points for a path)
+                    # We discard it
+                    pass
+            else:
+                new_data.append(shape_data)
+                for k in new_features_dict:
+                    new_features_dict[k].append(edit_layer.features[k][i])
+
+        if changed:
+            # IMPORTANT: Napari might not refresh correctly if we just assign .data
+            # Best way is to update data and features together.
+            edit_layer.data = new_data
+            edit_layer.features = pd.DataFrame(new_features_dict)
+            
+            # Force refresh of the layer
+            edit_layer.refresh()
+            show_info("Selected vertices deleted")
+        
+        # Clear selection
+        self._selected_vertices = {}
+        if "Selected Vertices" in self._viewer.layers:
+            self._viewer.layers.remove("Selected Vertices")
+        
+        if "Lasso Selection" in self._viewer.layers:
+            self._viewer.layers["Lasso Selection"].data = []
 
     def _update_year_spinbox(self) -> None:
         """Update the year spinbox value based on the selected layer."""
