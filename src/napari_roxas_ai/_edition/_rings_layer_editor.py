@@ -395,9 +395,15 @@ class RingsLayerEditorWidget(Container):
         self._viewer.layers.events.removed.connect(self._on_layer_change)
 
         self._connect_layer_callback()
+        # The first update might need a small delay to ensure all layer data is ready
+        # especially if called during initial loading
+        from qtpy.QtCore import QTimer
+        QTimer.singleShot(100, self._update_rings_years_layer)
 
     def _on_layer_change(self, event=None):
         """Called when layers are added/removed in the viewer."""
+        self._update_rings_years_layer()
+
         if self._is_editing:
             return
 
@@ -462,6 +468,7 @@ class RingsLayerEditorWidget(Container):
 
             # Update the spinbox value
             self._update_year_spinbox()
+            self._update_rings_years_layer()
 
 
     def _update_layer_year(self) -> None:
@@ -514,8 +521,6 @@ class RingsLayerEditorWidget(Container):
         self.input_layer = input_layer
 
         # If there is already an edit session open, remove old helper layers first
-        if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
         if "Rings Modification" in self._viewer.layers:
             self._viewer.layers.remove("Rings Modification")
 
@@ -566,7 +571,7 @@ class RingsLayerEditorWidget(Container):
             return
 
         # Create the editable Shapes layer
-        self._viewer.add_shapes(
+        shapes_layer = self._viewer.add_shapes(
             simplified_boundary_lines,
             shape_type="path",
             edge_color=settings.get("vectorization.rings_edge_color"),
@@ -584,85 +589,9 @@ class RingsLayerEditorWidget(Container):
             },
         )
 
-        # left margin in data coords
-        sx = (
-            float(self.input_layer.scale[1])
-            if hasattr(self.input_layer, "scale")
-            else 1.0
-        )
-        x_left = 10.0 / sx
+        self._update_rings_years_layer()
 
-        # y-value of each boundary line at x_left
-        y_on_left = []
-        for coords in df["RBXY"].tolist():
-            try:
-                y = interpolate_row_at_col(coords, x_left)
-                y_on_left.append(y)
-            except Exception:
-                y_on_left.append(0.0)
-
-        # Each boundary's YEAR labels the ring *above* it (between the previous
-        # boundary and this one).  So the label for boundary[i] should sit
-        # between boundary[i-1] and boundary[i].  For boundary[0] the upper
-        # edge is the top of the image (row 0).
-        centers_r = []
-        for i in range(len(y_on_left)):
-            upper = y_on_left[i - 1] if i > 0 else 0.0
-            centers_r.append(0.5 * (upper + y_on_left[i]))
-
-        years = [str(int(y)) for y in df["YEAR"].tolist()]
-
-        # left margin in *data coords*
-        sx = (
-            float(self.input_layer.scale[1])
-            if hasattr(self.input_layer, "scale")
-            else 1.0
-        )
-        x_left = 10.0 / sx
-
-        points_rc = np.column_stack(
-            [
-                np.array(centers_r, dtype=float),
-                np.full(len(df), x_left, dtype=float),
-            ]
-        )
-
-        self._viewer.add_points(
-            points_rc,
-            name="Rings Years",
-            size=1,
-            opacity=1.0,
-            border_width=0,
-            face_color=[0, 0, 0, 0],
-            border_color=[0, 0, 0, 0],
-            scale=self.input_layer.scale,
-            features={"YEAR": years},
-            text={
-                "string": "{YEAR}",
-                "anchor": "upper_left",
-                "translation": [0, 0],
-                "size": 8,
-                "color": "black",
-                "blending": "translucent",
-            },
-        )
-
-        years_layer = self._viewer.layers["Rings Years"]
-        shapes_layer = self._viewer.layers["Rings Modification"]
-
-        layers = self._viewer.layers
-        years_index = layers.index(years_layer)
-        shapes_index = layers.index(shapes_layer)
-
-        # We want years directly below shapes => years should end up at index == shapes_index - 1.
-        dest_index = shapes_index
-        if years_index < shapes_index:
-            dest_index -= 1
-
-        layers.move(years_index, dest_index)
-
-        layers.selection.active = shapes_layer
-        years_layer.editable = False
+        self._viewer.layers.selection.active = shapes_layer
 
         self._selected_vertices = {}
         self._setup_selection_callbacks(shapes_layer)
@@ -681,8 +610,7 @@ class RingsLayerEditorWidget(Container):
 
         if "Rings Modification" in self._viewer.layers:
             self._viewer.layers.remove("Rings Modification")
-        if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+        self._update_rings_years_layer()
         if "Lasso Selection" in self._viewer.layers:
             self._viewer.layers.remove("Lasso Selection")
         if "Selected Vertices" in self._viewer.layers:
@@ -731,8 +659,7 @@ class RingsLayerEditorWidget(Container):
 
         if "Rings Modification" in self._viewer.layers:
             self._viewer.layers.remove("Rings Modification")
-        if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+        self._update_rings_years_layer()
 
         input_layer = self._input_layer
         if input_layer is None:
@@ -1006,6 +933,151 @@ class RingsLayerEditorWidget(Container):
             if hasattr(layer, "features") and "YEAR" in layer.features.columns:
                 first_year = layer.features["YEAR"].min()
                 self._rerun_model_year_spinbox.value = int(first_year)
+
+    def _update_rings_years_layer(self) -> None:
+        """Update the Rings Years layer based on the current rings layer."""
+        # Determine source layer
+        source_layer = None
+        if "Rings Modification" in self._viewer.layers:
+            source_layer = self._viewer.layers["Rings Modification"]
+        else:
+            source_layer = self._input_layer
+
+        if source_layer is None:
+            if "Rings Years" in self._viewer.layers:
+                self._viewer.layers.remove("Rings Years")
+            return
+
+        # Build a DF of boundaries
+        if hasattr(source_layer, "features") and source_layer.features is not None:
+            df = source_layer.features.copy()
+        else:
+            df = pd.DataFrame()
+
+        if "RBXY" not in df.columns:
+            # If it's a Labels layer, we need to extract RBXY from its data if features are missing?
+            # Actually, in this plugin, rings layers always have features["RBXY"] if they are valid.
+            # But let's handle the data from source_layer.data if it's a Shapes layer
+            if isinstance(source_layer, napari.layers.Shapes):
+                df["RBXY"] = [coords.tolist() for coords in source_layer.data]
+                if "YEAR" not in df.columns:
+                    # Try to get YEAR from features if it was just missing RBXY
+                    pass
+            else:
+                if "Rings Years" in self._viewer.layers:
+                    self._viewer.layers.remove("Rings Years")
+                return
+
+        if df.empty or "RBXY" not in df.columns:
+            if "Rings Years" in self._viewer.layers:
+                self._viewer.layers.remove("Rings Years")
+            return
+
+        # Ensure YEAR exists
+        if "YEAR" not in df.columns:
+            # Fallback if YEAR is missing
+            n = len(df)
+            last_year = 9999
+            if source_layer.metadata and "rings_outmost_complete_year" in source_layer.metadata:
+                last_year = int(source_layer.metadata["rings_outmost_complete_year"])
+            df["YEAR"] = list(range(last_year - n + 1, last_year + 1))
+
+        # left margin in data coords
+        scale = source_layer.scale if hasattr(source_layer, "scale") else [1.0, 1.0]
+        sx = float(scale[1])
+        x_left = 10.0 / sx
+
+        # y-value of each boundary line at x_left
+        y_on_left = []
+        for coords in df["RBXY"].tolist():
+            try:
+                y = interpolate_row_at_col(coords, x_left)
+                y_on_left.append(y)
+            except Exception:
+                y_on_left.append(0.0)
+
+        # Each boundary's YEAR labels the ring *above* it
+        centers_r = []
+        for i in range(len(y_on_left)):
+            upper = y_on_left[i - 1] if i > 0 else 0.0
+            centers_r.append(0.5 * (upper + y_on_left[i]))
+
+        years = [str(int(y)) for y in df["YEAR"].tolist()]
+
+        points_rc = np.column_stack(
+            [
+                np.array(centers_r, dtype=float),
+                np.full(len(df), x_left, dtype=float),
+            ]
+        )
+
+        if "Rings Years" in self._viewer.layers:
+            years_layer = self._viewer.layers["Rings Years"]
+            years_layer.data = points_rc
+            years_layer.features = pd.DataFrame({"YEAR": years})
+            years_layer.scale = scale
+            # Force refresh of text
+            years_layer.refresh()
+        else:
+            self._viewer.add_points(
+                points_rc,
+                name="Rings Years",
+                size=1,
+                opacity=1.0,
+                border_width=0,
+                face_color=[0, 0, 0, 0],
+                border_color=[0, 0, 0, 0],
+                scale=scale,
+                features={"YEAR": years},
+                text={
+                    "string": "{YEAR}",
+                    "anchor": "upper_left",
+                    "translation": [0, 0],
+                    "size": 8,
+                    "color": "black",
+                    "blending": "translucent",
+                },
+            )
+            years_layer = self._viewer.layers["Rings Years"]
+            years_layer.editable = False
+
+        # Z-order management: we want Rings Years on top of scan, cells, rings
+        # In napari, higher index is on top.
+        # Rings Modification (during editing) should be on top of Rings Years.
+        # Rings layer should be below Rings Years.
+        
+        layers = self._viewer.layers
+        years_index = layers.index(years_layer)
+        
+        target_index = years_index
+        
+        # Find the highest index among scan, cells, rings
+        top_base_layer_index = -1
+        for i, layer in enumerate(layers):
+            if layer.name == "Rings Years":
+                continue
+            if layer.name == "Rings Modification":
+                continue
+            # Check if it's one of the base layers
+            if layer.name.endswith(".scan") or layer.name.endswith(".cells") or layer.name.endswith(".rings"):
+                if i > top_base_layer_index:
+                    top_base_layer_index = i
+        
+        if top_base_layer_index != -1:
+            # We want Rings Years just above the top base layer
+            new_years_index = top_base_layer_index + 1
+            if new_years_index > years_index:
+                # If we move it to a higher index, it moves everything else down
+                new_years_index -= 1
+            
+            # Special case: if Rings Modification is present, it should be above Rings Years
+            if "Rings Modification" in layers:
+                mod_index = layers.index("Rings Modification")
+                if new_years_index >= mod_index:
+                     new_years_index = mod_index - 1
+            
+            if new_years_index != years_index and new_years_index >= 0:
+                layers.move(years_index, new_years_index)
 
     def _rerun_model_from_year(self) -> None:
         """Rerun the ring detection model starting from the selected year."""

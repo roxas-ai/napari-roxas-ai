@@ -25,6 +25,7 @@ from napari_roxas_ai.shortcuts import (
     has_shortcuts_applied,
     mark_shortcuts_applied,
 )
+from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
 
 
 
@@ -189,6 +190,39 @@ class SamplesLoadingWidget(Container):
             ]
         )
         self._refresh_samples_list()
+
+        # Initialize the RingsLayerEditorWidget to start tracking years in the background
+        # Use a single-shot timer to allow the UI to settle
+        from qtpy.QtCore import QTimer
+        def _init_rings_editor():
+            # Check if it already exists in the dock
+            found = False
+            try:
+                # Use public API to find existing widgets
+                if hasattr(self._viewer.window, "qt_viewer"):
+                    for dock in self._viewer.window.qt_viewer.dockWidgets.values():
+                        if "RingsLayerEditorWidget" in str(type(dock.widget())):
+                            found = True
+                            break
+            except Exception:
+                # Fallback to broad search if dockWidgets is not accessible as expected
+                if hasattr(self._viewer.window, "_qt_window"):
+                    from qtpy.QtWidgets import QWidget
+                    for dock in self._viewer.window._qt_window.findChildren(QWidget):
+                        if "RingsLayerEditorWidget" in str(type(dock)):
+                            found = True
+                            break
+            
+            if not found:
+                try:
+                    # We don't add it to the dock here, just instantiate it.
+                    # It will connect to the viewer events and manage the "Rings Years" layer.
+                    # We keep a reference to prevent garbage collection.
+                    self._rings_editor = RingsLayerEditorWidget(self._viewer)
+                except Exception as e:
+                    print(f"Failed to auto-initialize RingsLayerEditorWidget: {e}")
+
+        QTimer.singleShot(1000, _init_rings_editor)
 
     def _open_project_dialog(self):
         """Open sample dialog to select project directory and refresh samples list."""
