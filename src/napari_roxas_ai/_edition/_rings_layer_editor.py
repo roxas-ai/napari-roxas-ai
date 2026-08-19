@@ -101,20 +101,35 @@ def horizontal_rings_completion(coords: list, width: int) -> list:
 def horizontal_rings_clippping(coords: list, width: int) -> list:
     """
     Clip the coordinates of the rings to a specified width.
+    This ensures that all ring boundary vertices stay within the image boundaries [0, width].
+
     Args:
-        coords (list): List of coordinates.
+        coords (list): List of coordinates (y, x).
         width (int): Width of the image.
     Returns:
         list: Clipped coordinates.
     """
+    if not coords:
+        return []
+
     coords = np.array(coords)
 
+    # Find the indices of points that are at or beyond the left (x<=0) and right (x>=width) boundaries
     left_points = np.where(coords[:, 1] <= 0)[0]
     right_points = np.where(coords[:, 1] >= width)[0]
 
-    coords = coords[left_points[-1] : right_points[0] + 1]
+    # Safety check: if no points are at or beyond boundaries, use the full range.
+    # This can happen after a lasso-delete operation removes vertices near the image edges,
+    # leaving only internal points. We must avoid IndexError by checking if boundary indices exist.
+    start_idx = left_points[-1] if len(left_points) > 0 else 0
+    end_idx = right_points[0] + 1 if len(right_points) > 0 else len(coords)
 
-    coords[:, 1] = np.clip(coords[:, 1], 0, width)
+    # Slice the coordinates to only include the relevant range within the boundaries
+    coords = coords[start_idx:end_idx]
+
+    # Final safeguard: Ensure we don't operate on empty arrays and clip everything precisely to [0, width]
+    if len(coords) > 0:
+        coords[:, 1] = np.clip(coords[:, 1], 0, width)
 
     return coords.tolist()
 
@@ -276,9 +291,14 @@ class RingsLayerEditorWidget(Container):
 
         self._layer_callback = None
         self._is_editing = False
-        self._selected_vertices = {}  # shape_index -> set of vertex_indices
-        self._layer_visibility_states = {}  # layer_name -> visibility (bool)
 
+        # --- SELECTION & VISIBILITY STATE ---
+        # Stores indices of vertices selected via lasso: shape_index -> set of vertex_indices
+        self._selected_vertices = {}
+        # Stores visibility of .cells and .rings layers before editing to restore them later
+        self._layer_visibility_states = {}
+
+        # --- UI WIDGETS ---
         # Create spinbox for the last year
         year_value = (
             self._input_layer.metadata[
@@ -346,7 +366,8 @@ class RingsLayerEditorWidget(Container):
 
         self._rerun_model_button.changed.connect(self._rerun_model_from_year)
 
-        # Lasso selection mode checkbox
+        # --- LASSO SELECTION UI ---
+        # Checkbox to toggle between standard vertex editing and polygon-based lasso selection
         self._lasso_selection_checkbox = CheckBox(
             text="Lasso Selection Mode",
             value=False,
@@ -356,6 +377,7 @@ class RingsLayerEditorWidget(Container):
             self._toggle_lasso_selection_mode
         )
 
+        # Dedicated button to execute deletion of vertices contained within drawn lasso polygons
         self._delete_lasso_vertices_button = PushButton(
             text="Delete Vertices in Lasso",
             visible=False,
@@ -394,14 +416,17 @@ class RingsLayerEditorWidget(Container):
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
 
+        # --- INITIALIZATION ---
         self._connect_layer_callback()
-        # The first update might need a small delay to ensure all layer data is ready
-        # especially if called during initial loading
+        # Ensure 'Rings Years' layer is initialized if a rings layer already exists.
+        # A small delay ensures that napari has finished its initial layer setup.
         from qtpy.QtCore import QTimer
         QTimer.singleShot(100, self._update_rings_years_layer)
 
     def _on_layer_change(self, event=None):
-        """Called when layers are added/removed in the viewer."""
+        """Called when layers are added/removed in the viewer.
+        Ensures persistent 'Rings Years' labels stay in sync with the current layers.
+        """
         self._update_rings_years_layer()
 
         if self._is_editing:
@@ -415,6 +440,15 @@ class RingsLayerEditorWidget(Container):
         self._connect_layer_callback()
 
     def _deferred_remove_layer(self, name: str) -> None:
+        """
+        Safely remove a layer by name in the next event loop iteration.
+
+        Direct removal of layers during complex event emissions or scenegraph updates
+        (like inside a button click handler that also modifies layer data) can lead to
+        RuntimeErrors in Vispy or Tracebacks in Napari's scenegraph manager.
+        Using QTimer.singleShot(0, ...) ensures the removal happens when the current
+        processing cycle is complete and the GUI event loop is idle.
+        """
         def _rm():
             if name in self._viewer.layers:
                 self._viewer.layers.remove(name)
@@ -501,14 +535,16 @@ class RingsLayerEditorWidget(Container):
 
         self._is_editing = True
 
-        # Store visibility of .cells and .rings layers and hide them
+        # --- LAYER VISIBILITY MANAGEMENT ---
+        # Hide .cells and .rings layers to reduce clutter during ring boundary editing.
+        # Store their original visibility state to restore it when editing is finished.
         self._layer_visibility_states = {}
         for layer in self._viewer.layers:
             if layer.name.endswith(".cells") or layer.name.endswith(".rings"):
                 self._layer_visibility_states[layer.name] = layer.visible
                 layer.visible = False
 
-        # Update button visibility
+        # --- UI UPDATE ---
         self._edit_rings_geometries_button.visible = False
         self._last_year_spinbox.visible = False
         self._last_year_update_button.visible = False
@@ -522,7 +558,7 @@ class RingsLayerEditorWidget(Container):
 
         # If there is already an edit session open, remove old helper layers first
         if "Rings Modification" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Modification")
+            self._deferred_remove_layer("Rings Modification")
 
         # Build a DF in the same logical order as the annotated export
         df = input_layer.features.copy()
@@ -594,51 +630,57 @@ class RingsLayerEditorWidget(Container):
         self._viewer.layers.selection.active = shapes_layer
 
         self._selected_vertices = {}
-        self._setup_selection_callbacks(shapes_layer)
 
         self._update_year_spinbox()
 
     def _cancel_rings_geometries(self) -> None:
-        """Cancel the changes made to the input layer."""
+        """Cancel the changes made to the input layer and cleanup the edit session."""
         self._is_editing = False
 
-        # Restore visibility of .cells and .rings layers
+        # Restore original visibility of .cells and .rings layers
         for layer_name, visible in self._layer_visibility_states.items():
             if layer_name in self._viewer.layers:
                 self._viewer.layers[layer_name].visible = visible
         self._layer_visibility_states = {}
 
+        # Cleanup temporary modification and selection layers
         if "Rings Modification" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Modification")
+            self._deferred_remove_layer("Rings Modification")
+        
+        # Ensure 'Rings Years' layer switches back to tracking the main rings layer
         self._update_rings_years_layer()
+        
         if "Lasso Selection" in self._viewer.layers:
-            self._viewer.layers.remove("Lasso Selection")
+            self._deferred_remove_layer("Lasso Selection")
         if "Selected Vertices" in self._viewer.layers:
-            self._viewer.layers.remove("Selected Vertices")
+            self._deferred_remove_layer("Selected Vertices")
         self._selected_vertices = {}
 
-        # Reset the button visibility
+        # Reset UI widgets visibility and state
         self._edit_rings_geometries_button.visible = True
         self._last_year_spinbox.visible = True
         self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
+        self._lasso_selection_checkbox.value = False
         self._lasso_selection_checkbox.visible = False
         self._rerun_model_container.visible = False
 
         show_info("Rings geometries modification cancelled")
 
     def _apply_rings_geometries(self) -> None:
-        """Apply the changes to the input layer."""
+        """Apply the changes to the input layer and finish the edit session."""
         self._is_editing = False
 
-        # Restore visibility of .cells and .rings layers
+        # Restore original visibility of .cells and .rings layers
         for layer_name, visible in self._layer_visibility_states.items():
             if layer_name in self._viewer.layers:
                 self._viewer.layers[layer_name].visible = visible
         self._layer_visibility_states = {}
 
         layer = self._viewer.layers["Rings Modification"]
+
+        # Prepare the new geometries for rasterization
 
         rings_table = pd.DataFrame(
             {
@@ -657,8 +699,11 @@ class RingsLayerEditorWidget(Container):
         ).rename_axis("id")
         rings_table = rings_table.dropna(axis=1, how="all")
 
+        # Cleanup temporary edit layers
         if "Rings Modification" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Modification")
+            self._deferred_remove_layer("Rings Modification")
+            
+        # Ensure 'Rings Years' layer switches back to tracking the main rings layer
         self._update_rings_years_layer()
 
         input_layer = self._input_layer
@@ -687,20 +732,25 @@ class RingsLayerEditorWidget(Container):
         self._last_year_update_button.visible = True
         self._cancel_rings_geometries_button.visible = False
         self._apply_rings_geometries_button.visible = False
+        self._lasso_selection_checkbox.value = False
         self._lasso_selection_checkbox.visible = False
         self._rerun_model_container.visible = False
 
         if "Lasso Selection" in self._viewer.layers:
-            self._viewer.layers.remove("Lasso Selection")
+            self._deferred_remove_layer("Lasso Selection")
         if "Selected Vertices" in self._viewer.layers:
-            self._viewer.layers.remove("Selected Vertices")
+            self._deferred_remove_layer("Selected Vertices")
         self._selected_vertices = {}
 
         # Show confirmation message
         show_info("Ring geometries successfully updated")
 
     def _toggle_lasso_selection_mode(self, enabled: bool) -> None:
-        """Toggle the lasso selection mode."""
+        """
+        Toggle the lasso selection mode.
+        When enabled, a temporary yellow shapes layer is created to allow users
+        to draw polygons defining areas for vertex deletion.
+        """
         if enabled:
             if "Lasso Selection" not in self._viewer.layers:
                 self._viewer.add_shapes(
@@ -718,8 +768,9 @@ class RingsLayerEditorWidget(Container):
             self._delete_lasso_vertices_button.visible = True
             show_info("Lasso Mode: Draw polygons and click 'Delete Vertices in Lasso' (or press 'Delete')")
         else:
+            # Revert to standard direct selection mode on the rings modification layer
             if "Lasso Selection" in self._viewer.layers:
-                self._viewer.layers.remove("Lasso Selection")
+                self._deferred_remove_layer("Lasso Selection")
             if "Rings Modification" in self._viewer.layers:
                 self._viewer.layers.selection.active = self._viewer.layers[
                     "Rings Modification"
@@ -727,34 +778,25 @@ class RingsLayerEditorWidget(Container):
                 self._viewer.layers["Rings Modification"].mode = "direct"
             self._delete_lasso_vertices_button.visible = False
 
-    def _setup_selection_callbacks(self, layer: "napari.layers.Shapes") -> None:
-        """Set up mouse callbacks for vertex selection."""
-
-        @layer.mouse_drag_callbacks.append
-        def _on_click(layer, event):
-            if self._lasso_selection_checkbox.value:
-                return
-
+        # Bind the Delete key to our custom handler to support lasso-delete via keyboard.
+        # We deselect lasso polygons before execution to prevent napari from deleting the lasso shape itself.
         @self._viewer.bind_key("Delete", overwrite=True)
         def _delete_selected(viewer):
             if not self._is_editing:
-                # Fallback to default delete if not in editing mode
                 return
 
             if self._lasso_selection_checkbox.value:
-                # When in lasso mode, we want to intercept Delete
-                # We deselect all shapes in lasso layer to prevent napari's default deletion
                 if "Lasso Selection" in self._viewer.layers:
                     self._viewer.layers["Lasso Selection"].selected_data = set()
                 
                 self._execute_lasso_deletion()
                 return
 
-            # Default behavior for Rings Modification layer if not in lasso mode
-            # (Napari handles direct vertex deletion automatically if selected)
-
     def _execute_lasso_deletion(self) -> None:
-        """Process the lasso selection and delete vertices."""
+        """
+        Main entry point for lasso-based deletion.
+        Identifies vertices within the lasso area and removes them from the ring boundaries.
+        """
         if not self._is_editing or not self._lasso_selection_checkbox.value:
             return
 
@@ -763,51 +805,22 @@ class RingsLayerEditorWidget(Container):
         if self._selected_vertices:
             self._delete_selected_vertices()
         else:
-            # Even if no vertices found, clear the lasso polygons
+            # Clear the lasso polygons even if no vertices were found to maintain UI flow
             if "Lasso Selection" in self._viewer.layers:
                 self._viewer.layers["Lasso Selection"].data = []
             show_info("No vertices found inside the lasso area")
 
-    def _identify_vertex(self, layer, position) -> Optional[tuple]:
-        """Find the vertex at the given position."""
-        if not hasattr(layer, "data") or len(layer.data) == 0:
-            return None
-        
-        # position is (y, x)
-        pos = np.array(position)
-        
-        # Scale position if needed (layer.scale)
-        scale = np.array(layer.scale)
-        
-        min_dist = float("inf")
-        best_res = None
-        
-        # threshold for selection in pixels
-        threshold = 10.0
-        
-        for i, shape_data in enumerate(layer.data):
-            # shape_data is (N, 2)
-            dists = np.linalg.norm((shape_data - pos), axis=1)
-            idx = np.argmin(dists)
-            if dists[idx] < min_dist:
-                min_dist = dists[idx]
-                best_res = (i, idx)
-        
-        if min_dist < threshold / np.mean(scale):
-            return best_res
-        return None
-
     def _select_vertices_in_lasso(self) -> None:
-        """Select all vertices inside the lasso polygon."""
+        """
+        Iterates through all drawn lasso polygons and identifies all ring boundary vertices
+        that fall within their boundaries using point-in-polygon tests.
+        """
         if "Lasso Selection" not in self._viewer.layers:
             return
         
         lasso_layer = self._viewer.layers["Lasso Selection"]
         if len(lasso_layer.data) == 0:
             return
-        
-        # We process all polygons in the lasso layer
-        # as the user might have drawn multiple polygons
         
         edit_layer = self._viewer.layers["Rings Modification"]
         
@@ -823,24 +836,20 @@ class RingsLayerEditorWidget(Container):
         self._highlight_selected_vertices()
 
     def _is_point_in_polygon(self, point, polygon) -> bool:
-        """Check if a point is inside a polygon using OpenCV."""
-        # point is (y, x), polygon is list of (y, x)
-        # napari uses (y, x) consistently.
-        # cv2.pointPolygonTest(contour, pt, measureDist)
-        # contour should be (N, 1, 2) or (N, 2)
-        # pt should be (x, y) if we want to follow standard opencv, 
-        # but as long as we are consistent with (y, x) it works too.
-        # However, to be safe and clear:
+        """
+        Helper method using OpenCV's pointPolygonTest to determine if a (y, x) coordinate
+        is inside a polygon defined by a set of (y, x) vertices.
+        """
         poly_pts = np.array(polygon, dtype=np.float32)
-        # pt = (y, x)
         return cv2.pointPolygonTest(poly_pts, (float(point[0]), float(point[1])), False) >= 0
 
     def _highlight_selected_vertices(self) -> None:
-        """Visual feedback for selected vertices."""
-        # This is tricky in napari without being invasive.
-        # We could add a temporary Points layer to show selected vertices.
+        """
+        Creates a temporary red 'Points' layer to provide visual feedback for vertices
+        identified by the lasso tool before they are actually deleted.
+        """
         if "Selected Vertices" in self._viewer.layers:
-            self._viewer.layers.remove("Selected Vertices")
+            self._deferred_remove_layer("Selected Vertices")
         
         points = []
         edit_layer = self._viewer.layers["Rings Modification"]
@@ -861,16 +870,20 @@ class RingsLayerEditorWidget(Container):
                 border_color="white",
                 scale=edit_layer.scale,
             )
-            # Ensure it stays on top
+            # Ensure feedback points are on top of other layers
             self._viewer.layers.move(self._viewer.layers.index(points_layer), -1)
-            # Make sure active selection remains the editor layer or lasso
+            # Maintain active selection on the appropriate tool layer
             if self._lasso_selection_checkbox.value:
                 self._viewer.layers.selection.active = self._viewer.layers["Lasso Selection"]
             else:
                 self._viewer.layers.selection.active = edit_layer
 
     def _delete_selected_vertices(self) -> None:
-        """Delete all selected vertices from the Rings Modification layer."""
+        """
+        Performs the actual removal of vertices from the 'Rings Modification' Shapes layer.
+        Reconstructs the boundary paths and their associated metadata (YEAR, enabled).
+        Shapes that drop below the 2-vertex minimum are automatically removed.
+        """
         if not self._selected_vertices:
             return
 
@@ -878,46 +891,38 @@ class RingsLayerEditorWidget(Container):
         new_data = []
         new_features_dict = {k: [] for k in edit_layer.features.keys()}
         
-        # We must be careful to keep features in sync
-        # Track if any changes were actually made
         changed = False
         for i, shape_data in enumerate(edit_layer.data):
             indices_to_delete = self._selected_vertices.get(i, set())
             
             if indices_to_delete:
                 changed = True
-                # Filter out vertices
                 shape_list = shape_data.tolist() if hasattr(shape_data, "tolist") else list(shape_data)
                 updated_shape = [p for j, p in enumerate(shape_list) if j not in indices_to_delete]
                 
+                # Keep only paths with at least 2 vertices
                 if len(updated_shape) >= 2:
                     new_data.append(np.array(updated_shape))
                     for k in new_features_dict:
                         new_features_dict[k].append(edit_layer.features[k][i])
-                else:
-                    # Shape becomes invalid (less than 2 points for a path)
-                    # We discard it
-                    pass
             else:
                 new_data.append(shape_data)
                 for k in new_features_dict:
                     new_features_dict[k].append(edit_layer.features[k][i])
 
         if changed:
-            # IMPORTANT: Napari might not refresh correctly if we just assign .data
-            # Best way is to update data and features together.
+            # Update layer data and features atomically to maintain synchronization
             edit_layer.data = new_data
             edit_layer.features = pd.DataFrame(new_features_dict)
-            
-            # Force refresh of the layer
             edit_layer.refresh()
             show_info("Selected vertices deleted")
         
-        # Clear selection
+        # Cleanup selection feedback
         self._selected_vertices = {}
         if "Selected Vertices" in self._viewer.layers:
-            self._viewer.layers.remove("Selected Vertices")
+            self._deferred_remove_layer("Selected Vertices")
         
+        # Clear the lasso polygons after deletion is complete
         if "Lasso Selection" in self._viewer.layers:
             self._viewer.layers["Lasso Selection"].data = []
 
@@ -935,8 +940,13 @@ class RingsLayerEditorWidget(Container):
                 self._rerun_model_year_spinbox.value = int(first_year)
 
     def _update_rings_years_layer(self) -> None:
-        """Update the Rings Years layer based on the current rings layer."""
-        # Determine source layer
+        """
+        Update or recreate the persistent 'Rings Years' points layer.
+        This layer displays the year labels for each ring boundary at the left margin.
+        It automatically tracks whether the viewer is in standard mode (Labels layer)
+        or editing mode (Shapes layer).
+        """
+        # Determine the source of geometry data based on current editing state
         source_layer = None
         if "Rings Modification" in self._viewer.layers:
             source_layer = self._viewer.layers["Rings Modification"]
@@ -945,49 +955,42 @@ class RingsLayerEditorWidget(Container):
 
         if source_layer is None:
             if "Rings Years" in self._viewer.layers:
-                self._viewer.layers.remove("Rings Years")
+                self._deferred_remove_layer("Rings Years")
             return
 
-        # Build a DF of boundaries
+        # Extract features and boundary coordinates
         if hasattr(source_layer, "features") and source_layer.features is not None:
             df = source_layer.features.copy()
         else:
             df = pd.DataFrame()
 
         if "RBXY" not in df.columns:
-            # If it's a Labels layer, we need to extract RBXY from its data if features are missing?
-            # Actually, in this plugin, rings layers always have features["RBXY"] if they are valid.
-            # But let's handle the data from source_layer.data if it's a Shapes layer
+            # If features are present but RBXY is missing, try to extract from Shapes data
             if isinstance(source_layer, napari.layers.Shapes):
                 df["RBXY"] = [coords.tolist() for coords in source_layer.data]
-                if "YEAR" not in df.columns:
-                    # Try to get YEAR from features if it was just missing RBXY
-                    pass
             else:
                 if "Rings Years" in self._viewer.layers:
-                    self._viewer.layers.remove("Rings Years")
+                    self._deferred_remove_layer("Rings Years")
                 return
 
         if df.empty or "RBXY" not in df.columns:
             if "Rings Years" in self._viewer.layers:
-                self._viewer.layers.remove("Rings Years")
+                self._deferred_remove_layer("Rings Years")
             return
 
-        # Ensure YEAR exists
+        # Ensure YEAR metadata exists for labeling
         if "YEAR" not in df.columns:
-            # Fallback if YEAR is missing
             n = len(df)
             last_year = 9999
             if source_layer.metadata and "rings_outmost_complete_year" in source_layer.metadata:
                 last_year = int(source_layer.metadata["rings_outmost_complete_year"])
             df["YEAR"] = list(range(last_year - n + 1, last_year + 1))
 
-        # left margin in data coords
+        # Calculate coordinates for labels at the left margin
         scale = source_layer.scale if hasattr(source_layer, "scale") else [1.0, 1.0]
         sx = float(scale[1])
         x_left = 10.0 / sx
 
-        # y-value of each boundary line at x_left
         y_on_left = []
         for coords in df["RBXY"].tolist():
             try:
@@ -996,14 +999,13 @@ class RingsLayerEditorWidget(Container):
             except Exception:
                 y_on_left.append(0.0)
 
-        # Each boundary's YEAR labels the ring *above* it
+        # Place labels in the center of each ring (between boundaries)
         centers_r = []
         for i in range(len(y_on_left)):
             upper = y_on_left[i - 1] if i > 0 else 0.0
             centers_r.append(0.5 * (upper + y_on_left[i]))
 
         years = [str(int(y)) for y in df["YEAR"].tolist()]
-
         points_rc = np.column_stack(
             [
                 np.array(centers_r, dtype=float),
@@ -1011,12 +1013,12 @@ class RingsLayerEditorWidget(Container):
             ]
         )
 
+        # Update existing layer or create new one
         if "Rings Years" in self._viewer.layers:
             years_layer = self._viewer.layers["Rings Years"]
             years_layer.data = points_rc
             years_layer.features = pd.DataFrame({"YEAR": years})
             years_layer.scale = scale
-            # Force refresh of text
             years_layer.refresh()
         else:
             self._viewer.add_points(
@@ -1041,46 +1043,26 @@ class RingsLayerEditorWidget(Container):
             years_layer = self._viewer.layers["Rings Years"]
             years_layer.editable = False
 
-        # Z-order management: we want Rings Years on top of scan, cells, rings
-        # In napari, higher index is on top.
-        # Rings Modification (during editing) should be on top of Rings Years.
-        # Rings layer should be below Rings Years.
+        # --- Z-ORDER MANAGEMENT ---
+        # Keep 'Rings Years' labels always visible but behind the editor and feedback points
+        if "Rings Years" in self._viewer.layers:
+            y_idx = self._viewer.layers.index("Rings Years")
+            self._viewer.layers.move(y_idx, -1)
+
+        if "Rings Modification" in self._viewer.layers:
+            mod_idx = self._viewer.layers.index("Rings Modification")
+            self._viewer.layers.move(mod_idx, -1)
         
-        layers = self._viewer.layers
-        years_index = layers.index(years_layer)
-        
-        target_index = years_index
-        
-        # Find the highest index among scan, cells, rings
-        top_base_layer_index = -1
-        for i, layer in enumerate(layers):
-            if layer.name == "Rings Years":
-                continue
-            if layer.name == "Rings Modification":
-                continue
-            # Check if it's one of the base layers
-            if layer.name.endswith(".scan") or layer.name.endswith(".cells") or layer.name.endswith(".rings"):
-                if i > top_base_layer_index:
-                    top_base_layer_index = i
-        
-        if top_base_layer_index != -1:
-            # We want Rings Years just above the top base layer
-            new_years_index = top_base_layer_index + 1
-            if new_years_index > years_index:
-                # If we move it to a higher index, it moves everything else down
-                new_years_index -= 1
-            
-            # Special case: if Rings Modification is present, it should be above Rings Years
-            if "Rings Modification" in layers:
-                mod_index = layers.index("Rings Modification")
-                if new_years_index >= mod_index:
-                     new_years_index = mod_index - 1
-            
-            if new_years_index != years_index and new_years_index >= 0:
-                layers.move(years_index, new_years_index)
+        if "Selected Vertices" in self._viewer.layers:
+            sv_idx = self._viewer.layers.index("Selected Vertices")
+            self._viewer.layers.move(sv_idx, -1)
 
     def _rerun_model_from_year(self) -> None:
-        """Rerun the ring detection model starting from the selected year."""
+        """
+        Reruns the ring detection model starting from a specific boundary identified by its year.
+        This allows for local adjustments and refinements without reprocessing the entire image.
+        Uses the 'Rings Modification' Shapes layer as the geometry source.
+        """
         selected_year = self._rerun_model_year_spinbox.value
 
         if not self._input_layer:
@@ -1322,7 +1304,7 @@ class RingsLayerEditorWidget(Container):
 
         # --- Redraw the "Rings Years" label layer ---
         if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+            self._deferred_remove_layer("Rings Years")
 
         # Reorder coords by YEAR for label placement
         df_labels = (

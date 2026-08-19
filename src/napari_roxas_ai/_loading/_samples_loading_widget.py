@@ -191,21 +191,24 @@ class SamplesLoadingWidget(Container):
         )
         self._refresh_samples_list()
 
-        # Initialize the RingsLayerEditorWidget to start tracking years in the background
-        # Use a single-shot timer to allow the UI to settle
+        # --- BACKGROUND MONITORING INITIALIZATION ---
+        # Initialize the RingsLayerEditorWidget to start tracking ring years in the background.
+        # This ensures that 'Rings Years' labels appear even if the user hasn't opened the editor widget yet.
+        # A small delay is used to allow the napari viewer and other widgets to settle.
         from qtpy.QtCore import QTimer
         def _init_rings_editor():
-            # Check if it already exists in the dock
+            # Check if an instance of the editor widget already exists in any dock window
+            # to avoid redundant background monitors.
             found = False
             try:
-                # Use public API to find existing widgets
+                # Iterate through all dock widgets using public napari/Qt APIs.
                 if hasattr(self._viewer.window, "qt_viewer"):
                     for dock in self._viewer.window.qt_viewer.dockWidgets.values():
                         if "RingsLayerEditorWidget" in str(type(dock.widget())):
                             found = True
                             break
             except Exception:
-                # Fallback to broad search if dockWidgets is not accessible as expected
+                # Fallback search strategy using Qt's child lookup if dockWidgets is restricted.
                 if hasattr(self._viewer.window, "_qt_window"):
                     from qtpy.QtWidgets import QWidget
                     for dock in self._viewer.window._qt_window.findChildren(QWidget):
@@ -215,9 +218,9 @@ class SamplesLoadingWidget(Container):
             
             if not found:
                 try:
-                    # We don't add it to the dock here, just instantiate it.
-                    # It will connect to the viewer events and manage the "Rings Years" layer.
-                    # We keep a reference to prevent garbage collection.
+                    # Instantiate the widget. Even if not docked, it connects to viewer events
+                    # to manage the 'Rings Years' layer. A reference is kept on the loader
+                    # widget to prevent the editor from being garbage collected.
                     self._rings_editor = RingsLayerEditorWidget(self._viewer)
                 except Exception as e:
                     print(f"Failed to auto-initialize RingsLayerEditorWidget: {e}")
