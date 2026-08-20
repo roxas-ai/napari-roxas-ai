@@ -201,20 +201,17 @@ class SamplesLoadingWidget(Container):
             # to avoid redundant background monitors.
             found = False
             try:
-                # Iterate through all dock widgets using public napari/Qt APIs.
-                if hasattr(self._viewer.window, "qt_viewer"):
-                    for dock in self._viewer.window.qt_viewer.dockWidgets.values():
-                        if "RingsLayerEditorWidget" in str(type(dock.widget())):
-                            found = True
-                            break
-            except Exception:
-                # Fallback search strategy using Qt's child lookup if dockWidgets is restricted.
+                # Iterate through all dock widgets using public-compatible APIs.
+                # Accessing Window._qt_window and findChildren is a safer alternative
+                # to the deprecated qt_viewer property.
                 if hasattr(self._viewer.window, "_qt_window"):
                     from qtpy.QtWidgets import QWidget
                     for dock in self._viewer.window._qt_window.findChildren(QWidget):
                         if "RingsLayerEditorWidget" in str(type(dock)):
                             found = True
                             break
+            except Exception:
+                pass
             
             if not found:
                 try:

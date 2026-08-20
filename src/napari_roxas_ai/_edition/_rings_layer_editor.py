@@ -9,6 +9,7 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
+    Label,
     PushButton,
     SpinBox,
 )
@@ -367,9 +368,9 @@ class RingsLayerEditorWidget(Container):
         self._rerun_model_button.changed.connect(self._rerun_model_from_year)
 
         # --- LASSO SELECTION UI ---
-        # Checkbox to toggle between standard vertex editing and polygon-based lasso selection
+        # Positioned on two lines to ensure alignment stability and correct margin handling.
         self._lasso_selection_checkbox = CheckBox(
-            text="Lasso Selection Mode",
+            label="Lasso Selection Mode",
             value=False,
             visible=False,
         )
@@ -378,7 +379,9 @@ class RingsLayerEditorWidget(Container):
         )
 
         # Dedicated button to execute deletion of vertices contained within drawn lasso polygons
+        # Setting label="" ensures it occupies the right-hand column, centered relative to the widget.
         self._delete_lasso_vertices_button = PushButton(
+            label="",
             text="Delete Vertices in Lasso",
             visible=False,
         )
@@ -399,7 +402,6 @@ class RingsLayerEditorWidget(Container):
             label="Rerun Model from year:",
         )
 
-        # Append the widgets to the container
         self.extend(
             [
                 self._edit_rings_geometries_button,
@@ -551,6 +553,8 @@ class RingsLayerEditorWidget(Container):
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
         self._lasso_selection_checkbox.visible = True
+        # The delete button is only relevant when Lasso Mode is enabled
+        self._delete_lasso_vertices_button.visible = self._lasso_selection_checkbox.value
         self._rerun_model_container.visible = True
 
         input_layer = self._input_layer
@@ -664,6 +668,7 @@ class RingsLayerEditorWidget(Container):
         self._apply_rings_geometries_button.visible = False
         self._lasso_selection_checkbox.value = False
         self._lasso_selection_checkbox.visible = False
+        self._delete_lasso_vertices_button.visible = False
         self._rerun_model_container.visible = False
 
         show_info("Rings geometries modification cancelled")
@@ -734,6 +739,7 @@ class RingsLayerEditorWidget(Container):
         self._apply_rings_geometries_button.visible = False
         self._lasso_selection_checkbox.value = False
         self._lasso_selection_checkbox.visible = False
+        self._delete_lasso_vertices_button.visible = False
         self._rerun_model_container.visible = False
 
         if "Lasso Selection" in self._viewer.layers:
@@ -751,6 +757,9 @@ class RingsLayerEditorWidget(Container):
         When enabled, a temporary yellow shapes layer is created to allow users
         to draw polygons defining areas for vertex deletion.
         """
+        # Toggle visibility of the deletion button based on checkbox state
+        self._delete_lasso_vertices_button.visible = enabled
+
         if enabled:
             if "Lasso Selection" not in self._viewer.layers:
                 self._viewer.add_shapes(
