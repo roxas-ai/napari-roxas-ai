@@ -324,7 +324,7 @@ class RingsLayerEditorWidget(Container):
 
         # Create a button to create the rings working layer
         self._edit_rings_geometries_button = PushButton(
-            text="Edit Rings Geometries"
+            text="Edit Ring Boundaries"
         )
         self._edit_rings_geometries_button.changed.connect(
             self._edit_rings_geometries
@@ -332,7 +332,7 @@ class RingsLayerEditorWidget(Container):
 
         # Create a button to cancel the changes
         self._cancel_rings_geometries_button = PushButton(
-            text="Cancel Geometries Changes", visible=False
+            text="Cancel Ring Changes", visible=False
         )
         self._cancel_rings_geometries_button.changed.connect(
             self._cancel_rings_geometries
@@ -340,7 +340,7 @@ class RingsLayerEditorWidget(Container):
 
         # Create a button to apply the changes
         self._apply_rings_geometries_button = PushButton(
-            text="Apply Geometries Changes", visible=False
+            text="Apply Ring Changes", visible=False
         )
         self._apply_rings_geometries_button.changed.connect(
             self._apply_rings_geometries
@@ -749,7 +749,7 @@ class RingsLayerEditorWidget(Container):
         self._selected_vertices = {}
 
         # Show confirmation message
-        show_info("Ring geometries successfully updated")
+        show_info("Ring boundaries successfully updated")
 
     def _toggle_lasso_selection_mode(self, enabled: bool) -> None:
         """
@@ -773,7 +773,7 @@ class RingsLayerEditorWidget(Container):
             self._viewer.layers.selection.active = self._viewer.layers[
                 "Lasso Selection"
             ]
-            self._viewer.layers["Lasso Selection"].mode = "add_polygon"
+            self._viewer.layers["Lasso Selection"].mode = "add_polygon_lasso"
             self._delete_lasso_vertices_button.visible = True
             show_info("Lasso Mode: Draw polygons and click 'Delete Vertices in Lasso' (or press 'Delete')")
         else:
@@ -1081,7 +1081,7 @@ class RingsLayerEditorWidget(Container):
         # Read from the Shapes editing layer, not the original Labels layer
         if "Rings Modification" not in self._viewer.layers:
             show_info(
-                "No editing session active — click 'Edit Rings Geometries' first"
+                "No editing session active — click 'Edit Ring Boundaries' first"
             )
             return
 
