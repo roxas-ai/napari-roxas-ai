@@ -631,7 +631,6 @@ class SampleAnalyzer:
 
     def _compute_rings_metrics(self):
         """Compute metrics for rings."""
-
         # Compute rings regressions
         self.rings_table[["boundary_slope", "boundary_intercept"]] = (
             self.rings_table["RBXY"]
@@ -644,15 +643,18 @@ class SampleAnalyzer:
 
         # Compute rings average widths
         self.rings_table["ring_vert_width"] = np.nan
-        self.rings_table.iloc[
-            1:, self.rings_table.columns.tolist().index("ring_vert_width")
-        ] = np.diff(self.rings_table["cells_above"].values)
-        self.rings_table["ring_vert_width"] = self.rings_table[
-            "ring_vert_width"
-        ] / (self.pixels_per_um * self.cells_array.shape[1])
-        self.rings_table.loc[
-            ~self.rings_table["enabled"], "ring_vert_width"
-        ] = np.nan
+        if "cells_above" in self.rings_table.columns and len(self.rings_table) > 1:
+            self.rings_table.iloc[
+                1:, self.rings_table.columns.tolist().index("ring_vert_width")
+            ] = np.diff(self.rings_table["cells_above"].values)
+            self.rings_table["ring_vert_width"] = self.rings_table[
+                "ring_vert_width"
+            ] / (self.pixels_per_um * self.cells_array.shape[1])
+            
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[
+                ~self.rings_table["enabled"], "ring_vert_width"
+            ] = np.nan
 
         # Compute ring angle width
         self.rings_table["ring_angle_width"] = self.rings_table[
@@ -667,7 +669,6 @@ class SampleAnalyzer:
 
     def _compute_ring_area(self) -> None:
         # Compute ring area (RA) in mm² and store in rings_table["RA"].
-
         h, w = self.cells_array.shape[:2]
 
         # Ensure RA exists and reset
@@ -721,7 +722,8 @@ class SampleAnalyzer:
                 self.rings_table.loc[ring_id, "CNO"] = int(cnt)
 
         # disabled rings -> NaN
-        self.rings_table.loc[~self.rings_table["enabled"], "CNO"] = np.nan
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "CNO"] = np.nan
 
     def _compute_cd(self) -> None:
         self.rings_table["CD"] = np.nan
@@ -876,8 +878,8 @@ class SampleAnalyzer:
 
         self.rings_table.loc[valid, "KS"] = kh[valid] / ra_m2[valid]
 
-        self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
-
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
 
         return self.rings_table
 
@@ -891,7 +893,6 @@ class SampleAnalyzer:
         For conifers: metrics are not applicable and are always NA.
         For angiosperms: computed based on cluster IDs (cell-level "cluster") within each ring.
         """
-
         # Init columns
         self.rings_table["RVGI"] = np.nan
         self.rings_table["RVSF"] = np.nan
@@ -1071,6 +1072,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwttan(self) -> None:
         # CWTTAN = Mean thickness of tangential cell walls per ring [µm]. Uses cell-level CWTTAN and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWTTAN"] = np.nan
 
         if self.cells_table.empty:
@@ -1099,6 +1102,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwtrad(self) -> None:
         # CWTRAD = Mean thickness of radial cell walls per ring [µm]. Uses cell-level CWTRAD and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWTRAD"] = np.nan
 
         if self.cells_table.empty:
@@ -1127,6 +1132,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwtall(self) -> None:
         # CWTALL = Mean thickness of all cell walls per ring [µm]. Uses cell-level CWTALL and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWTALL"] = np.nan
 
         if self.cells_table.empty:
@@ -1155,6 +1162,8 @@ class SampleAnalyzer:
 
     def _compute_mean_rtsr(self) -> None:
         # RTSR = Mean radial Thickness-to-span ratio per ring (Mork's index). Uses cell-level RTSR and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["RTSR"] = np.nan
 
         if self.cells_table.empty:
@@ -1183,6 +1192,8 @@ class SampleAnalyzer:
 
     def _compute_mean_ctsr(self) -> None:
         # CTSR = Mean circular Thickness-to-span ratio per ring. Uses cell-level CTSR and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CTSR"] = np.nan
 
         if self.cells_table.empty:
@@ -1211,6 +1222,8 @@ class SampleAnalyzer:
 
     def _compute_mean_dh(self) -> None:
         # DHW = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DHW"] = np.nan
 
         if self.cells_table.empty:
@@ -1252,6 +1265,8 @@ class SampleAnalyzer:
 
     def _compute_mean_dh2(self) -> None:
         # DHM = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DHM"] = np.nan
 
         if self.cells_table.empty:
@@ -1296,6 +1311,8 @@ class SampleAnalyzer:
 
     def _compute_mean_drad(self) -> None:
         # DRAD = Mean radial cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_rad and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DRAD"] = np.nan
 
         if self.cells_table.empty:
@@ -1324,6 +1341,8 @@ class SampleAnalyzer:
 
     def _compute_mean_dtan(self) -> None:
         # DTAN = Mean tangential cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_tang and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DTAN"] = np.nan
 
         if self.cells_table.empty:
@@ -1352,6 +1371,8 @@ class SampleAnalyzer:
 
     def _compute_mean_tb2(self) -> None:
         # TB2 = Mean cell wall reinforcement index (t/b)^2 per ring. Uses cell-level TB2 and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["TB2"] = np.nan
 
         if self.cells_table.empty:
@@ -1380,6 +1401,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwa(self) -> None:
         # CWA = Mean cell wall area per ring [µm²]. Uses cell-level CWA and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWA"] = np.nan
 
         if self.cells_table.empty:
@@ -1408,6 +1431,8 @@ class SampleAnalyzer:
 
     def _compute_mean_rwd(self) -> None:
         # RWD = Mean relative anatomical cell density per ring. Uses cell-level RWD and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["RWD"] = np.nan
 
         if self.cells_table.empty:
@@ -1580,6 +1605,9 @@ class SampleAnalyzer:
 
     def analyze_rings(self) -> pd.DataFrame:
         """Main method to analyze rings."""
+        if self.rings_table is None or self.rings_table.empty:
+            return self.rings_table
+
         self._compute_rings_metrics()
         if not self.cells_table.empty:
             self._compute_cells_to_rings_distances()

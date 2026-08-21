@@ -246,9 +246,9 @@ class SingleSampleMeasurementsWidget(Container):
 
         sample_type = None
         if self._measure_cells_checkbox.value:
-            sample_type = self._cells_input_layer.metadata.get("sample_type")
+            sample_type = self._cells_input_layer.metadata["sample_type"]
         elif self._measure_rings_checkbox.value:
-            sample_type = self._rings_input_layer.metadata.get("sample_type")
+            sample_type = self._rings_input_layer.metadata["sample_type"]
 
         config = {
             "pixels_per_um": scale,

@@ -65,14 +65,11 @@ def install_wasd_shortcuts(viewer):
     SETTINGS.shortcuts.shortcuts = newmap
 
     # Refresh napari internal bindings
-    # Accessing _qt_viewer is deprecated, so we attempt to safely refresh
-    # using available public-compatible properties.
-    qtv = getattr(viewer.window, "_qt_viewer", None)
-    if not qtv and hasattr(viewer.window, "qt_viewer"):
-        try:
-            qtv = viewer.window.qt_viewer
-        except Exception:
-            pass
+    # Accessing qt_viewer is deprecated, so we attempt to safely refresh
+    # using getattr to avoid warnings and handle version differences.
+    qtv = getattr(viewer.window, "qt_viewer", None)
+    if qtv is None:
+        qtv = getattr(viewer.window, "_qt_viewer", None)
 
     if qtv:
         for method in ("_bind_shortcuts", "_refresh_shortcuts", "_rebuild_shortcuts"):

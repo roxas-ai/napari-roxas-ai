@@ -339,23 +339,35 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         scale_value = 1 / float(metadata["sample_scale"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
-        # Try to get tabular data associated with the rings
-        rings_table_base = Path(path).parent / (Path(layer_name).stem + ".rings_table")
+    # Try to get tabular data associated with the rings
+    rings_table_base = Path(path).parent / (Path(layer_name).stem + ".rings_table")
 
-        rings_table_candidates = [
-            Path(str(rings_table_base) + ".csv"),  # modern
-            Path(str(rings_table_base) + ".txt"),  # legacy
-        ]
+    rings_table_candidates = [
+        Path(str(rings_table_base) + ".csv"),  # modern
+        Path(str(rings_table_base) + ".txt"),  # legacy
+    ]
 
-        rings_table_path = next((p for p in rings_table_candidates if p.exists()), None)
+    rings_table_path = next((p for p in rings_table_candidates if p.exists()), None)
 
-        if rings_table_path is not None:
-            expected_any = {"boundary_coordinates", "RBXY", "ring_year", "YEAR"}
+    if rings_table_path is not None:
+        expected_any = {"boundary_coordinates", "RBXY", "ring_year", "YEAR"}
 
-            # try configured separator first
+        # try configured separator first
+        df = pd.read_csv(
+            rings_table_path,
+            sep=settings.get("tables.separator"),
+            index_col=None,
+            converters={
+                "RBXY": ast.literal_eval,
+                "boundary_coordinates": ast.literal_eval,
+            },
+        )
+
+        # fallback: legacy tab-separated
+        if df.empty or expected_any.isdisjoint(set(df.columns)):
             df = pd.read_csv(
                 rings_table_path,
-                sep=settings.get("tables.separator"),
+                sep="\t",
                 index_col=None,
                 converters={
                     "RBXY": ast.literal_eval,
@@ -363,36 +375,24 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
                 },
             )
 
-            # fallback: legacy tab-separated
-            if df.empty or expected_any.isdisjoint(set(df.columns)):
-                df = pd.read_csv(
-                    rings_table_path,
-                    sep="\t",
-                    index_col=None,
-                    converters={
-                        "RBXY": ast.literal_eval,
-                        "boundary_coordinates": ast.literal_eval,
-                    },
-                )
+        # normalize column names so downstream code can rely on RBXY + YEAR
+        rename_map = {}
 
-            # normalize column names so downstream code can rely on RBXY + YEAR
-            rename_map = {}
+        if "ring_year" in df.columns and "YEAR" not in df.columns:
+            rename_map["ring_year"] = "YEAR"
 
-            if "ring_year" in df.columns and "YEAR" not in df.columns:
-                rename_map["ring_year"] = "YEAR"
+        # important: keep legacy RBXY if already there; otherwise map boundary_coordinates -> RBXY
+        if "boundary_coordinates" in df.columns and "RBXY" not in df.columns:
+            rename_map["boundary_coordinates"] = "RBXY"
 
-            # important: keep legacy RBXY if already there; otherwise map boundary_coordinates -> RBXY
-            if "boundary_coordinates" in df.columns and "RBXY" not in df.columns:
-                rename_map["boundary_coordinates"] = "RBXY"
+        # legacy
+        if "ring_angle_width" in df.columns and "MRW" not in df.columns:
+            rename_map["ring_angle_width"] = "MRW"
 
-            # legacy
-            if "ring_angle_width" in df.columns and "MRW" not in df.columns:
-                rename_map["ring_angle_width"] = "MRW"
+        if rename_map:
+            df = df.rename(columns=rename_map)
 
-            if rename_map:
-                df = df.rename(columns=rename_map)
-
-            add_kwargs["features"] = df
+        add_kwargs["features"] = df
 
     # Try to get sample metadata and rings metadata from metadata file
     add_kwargs["metadata"] = {}

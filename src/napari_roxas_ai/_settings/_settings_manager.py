@@ -4,8 +4,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from magicgui import magic_factory
-
 
 class SettingsManager:
     """
@@ -372,11 +370,3 @@ def open_settings_file():
         subprocess.call(["xdg-open", str(settings_file)])
 
     return settings_file
-
-
-@magic_factory(call_button="Open Settings File")
-def open_settings_widget():
-    """
-    Magicgui widget wrapper for open_settings_file.
-    """
-    open_settings_file()

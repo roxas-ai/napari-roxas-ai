@@ -203,10 +203,11 @@ class SamplesLoadingWidget(Container):
             try:
                 # Iterate through all dock widgets using public-compatible APIs.
                 # Accessing Window._qt_window and findChildren is a safer alternative
-                # to the deprecated qt_viewer property.
-                if hasattr(self._viewer.window, "_qt_window"):
+                # to using internal viewer attributes directly.
+                qt_window = getattr(self._viewer.window, "_qt_window", None)
+                if qt_window is not None:
                     from qtpy.QtWidgets import QWidget
-                    for dock in self._viewer.window._qt_window.findChildren(QWidget):
+                    for dock in qt_window.findChildren(QWidget):
                         if "RingsLayerEditorWidget" in str(type(dock)):
                             found = True
                             break

@@ -145,14 +145,8 @@ class Worker(QObject):
                     rings_file_path
                 )
 
-                self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
-                    "sample_scale"
-                ]
-                self.config["sample_type"] = (
-                        (cells_add_kwargs.get("metadata") or {}).get("sample_type")
-                        or (rings_add_kwargs.get("metadata") or {}).get("sample_type")
-                        or "conifer"
-                )
+                self.config["pixels_per_um"] = cells_add_kwargs["metadata"]["sample_scale"]
+                self.config["sample_type"] = cells_add_kwargs["metadata"]["sample_type"]
 
                 analyzer = SampleAnalyzer(
                     self.config,
@@ -184,13 +178,8 @@ class Worker(QObject):
                 cells_data, cells_add_kwargs, _ = read_cells_file(
                     cells_file_path
                 )
-                self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
-                    "sample_scale"
-                ]
-                self.config["sample_type"] = (
-                        (cells_add_kwargs.get("metadata") or {}).get("sample_type")
-                        or "conifer"
-                )
+                self.config["pixels_per_um"] = cells_add_kwargs["metadata"]["sample_scale"]
+                self.config["sample_type"] = cells_add_kwargs["metadata"]["sample_type"]
                 analyzer = SampleAnalyzer(
                     self.config,
                     cells_data.astype("uint8") * 255,
@@ -215,13 +204,8 @@ class Worker(QObject):
                 rings_data, rings_add_kwargs, _ = read_rings_file(
                     rings_file_path
                 )
-                self.config["pixels_per_um"] = rings_add_kwargs["metadata"][
-                    "sample_scale"
-                ]
-                self.config["sample_type"] = (
-                        (rings_add_kwargs.get("metadata") or {}).get("sample_type")
-                        or "conifer"
-                )
+                self.config["pixels_per_um"] = rings_add_kwargs["metadata"]["sample_scale"]
+                self.config["sample_type"] = rings_add_kwargs["metadata"]["sample_type"]
                 analyzer = SampleAnalyzer(
                     self.config,
                     np.zeros_like(rings_data),

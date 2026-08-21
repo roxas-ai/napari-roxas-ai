@@ -519,7 +519,9 @@ class RingsLayerEditorWidget(Container):
         self._connect_layer_callback()
         # Ensure 'Rings Years' layer is initialized if a rings layer already exists.
         # A small delay ensures that napari has finished its initial layer setup.
-        self._years_update_timer.start(100)
+        # Use a slightly longer delay and immediate follow-up to ensure visibility.
+        self._years_update_timer.start(500)
+        QTimer.singleShot(1000, lambda: self._years_update_timer.start(10))
 
     @contextmanager
     def _pause_rendering(self) -> ContextManager[None]:
@@ -536,16 +538,21 @@ class RingsLayerEditorWidget(Container):
         """
         canvas = None
         try:
-            if hasattr(self._viewer.window, "_qt_viewer"):
-                canvas = self._viewer.window._qt_viewer.canvas
-                canvas._pause_scene_graph = True
+            # Safely access the qt_viewer and its canvas using getattr to avoid deprecation warnings
+            # and to handle different napari versions.
+            qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
+            if qt_viewer is None:
+                qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+
+            if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
+                canvas = qt_viewer.canvas
+                if canvas is not None:
+                    canvas._pause_scene_graph = True
             yield
         finally:
             if canvas is not None:
                 canvas._pause_scene_graph = False
                 # Force a single clean redraw once modifications are complete.
-                # We check both the napari wrapper and the native Vispy backend
-                # to support different napari/Qt versions.
                 if hasattr(canvas, "update"):
                     canvas.update()
                 elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
@@ -555,7 +562,13 @@ class RingsLayerEditorWidget(Container):
         """Called when layers are added/removed in the viewer.
         Ensures persistent 'Rings Years' labels stay in sync with the current layers.
         """
-        self._years_update_timer.start(200)
+        # Guard against recursive updates from "Rings Years" itself
+        if event is not None and hasattr(event, "value") and event.value is not None:
+            if getattr(event.value, "name", "") == "Rings Years":
+                return
+
+        # Always trigger years update when layer list changes
+        self._years_update_timer.start(500)
 
         if self._is_editing:
             return
@@ -618,6 +631,7 @@ class RingsLayerEditorWidget(Container):
                 self._input_layer, self, self._on_layer_data_change
             )
             self._update_year_spinbox()
+            self._years_update_timer.start(500)
 
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
@@ -805,10 +819,17 @@ class RingsLayerEditorWidget(Container):
                     self._layer_visibility_states = {}
                     
                     # Force a canvas update to ensure the restored layers are redrawn
-                    if hasattr(self._viewer.window._qt_viewer, "canvas"):
-                        canvas = self._viewer.window._qt_viewer.canvas
-                        if hasattr(canvas, "native") and hasattr(canvas.native, "update"):
-                            canvas.native.update()
+                    qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
+                    if qt_viewer is None:
+                        qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+                    
+                    if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
+                        canvas = qt_viewer.canvas
+                        if canvas is not None:
+                            if hasattr(canvas, "update"):
+                                canvas.update()
+                            elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
+                                canvas.native.update()
                 except Exception:
                     pass
 
@@ -889,10 +910,17 @@ class RingsLayerEditorWidget(Container):
                     self._layer_visibility_states = {}
                     
                     # Force a canvas update to ensure the restored layers are redrawn
-                    if hasattr(self._viewer.window._qt_viewer, "canvas"):
-                        canvas = self._viewer.window._qt_viewer.canvas
-                        if hasattr(canvas, "native") and hasattr(canvas.native, "update"):
-                            canvas.native.update()
+                    qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
+                    if qt_viewer is None:
+                        qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+                    
+                    if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
+                        canvas = qt_viewer.canvas
+                        if canvas is not None:
+                            if hasattr(canvas, "update"):
+                                canvas.update()
+                            elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
+                                canvas.native.update()
                 except Exception:
                     pass
 
@@ -1091,7 +1119,7 @@ class RingsLayerEditorWidget(Container):
                         points_layer = self._viewer.add_points(
                             points,
                             name="Selected Vertices",
-                            size=100,
+                            size=75,
                             face_color="yellow",
                             border_color="black",
                             scale=edit_layer.scale,
@@ -1231,12 +1259,10 @@ class RingsLayerEditorWidget(Container):
 
     def _do_update_rings_years_layer(self) -> None:
         """Actual implementation of Rings Years update."""
-        # --- SCENEGRAPH STABILITY CHECK ---
-        # If the viewer is currently drawing, Vispy might crash if we modify layer data.
         if not hasattr(self, "_viewer") or self._viewer is None:
             return
 
-        # Determine the source of geometry data based on current editing state
+        # Determine the source of geometry data
         source_layer = None
         if "Rings Modification" in self._viewer.layers:
             source_layer = self._viewer.layers["Rings Modification"]
@@ -1244,20 +1270,28 @@ class RingsLayerEditorWidget(Container):
             source_layer = self._input_layer
 
         if source_layer is None:
+            valid_layers = self._get_valid_layers()
+            if valid_layers:
+                source_layer = valid_layers[0]
+
+        if source_layer is None:
             if "Rings Years" in self._viewer.layers:
                 self._deferred_remove_layer("Rings Years")
             return
 
-        # Extract features and boundary coordinates using consolidated helper
         try:
             df = self._get_rings_data(source_layer)
-
-            if df.empty or "RBXY" not in df.columns:
+            if df.empty:
                 if "Rings Years" in self._viewer.layers:
                     self._deferred_remove_layer("Rings Years")
                 return
 
-            # Calculate coordinates for labels at the left margin
+            if "RBXY" not in df.columns:
+                if "Rings Years" in self._viewer.layers:
+                    self._deferred_remove_layer("Rings Years")
+                return
+
+            # Placement logic for labels
             scale = source_layer.scale if hasattr(source_layer, "scale") else [1.0, 1.0]
             sx = float(scale[1])
             x_left = 10.0 / sx
@@ -1270,41 +1304,37 @@ class RingsLayerEditorWidget(Container):
                 except Exception:
                     y_on_left.append(0.0)
 
-            # Place labels in the center of each ring (between boundaries)
             centers_r = []
             for i in range(len(y_on_left)):
                 upper = y_on_left[i - 1] if i > 0 else 0.0
                 centers_r.append(0.5 * (upper + y_on_left[i]))
 
             years = [str(int(y)) for y in df["YEAR"].tolist()]
-            points_rc = np.column_stack(
-                [
-                    np.array(centers_r, dtype=float),
-                    np.full(len(df), x_left, dtype=float),
-                ]
-            )
+            h, w = source_layer.data.shape[:2]
+            centers_r = [max(0, min(h - 1, r)) for r in centers_r]
+
+            # Use a safe X coordinate that is well within the image bounds
+            x_left = 10.0 / sx
+
+            points_rc = np.column_stack([
+                np.array(centers_r, dtype=float),
+                np.full(len(df), x_left, dtype=float),
+            ])
         except Exception:
-            # Data extraction failed, possibly due to concurrent modification
             self._years_update_timer.start(500)
             return
 
-        # Update existing layer or create new one
+        # SIMPLIFIED: Always remove and recreate the layer to ensure Vispy refreshes correctly.
+        # This is more robust for text-feature mappings in napari.
         if "Rings Years" in self._viewer.layers:
+            self._viewer.layers.remove("Rings Years")
+
+        # Defer the addition to ensure it happens AFTER the removal and in a clean event cycle
+        def _add_years_layer():
             try:
-                years_layer = self._viewer.layers["Rings Years"]
-                
-                # Perform updates in a safe order. 
-                # Updating scale and features usually doesn't trigger a full redraw immediately,
-                # but setting .data does.
-                years_layer.scale = scale
-                years_layer.features = pd.DataFrame({"YEAR": years})
-                years_layer.data = points_rc
-            except Exception:
-                # If update fails, deferred recreation might be safer
-                self._deferred_remove_layer("Rings Years")
-                self._years_update_timer.start(500)
-        else:
-            try:
+                if "Rings Years" in self._viewer.layers:
+                    return
+
                 self._viewer.add_points(
                     points_rc,
                     name="Rings Years",
@@ -1322,37 +1352,44 @@ class RingsLayerEditorWidget(Container):
                         "size": 8,
                         "color": "black",
                         "blending": "translucent",
+                        "visible": True,
                     },
                 )
-                if "Rings Years" in self._viewer.layers:
-                    years_layer = self._viewer.layers["Rings Years"]
-                    years_layer.editable = False
+
+                years_layer = self._viewer.layers["Rings Years"]
+                years_layer.editable = False
+                years_layer.visible = True
+
+                # Position years layer: top-most, but below editing layers if they exist
+                layers = self._viewer.layers
+                try:
+                    years_index = layers.index(years_layer)
+                    target_idx = len(layers) - 1
+
+                    editing_layers = ["Rings Modification", "Selected Vertices", "Lasso Selection"]
+                    for layer_name in editing_layers:
+                        if layer_name in layers:
+                            # If an editing layer exists, position years just below it
+                            target_idx = layers.index(layer_name) - 1
+                            break
+
+                    if years_index != target_idx and target_idx >= 0:
+                        layers.move(years_index, target_idx)
+                except (ValueError, IndexError):
+                    pass
+
+                years_layer.refresh()
+                if hasattr(years_layer, "text"):
+                    years_layer.text.visible = True
+                    try:
+                        years_layer.text.refresh(years_layer.features)
+                    except TypeError:
+                        # Fallback for older napari versions where refresh() takes no arguments
+                        years_layer.text.refresh()
             except Exception:
-                # If addition fails, try again later
-                self._years_update_timer.start(500)
-
-        # --- Z-ORDER MANAGEMENT ---
-        # Keep 'Rings Years' labels always visible but behind the editor and feedback points
-        if "Rings Years" in self._viewer.layers:
-            try:
-                y_idx = self._viewer.layers.index("Rings Years")
-                self._viewer.layers.move(y_idx, -1)
-            except (ValueError, KeyError, IndexError):
                 pass
 
-        if "Rings Modification" in self._viewer.layers:
-            try:
-                mod_idx = self._viewer.layers.index("Rings Modification")
-                self._viewer.layers.move(mod_idx, -1)
-            except (ValueError, KeyError, IndexError):
-                pass
-        
-        if "Selected Vertices" in self._viewer.layers:
-            try:
-                sv_idx = self._viewer.layers.index("Selected Vertices")
-                self._viewer.layers.move(sv_idx, -1)
-            except (ValueError, KeyError, IndexError):
-                pass
+        QTimer.singleShot(100, _add_years_layer)
 
     def _rerun_model_from_year(self) -> None:
         """

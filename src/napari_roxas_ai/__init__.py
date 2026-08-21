@@ -46,7 +46,6 @@ __version__ = "0.1.2"
 # Mirrors the ``python_name`` references in napari.yaml and the previous
 # eager imports / ``__all__`` of this module.
 _LAZY_IMPORTS = {
-    "cells_vectorization_widget": "._conversion",
     "CrossDatingPlotterWidget": "._crossdating",
     "CellsLayerEditorWidget": "._edition",
     "RingsLayerEditorWidget": "._edition",
