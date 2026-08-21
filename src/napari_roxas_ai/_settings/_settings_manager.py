@@ -1,7 +1,18 @@
 import json
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List
+
+# Encoding used to read settings.json. "utf-8-sig" is plain UTF-8 except that
+# it also accepts a leading byte order mark, which Windows editors such as
+# Notepad and PowerShell add when saving. Reading with plain "utf-8" would
+# reject such a file, which is a needless way to lose someone's settings.
+SETTINGS_READ_ENCODING = "utf-8-sig"
+
+# Encoding used to write settings.json. Written without a BOM and, because
+# json.dump escapes non-ASCII by default, as pure ASCII.
+SETTINGS_WRITE_ENCODING = "utf-8"
 
 # ---------------------------------------------------------------------------
 # Default settings
@@ -420,7 +431,10 @@ class SettingsManager:
         (legacy keys renamed, missing keys filled in from the defaults) and
         written back if anything changed, so that a settings.json left behind
         by an older install keeps working without losing user values.
-        If the file doesn't exist or is corrupted, creates default settings.
+
+        If the file doesn't exist, it is created from the defaults. If it
+        exists but cannot be read, the defaults are used for this session only
+        and the file is left untouched (see _fall_back_to_defaults).
         """
         if not self.settings_file.exists():
             # Create default settings if file doesn't exist
@@ -428,15 +442,16 @@ class SettingsManager:
             return
 
         try:
-            with open(self.settings_file, encoding="utf-8") as f:
+            with open(self.settings_file, encoding=SETTINGS_READ_ENCODING) as f:
                 stored = json.load(f)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            # If file is corrupted, use default settings
-            self.reset()
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            self._fall_back_to_defaults(f"could not be read ({e})")
             return
 
         if not isinstance(stored, dict):
-            self.reset()
+            self._fall_back_to_defaults(
+                "does not contain a JSON object at the top level"
+            )
             return
 
         self._settings = upgrade_settings(stored)
@@ -445,13 +460,35 @@ class SettingsManager:
         if self._settings != stored:
             self.save_settings()
 
+    def _fall_back_to_defaults(self, problem: str) -> None:
+        """
+        Use the defaults for this session without writing them to the file.
+
+        An unreadable file is nearly always a typo in a hand-edited one. Saving
+        the defaults over it would silently destroy every value the user had
+        set, so the file is left exactly as it is and the reason is reported
+        instead, giving them the chance to fix the typo. Settings are only ever
+        overwritten on an explicit reset().
+        """
+        message = (
+            f"The ROXAS AI settings file {self.settings_file} {problem}. "
+            "The default settings are used for this session. The file has not "
+            "been modified, so you can correct it and restart."
+        )
+        print(f"[settings] {message}")
+        warnings.warn(message, RuntimeWarning, stacklevel=3)
+
+        self._settings = deepcopy(DEFAULT_SETTINGS)
+
     def save_settings(self):
         """
         Save current settings to the JSON file.
 
         Writes the settings dictionary to the settings file with pretty formatting.
         """
-        with open(self.settings_file, "w", encoding="utf-8") as f:
+        with open(
+            self.settings_file, "w", encoding=SETTINGS_WRITE_ENCODING
+        ) as f:
             json.dump(self._settings, f, indent=4)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -527,47 +564,70 @@ class SettingsManager:
         self._settings.update(settings_dict)
         self.save_settings()
 
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Return a copy of all settings.
+
+        A copy rather than the live dictionary, because get() hands out the
+        nested objects themselves: a caller editing the result -- the settings
+        widget does exactly that -- would otherwise change the running settings
+        by accident, and without saving them.
+
+        Returns:
+            A deep copy of the complete settings dictionary
+        """
+        return deepcopy(self._settings)
+
+    def replace(self, new_settings: Dict[str, Any]) -> None:
+        """
+        Replace all settings at once and save them in a single file write.
+
+        Used by the settings widget, which always holds the complete tree.
+        `set()` would write the file once per field, and `update()` is a shallow
+        dict.update. Going through upgrade_settings() keeps the invariant that
+        the settings in memory are complete and use the current key names.
+
+        Args:
+            new_settings: The complete settings dictionary to store
+        """
+        self._settings = upgrade_settings(new_settings)
+        self.save_settings()
+
+    def reload(self) -> bool:
+        """
+        Re-read the settings file, picking up a change made outside the plugin.
+
+        Refuses to reload a file that is gone or unreadable, rather than falling
+        back to the defaults: the settings held in memory are the better copy in
+        that case, and _load_settings() would write the defaults over a merely
+        missing file.
+
+        Returns:
+            True if the file was read, False if it was left alone
+        """
+        if not self.settings_file.exists():
+            return False
+
+        try:
+            with open(
+                self.settings_file, encoding=SETTINGS_READ_ENCODING
+            ) as f:
+                if not isinstance(json.load(f), dict):
+                    return False
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return False
+
+        self._load_settings()
+        return True
+
     def reset(self):
         """
         Reset all settings to default values and save to file.
+
+        This is the only place that discards user values: everything a user
+        changed, added or shortened is replaced by the defaults. It is meant to
+        be reachable only through a deliberate action, such as a "reset to
+        defaults" button, never as a fallback when something goes wrong.
         """
         self._settings = deepcopy(DEFAULT_SETTINGS)
         self.save_settings()
-
-
-def open_settings_file():
-    """
-    Opens the settings file in the system's default text editor.
-
-    This function is used as an entry point for the plugin menu item.
-    It ensures the settings file exists and then opens it using the
-    appropriate system command based on the user's operating system.
-
-    Returns:
-        Path: The path to the settings file that was opened
-    """
-    # Get the settings file path
-    settings_manager = SettingsManager()
-    settings_file = settings_manager.settings_file
-
-    # Ensure the file exists
-    if not settings_file.exists():
-        settings_manager.save_settings()
-
-    # Open the file with the system's default application based on OS
-    import subprocess
-    import sys
-
-    if sys.platform == "win32":
-        # Windows - use Path.open() instead of os.startfile
-        import webbrowser
-
-        webbrowser.open(str(settings_file))
-    elif sys.platform == "darwin":
-        # macOS
-        subprocess.call(["open", str(settings_file)])
-    else:
-        # Linux and other UNIX-like systems
-        subprocess.call(["xdg-open", str(settings_file)])
-
-    return settings_file

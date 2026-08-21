@@ -33,7 +33,7 @@ _LAZY_IMPORTS = {
     "SamplesSavingWidget": "._saving",
     "BatchSampleSegmentationWidget": "._segmentation",
     "SingleSampleSegmentationWidget": "._segmentation",
-    "open_settings_file": "._settings",
+    "SettingsWidget": "._settings._settings_widget",
     "write_multiple_layers": "._writer",
     "write_single_layer": "._writer",
 }

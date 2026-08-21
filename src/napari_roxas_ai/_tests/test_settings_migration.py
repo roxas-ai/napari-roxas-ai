@@ -10,6 +10,9 @@ under the current name.
 """
 
 import json
+from copy import deepcopy
+
+import pytest
 
 from napari_roxas_ai._settings._settings_manager import (
     DEFAULT_SETTINGS,
@@ -236,3 +239,134 @@ def test_current_sample_metadata_wins_over_legacy_key():
 def test_current_sample_metadata_is_untouched():
     metadata = {"sample_name": "x", "spatial_resolution": 2.2675}
     assert migrate_legacy_metadata_keys(metadata) == metadata
+
+
+def _edited_settings():
+    """A current settings.json with the kind of edits a user makes by hand."""
+    edited = deepcopy(DEFAULT_SETTINGS)
+    edited["processing"]["try_to_use_gpu"] = True
+    edited["measurements"]["cells_tangential_angle"] = 42.0
+    edited["my_own_block"] = {"hello": "world"}
+    edited["rasterization"]["rings_color_sequence"] = ["red", "blue"]
+    del edited["tables"]["separator"]  # a setting a newer version added
+    return edited
+
+
+def _load_file(path, monkeypatch):
+    monkeypatch.setattr(SettingsManager, "_instance", None)
+    monkeypatch.setattr(SettingsManager, "_settings_file", path)
+    return SettingsManager()
+
+
+def _assert_edits_survived(manager, custom=None):
+    """The four rules a hand-edited settings.json must obey on load."""
+    custom = {"hello": "world"} if custom is None else custom
+    # Key present: the user value is not overwritten
+    assert manager.get("processing.try_to_use_gpu") is True
+    assert manager.get("measurements.cells_tangential_angle") == 42.0
+    # Key only in the user file: left alone
+    assert manager.get("my_own_block") == custom
+    # List: the user list is not overwritten
+    assert manager.get("rasterization.rings_color_sequence") == ["red", "blue"]
+    # Key missing: filled in from the defaults
+    assert manager.get("tables.separator") == ";"
+
+
+@pytest.mark.parametrize(
+    "encoding", ["utf-8", "utf-8-sig"], ids=["utf8", "utf8_with_bom"]
+)
+def test_hand_edited_file_loads_with_or_without_a_bom(
+    encoding, tmp_path, monkeypatch
+):
+    """
+    The file is meant to be hand-edited, and Windows editors add a UTF-8 byte
+    order mark when saving. Reading with plain "utf-8" rejected such a file,
+    which used to cost the user every value they had set.
+    """
+    edited = _edited_settings()
+    edited["my_own_block"] = {"note": "Grösse in µm"}  # non-ASCII on purpose
+
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_bytes(
+        json.dumps(edited, indent=4, ensure_ascii=False).encode(encoding)
+    )
+
+    manager = _load_file(settings_file, monkeypatch)
+
+    assert manager.get("my_own_block") == {"note": "Grösse in µm"}
+    _assert_edits_survived(manager, custom={"note": "Grösse in µm"})
+
+
+def test_edits_are_kept_when_defaults_are_filled_in(tmp_path, monkeypatch):
+    """Filling in a missing setting must not touch the surrounding values."""
+    edited = _edited_settings()
+    del edited["measurements"]["adjacent_cwt_ratio_limit"]
+
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps(edited, indent=4), encoding="utf-8")
+
+    manager = _load_file(settings_file, monkeypatch)
+
+    assert manager.get("measurements.adjacent_cwt_ratio_limit") == 3.0
+    _assert_edits_survived(manager)
+
+    # ...and the completed settings are on disk, still carrying the edits
+    on_disk = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert on_disk["my_own_block"] == {"hello": "world"}
+    assert on_disk["measurements"]["adjacent_cwt_ratio_limit"] == 3.0
+
+
+def test_missing_file_is_created_from_the_defaults(tmp_path, monkeypatch):
+    settings_file = tmp_path / "settings.json"
+
+    manager = _load_file(settings_file, monkeypatch)
+
+    assert json.loads(settings_file.read_text(encoding="utf-8")) == json.loads(
+        json.dumps(DEFAULT_SETTINGS)
+    )
+    assert manager.get("processing.try_to_use_gpu") is False
+
+
+@pytest.mark.parametrize(
+    "content",
+    ['{"processing": {"try_to_use_gpu": true,,}}', "[1, 2, 3]", "not json"],
+    ids=["stray_comma", "not_an_object", "garbage"],
+)
+def test_unreadable_file_is_left_untouched(
+    content, tmp_path, monkeypatch, recwarn
+):
+    """
+    A typo in a hand-edited file must not cost the user their settings: the
+    file stays exactly as it is so it can be corrected, and the reason is
+    reported instead of failing silently.
+    """
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(content, encoding="utf-8")
+
+    manager = _load_file(settings_file, monkeypatch)
+
+    assert settings_file.read_text(encoding="utf-8") == content
+    assert manager.get("processing.try_to_use_gpu") is False
+    assert any("settings.json" in str(w.message) for w in recwarn)
+
+
+def test_reset_is_the_only_thing_that_discards_user_values(
+    tmp_path, monkeypatch
+):
+    """reset() is what a "reset to defaults" button calls, and only that."""
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(
+        json.dumps(_edited_settings(), indent=4), encoding="utf-8"
+    )
+
+    manager = _load_file(settings_file, monkeypatch)
+    _assert_edits_survived(manager)
+
+    manager.reset()
+
+    assert manager.get("processing.try_to_use_gpu") is False
+    assert manager.get("my_own_block") is None
+    assert (
+        manager.get("rasterization.rings_color_sequence")
+        == DEFAULT_SETTINGS["rasterization"]["rings_color_sequence"]
+    )
