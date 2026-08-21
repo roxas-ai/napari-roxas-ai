@@ -718,10 +718,23 @@ class RingsLayerEditorWidget(Container):
             self._rerun_model_container.visible = False
 
             # Restore original visibility of .cells and .rings layers
-            for layer_name, visible in self._layer_visibility_states.items():
-                if layer_name in self._viewer.layers:
-                    self._viewer.layers[layer_name].visible = visible
-            self._layer_visibility_states = {}
+            def restore_visibility():
+                try:
+                    for layer_name, visible in self._layer_visibility_states.items():
+                        if layer_name in self._viewer.layers:
+                            self._viewer.layers[layer_name].visible = visible
+                    self._layer_visibility_states = {}
+                    
+                    # Force a canvas update to ensure the restored layers are redrawn
+                    if hasattr(self._viewer.window._qt_viewer, "canvas"):
+                        canvas = self._viewer.window._qt_viewer.canvas
+                        if hasattr(canvas, "native") and hasattr(canvas.native, "update"):
+                            canvas.native.update()
+                except Exception:
+                    pass
+
+            # Defer visibility restoration slightly to let scenegraph settle from removals
+            QTimer.singleShot(100, restore_visibility)
 
             show_info("Rings geometries modification cancelled")
             self._years_update_timer.start(200)
@@ -811,10 +824,23 @@ class RingsLayerEditorWidget(Container):
             self._rerun_model_container.visible = False
 
             # Restore original visibility of .cells and .rings layers
-            for layer_name, visible in self._layer_visibility_states.items():
-                if layer_name in self._viewer.layers:
-                    self._viewer.layers[layer_name].visible = visible
-            self._layer_visibility_states = {}
+            def restore_visibility():
+                try:
+                    for layer_name, visible in self._layer_visibility_states.items():
+                        if layer_name in self._viewer.layers:
+                            self._viewer.layers[layer_name].visible = visible
+                    self._layer_visibility_states = {}
+                    
+                    # Force a canvas update to ensure the restored layers are redrawn
+                    if hasattr(self._viewer.window._qt_viewer, "canvas"):
+                        canvas = self._viewer.window._qt_viewer.canvas
+                        if hasattr(canvas, "native") and hasattr(canvas.native, "update"):
+                            canvas.native.update()
+                except Exception:
+                    pass
+
+            # Defer visibility restoration slightly to let scenegraph settle from removals
+            QTimer.singleShot(100, restore_visibility)
 
             # Defer updating years layer to ensure all other layer removals/modifications are settled
             self._years_update_timer.start(400)
