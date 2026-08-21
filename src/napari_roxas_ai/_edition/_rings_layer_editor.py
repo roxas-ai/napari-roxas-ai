@@ -435,7 +435,14 @@ class RingsLayerEditorWidget(Container):
     def _pause_rendering(self) -> ContextManager[None]:
         """
         Context manager to pause Vispy rendering.
-        This helps prevent 'Error drawing visual' crashes when modifying layers.
+        
+        This is a CRITICAL stability component. Direct layer modifications in napari
+        (adding/removing/moving layers) trigger immediate redraws in Vispy. If these
+        modifications happen while Vispy is already in its paint cycle, it causes
+        'RuntimeError: Error drawing visual' or 'OSError' during scenegraph updates.
+        
+        By setting canvas._pause_scene_graph = True, we prevent Vispy from attempting
+        to draw until we've finished all our synchronous layer operations.
         """
         canvas = None
         try:
@@ -446,6 +453,9 @@ class RingsLayerEditorWidget(Container):
         finally:
             if canvas is not None:
                 canvas._pause_scene_graph = False
+                # Force a single clean redraw once modifications are complete.
+                # We check both the napari wrapper and the native Vispy backend
+                # to support different napari/Qt versions.
                 if hasattr(canvas, "update"):
                     canvas.update()
                 elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
@@ -471,22 +481,23 @@ class RingsLayerEditorWidget(Container):
         """
         Safely remove a layer by name in the next event loop iteration.
 
-        Direct removal of layers during complex event emissions or scenegraph updates
-        (like inside a button click handler that also modifies layer data) can lead to
-        RuntimeErrors in Vispy or Tracebacks in Napari's scenegraph manager.
+        Direct removal of layers during complex event emissions (like inside a button 
+        click handler that also modifies layer data) can lead to Tracebacks in 
+        Napari's evented list or Vispy's scenegraph manager.
+        
         Using QTimer.singleShot(50, ...) ensures the removal happens when the current
         processing cycle is complete and the GUI event loop is idle.
         """
         def _rm():
             if name in self._viewer.layers:
                 try:
-                    # Before removing, we can try to minimize redraw impact 
-                    # by hiding the layer if it's still there.
+                    # Before removing, we hide the layer to stop Vispy from 
+                    # trying to draw it while it's being purged from the list.
                     self._viewer.layers[name].visible = False
                     self._viewer.layers.remove(name)
                 except Exception:
-                    # Layer might have been removed by another process/event
-                    # or a scenegraph update might have failed mid-way.
+                    # Catch all to prevent crashes if the layer was already 
+                    # removed by another concurrent event.
                     pass
 
         QTimer.singleShot(50, _rm)
@@ -682,6 +693,7 @@ class RingsLayerEditorWidget(Container):
         try:
             with self._pause_rendering():
                 # Cleanup temporary modification and selection layers
+                # We hide them first to stop Vispy rendering before they are removed.
                 if "Rings Modification" in self._viewer.layers:
                     self._viewer.layers["Rings Modification"].visible = False
                     self._viewer.layers.remove("Rings Modification")
@@ -753,7 +765,8 @@ class RingsLayerEditorWidget(Container):
                 ).rename_axis("id")
                 rings_table = rings_table.dropna(axis=1, how="all")
 
-                # Cleanup temporary edit layers
+                # Cleanup temporary edit layers.
+                # Explicit hiding before removal prevents Vispy from drawing partially purged states.
                 self._viewer.layers.remove("Rings Modification")
                 
                 if "Lasso Selection" in self._viewer.layers:
@@ -851,7 +864,8 @@ class RingsLayerEditorWidget(Container):
             self._delete_lasso_vertices_button.visible = True
             show_info("Lasso Mode: Draw polygons and click 'Delete Vertices in Lasso' (or press 'Delete')")
         else:
-            # Revert to standard direct selection mode on the rings modification layer
+            # Revert to standard direct selection mode on the rings modification layer.
+            # We defer the lasso layer removal to ensure the viewer state is stable.
             if "Lasso Selection" in self._viewer.layers:
                 self._deferred_remove_layer("Lasso Selection")
             if "Rings Modification" in self._viewer.layers:
@@ -964,6 +978,8 @@ class RingsLayerEditorWidget(Container):
                     points.append(shape_data[v_idx])
         
         if points:
+            # We defer the addition of feedback points to ensure it doesn't collide
+            # with the ongoing lasso drawing event processing.
             def _add_selected_points():
                 if not self._is_editing:
                     return
@@ -987,7 +1003,8 @@ class RingsLayerEditorWidget(Container):
                     except (ValueError, KeyError, IndexError):
                         pass
 
-                    # Maintain active selection on the appropriate tool layer
+                    # Maintain active selection on the appropriate tool layer.
+                    # This prevents the feedback layer from stealing focus.
                     if self._lasso_selection_checkbox.value:
                         if "Lasso Selection" in self._viewer.layers:
                             self._viewer.layers.selection.active = self._viewer.layers["Lasso Selection"]
@@ -1078,19 +1095,25 @@ class RingsLayerEditorWidget(Container):
         It automatically tracks whether the viewer is in standard mode (Labels layer)
         or editing mode (Shapes layer).
         """
-        # Lock check: if already updating or lasso selection is active, skip.
+        # Global lock: prevents background updates from colliding with 
+        # UI-driven layer modifications (like Apply/Cancel).
         if self._is_updating:
             return
             
+        # Do not update year labels while the user is drawing a lasso selection polygon
+        # to avoid scenegraph race conditions during high-frequency mouse events.
         if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
             return
 
         try:
             self._is_updating = True
+            # Wrap in a rendering pause context to ensure the Vispy scenegraph 
+            # is stable while we modify the 'Rings Years' layer.
             with self._pause_rendering():
                 self._do_update_rings_years_layer()
         except Exception:
-            # Silent failure for visual feedback layer to avoid crashing main UI
+            # Silent failure for visual feedback layer to avoid crashing the main UI
+            # if a race condition still occurs during the update.
             pass
         finally:
             self._is_updating = False
