@@ -568,7 +568,7 @@ class RingsLayerEditorWidget(Container):
                 return
 
         # Always trigger years update when layer list changes
-        self._years_update_timer.start(500)
+        self._years_update_timer.start(50)
 
         if self._is_editing:
             return
@@ -631,7 +631,7 @@ class RingsLayerEditorWidget(Container):
                 self._input_layer, self, self._on_layer_data_change
             )
             self._update_year_spinbox()
-            self._years_update_timer.start(500)
+            self._years_update_timer.start(50)
 
     def _disconnect_layer_callback(self):
         """Disconnect callback from the previously selected layer."""
@@ -654,7 +654,7 @@ class RingsLayerEditorWidget(Container):
             # Update the spinbox value
             self._update_year_spinbox()
             # Defer updating years layer to avoid scenegraph issues during event emission
-            self._years_update_timer.start(300)
+            self._years_update_timer.start(50)
 
 
     def _update_layer_year(self) -> None:
@@ -1313,9 +1313,6 @@ class RingsLayerEditorWidget(Container):
             h, w = source_layer.data.shape[:2]
             centers_r = [max(0, min(h - 1, r)) for r in centers_r]
 
-            # Use a safe X coordinate that is well within the image bounds
-            x_left = 10.0 / sx
-
             points_rc = np.column_stack([
                 np.array(centers_r, dtype=float),
                 np.full(len(df), x_left, dtype=float),
@@ -1324,12 +1321,30 @@ class RingsLayerEditorWidget(Container):
             self._years_update_timer.start(500)
             return
 
-        # SIMPLIFIED: Always remove and recreate the layer to ensure Vispy refreshes correctly.
-        # This is more robust for text-feature mappings in napari.
+        # Check if we can update in-place to avoid flickering
+        if "Rings Years" in self._viewer.layers:
+            years_layer = self._viewer.layers["Rings Years"]
+            # Only update in-place if the number of points is the same
+            if len(years_layer.data) == len(points_rc):
+                years_layer.data = points_rc
+                years_layer.features = {"YEAR": years}
+                years_layer.scale = scale
+                
+                # Refresh text properties
+                if hasattr(years_layer, "text"):
+                    years_layer.text.visible = True
+                    try:
+                        years_layer.text.refresh(years_layer.features)
+                    except TypeError:
+                        years_layer.text.refresh()
+                years_layer.refresh()
+                return
+
+        # Fallback: remove and recreate the layer if in-place update is not possible
         if "Rings Years" in self._viewer.layers:
             self._viewer.layers.remove("Rings Years")
 
-        # Defer the addition to ensure it happens AFTER the removal and in a clean event cycle
+        # Defer the addition to ensure it happens in a clean event cycle
         def _add_years_layer():
             try:
                 if "Rings Years" in self._viewer.layers:
@@ -1379,17 +1394,10 @@ class RingsLayerEditorWidget(Container):
                     pass
 
                 years_layer.refresh()
-                if hasattr(years_layer, "text"):
-                    years_layer.text.visible = True
-                    try:
-                        years_layer.text.refresh(years_layer.features)
-                    except TypeError:
-                        # Fallback for older napari versions where refresh() takes no arguments
-                        years_layer.text.refresh()
             except Exception:
                 pass
 
-        QTimer.singleShot(100, _add_years_layer)
+        QTimer.singleShot(50, _add_years_layer)
 
     def _rerun_model_from_year(self) -> None:
         """
