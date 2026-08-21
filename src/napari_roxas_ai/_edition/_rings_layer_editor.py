@@ -630,20 +630,24 @@ class RingsLayerEditorWidget(Container):
             show_info("No valid rings to edit")
             return
 
-        # Simplify boundary coordinates using cv2.approxPolyDP
+        # Simplify boundary coordinates using cv2.approxPolyDP if tolerance is > 0
         simplified_boundary_lines = []
         keep_rows = []
+        tolerance = settings.get("vectorization.rings_tolerance")
         for i, coords in enumerate(df["RBXY"].tolist()):
             if not isinstance(coords, (list, tuple)) or len(coords) < 2:
                 continue
 
-            approx = cv2.approxPolyDP(
-                np.array(coords, dtype=np.float32),
-                epsilon=settings.get("vectorization.rings_tolerance"),
-                closed=False,
-            )
+            if tolerance > 0:
+                approx = cv2.approxPolyDP(
+                    np.array(coords, dtype=np.float32),
+                    epsilon=tolerance,
+                    closed=False,
+                )
+                approx = np.squeeze(approx)
+            else:
+                approx = np.array(coords, dtype=np.float32)
 
-            approx = np.squeeze(approx)
             if approx.ndim != 2 or approx.shape[0] < 2:
                 continue
 
@@ -1017,9 +1021,9 @@ class RingsLayerEditorWidget(Container):
                     points_layer = self._viewer.add_points(
                         points,
                         name="Selected Vertices",
-                        size=5,
-                        face_color="red",
-                        border_color="white",
+                        size=50,
+                        face_color="yellow",
+                        border_color="black",
                         scale=edit_layer.scale,
                     )
                     # Ensure feedback points are on top of other layers
