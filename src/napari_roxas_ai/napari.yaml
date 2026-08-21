@@ -13,7 +13,7 @@ contributions:
 
     # Widgets contributions
     - id: napari-roxas-ai.open_project_directory_dialog
-      python_name: napari_roxas_ai:open_project_directory_dialog
+      python_name: napari_roxas_ai._project_directory._project_directory_dialog:open_project_directory_dialog
       title: Project directory setting widget
 
     - id: napari-roxas-ai.make_preparation_widget
@@ -56,8 +56,8 @@ contributions:
       python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
       title: Batch sample measurements widget
 
-    - id: napari-roxas-ai.open_settings_file
-      python_name: napari_roxas_ai:open_settings_file
+    - id: napari-roxas-ai.open_settings_widget
+      python_name: napari_roxas_ai._settings._settings_manager:open_settings_widget
       title: Settings
 
     # Readers contributions
@@ -134,5 +134,5 @@ contributions:
     - command: napari-roxas-ai.make_batch_sample_measurements_widget
       display_name: 9B - Batch measure cells & rings
 
-    - command: napari-roxas-ai.open_settings_file
+    - command: napari-roxas-ai.open_settings_widget
       display_name: ZZ - Settings

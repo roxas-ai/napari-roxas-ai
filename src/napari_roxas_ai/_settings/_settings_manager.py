@@ -1,6 +1,10 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict
+
+from magicgui import magic_factory
 
 
 class SettingsManager:
@@ -359,7 +363,6 @@ def open_settings_file():
     if sys.platform == "win32":
         # Windows - use Path.open() instead of os.startfile
         import webbrowser
-
         webbrowser.open(str(settings_file))
     elif sys.platform == "darwin":
         # macOS
@@ -369,3 +372,11 @@ def open_settings_file():
         subprocess.call(["xdg-open", str(settings_file)])
 
     return settings_file
+
+
+@magic_factory(call_button="Open Settings File")
+def open_settings_widget():
+    """
+    Magicgui widget wrapper for open_settings_file.
+    """
+    open_settings_file()

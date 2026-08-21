@@ -15,7 +15,6 @@ from magicgui.widgets import (
     SpinBox,
 )
 from napari.utils.notifications import show_info
-from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
 
@@ -28,9 +27,6 @@ from napari_roxas_ai._utils._callback_manager import (
 
 if TYPE_CHECKING:
     import napari
-
-# Disable DecompressionBomb warnings for large images
-Image.MAX_IMAGE_PIXELS = None
 
 settings = SettingsManager()
 
@@ -286,6 +282,67 @@ class RingsLayerEditorWidget(Container):
         valid_layers = self._get_valid_layers()
         return valid_layers[0] if valid_layers else None
 
+    def _get_rings_data(self, source_layer: "napari.layers.Layer") -> pd.DataFrame:
+        """
+        Extract RBXY, YEAR, and enabled status from a layer.
+        Handles both Labels (via features) and Shapes (via data/features).
+        """
+        if source_layer is None:
+            return pd.DataFrame()
+
+        # Extract features/data based on layer type
+        if hasattr(source_layer, "features") and source_layer.features is not None:
+            df = source_layer.features.copy()
+        else:
+            df = pd.DataFrame()
+
+        # Handle RBXY extraction
+        if "RBXY" not in df.columns:
+            if isinstance(source_layer, napari.layers.Shapes):
+                df["RBXY"] = [coords.tolist() for coords in source_layer.data]
+            else:
+                return pd.DataFrame()
+
+        # Handle YEAR assignment if missing
+        if "YEAR" not in df.columns:
+            n = len(df)
+            last_year = 9999
+            if source_layer.metadata and "rings_outmost_complete_year" in source_layer.metadata:
+                last_year = int(source_layer.metadata["rings_outmost_complete_year"])
+            df["YEAR"] = list(range(last_year - n + 1, last_year + 1))
+
+        # Handle enabled status
+        if "enabled" not in df.columns:
+            df["enabled"] = True
+
+        return df
+
+    def _set_ui_editing_mode(self, editing: bool) -> None:
+        """Toggle UI visibility for editing/idle states."""
+        self._is_editing = editing
+        self._edit_rings_geometries_button.visible = not editing
+        self._last_year_row.visible = not editing
+        
+        self._cancel_rings_geometries_button.visible = editing
+        self._apply_rings_geometries_button.visible = editing
+        
+        # Explicitly toggle visibility of lasso and rerun model rows
+        self._lasso_container.visible = editing
+        self._rerun_params_row.visible = editing
+        self._rerun_model_button.visible = editing
+        
+        # Ensure lasso selection elements are properly handled
+        if editing:
+            # Force inner widgets to be visible as well to overcome potential propagation issues
+            self._lasso_selection_checkbox.visible = True
+            # Show the deletion button only if the checkbox is checked
+            self._delete_lasso_vertices_button.visible = self._lasso_selection_checkbox.value
+        else:
+            # Reset checkbox and hide inner widgets when exiting edit mode
+            self._lasso_selection_checkbox.value = False
+            self._lasso_selection_checkbox.visible = False
+            self._delete_lasso_vertices_button.visible = False
+
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(labels=False)
         self._viewer = viewer
@@ -309,6 +366,10 @@ class RingsLayerEditorWidget(Container):
         self._layer_visibility_states = {}
 
         # --- UI WIDGETS ---
+        # Explicit label for Rerun Model section to ensure consistent appearance
+        self._rerun_model_header = Label(value="Rerun Model from year:", visible=False)
+        self._rerun_model_header.native.setFixedWidth(140)  # Ensure consistent width for alignment
+
         # Create spinbox for the last year
         year_value = (
             self._input_layer.metadata[
@@ -355,11 +416,12 @@ class RingsLayerEditorWidget(Container):
             self._apply_rings_geometries
         )
 
-        # Create a horizontal container for the "Rerun Model" button and year selector
+        # --- RERUN MODEL UI ---
+        # Line 1: Rerun Model from year: --- spinbox --- Rings Model --- combo
         self._rerun_model_year_spinbox = SpinBox(
             value=9999,
-            label="Year",
-            min=-10000,
+            label="Rerun from Year",  # Use a simple label
+            min=-100000,
             max=10000,
             step=1,
         )
@@ -368,16 +430,31 @@ class RingsLayerEditorWidget(Container):
             choices=tuple(
                 path.name for path in Path(RINGS_MODELS_PATH).iterdir()
             ),
-            label="Rings Model",
-        )
-        self._rerun_model_button = PushButton(
-            text="Run",
+            label="Model",
         )
 
+        # Horizontal row for the rerun model parameters
+        self._rerun_params_row = Container(
+            widgets=[
+                self._rerun_model_header,
+                self._rerun_model_year_spinbox,
+                self._rings_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,  # Enable labels for Year and Model
+            visible=False,
+        )
+        # Ensure the header doesn't have a double label effect
+        self._rerun_model_header.label = ""
+
+        # Line 2: Run
+        self._rerun_model_button = PushButton(
+            text="Run",
+            visible=False,
+        )
         self._rerun_model_button.changed.connect(self._rerun_model_from_year)
 
         # --- LASSO SELECTION UI ---
-        # Positioned on two lines to ensure alignment stability and correct margin handling.
         self._lasso_selection_checkbox = CheckBox(
             label="Lasso Selection Mode",
             value=False,
@@ -387,10 +464,7 @@ class RingsLayerEditorWidget(Container):
             lambda val: self._toggle_lasso_selection_mode(val)
         )
 
-        # Dedicated button to execute deletion of vertices contained within drawn lasso polygons
-        # Setting label="" ensures it occupies the right-hand column, centered relative to the widget.
         self._delete_lasso_vertices_button = PushButton(
-            label="",
             text="Delete Vertices in Lasso",
             visible=False,
         )
@@ -398,6 +472,7 @@ class RingsLayerEditorWidget(Container):
             self._execute_lasso_deletion
         )
 
+        # Horizontal row for lasso selection controls
         self._lasso_container = Container(
             widgets=[
                 self._lasso_selection_checkbox,
@@ -407,48 +482,22 @@ class RingsLayerEditorWidget(Container):
             labels=False,
             visible=False,
         )
-
-        # Create Labels for rerun model
-        self._rerun_year_label = Label(value="Year")
-        self._rerun_year_label.native.setFixedWidth(80)
+        # Ensure the container is explicitly hidden at start
+        self._lasso_container.visible = False
         
-        self._rerun_model_label = Label(value="Rings Model")
-        self._rerun_model_label.native.setFixedWidth(80)
-
-        self._rerun_model_container = Container(
-            widgets=[
-                Label(value="Rerun Model from year:"),
-                Container(
-                    widgets=[self._rerun_year_label, self._rerun_model_year_spinbox],
-                    layout="horizontal",
-                    labels=False,
-                ),
-                Container(
-                    widgets=[
-                        self._rerun_model_label,
-                        self._rings_model_weights_file,
-                    ],
-                    layout="horizontal",
-                    labels=False,
-                ),
-                self._rerun_model_button,
-            ],
-            layout="vertical",
-            visible=False,
-            labels=False,
-        )
-
-        self._last_year_label = Label(value="Last Complete Ring Year")
-        self._last_year_label.native.setFixedWidth(150)
+        # Force alignment to the left margin and consistent spacing
+        if hasattr(self._lasso_container.native, "layout"):
+            layout = self._lasso_container.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(10)
 
         self._last_year_row = Container(
             widgets=[
-                self._last_year_label,
                 self._last_year_spinbox,
                 self._last_year_update_button,
             ],
             layout="horizontal",
-            labels=False,
         )
 
         self.extend(
@@ -457,7 +506,8 @@ class RingsLayerEditorWidget(Container):
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
                 self._lasso_container,
-                self._rerun_model_container,
+                self._rerun_params_row,
+                self._rerun_model_button,
                 self._last_year_row,
             ]
         )
@@ -617,11 +667,10 @@ class RingsLayerEditorWidget(Container):
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
         # Get the selected input layer
-        if not self._input_layer:
+        input_layer = self._input_layer
+        if not input_layer:
             QMessageBox.warning(None, "Error", "No valid rings layer found")
             return
-
-        self._is_editing = True
 
         # --- LAYER VISIBILITY MANAGEMENT ---
         # Hide .cells and .rings layers to reduce clutter during ring boundary editing.
@@ -633,17 +682,8 @@ class RingsLayerEditorWidget(Container):
                 layer.visible = False
 
         # --- UI UPDATE ---
-        self._edit_rings_geometries_button.visible = False
-        self._last_year_row.visible = False
-        self._cancel_rings_geometries_button.visible = True
-        self._apply_rings_geometries_button.visible = True
-        self._lasso_container.visible = True
-        self._lasso_selection_checkbox.visible = True
-        # The delete button is only relevant when Lasso Mode is enabled
-        self._delete_lasso_vertices_button.visible = self._lasso_selection_checkbox.value
-        self._rerun_model_container.visible = True
+        self._set_ui_editing_mode(True)
 
-        input_layer = self._input_layer
         self._current_input_layer = input_layer
 
         # If there is already an edit session open, remove old helper layers first
@@ -733,7 +773,6 @@ class RingsLayerEditorWidget(Container):
         if self._is_updating:
             return
         self._is_updating = True
-        self._is_editing = False
 
         try:
             with self._pause_rendering():
@@ -753,15 +792,9 @@ class RingsLayerEditorWidget(Container):
                 self._all_deleted_points = []
 
             # Reset UI widgets visibility and state (outside pause)
-            self._edit_rings_geometries_button.visible = True
-            self._last_year_row.visible = True
-            self._cancel_rings_geometries_button.visible = False
-            self._apply_rings_geometries_button.visible = False
+            self._set_ui_editing_mode(False)
             self._lasso_selection_checkbox.value = False
-            self._lasso_container.visible = False
-            self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
-            self._rerun_model_container.visible = False
 
             # Restore original visibility of .cells and .rings layers
             def restore_visibility():
@@ -795,7 +828,6 @@ class RingsLayerEditorWidget(Container):
         if self._is_updating:
             return
         self._is_updating = True
-        self._is_editing = False
 
         try:
             with self._pause_rendering():
@@ -807,22 +839,7 @@ class RingsLayerEditorWidget(Container):
                 layer.visible = False # Hide immediately to stop rendering
 
                 # Prepare the new geometries for rasterization
-                rings_table = pd.DataFrame(
-                    {
-                        "RBXY": [coords.tolist() for coords in layer.data],
-                        "YEAR": (
-                            layer.features["YEAR"].astype(int).tolist()
-                            if "YEAR" in layer.features
-                            else None
-                        ),
-                        "enabled": (
-                            layer.features["enabled"].tolist()
-                            if "enabled" in layer.features
-                            else None
-                        ),
-                    }
-                ).rename_axis("id")
-                rings_table = rings_table.dropna(axis=1, how="all")
+                rings_table = self._get_rings_data(layer)
 
                 # Cleanup temporary edit layers.
                 # Explicit hiding before removal prevents Vispy from drawing partially purged states.
@@ -859,16 +876,9 @@ class RingsLayerEditorWidget(Container):
                 input_layer.colormap = new_colormap
 
             # UI Update (outside pause)
-            self._edit_rings_geometries_button.visible = True
-            self._last_year_row.visible = True
-            self._cancel_rings_geometries_button.visible = False
-            self._apply_rings_geometries_button.visible = False
-            
+            self._set_ui_editing_mode(False)
             self._lasso_selection_checkbox.value = False
-            self._lasso_container.visible = False
-            self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
-            self._rerun_model_container.visible = False
 
             # Restore original visibility of .cells and .rings layers
             def restore_visibility():
@@ -941,12 +951,13 @@ class RingsLayerEditorWidget(Container):
             # We defer the lasso layer removal to ensure the viewer state is stable.
             if "Lasso Selection" in self._viewer.layers:
                 self._deferred_remove_layer("Lasso Selection")
+            
+            # Explicitly set "Rings Modification" as active layer after lasso mode is disabled
             if "Rings Modification" in self._viewer.layers:
                 try:
-                    self._viewer.layers.selection.active = self._viewer.layers[
-                        "Rings Modification"
-                    ]
-                    self._viewer.layers["Rings Modification"].mode = "direct"
+                    edit_layer = self._viewer.layers["Rings Modification"]
+                    self._viewer.layers.selection.active = edit_layer
+                    edit_layer.mode = "direct"
                 except (ValueError, KeyError, IndexError):
                     pass
             self._delete_lasso_vertices_button.visible = False
@@ -991,6 +1002,16 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.value = False
             # Ensure the horizontal container stays visible since we're still in editing mode.
             self._lasso_container.visible = True
+            
+            # Re-activate the Rings Modification layer to ensure it stays selected after deletion markers are shown
+            if "Rings Modification" in self._viewer.layers:
+                def _restore_active():
+                    if "Rings Modification" in self._viewer.layers:
+                        try:
+                            self._viewer.layers.selection.active = self._viewer.layers["Rings Modification"]
+                        except Exception:
+                            pass
+                QTimer.singleShot(100, _restore_active)
 
     def _select_vertices_in_lasso(self) -> None:
         """
@@ -1084,7 +1105,7 @@ class RingsLayerEditorWidget(Container):
 
                     # Maintain active selection on the appropriate tool layer.
                     # This prevents the feedback layer from stealing focus.
-                    if self._lasson_selection_checkbox.value:
+                    if self._lasso_selection_checkbox.value:
                         if "Lasso Selection" in self._viewer.layers:
                             self._viewer.layers.selection.active = self._viewer.layers["Lasso Selection"]
                     else:
@@ -1212,7 +1233,6 @@ class RingsLayerEditorWidget(Container):
         """Actual implementation of Rings Years update."""
         # --- SCENEGRAPH STABILITY CHECK ---
         # If the viewer is currently drawing, Vispy might crash if we modify layer data.
-        # We check if the viewer is busy or if the scene graph is being updated.
         if not hasattr(self, "_viewer") or self._viewer is None:
             return
 
@@ -1228,34 +1248,14 @@ class RingsLayerEditorWidget(Container):
                 self._deferred_remove_layer("Rings Years")
             return
 
-        # Extract features and boundary coordinates
+        # Extract features and boundary coordinates using consolidated helper
         try:
-            if hasattr(source_layer, "features") and source_layer.features is not None:
-                df = source_layer.features.copy()
-            else:
-                df = pd.DataFrame()
-
-            if "RBXY" not in df.columns:
-                # If features are present but RBXY is missing, try to extract from Shapes data
-                if isinstance(source_layer, napari.layers.Shapes):
-                    df["RBXY"] = [coords.tolist() for coords in source_layer.data]
-                else:
-                    if "Rings Years" in self._viewer.layers:
-                        self._deferred_remove_layer("Rings Years")
-                    return
+            df = self._get_rings_data(source_layer)
 
             if df.empty or "RBXY" not in df.columns:
                 if "Rings Years" in self._viewer.layers:
                     self._deferred_remove_layer("Rings Years")
                 return
-
-            # Ensure YEAR metadata exists for labeling
-            if "YEAR" not in df.columns:
-                n = len(df)
-                last_year = 9999
-                if source_layer.metadata and "rings_outmost_complete_year" in source_layer.metadata:
-                    last_year = int(source_layer.metadata["rings_outmost_complete_year"])
-                df["YEAR"] = list(range(last_year - n + 1, last_year + 1))
 
             # Calculate coordinates for labels at the left margin
             scale = source_layer.scale if hasattr(source_layer, "scale") else [1.0, 1.0]
@@ -1375,25 +1375,9 @@ class RingsLayerEditorWidget(Container):
 
         edit_layer = self._viewer.layers["Rings Modification"]
 
-        # Build rings_table from the current Shapes layer data
-        rings_table = pd.DataFrame(
-            {
-                "RBXY": [
-                    coords.tolist() if hasattr(coords, "tolist") else coords
-                    for coords in edit_layer.data
-                ],
-                "YEAR": (
-                    edit_layer.features["YEAR"].astype(int).tolist()
-                    if "YEAR" in edit_layer.features
-                    else None
-                ),
-                "enabled": (
-                    edit_layer.features["enabled"].tolist()
-                    if "enabled" in edit_layer.features
-                    else None
-                ),
-            }
-        ).rename_axis("id")
+        # Build rings_table from the current Shapes layer data using consolidated helper
+        rings_table = self._get_rings_data(edit_layer)
+        rings_table = rings_table.rename_axis("id")
         rings_table = rings_table.dropna(axis=1, how="all")
 
         if (
@@ -1469,12 +1453,23 @@ class RingsLayerEditorWidget(Container):
             )
         )
         rings_model.to(device=rings_model.available_device)
-        # Fix for problem with model object; device attribute is not updated with to()
-        rings_model.device = rings_model.available_device
+        # Force synchronization of the internal device attribute
+        # We use multiple methods because some models have read-only properties
+        try:
+            rings_model.device = rings_model.available_device
+        except Exception:
+            try:
+                setattr(rings_model, "device", rings_model.available_device)
+            except Exception:
+                # Last resort for read-only properties in some model wrappers
+                if hasattr(rings_model, "__dict__"):
+                    rings_model.__dict__["device"] = rings_model.available_device
+        # Use local device variable for autocast checks
+        device_obj = torch.device(rings_model.available_device)
         rings_model.use_autocast = bool(
-            torch.amp.autocast_mode.is_autocast_available(rings_model.device)
+            torch.amp.autocast_mode.is_autocast_available(device_obj.type)
             and self.settings.get("processing.try_to_use_gpu")
-            and (rings_model.device == "cuda" or rings_model.device == "mps")
+            and (rings_model.available_device == "cuda" or rings_model.available_device == "mps")
         )
 
         # Perform inference
@@ -1600,77 +1595,7 @@ class RingsLayerEditorWidget(Container):
         )
 
         # --- Redraw the "Rings Years" label layer ---
-        if "Rings Years" in self._viewer.layers:
-            self._deferred_remove_layer("Rings Years")
-
-        # Reorder coords by YEAR for label placement
-        df_labels = (
-            pd.DataFrame(
-                {
-                    "YEAR": assigned_years.tolist(),
-                    "RBXY": all_coords,
-                }
-            )
-            .sort_values("YEAR")
-            .reset_index(drop=True)
-        )
-
-        sx = (
-            float(self.input_layer.scale[1])
-            if hasattr(self.input_layer, "scale")
-            else 1.0
-        )
-        x_left = 10.0 / sx
-
-        y_on_left = [
-            interpolate_row_at_col(c, x_left)
-            for c in df_labels["RBXY"].tolist()
-        ]
-        centers_r = []
-        for i in range(len(y_on_left)):
-            upper = y_on_left[i - 1] if i > 0 else 0.0
-            centers_r.append(0.5 * (upper + y_on_left[i]))
-
-        year_strings = [str(int(y)) for y in df_labels["YEAR"].tolist()]
-        points_rc = np.column_stack(
-            [
-                np.array(centers_r, dtype=float),
-                np.full(len(df_labels), x_left, dtype=float),
-            ]
-        )
-
-        self._viewer.add_points(
-            points_rc,
-            name="Rings Years",
-            size=1,
-            opacity=1.0,
-            border_width=0,
-            face_color=[0, 0, 0, 0],
-            border_color=[0, 0, 0, 0],
-            scale=self.input_layer.scale,
-            features={"YEAR": year_strings},
-            text={
-                "string": "{YEAR}",
-                "anchor": "upper_left",
-                "translation": [0, 0],
-                "size": 8,
-                "color": "black",
-                "blending": "translucent",
-            },
-        )
-
-        # Position years layer just below shapes layer
-        years_layer = self._viewer.layers["Rings Years"]
-        shapes_layer = self._viewer.layers["Rings Modification"]
-        layers = self._viewer.layers
-        years_index = layers.index(years_layer)
-        shapes_index = layers.index(shapes_layer)
-        dest_index = shapes_index
-        if years_index < shapes_index:
-            dest_index -= 1
-        layers.move(years_index, dest_index)
-        layers.selection.active = shapes_layer
-        years_layer.editable = False
+        self._years_update_timer.start(100)
 
         show_info(
             f"Model rerun complete: {len(boundary_approx)} new boundaries added"

@@ -111,14 +111,21 @@ class Worker(QObject):
                 )
             )
             self.cells_model.to(device=self.cells_model.available_device)
+            # Ensure internal device attribute is synchronized if possible
+            try:
+                self.cells_model.device = self.cells_model.available_device
+            except Exception:
+                pass
+            # Use local device variable for autocast checks to avoid restricted attribute assignment
+            device_obj = torch.device(self.cells_model.available_device)
             self.cells_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.cells_model.device.type
+                    device_obj.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.cells_model.device == "cuda"
-                    or self.cells_model.device == "mps"
+                    self.cells_model.available_device == "cuda"
+                    or self.cells_model.available_device == "mps"
                 )
             )
 
@@ -144,16 +151,28 @@ class Worker(QObject):
                 )
             )
             self.rings_model.to(device=self.rings_model.available_device)
+            # Force synchronization of the internal device attribute
+            # We use multiple methods because some models have read-only properties
+            try:
+                self.rings_model.device = self.rings_model.available_device
+            except Exception:
+                try:
+                    setattr(self.rings_model, "device", self.rings_model.available_device)
+                except Exception:
+                    # Last resort for read-only properties in some model wrappers
+                    if hasattr(self.rings_model, "__dict__"):
+                        self.rings_model.__dict__["device"] = self.rings_model.available_device
+            # Use local device variable for autocast checks
+            device_obj = torch.device(self.rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
-            self.rings_model.device = self.rings_model.available_device
             self.rings_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.rings_model.device
+                    device_obj.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.rings_model.device == "cuda"
-                    or self.rings_model.device == "mps"
+                    self.rings_model.available_device == "cuda"
+                    or self.rings_model.available_device == "mps"
                 )
             )
 
