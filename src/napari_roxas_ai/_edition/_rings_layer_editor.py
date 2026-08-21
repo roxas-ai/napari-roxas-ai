@@ -287,7 +287,7 @@ class RingsLayerEditorWidget(Container):
         return valid_layers[0] if valid_layers else None
 
     def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__()
+        super().__init__(labels=False)
         self._viewer = viewer
         self.settings = SettingsManager()
 
@@ -398,17 +398,57 @@ class RingsLayerEditorWidget(Container):
             self._execute_lasso_deletion
         )
 
+        self._lasso_container = Container(
+            widgets=[
+                self._lasso_selection_checkbox,
+                self._delete_lasso_vertices_button,
+            ],
+            layout="horizontal",
+            labels=False,
+            visible=False,
+        )
+
+        # Create Labels for rerun model
+        self._rerun_year_label = Label(value="Year")
+        self._rerun_year_label.native.setFixedWidth(80)
+        
+        self._rerun_model_label = Label(value="Rings Model")
+        self._rerun_model_label.native.setFixedWidth(80)
+
         self._rerun_model_container = Container(
             widgets=[
-                # self.label_rerun_model,
-                self._rerun_model_year_spinbox,
-                self._rings_model_weights_file,
+                Label(value="Rerun Model from year:"),
+                Container(
+                    widgets=[self._rerun_year_label, self._rerun_model_year_spinbox],
+                    layout="horizontal",
+                    labels=False,
+                ),
+                Container(
+                    widgets=[
+                        self._rerun_model_label,
+                        self._rings_model_weights_file,
+                    ],
+                    layout="horizontal",
+                    labels=False,
+                ),
                 self._rerun_model_button,
             ],
-            layout="Vertical",
+            layout="vertical",
             visible=False,
-            labels=True,
-            label="Rerun Model from year:",
+            labels=False,
+        )
+
+        self._last_year_label = Label(value="Last Complete Ring Year")
+        self._last_year_label.native.setFixedWidth(150)
+
+        self._last_year_row = Container(
+            widgets=[
+                self._last_year_label,
+                self._last_year_spinbox,
+                self._last_year_update_button,
+            ],
+            layout="horizontal",
+            labels=False,
         )
 
         self.extend(
@@ -416,11 +456,9 @@ class RingsLayerEditorWidget(Container):
                 self._edit_rings_geometries_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
-                self._lasso_selection_checkbox,
-                self._delete_lasso_vertices_button,
+                self._lasso_container,
                 self._rerun_model_container,
-                self._last_year_spinbox,
-                self._last_year_update_button,
+                self._last_year_row,
             ]
         )
 
@@ -596,10 +634,10 @@ class RingsLayerEditorWidget(Container):
 
         # --- UI UPDATE ---
         self._edit_rings_geometries_button.visible = False
-        self._last_year_spinbox.visible = False
-        self._last_year_update_button.visible = False
+        self._last_year_row.visible = False
         self._cancel_rings_geometries_button.visible = True
         self._apply_rings_geometries_button.visible = True
+        self._lasso_container.visible = True
         self._lasso_selection_checkbox.visible = True
         # The delete button is only relevant when Lasso Mode is enabled
         self._delete_lasso_vertices_button.visible = self._lasso_selection_checkbox.value
@@ -716,11 +754,11 @@ class RingsLayerEditorWidget(Container):
 
             # Reset UI widgets visibility and state (outside pause)
             self._edit_rings_geometries_button.visible = True
-            self._last_year_spinbox.visible = True
-            self._last_year_update_button.visible = True
+            self._last_year_row.visible = True
             self._cancel_rings_geometries_button.visible = False
             self._apply_rings_geometries_button.visible = False
             self._lasso_selection_checkbox.value = False
+            self._lasso_container.visible = False
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
             self._rerun_model_container.visible = False
@@ -822,12 +860,12 @@ class RingsLayerEditorWidget(Container):
 
             # UI Update (outside pause)
             self._edit_rings_geometries_button.visible = True
-            self._last_year_spinbox.visible = True
-            self._last_year_update_button.visible = True
+            self._last_year_row.visible = True
             self._cancel_rings_geometries_button.visible = False
             self._apply_rings_geometries_button.visible = False
             
             self._lasso_selection_checkbox.value = False
+            self._lasso_container.visible = False
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
             self._rerun_model_container.visible = False
@@ -951,6 +989,8 @@ class RingsLayerEditorWidget(Container):
             # Reset the lasso selection mode checkbox as requested by the user.
             # This will also trigger the cleanup via _toggle_lasso_selection_mode.
             self._lasso_selection_checkbox.value = False
+            # Ensure the horizontal container stays visible since we're still in editing mode.
+            self._lasso_container.visible = True
 
     def _select_vertices_in_lasso(self) -> None:
         """
