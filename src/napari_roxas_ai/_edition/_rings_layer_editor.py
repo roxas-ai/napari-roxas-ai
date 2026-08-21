@@ -303,6 +303,8 @@ class RingsLayerEditorWidget(Container):
         # --- SELECTION & VISIBILITY STATE ---
         # Stores indices of vertices selected via lasso: shape_index -> set of vertex_indices
         self._selected_vertices = {}
+        # Stores coordinates of all vertices deleted during the current edit session
+        self._all_deleted_points = []
         # Stores visibility of .cells and .rings layers before editing to restore them later
         self._layer_visibility_states = {}
 
@@ -684,6 +686,7 @@ class RingsLayerEditorWidget(Container):
         self._viewer.layers.selection.active = shapes_layer
 
         self._selected_vertices = {}
+        self._all_deleted_points = []
 
         self._update_year_spinbox()
 
@@ -709,6 +712,7 @@ class RingsLayerEditorWidget(Container):
                     self._viewer.layers["Selected Vertices"].visible = False
                     self._viewer.layers.remove("Selected Vertices")
                 self._selected_vertices = {}
+                self._all_deleted_points = []
 
             # Reset UI widgets visibility and state (outside pause)
             self._edit_rings_geometries_button.visible = True
@@ -793,6 +797,7 @@ class RingsLayerEditorWidget(Container):
                     self._viewer.layers["Selected Vertices"].visible = False
                     self._viewer.layers.remove("Selected Vertices")
                 self._selected_vertices = {}
+                self._all_deleted_points = []
 
                 input_layer = self._input_layer
                 if input_layer is None:
@@ -991,13 +996,11 @@ class RingsLayerEditorWidget(Container):
         Creates a temporary red 'Points' layer to provide visual feedback for vertices
         identified by the lasso tool before they are actually deleted.
         """
-        if "Selected Vertices" in self._viewer.layers:
-            self._deferred_remove_layer("Selected Vertices")
-        
         if "Rings Modification" not in self._viewer.layers:
             return
             
         points = []
+        # Add points that are currently marked for deletion in the current lasso selection
         edit_layer = self._viewer.layers["Rings Modification"]
         for shape_idx, vertex_indices in self._selected_vertices.items():
             if shape_idx >= len(edit_layer.data):
@@ -1007,6 +1010,10 @@ class RingsLayerEditorWidget(Container):
                 if v_idx < len(shape_data):
                     points.append(shape_data[v_idx])
         
+        # Add points that were deleted in previous lasso operations within the same edit session
+        if self._all_deleted_points:
+            points.extend(self._all_deleted_points)
+        
         if points:
             # We defer the addition of feedback points to ensure it doesn't collide
             # with the ongoing lasso drawing event processing.
@@ -1014,28 +1021,30 @@ class RingsLayerEditorWidget(Container):
                 if not self._is_editing:
                     return
                 try:
-                    # Safety check: if the layer already exists, don't try to add it again
+                    # Update data if layer exists, otherwise create it
                     if "Selected Vertices" in self._viewer.layers:
-                        return
-
-                    points_layer = self._viewer.add_points(
-                        points,
-                        name="Selected Vertices",
-                        size=50,
-                        face_color="yellow",
-                        border_color="black",
-                        scale=edit_layer.scale,
-                    )
-                    # Ensure feedback points are on top of other layers
-                    try:
-                        p_idx = self._viewer.layers.index(points_layer)
-                        self._viewer.layers.move(p_idx, -1)
-                    except (ValueError, KeyError, IndexError):
-                        pass
+                        points_layer = self._viewer.layers["Selected Vertices"]
+                        points_layer.data = points
+                        points_layer.refresh()
+                    elif points:
+                        points_layer = self._viewer.add_points(
+                            points,
+                            name="Selected Vertices",
+                            size=100,
+                            face_color="yellow",
+                            border_color="black",
+                            scale=edit_layer.scale,
+                        )
+                        # Ensure feedback points are on top of other layers
+                        try:
+                            p_idx = self._viewer.layers.index(points_layer)
+                            self._viewer.layers.move(p_idx, -1)
+                        except (ValueError, KeyError, IndexError):
+                            pass
 
                     # Maintain active selection on the appropriate tool layer.
                     # This prevents the feedback layer from stealing focus.
-                    if self._lasso_selection_checkbox.value:
+                    if self._lasson_selection_checkbox.value:
                         if "Lasso Selection" in self._viewer.layers:
                             self._viewer.layers.selection.active = self._viewer.layers["Lasso Selection"]
                     else:
@@ -1044,6 +1053,10 @@ class RingsLayerEditorWidget(Container):
                     pass
 
             QTimer.singleShot(50, _add_selected_points)
+        else:
+            # If no points are left to highlight, remove the layer if it exists
+            if "Selected Vertices" in self._viewer.layers:
+                self._deferred_remove_layer("Selected Vertices")
 
     def _delete_selected_vertices(self) -> None:
         """
@@ -1068,6 +1081,12 @@ class RingsLayerEditorWidget(Container):
             if indices_to_delete:
                 changed = True
                 shape_list = shape_data.tolist() if hasattr(shape_data, "tolist") else list(shape_data)
+                
+                # Capture coordinates of vertices being deleted to maintain visual feedback
+                for v_idx in indices_to_delete:
+                    if v_idx < len(shape_list):
+                        self._all_deleted_points.append(shape_list[v_idx])
+
                 updated_shape = [p for j, p in enumerate(shape_list) if j not in indices_to_delete]
                 
                 # Keep only paths with at least 2 vertices
@@ -1092,8 +1111,9 @@ class RingsLayerEditorWidget(Container):
         
         # Cleanup selection feedback
         self._selected_vertices = {}
-        if "Selected Vertices" in self._viewer.layers:
-            self._deferred_remove_layer("Selected Vertices")
+        
+        # Refresh highlighting to show accumulated deleted points
+        self._highlight_selected_vertices()
         
         # Defer updating years layer to ensure stability after data removal
         self._years_update_timer.start(200)
