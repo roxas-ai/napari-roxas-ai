@@ -21,6 +21,7 @@ from napari_roxas_ai._settings._settings_manager import (
 from napari_roxas_ai._settings._settings_widget import (
     SettingsWidget,
     _decimals_for,
+    _list_editor_style,
     _make_editor,
 )
 
@@ -255,6 +256,126 @@ def test_reset_is_abandoned_when_not_confirmed(widget):
     assert SettingsManager().get("tables.separator") == "#"
 
 
+# ------------------------------------------------- the list editor is a field
+
+
+def test_every_list_editor_is_marked_as_an_input(widget):
+    """
+    napari's stylesheet does not cover QPlainTextEdit, so without a style of
+    its own a list editor is indistinguishable from a label: same background as
+    the form, no border, and nothing that says it can be typed in.
+    """
+    from qtpy.QtWidgets import QPlainTextEdit
+
+    editors = widget.native.findChildren(QPlainTextEdit)
+    assert editors  # the file extensions alone are ten of them
+
+    for editor in editors:
+        style = editor.styleSheet()
+        assert "border" in style
+        assert "background-color" in style
+        assert ":focus" in style
+
+
+def test_a_list_editor_does_not_wrap_its_entries(widget):
+    """
+    One line is one entry, so a wrapped entry would read as two: in a narrow
+    dock ".crossdating" would show up as ".crossdatin" and "g".
+    """
+    from qtpy.QtWidgets import QPlainTextEdit
+
+    editors = widget.native.findChildren(QPlainTextEdit)
+    assert all(
+        editor.lineWrapMode() == QPlainTextEdit.NoWrap for editor in editors
+    )
+
+
+def test_list_editor_style_follows_the_theme():
+    """The colors come from the theme, not from a hardcoded dark palette."""
+    from napari.utils.theme import darken, get_theme
+
+    with patch(
+        "napari.settings.get_settings"
+    ) as get_napari_settings:
+        get_napari_settings.return_value.appearance.theme = "light"
+        style = _list_editor_style()
+
+    light = get_theme("light")
+    assert darken(light.background, 15) in style
+    assert str(light.secondary) in style
+
+
+def test_list_editor_style_survives_a_theme_it_cannot_read():
+    """A plain Qt application has no napari theme; the box must still show."""
+    with patch(
+        "napari.utils.theme.get_theme", side_effect=RuntimeError("no theme")
+    ):
+        style = _list_editor_style()
+
+    assert "border" in style
+
+
+# --------------------------------------------------- opening the file itself
+
+
+def test_open_settings_file_hands_the_file_to_the_system(
+    widget, settings_file
+):
+    with patch(
+        "napari_roxas_ai._settings._settings_widget.QDesktopServices.openUrl",
+        return_value=True,
+    ) as open_url:
+        widget._open_settings_file()
+
+    url = open_url.call_args[0][0]
+    assert url.isLocalFile()
+    assert url.toLocalFile() == str(settings_file)
+
+
+def test_open_settings_file_writes_a_missing_file_first(widget, settings_file):
+    """Opening a path that does not exist would just fail."""
+    settings_file.unlink()
+
+    with patch(
+        "napari_roxas_ai._settings._settings_widget.QDesktopServices.openUrl",
+        return_value=True,
+    ):
+        widget._open_settings_file()
+
+    assert json.loads(settings_file.read_text()) == SettingsManager().as_dict()
+
+
+def test_open_settings_file_reports_a_system_without_an_editor(
+    widget, settings_file
+):
+    """The path is shown, so the file stays reachable by hand."""
+    with patch(
+        "napari_roxas_ai._settings._settings_widget.QDesktopServices.openUrl",
+        return_value=False,
+    ), patch(
+        "napari_roxas_ai._settings._settings_widget.QMessageBox.warning"
+    ) as warning:
+        widget._open_settings_file()
+
+    assert warning.called
+    assert str(settings_file) in warning.call_args[0][2]
+
+
+def test_open_settings_file_changes_nothing(widget, settings_file):
+    """Looking at the file must not apply the form or rewrite the file."""
+    _editor_for(widget, "tables", "separator").setText("#")
+    before = settings_file.read_text()
+
+    with patch(
+        "napari_roxas_ai._settings._settings_widget.QDesktopServices.openUrl",
+        return_value=True,
+    ):
+        widget._open_settings_file()
+
+    assert settings_file.read_text() == before
+    assert SettingsManager().get("tables.separator") == ";"
+
+
 # ------------------------------------------------------------------- the layout
 
 
@@ -274,6 +395,48 @@ def test_the_buttons_stay_below_the_form(widget):
     assert before == order()
     assert layout.indexOf(widget._form.native) < layout.indexOf(
         widget._apply_button.native
+    )
+
+
+def test_the_open_button_sits_above_the_reset_button(widget):
+    layout = widget.native.layout()
+
+    assert layout.indexOf(widget._reload_button.native) < layout.indexOf(
+        widget._open_file_button.native
+    )
+    assert layout.indexOf(widget._open_file_button.native) < layout.indexOf(
+        widget._reset_button.native
+    )
+
+
+def test_the_form_takes_the_height_the_buttons_leave(widget):
+    """
+    The widget is docked at the side of the napari window, so the form has to
+    fill it. Its size policy is what both the layout here and napari's
+    QtViewerDockWidget read to decide that.
+    """
+    from qtpy.QtWidgets import QSizePolicy
+
+    assert (
+        widget._form.native.sizePolicy().verticalPolicy()
+        == QSizePolicy.Expanding
+    )
+
+    layout = widget.native.layout()
+    buttons = [
+        layout.itemAt(index).widget()
+        for index in range(layout.count())
+        if layout.itemAt(index).widget() is not widget._form.native
+    ]
+    assert all(
+        button.sizePolicy().verticalPolicy() == QSizePolicy.Fixed
+        for button in buttons
+    )
+
+    widget.native.resize(400, 900)
+    widget.native.show()
+    assert widget._form.native.height() > sum(
+        button.height() for button in buttons
     )
 
 

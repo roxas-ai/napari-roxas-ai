@@ -25,6 +25,8 @@ from typing import (
 
 from magicgui.widgets import Container, PushButton
 from napari.utils.notifications import show_info
+from qtpy.QtCore import QUrl
+from qtpy.QtGui import QDesktopServices
 from qtpy.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
@@ -64,6 +66,47 @@ MAX_DECIMALS = 8
 # fits without scrolling and a ten-entry color sequence stays reasonable
 MIN_LIST_ROWS = 2
 MAX_LIST_ROWS = 12
+
+
+def _list_editor_style() -> str:
+    """
+    Stylesheet that makes a list editor look like something to type in.
+
+    napari's stylesheet covers QLineEdit and QTextEdit but not the
+    QPlainTextEdit used for the lists, which therefore falls through to the
+    generic QWidget rule: the background of the form and no border at all, so
+    the entries read as a label rather than as an editable field. This gives it
+    the fill napari gives a line edit, plus an outline -- a box whose height
+    varies with its content needs one more than a single-line field does -- and
+    a brighter outline while it has the focus.
+
+    The colors come from the theme in use, so the editor follows a light theme
+    and a custom one as the rest of the widget does.
+    """
+    try:
+        from napari.settings import get_settings
+        from napari.utils.theme import darken, get_theme
+
+        theme = get_theme(get_settings().appearance.theme)
+        # darken(background, 15) is what the stylesheet gives a QLineEdit
+        fill = darken(theme.background, 15)
+        border, focus_border = theme.secondary, theme.text
+    except Exception:
+        # No napari theme to read, e.g. in a plain Qt application in a test. A
+        # neutral outline still marks the widget as an input either way.
+        fill, border, focus_border = "transparent", "gray", "gray"
+
+    return (
+        "QPlainTextEdit {"
+        f"  background-color: {fill};"
+        f"  border: 1px solid {border};"
+        "  border-radius: 2px;"
+        "  padding: 2px;"
+        "}"
+        "QPlainTextEdit:focus {"
+        f"  border: 1px solid {focus_border};"
+        "}"
+    )
 
 
 def _decimals_for(value: float) -> int:
@@ -127,6 +170,11 @@ def _make_editor(
     ):
         text_edit = QPlainTextEdit("\n".join(value))
         text_edit.setPlaceholderText("one entry per line")
+        text_edit.setStyleSheet(_list_editor_style())
+        # One line is one entry, so an entry too long for the box must not be
+        # wrapped: in a narrow dock ".crossdating" would look like the two
+        # entries ".crossdatin" and "g". It gets a scroll bar instead.
+        text_edit.setLineWrapMode(QPlainTextEdit.NoWrap)
         rows = min(MAX_LIST_ROWS, max(MIN_LIST_ROWS, len(value) + 1))
         text_edit.setFixedHeight(
             rows * text_edit.fontMetrics().lineSpacing() + 12
@@ -256,13 +304,24 @@ class SettingsForm(Container):
     magicgui widgets of the settings widget while being built with Qt layouts
     (the same approach as MatplotlibCanvas in the crossdating plotter). napari
     does not put dock widgets in a scroll area, so this brings its own.
+
+    The form declares itself vertically expanding, which is what makes the
+    widget fill the dock instead of ending halfway down it. Two things read that
+    policy: the layout of the settings widget, which hands all the space left
+    over by the buttons to the only item asking for it, and napari, which
+    appends a stretch of its own to the bottom of a dock widget unless one of
+    its children wants the vertical space (QtViewerDockWidget's
+    _maybe_add_vertical_stretch) -- that stretch would otherwise take the room
+    the form is meant to get.
     """
 
     def __init__(self, settings: Dict[str, Any]):
         inner = QWidget()
         outer_layout = QVBoxLayout(inner)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
         outer_layout.addLayout(form)
+        # Keeps the rows at the top while the scroll area is taller than them
         outer_layout.addStretch(1)
 
         self._collect = _build_group(settings, form, expand_children=True)
@@ -271,9 +330,15 @@ class SettingsForm(Container):
         scroll_area.setWidget(inner)
         scroll_area.setWidgetResizable(True)
         scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # The dock can be dragged to any height, so the form must be able to
+        # shrink as far as the scroll bar allows rather than hold a floor
+        scroll_area.setMinimumHeight(0)
 
         super().__init__(widgets=[])
-        self.native.layout().addWidget(scroll_area)
+        layout = self.native.layout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(scroll_area)
+        self.native.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
     def collect(self) -> Dict[str, Any]:
         """Read every editor back into a settings dictionary."""
@@ -284,7 +349,10 @@ class SettingsWidget(Container):
     """Edit the plugin settings and apply them without restarting napari."""
 
     def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__()
+        # Without labels=False, magicgui wraps the form in a labeled widget
+        # whose own size policy is the one the layout and napari see, so the
+        # form's request for the full height would never reach either of them
+        super().__init__(labels=False)
         self._viewer = viewer
         self._settings_manager = SettingsManager()
         self._form = None
@@ -300,6 +368,17 @@ class SettingsWidget(Container):
             tooltip="Discard unapplied changes and read the file again",
         )
         self._reload_button.changed.connect(self._reload)
+
+        self._open_file_button = PushButton(
+            text="Open settings.json",
+            tooltip=(
+                "Open the settings file in the system editor. Editing it by "
+                "hand is what this widget exists to avoid, so use it to look "
+                "at the file or to copy it; press 'Reload from file' "
+                "afterwards to pick up what you saved there."
+            ),
+        )
+        self._open_file_button.changed.connect(self._open_settings_file)
 
         self._reset_button = PushButton(
             text="Reset to defaults",
@@ -319,6 +398,7 @@ class SettingsWidget(Container):
                     form,
                     self._apply_button,
                     self._reload_button,
+                    self._open_file_button,
                     self._reset_button,
                 ]
             )
@@ -379,6 +459,40 @@ class SettingsWidget(Container):
 
         self._build_form()
         show_info("Settings reloaded from file")
+
+    def _open_settings_file(self) -> None:
+        """
+        Show the settings file in the editor the system uses for .json files.
+
+        Handing the file to the system rather than editing it here is the whole
+        point: what the user saves there is picked up by "Reload from file",
+        which runs the same upgrade as a napari start, so a file broken by hand
+        is reported rather than silently used.
+        """
+        settings_file = self._settings_manager.settings_file
+
+        # A settings file only missing because nothing has written it yet:
+        # opening a path that does not exist would just fail
+        if not settings_file.exists():
+            self._settings_manager.save_settings()
+
+        if not QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(settings_file))
+        ):
+            QMessageBox.warning(
+                None,
+                "Settings file not opened",
+                f"{settings_file}\n\nThe system has no application "
+                "registered for this file. You can open it yourself from the "
+                "path above.",
+            )
+            return
+
+        show_info(
+            f"Opened {settings_file}. Unapplied changes in this widget are not "
+            "in the file yet, and changes you save there show up here after "
+            "'Reload from file'."
+        )
 
     def _reset(self) -> None:
         """Restore the defaults, discarding every value the user set."""

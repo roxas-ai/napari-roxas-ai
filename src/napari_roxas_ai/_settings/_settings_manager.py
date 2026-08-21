@@ -352,6 +352,17 @@ def upgrade_settings(stored: Dict[str, Any]) -> Dict[str, Any]:
     migrated = _migrate_legacy_settings(stored)
     merged = _merge_defaults(DEFAULT_SETTINGS, migrated)
 
+    # _merge_defaults leaves a value alone when it is not a dict, so a
+    # hand-edited "samples_metadata": null (or a list) survives the merge and
+    # the field merge below would raise on it, which means a failed import
+    # rather than a settings file the user can still fix. Such a value carries
+    # no field definitions, so the defaults replace it -- the same fallback
+    # _merge_metadata_fields() already applies to a "fields" that is not a list.
+    if not isinstance(merged.get("samples_metadata"), dict):
+        merged["samples_metadata"] = deepcopy(
+            DEFAULT_SETTINGS["samples_metadata"]
+        )
+
     # The field list is a list of dicts and needs to be merged by field id
     merged["samples_metadata"]["fields"] = _merge_metadata_fields(
         DEFAULT_SETTINGS["samples_metadata"]["fields"],

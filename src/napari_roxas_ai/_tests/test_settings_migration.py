@@ -161,6 +161,38 @@ def test_user_added_field_is_kept():
     assert custom in upgraded["samples_metadata"]["fields"]
 
 
+@pytest.mark.parametrize(
+    "broken", [None, [], [{"id": "spatial_resolution"}], "broken", 0]
+)
+def test_hand_edited_samples_metadata_falls_back_to_the_defaults(broken):
+    """
+    A "samples_metadata" that is not an object must not break the upgrade.
+
+    Only dicts are merged key by key, so a hand-edited null or list reaches the
+    field merge unchanged and used to raise there -- an exception on import,
+    i.e. a plugin that no longer starts, over a value that carries no field
+    definitions anyway. The defaults take its place, as they do for a "fields"
+    that is not a list, and the rest of the file is still upgraded normally.
+    """
+    legacy = _legacy_settings()
+    legacy["samples_metadata"] = broken
+
+    upgraded = upgrade_settings(legacy)
+
+    assert upgraded["samples_metadata"] == DEFAULT_SETTINGS["samples_metadata"]
+    # The settings next to it are unaffected
+    assert upgraded["processing"]["try_to_use_gpu"] is True
+    assert upgraded["project_directory"] == "/some/where/MyProject"
+
+
+def test_hand_edited_fields_falls_back_to_the_defaults():
+    legacy = _legacy_settings()
+    legacy["samples_metadata"]["fields"] = None
+
+    upgraded = upgrade_settings(legacy)
+    assert _field_ids(upgraded) == _field_ids(DEFAULT_SETTINGS)
+
+
 def test_upgrading_current_settings_is_a_no_op():
     assert upgrade_settings(DEFAULT_SETTINGS) == DEFAULT_SETTINGS
 
