@@ -18,11 +18,16 @@ from napari_roxas_ai._settings._settings_manager import (
     DEFAULT_SETTINGS,
     SettingsManager,
 )
+from napari_roxas_ai._settings import _settings_widget
 from napari_roxas_ai._settings._settings_widget import (
+    INFO_ICON,
+    SETTING_HINTS,
     SettingsWidget,
+    _InfoIcon,
     _decimals_for,
     _list_editor_style,
     _make_editor,
+    _row_label,
 )
 
 
@@ -53,6 +58,12 @@ def _editor_for(widget, *path):
     """
     from qtpy.QtWidgets import QFormLayout, QLabel
 
+    def label_texts(label):
+        """A row label is a plain QLabel, or a widget holding one plus an icon."""
+        if isinstance(label, QLabel):
+            return [label.text()]
+        return [inner.text() for inner in label.findChildren(QLabel)]
+
     def find_row(root, key):
         for form in root.findChildren(QFormLayout):
             for row in range(form.rowCount()):
@@ -60,8 +71,7 @@ def _editor_for(widget, *path):
                 field_item = form.itemAt(row, QFormLayout.FieldRole)
                 if label_item is None or field_item is None:
                     continue
-                label = label_item.widget()
-                if isinstance(label, QLabel) and label.text() == f"{key}:":
+                if f"{key}:" in label_texts(label_item.widget()):
                     return field_item.widget()
         return None
 
@@ -254,6 +264,244 @@ def test_reset_is_abandoned_when_not_confirmed(widget):
         widget._reset()
 
     assert SettingsManager().get("tables.separator") == "#"
+
+
+# ------------------------------------------------------ the explanation hints
+
+
+def _row_label_widget(widget, key):
+    """The label widget of the row belonging to a settings key."""
+    from qtpy.QtWidgets import QFormLayout, QLabel
+
+    for form in widget.native.findChildren(QFormLayout):
+        for row in range(form.rowCount()):
+            item = form.itemAt(row, QFormLayout.LabelRole)
+            if item is None:
+                continue
+            label = item.widget()
+            texts = (
+                [label.text()]
+                if isinstance(label, QLabel)
+                else [inner.text() for inner in label.findChildren(QLabel)]
+            )
+            if f"{key}:" in texts:
+                return label
+    return None
+
+
+def test_every_hint_belongs_to_a_setting_that_exists():
+    """
+    The hints repeat the comments in DEFAULT_SETTINGS, so they can fall behind
+    a renamed or removed setting. A hint whose path is gone shows up nowhere in
+    the widget, which is exactly why it would go unnoticed.
+    """
+
+    def paths(mapping, prefix=""):
+        for key, value in mapping.items():
+            yield f"{prefix}{key}"
+            if isinstance(value, dict):
+                yield from paths(value, f"{prefix}{key}.")
+
+    unknown = set(SETTING_HINTS) - set(paths(DEFAULT_SETTINGS))
+    assert not unknown
+
+
+def test_an_explained_setting_gets_an_icon_with_its_explanation(widget):
+    from qtpy.QtWidgets import QLabel
+
+    label = _row_label_widget(widget, "try_to_use_gpu")
+    icons = [
+        inner
+        for inner in label.findChildren(QLabel)
+        if inner.text() == INFO_ICON
+    ]
+
+    assert len(icons) == 1
+    assert icons[0].toolTip() == "Try to use GPU if available"
+    # Hovering the name works as well as hovering the icon
+    assert label.toolTip() == "Try to use GPU if available"
+
+
+def _click(icon):
+    """Click an icon and let the event loop run, as a real click does."""
+    from qtpy.QtCore import Qt
+    from qtpy.QtTest import QTest
+    from qtpy.QtWidgets import QApplication
+
+    QTest.mousePress(icon, Qt.LeftButton)
+    QApplication.instance().processEvents()
+    QTest.mouseRelease(icon, Qt.LeftButton)
+    QApplication.instance().processEvents()
+
+
+def _shown_icon(widget, hint):
+    """The laid out info icon carrying the given explanation."""
+    from qtpy.QtWidgets import QApplication
+
+    widget.native.resize(430, 900)
+    widget.native.show()
+    QApplication.instance().processEvents()
+
+    icon = next(
+        candidate
+        for candidate in widget.native.findChildren(_InfoIcon)
+        if candidate.toolTip() == hint
+    )
+    assert not icon.rect().isEmpty()  # or there is nothing to click
+    return icon
+
+
+def test_clicking_the_icon_shows_the_explanation(widget):
+    """
+    A tooltip needs the pointer held still on a small target, which a trackpad
+    makes fiddly; a click has to work as well.
+
+    Qt takes the visible tooltip down on every mouse press and release, so this
+    goes through a press and a release with the event loop running in between,
+    the way a real click arrives. Showing the tooltip from inside either
+    handler passes a test that clicks in one go and fails in the application.
+    """
+    from qtpy.QtWidgets import QToolTip
+
+    icon = _shown_icon(widget, "Try to use GPU if available")
+    QToolTip.hideText()
+
+    _click(icon)
+
+    assert QToolTip.isVisible()
+    assert QToolTip.text() == "Try to use GPU if available"
+
+
+def test_clicking_the_icon_again_keeps_the_explanation_up(widget):
+    from qtpy.QtWidgets import QToolTip
+
+    icon = _shown_icon(widget, "Try to use GPU if available")
+
+    _click(icon)
+    _click(icon)
+
+    assert QToolTip.isVisible()
+    assert QToolTip.text() == "Try to use GPU if available"
+
+
+def test_the_explanation_is_shown_on_the_icon(widget):
+    """Not wherever the pointer happens to be."""
+    icon = _shown_icon(widget, "Try to use GPU if available")
+
+    with patch.object(_settings_widget.QToolTip, "showText") as show_text:
+        icon._show_explanation()
+
+    position, text, owner = show_text.call_args[0]
+    assert text == "Try to use GPU if available"
+    assert owner is icon
+    assert icon.rect().contains(icon.mapFromGlobal(position))
+
+
+def test_the_icon_shows_that_it_can_be_clicked(widget):
+    from qtpy.QtCore import Qt
+
+    icon = widget.native.findChild(_InfoIcon)
+
+    assert icon.cursor().shape() == Qt.PointingHandCursor
+
+
+def test_a_setting_without_an_explanation_gets_no_icon(widget):
+    """The icon has to mean there is something to read."""
+    from qtpy.QtWidgets import QLabel
+
+    label = _row_label_widget(widget, "separator")
+
+    assert isinstance(label, QLabel)
+    assert label.text() == "separator:"
+    assert not label.toolTip()
+    assert INFO_ICON not in label.text()
+
+
+def test_the_explanations_reach_the_nested_sections(widget):
+    """The hints are keyed by dotted path, so the nesting has to be tracked."""
+    label = _row_label_widget(widget, "cluster_dbl_cwt_threshold")
+
+    assert label.toolTip() == "Default cluster DBL/CWT threshold in \u00b5m"
+
+
+def test_row_label_is_a_plain_label_without_a_hint():
+    from qtpy.QtWidgets import QLabel
+
+    assert isinstance(_row_label("quality", ""), QLabel)
+    assert not isinstance(_row_label("quality", "an explanation"), QLabel)
+
+
+def test_the_icons_do_not_change_what_the_form_holds(widget):
+    """A composite row label must not disturb the editors it labels."""
+    assert widget._form.collect() == json.loads(json.dumps(DEFAULT_SETTINGS))
+
+
+# ------------------------------------------------- expanding all the sections
+
+
+def _sections(widget):
+    from superqt import QCollapsible
+
+    return widget._form.native.findChildren(QCollapsible)
+
+
+def test_the_expand_button_is_above_the_form(widget):
+    layout = widget.native.layout()
+
+    assert layout.indexOf(widget._expand_all_button.native) < layout.indexOf(
+        widget._form.native
+    )
+
+
+def test_expand_all_opens_every_section_including_nested_ones(widget):
+    """
+    The form opens with the nested sections closed, so the metadata fields --
+    the deepest ones -- are what this has to reach.
+    """
+    sections = _sections(widget)
+    assert not all(section.isExpanded() for section in sections)
+    assert any(
+        widget._form._nesting_depth(section) > 1 for section in sections
+    )
+
+    widget._toggle_all_sections()
+
+    assert all(section.isExpanded() for section in sections)
+    assert widget._expand_all_button.text == "Collapse all"
+
+
+def test_collapse_all_closes_every_section(widget):
+    widget._toggle_all_sections()  # expand
+    widget._toggle_all_sections()  # collapse
+
+    assert not any(section.isExpanded() for section in _sections(widget))
+    assert widget._expand_all_button.text == "Expand all"
+
+
+def test_the_button_keeps_toggling(widget):
+    for expected in ("Collapse all", "Expand all", "Collapse all"):
+        widget._toggle_all_sections()
+        assert widget._expand_all_button.text == expected
+
+
+def test_a_rebuilt_form_starts_the_button_over(widget):
+    """A reload or a reset builds a form in its default state."""
+    widget._toggle_all_sections()
+    assert widget._expand_all_button.text == "Collapse all"
+
+    widget._build_form()
+
+    assert widget._expand_all_button.text == "Expand all"
+    assert not all(section.isExpanded() for section in _sections(widget))
+
+
+def test_expanding_everything_does_not_touch_the_values(widget):
+    """Opening the sections must not disturb what the editors hold."""
+    before = widget._form.collect()
+
+    widget._toggle_all_sections()
+
+    assert widget._form.collect() == before
 
 
 # ------------------------------------------------- the list editor is a field

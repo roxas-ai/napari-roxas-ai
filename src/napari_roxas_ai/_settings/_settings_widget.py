@@ -25,12 +25,13 @@ from typing import (
 
 from magicgui.widgets import Container, PushButton
 from napari.utils.notifications import show_info
-from qtpy.QtCore import QUrl
+from qtpy.QtCore import Qt, QTimer, QUrl
 from qtpy.QtGui import QDesktopServices
 from qtpy.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -38,6 +39,7 @@ from qtpy.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -66,6 +68,19 @@ MAX_DECIMALS = 8
 # fits without scrolling and a ten-entry color sequence stays reasonable
 MIN_LIST_ROWS = 2
 MAX_LIST_ROWS = 12
+
+
+def _info_icon_style() -> str:
+    """Stylesheet that keeps the info icon quieter than the setting name."""
+    try:
+        from napari.settings import get_settings
+        from napari.utils.theme import get_theme
+
+        color = get_theme(get_settings().appearance.theme).secondary
+    except Exception:
+        color = "gray"
+
+    return f"QLabel {{ color: {color}; }}"
 
 
 def _list_editor_style() -> str:
@@ -107,6 +122,158 @@ def _list_editor_style() -> str:
         f"  border: 1px solid {focus_border};"
         "}"
     )
+
+
+# What each setting means, by dotted path, shown as the tooltip of its row.
+# These are the comments next to the settings in DEFAULT_SETTINGS: keep the two
+# in step when adding a setting or changing what one does. A setting that is
+# not listed here simply gets no hint.
+SETTING_HINTS: Dict[str, str] = {
+    "file_extensions.scan_file_extension": "Parts of scan file extension",
+    "file_extensions.metadata_file_extension": (
+        "Parts of metadata file extension"
+    ),
+    "file_extensions.cells_file_extension": "Parts of cells file extension",
+    "file_extensions.cells_table_file_extension": (
+        "And those of the cells table"
+    ),
+    "file_extensions.rings_file_extension": "Parts of rings file extension",
+    "file_extensions.rings_table_file_extension": (
+        "And those of the rings table"
+    ),
+    "file_extensions.crossdating_file_extension": (
+        "Parts of tucson file extension"
+    ),
+    "file_extensions.roxas_file_extensions": "roxas file extensions",
+    "file_extensions.image_file_extensions": "Supported image file extensions",
+    "file_extensions.text_file_extensions": "Supported text file extensions",
+    "JPEG_compression.quality": "Default JPEG quality",
+    "JPEG_compression.optimize": "Default optimize flag",
+    "JPEG_compression.progressive": "Default progressive flag",
+    "processing.try_to_use_gpu": "Try to use GPU if available",
+    "processing.try_to_use_autocast": "Try to use autocast if available",
+    "vectorization.cells_tolerance": (
+        "Default tolerance in pixels for cells vectorization"
+    ),
+    "vectorization.cells_edge_width": (
+        "Default line thickness in pixels for vector shapes visualization"
+    ),
+    "vectorization.cells_edge_color": (
+        "Default color for vector shapes visualization"
+    ),
+    "vectorization.cells_face_color": (
+        "Default color for vector shapes visualization (also used for cells "
+        "edition in raster mode)"
+    ),
+    "vectorization.rings_tolerance": (
+        "Default tolerance in pixels for rings vectorization"
+    ),
+    "vectorization.rings_edge_width": (
+        "Default line thickness in pixels for vector shapes visualization"
+    ),
+    "vectorization.rings_edge_color": (
+        "Default color for vector shapes visualization"
+    ),
+    "vectorization.rerun_interactive_edge_color": (
+        "Default color for vector shapes visualization"
+    ),
+    "measurements.cluster_dbl_cwt_threshold": (
+        "Default cluster DBL/CWT threshold in \u00b5m"
+    ),
+    "measurements.cells_smoothing_kernel_size": (
+        "Default smoothing kernel size (1 to disable)"
+    ),
+    "measurements.relwidth_cwt_integration": (
+        "Default wall fraction for thickness measurement"
+    ),
+    "measurements.cells_tangential_angle": (
+        "Default sample angle in degrees (clockwise)"
+    ),
+    "measurements.lower_limit_cwt_iqr_multiplier": (
+        "IQR multiplier for the lower CWT outlier fence"
+    ),
+    "measurements.upper_limit_cwt_iqr_multiplier": (
+        "IQR multiplier for the upper CWT outlier fence"
+    ),
+    "measurements.opposite_cwt_ratio_limit": (
+        "Max CWT ratio between opposite cell sides"
+    ),
+    "measurements.adjacent_cwt_ratio_limit": (
+        "Max CWT ratio between a side and its adjacent sides"
+    ),
+    "project_directory": "Current project directory",
+}
+
+# Marker for a setting that has an explanation. A character rather than an
+# icon file: it scales with the font and needs no light and dark variant.
+INFO_ICON = "\u24d8"  # circled latin small letter i
+
+
+class _InfoIcon(QLabel):
+    """
+    The info icon of a setting: it explains the setting on hover and on click.
+
+    A tooltip alone is easy to miss -- it needs the pointer held still on a
+    small target for about a second, which a trackpad makes fiddly and a touch
+    screen does not do at all. Clicking shows the same text right away.
+    """
+
+    def __init__(self, hint: str):
+        super().__init__(INFO_ICON)
+        self.setToolTip(hint)
+        self.setStyleSheet(_info_icon_style())
+        # Says that there is something to click before it is clicked
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mouseReleaseEvent(self, event) -> None:
+        """
+        Show the explanation, at the icon rather than at the pointer.
+
+        Qt hides the visible tooltip on every mouse press and release, and it
+        does so while the click is still being delivered -- showing one from
+        inside either handler makes it appear and vanish again. Hence the
+        release rather than the press, and the timer on top of it: the tooltip
+        is put up once the click is over and nothing is left to take it down.
+        """
+        QTimer.singleShot(0, self._show_explanation)
+        super().mouseReleaseEvent(event)
+
+    def _show_explanation(self) -> None:
+        QToolTip.showText(
+            self.mapToGlobal(self.rect().center()), self.toolTip(), self
+        )
+
+
+def _row_label(key: str, hint: str) -> QLabel:
+    """
+    The name of a setting, with the info icon that carries its explanation.
+
+    A setting without an explanation keeps the plain label it had, so the icon
+    means "there is something to read here" rather than being decoration on
+    every row.
+    """
+    name = QLabel(f"{key}:")
+    if not hint:
+        return name
+
+    row = QWidget()
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+    # Keeps the name and its icon against the column of the editors, which is
+    # where a form label sits when it is a plain right-aligned QLabel
+    layout.addStretch(1)
+    layout.addWidget(name)
+
+    icon = _InfoIcon(hint)
+    layout.addWidget(icon)
+
+    # On the name and on the row too, so that the explanation shows wherever
+    # over the label the pointer ends up (the icon sets its own)
+    row.setToolTip(hint)
+    name.setToolTip(hint)
+
+    return row
 
 
 def _decimals_for(value: float) -> int:
@@ -238,6 +405,7 @@ def _build_group(
     form: QFormLayout,
     expand_children: bool = False,
     read_only_keys: FrozenSet[str] = frozenset(),
+    path: str = "",
 ) -> Callable[[], Dict[str, Any]]:
     """
     Add one row per entry of the mapping to the form, nesting where needed.
@@ -245,32 +413,40 @@ def _build_group(
     Entries keep the order they have in the settings file, so the form reads
     like the file it edits. Returns a collector that rebuilds the mapping from
     the editors that were created.
+
+    `path` is the dotted path of the mapping itself, which is what the
+    explanations of the settings are keyed by.
     """
     collectors: Dict[str, Callable[[], Any]] = {}
 
     for key, value in mapping.items():
         if isinstance(value, dict):
             group, nested_form = _make_group(key, expanded=expand_children)
-            collectors[key] = _build_group(value, nested_form)
+            collectors[key] = _build_group(
+                value, nested_form, path=f"{path}{key}."
+            )
             form.addRow(group)
 
         elif _is_list_of_dicts(value):
             group, nested_form = _make_group(key, expanded=expand_children)
-            collectors[key] = _build_item_list(value, nested_form)
+            collectors[key] = _build_item_list(
+                value, nested_form, path=f"{path}{key}."
+            )
             form.addRow(group)
 
         else:
             editor, getter = _make_editor(
                 value, read_only=key in read_only_keys
             )
-            form.addRow(f"{key}:", editor)
+            hint = SETTING_HINTS.get(f"{path}{key}", "")
+            form.addRow(_row_label(key, hint), editor)
             collectors[key] = getter
 
     return lambda: {key: getter() for key, getter in collectors.items()}
 
 
 def _build_item_list(
-    items: List[Dict[str, Any]], form: QFormLayout
+    items: List[Dict[str, Any]], form: QFormLayout, path: str = ""
 ) -> Callable[[], List[Dict[str, Any]]]:
     """
     Add a list of dictionaries as one collapsible section per entry.
@@ -289,7 +465,12 @@ def _build_item_list(
         title = str(item.get("id") or f"[{index}]")
         group, nested_form = _make_group(title, expanded=False)
         collectors.append(
-            _build_group(item, nested_form, read_only_keys=frozenset({"id"}))
+            _build_group(
+                item,
+                nested_form,
+                read_only_keys=frozenset({"id"}),
+                path=f"{path}{title}.",
+            )
         )
         form.addRow(group)
 
@@ -344,6 +525,34 @@ class SettingsForm(Container):
         """Read every editor back into a settings dictionary."""
         return self._collect()
 
+    def set_all_expanded(self, expanded: bool) -> None:
+        """
+        Expand or collapse every section, nested ones included.
+
+        A QCollapsible caps the height of its content at the size that content
+        has at the moment it is expanded, so the sections are walked deepest
+        first: every parent is then measured with its children already open.
+        (A parent expanded first is resized by its children afterwards through
+        the event filter QCollapsible installs on them, so both orders come out
+        right in the end -- this one does not have to rely on that.)
+        """
+        groups = self.native.findChildren(QCollapsible)
+        groups.sort(key=self._nesting_depth, reverse=True)
+
+        for group in groups:
+            if expanded:
+                group.expand(animate=False)
+            else:
+                group.collapse(animate=False)
+
+    def _nesting_depth(self, group: QCollapsible) -> int:
+        """How many sections the given one sits inside."""
+        depth, parent = 0, group.parentWidget()
+        while parent is not None and parent is not self.native:
+            depth += isinstance(parent, QCollapsible)
+            parent = parent.parentWidget()
+        return depth
+
 
 class SettingsWidget(Container):
     """Edit the plugin settings and apply them without restarting napari."""
@@ -356,6 +565,16 @@ class SettingsWidget(Container):
         self._viewer = viewer
         self._settings_manager = SettingsManager()
         self._form = None
+
+        # The form opens with its top-level sections expanded and the nested
+        # ones collapsed, which is neither of the two states below, so the
+        # button offers the one that reveals everything first
+        self._all_expanded = False
+        self._expand_all_button = PushButton(
+            text="Expand all",
+            tooltip="Open every section, nested ones included",
+        )
+        self._expand_all_button.changed.connect(self._toggle_all_sections)
 
         self._apply_button = PushButton(
             text="Apply",
@@ -395,6 +614,7 @@ class SettingsWidget(Container):
         if self._form is None:
             self.extend(
                 [
+                    self._expand_all_button,
                     form,
                     self._apply_button,
                     self._reload_button,
@@ -403,11 +623,18 @@ class SettingsWidget(Container):
                 ]
             )
         else:
-            # Putting the new form back in front keeps the buttons at the bottom
+            # The new form takes the place of the old one, which keeps the
+            # expand button above it and the other buttons below it
+            index = self.index(self._form)
             self.remove(self._form)
-            self.insert(0, form)
+            self.insert(index, form)
 
         self._form = form
+
+        # A fresh form is back to top-level sections expanded, nested ones
+        # collapsed, so the button starts over as well
+        self._all_expanded = False
+        self._expand_all_button.text = "Expand all"
 
     def _apply(self) -> None:
         """Store what the form holds, in the file and in the running session."""
@@ -459,6 +686,14 @@ class SettingsWidget(Container):
 
         self._build_form()
         show_info("Settings reloaded from file")
+
+    def _toggle_all_sections(self) -> None:
+        """Switch between showing every section and showing none."""
+        self._all_expanded = not self._all_expanded
+        self._form.set_all_expanded(self._all_expanded)
+        self._expand_all_button.text = (
+            "Collapse all" if self._all_expanded else "Expand all"
+        )
 
     def _open_settings_file(self) -> None:
         """
