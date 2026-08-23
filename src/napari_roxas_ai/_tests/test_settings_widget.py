@@ -436,6 +436,169 @@ def test_the_icons_do_not_change_what_the_form_holds(widget):
     assert widget._form.collect() == json.loads(json.dumps(DEFAULT_SETTINGS))
 
 
+# --------------------------------------------------------------- the filter
+
+
+def _visible_settings(widget):
+    """The paths of the settings the form is currently showing."""
+    return {
+        entry.path
+        for entry in _leaf_entries(widget._form._entries)
+        if all(w.isVisible() for w in entry.widgets)
+    }
+
+
+def _leaf_entries(entries):
+    for entry in entries:
+        if entry.children:
+            yield from _leaf_entries(entry.children)
+        else:
+            yield entry
+
+
+def _filter(widget, text):
+    """Type into the filter field, as a user does."""
+    from qtpy.QtWidgets import QApplication
+
+    widget.native.resize(430, 900)
+    widget.native.show()
+    widget._filter_field.native.setText(text)
+    for _ in range(3):  # the sections settle over a couple of layout passes
+        QApplication.instance().processEvents()
+
+
+def test_the_filter_field_is_the_topmost_widget(widget):
+    layout = widget.native.layout()
+
+    assert layout.indexOf(widget._filter_field.native) == 0
+
+
+def test_the_filter_matches_part_of_a_name_ignoring_case(widget):
+    """"gpu" has to find try_to_use_gpu."""
+    for text in ("gpu", "GPU", "Gpu"):
+        _filter(widget, text)
+        assert _visible_settings(widget) == {"processing.try_to_use_gpu"}
+
+
+def test_the_filter_keeps_every_setting_that_matches(widget):
+    _filter(widget, "cwt")
+
+    visible = _visible_settings(widget)
+    assert all("cwt" in path for path in visible)
+    assert "measurements.cluster_dbl_cwt_threshold" in visible
+    assert "measurements.relwidth_cwt_integration" in visible
+    assert "processing.try_to_use_gpu" not in visible
+
+
+def test_a_matching_section_keeps_all_of_its_settings(widget):
+    """Filtering for a section shows that section, not nothing."""
+    _filter(widget, "measurements")
+
+    visible = _visible_settings(widget)
+    assert visible == {
+        f"measurements.{key}" for key in DEFAULT_SETTINGS["measurements"]
+    }
+
+
+def test_several_words_all_have_to_match(widget):
+    _filter(widget, "cells color")
+
+    assert _visible_settings(widget) == {
+        "vectorization.cells_edge_color",
+        "vectorization.cells_face_color",
+        "rasterization.cells_color",
+    }
+
+
+def test_the_filter_opens_the_sections_it_finds_something_in(widget):
+    """A hit inside a collapsed section would otherwise stay hidden."""
+    from superqt import QCollapsible
+
+    _filter(widget, "spatial_resolution")
+
+    sections = {
+        section._toggle_btn.text(): section.isExpanded()
+        for section in widget._form.native.findChildren(QCollapsible)
+        if section.isVisible()
+    }
+    assert sections["samples_metadata"]
+    assert sections["fields"]
+    assert sections["spatial_resolution"]
+
+
+def test_a_filter_matching_nothing_says_so(widget):
+    _filter(widget, "zzz")
+
+    assert _visible_settings(widget) == set()
+    assert widget._form._no_match_label.isVisible()
+
+
+def test_clearing_the_filter_brings_everything_back(widget):
+    _filter(widget, "gpu")
+    _filter(widget, "")
+
+    assert len(_visible_settings(widget)) == len(
+        list(_leaf_entries(widget._form._entries))
+    )
+    assert not widget._form._no_match_label.isVisible()
+
+
+def test_clearing_the_filter_restores_the_default_sections(widget):
+    """Back to the state of a form that was just built."""
+    from superqt import QCollapsible
+
+    def expanded():
+        return {
+            section._toggle_btn.text(): section.isExpanded()
+            for section in widget._form.native.findChildren(QCollapsible)
+        }
+
+    before = expanded()
+    _filter(widget, "spatial_resolution")
+    _filter(widget, "")
+
+    assert expanded() == before
+
+
+def test_filtering_hides_settings_without_dropping_them(widget):
+    """
+    The editors of the hidden settings are still read on apply. A filter that
+    lost them would write a settings file missing everything not searched for.
+    """
+    _filter(widget, "gpu")
+
+    assert widget._form.collect() == json.loads(json.dumps(DEFAULT_SETTINGS))
+
+
+def test_applying_while_filtered_changes_only_what_was_edited(
+    widget, settings_file
+):
+    _filter(widget, "separator")
+    _editor_for(widget, "tables", "separator").setText("#")
+    widget._apply()
+
+    stored = json.loads(settings_file.read_text())
+    expected = deepcopy(DEFAULT_SETTINGS)
+    expected["tables"]["separator"] = "#"
+    assert stored == json.loads(json.dumps(expected))
+
+
+def test_a_rebuilt_form_is_filtered_again(widget):
+    """
+    Reload and reset build a new form, which starts out unfiltered while the
+    field still shows what was typed.
+    """
+    from qtpy.QtWidgets import QApplication
+
+    _filter(widget, "gpu")
+
+    widget._build_form()
+    for _ in range(3):  # the widgets of the new form are shown along the way
+        QApplication.instance().processEvents()
+
+    assert _visible_settings(widget) == {"processing.try_to_use_gpu"}
+
+
 # ------------------------------------------------- expanding all the sections
 
 

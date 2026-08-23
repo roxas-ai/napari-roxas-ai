@@ -20,10 +20,11 @@ from typing import (
     Dict,
     FrozenSet,
     List,
+    Optional,
     Tuple,
 )
 
-from magicgui.widgets import Container, PushButton
+from magicgui.widgets import Container, LineEdit, PushButton
 from napari.utils.notifications import show_info
 from qtpy.QtCore import Qt, QTimer, QUrl
 from qtpy.QtGui import QDesktopServices
@@ -386,6 +387,78 @@ def _is_list_of_dicts(value: Any) -> bool:
     )
 
 
+class _FormEntry:
+    """
+    One row of the form -- a setting or a section -- as the filter sees it.
+
+    Built along with the form, because the dotted path of a row is known while
+    it is being added and would have to be guessed back out of the widget tree
+    afterwards.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        widgets: List[QWidget],
+        depth: int,
+        group: Optional[QCollapsible] = None,
+    ):
+        # Matching is case insensitive, so the path is stored ready to compare
+        self.path = path.lower()
+        self.widgets = widgets
+        self.depth = depth
+        self.group = group
+        self.children: List["_FormEntry"] = []
+
+    def set_visible(self, visible: bool) -> None:
+        for widget in self.widgets:
+            widget.setVisible(visible)
+
+    def show_everything(self) -> int:
+        """Show this entry and all of its children, and count the settings."""
+        self.set_visible(True)
+        if not self.children:
+            return 1
+        return sum(child.show_everything() for child in self.children)
+
+    def restore_default(self) -> None:
+        """Back to the state of a form that was just built."""
+        self.set_visible(True)
+        if self.group is not None:
+            # Only the outermost sections start out open
+            if self.depth == 0:
+                self.group.expand(animate=False)
+            else:
+                self.group.collapse(animate=False)
+        for child in self.children:
+            child.restore_default()
+
+    def apply_filter(self, parts: List[str]) -> int:
+        """
+        Show what matches every part of the filter, and count the settings.
+
+        A section whose own name matches keeps all of its settings, so that
+        filtering for "measurements" shows that section rather than nothing.
+        """
+        if all(part in self.path for part in parts):
+            found = self.show_everything()
+            if self.group is not None:
+                self.group.expand(animate=False)
+            return found
+
+        if not self.children:
+            self.set_visible(False)
+            return 0
+
+        # Children first: a section is measured for its height when it opens,
+        # so its content has to be in its final state by then
+        found = sum(child.apply_filter(parts) for child in self.children)
+        self.set_visible(bool(found))
+        if found and self.group is not None:
+            self.group.expand(animate=False)
+        return found
+
+
 def _make_group(
     title: str, expanded: bool
 ) -> Tuple[QCollapsible, QFormLayout]:
@@ -406,6 +479,8 @@ def _build_group(
     expand_children: bool = False,
     read_only_keys: FrozenSet[str] = frozenset(),
     path: str = "",
+    entries: Optional[List[_FormEntry]] = None,
+    depth: int = 0,
 ) -> Callable[[], Dict[str, Any]]:
     """
     Add one row per entry of the mapping to the form, nesting where needed.
@@ -415,38 +490,61 @@ def _build_group(
     the editors that were created.
 
     `path` is the dotted path of the mapping itself, which is what the
-    explanations of the settings are keyed by.
+    explanations of the settings are keyed by. `entries` collects one entry per
+    row for the filter to work on.
     """
     collectors: Dict[str, Callable[[], Any]] = {}
+    if entries is None:
+        entries = []
 
     for key, value in mapping.items():
         if isinstance(value, dict):
             group, nested_form = _make_group(key, expanded=expand_children)
+            entry = _FormEntry(f"{path}{key}", [group], depth, group)
             collectors[key] = _build_group(
-                value, nested_form, path=f"{path}{key}."
+                value,
+                nested_form,
+                path=f"{path}{key}.",
+                entries=entry.children,
+                depth=depth + 1,
             )
             form.addRow(group)
+            entries.append(entry)
 
         elif _is_list_of_dicts(value):
             group, nested_form = _make_group(key, expanded=expand_children)
+            entry = _FormEntry(f"{path}{key}", [group], depth, group)
             collectors[key] = _build_item_list(
-                value, nested_form, path=f"{path}{key}."
+                value,
+                nested_form,
+                path=f"{path}{key}.",
+                entries=entry.children,
+                depth=depth + 1,
             )
             form.addRow(group)
+            entries.append(entry)
 
         else:
             editor, getter = _make_editor(
                 value, read_only=key in read_only_keys
             )
             hint = SETTING_HINTS.get(f"{path}{key}", "")
-            form.addRow(_row_label(key, hint), editor)
+            label = _row_label(key, hint)
+            form.addRow(label, editor)
             collectors[key] = getter
+            entries.append(
+                _FormEntry(f"{path}{key}", [label, editor], depth)
+            )
 
     return lambda: {key: getter() for key, getter in collectors.items()}
 
 
 def _build_item_list(
-    items: List[Dict[str, Any]], form: QFormLayout, path: str = ""
+    items: List[Dict[str, Any]],
+    form: QFormLayout,
+    path: str = "",
+    entries: Optional[List[_FormEntry]] = None,
+    depth: int = 0,
 ) -> Callable[[], List[Dict[str, Any]]]:
     """
     Add a list of dictionaries as one collapsible section per entry.
@@ -460,19 +558,25 @@ def _build_item_list(
     therefore shown read-only.
     """
     collectors = []
+    if entries is None:
+        entries = []
 
     for index, item in enumerate(items):
         title = str(item.get("id") or f"[{index}]")
         group, nested_form = _make_group(title, expanded=False)
+        entry = _FormEntry(f"{path}{title}", [group], depth, group)
         collectors.append(
             _build_group(
                 item,
                 nested_form,
                 read_only_keys=frozenset({"id"}),
                 path=f"{path}{title}.",
+                entries=entry.children,
+                depth=depth + 1,
             )
         )
         form.addRow(group)
+        entries.append(entry)
 
     return lambda: [collect() for collect in collectors]
 
@@ -500,12 +604,22 @@ class SettingsForm(Container):
         inner = QWidget()
         outer_layout = QVBoxLayout(inner)
         outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Shown in place of the form when a filter matches nothing, so that an
+        # empty form does not read as a broken widget
+        self._no_match_label = QLabel("No setting matches the filter.")
+        self._no_match_label.setVisible(False)
+        outer_layout.addWidget(self._no_match_label)
+
         form = QFormLayout()
         outer_layout.addLayout(form)
         # Keeps the rows at the top while the scroll area is taller than them
         outer_layout.addStretch(1)
 
-        self._collect = _build_group(settings, form, expand_children=True)
+        self._entries: List[_FormEntry] = []
+        self._collect = _build_group(
+            settings, form, expand_children=True, entries=self._entries
+        )
 
         scroll_area = QScrollArea()
         scroll_area.setWidget(inner)
@@ -524,6 +638,29 @@ class SettingsForm(Container):
     def collect(self) -> Dict[str, Any]:
         """Read every editor back into a settings dictionary."""
         return self._collect()
+
+    def apply_filter(self, text: str) -> int:
+        """
+        Show only the settings whose path contains what was typed.
+
+        Matching is case insensitive and on part of a name, so "gpu" finds
+        try_to_use_gpu. Several words all have to appear, in any order and
+        anywhere in the path, which is what makes "cells color" find
+        rasterization.cells_color.
+
+        Returns the number of settings left visible.
+        """
+        parts = text.lower().split()
+
+        if not parts:
+            found = sum(entry.show_everything() for entry in self._entries)
+            for entry in self._entries:
+                entry.restore_default()
+        else:
+            found = sum(entry.apply_filter(parts) for entry in self._entries)
+
+        self._no_match_label.setVisible(found == 0)
+        return found
 
     def set_all_expanded(self, expanded: bool) -> None:
         """
@@ -565,6 +702,15 @@ class SettingsWidget(Container):
         self._viewer = viewer
         self._settings_manager = SettingsManager()
         self._form = None
+
+        self._filter_field = LineEdit(
+            tooltip=(
+                "Show only the settings whose name contains this text, e.g. "
+                "'gpu' for try_to_use_gpu. Upper and lower case do not matter."
+            ),
+        )
+        self._filter_field.native.setPlaceholderText("Filter settings")
+        self._filter_field.changed.connect(self._apply_filter)
 
         # The form opens with its top-level sections expanded and the nested
         # ones collapsed, which is neither of the two states below, so the
@@ -614,6 +760,7 @@ class SettingsWidget(Container):
         if self._form is None:
             self.extend(
                 [
+                    self._filter_field,
                     self._expand_all_button,
                     form,
                     self._apply_button,
@@ -635,6 +782,11 @@ class SettingsWidget(Container):
         # collapsed, so the button starts over as well
         self._all_expanded = False
         self._expand_all_button.text = "Expand all"
+
+        # The new form is unfiltered, while the field still shows what it was
+        # filtered by, so the filter is put back on
+        if self._filter_field.value.strip():
+            self._apply_filter()
 
     def _apply(self) -> None:
         """Store what the form holds, in the file and in the running session."""
@@ -686,6 +838,15 @@ class SettingsWidget(Container):
 
         self._build_form()
         show_info("Settings reloaded from file")
+
+    def _apply_filter(self) -> None:
+        """Show only the settings matching the filter, as it is being typed."""
+        self._form.apply_filter(self._filter_field.value)
+
+        # Filtering opens the sections it finds something in, and clearing it
+        # closes them again, so either way the toggle starts over
+        self._all_expanded = False
+        self._expand_all_button.text = "Expand all"
 
     def _toggle_all_sections(self) -> None:
         """Switch between showing every section and showing none."""
