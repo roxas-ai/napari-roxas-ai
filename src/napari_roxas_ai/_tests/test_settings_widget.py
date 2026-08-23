@@ -13,12 +13,13 @@ from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
 import pytest
+from qtpy.QtWidgets import QApplication
 
+from napari_roxas_ai._settings import _settings_widget
 from napari_roxas_ai._settings._settings_manager import (
     DEFAULT_SETTINGS,
     SettingsManager,
 )
-from napari_roxas_ai._settings import _settings_widget
 from napari_roxas_ai._settings._settings_widget import (
     INFO_ICON,
     SETTING_HINTS,
@@ -323,78 +324,79 @@ def test_an_explained_setting_gets_an_icon_with_its_explanation(widget):
 
 
 def _click(icon):
-    """Click an icon and let the event loop run, as a real click does."""
+    """
+    Press and release on an icon, with the event loop running in between.
+
+    A real click arrives as two events some hundred milliseconds apart, and the
+    difference matters here: anything scheduled on the press would be undone by
+    the release.
+    """
     from qtpy.QtCore import Qt
     from qtpy.QtTest import QTest
-    from qtpy.QtWidgets import QApplication
 
     QTest.mousePress(icon, Qt.LeftButton)
     QApplication.instance().processEvents()
     QTest.mouseRelease(icon, Qt.LeftButton)
-    QApplication.instance().processEvents()
 
 
-def _shown_icon(widget, hint):
-    """The laid out info icon carrying the given explanation."""
-    from qtpy.QtWidgets import QApplication
-
-    widget.native.resize(430, 900)
-    widget.native.show()
-    QApplication.instance().processEvents()
-
-    icon = next(
+def _icon_for(widget, hint):
+    """The info icon carrying the given explanation."""
+    return next(
         candidate
         for candidate in widget.native.findChildren(_InfoIcon)
         if candidate.toolTip() == hint
     )
-    assert not icon.rect().isEmpty()  # or there is nothing to click
-    return icon
 
 
-def test_clicking_the_icon_shows_the_explanation(widget):
+def test_clicking_the_icon_asks_for_the_explanation_after_the_click(widget):
     """
     A tooltip needs the pointer held still on a small target, which a trackpad
     makes fiddly; a click has to work as well.
 
-    Qt takes the visible tooltip down on every mouse press and release, so this
-    goes through a press and a release with the event loop running in between,
-    the way a real click arrives. Showing the tooltip from inside either
-    handler passes a test that clicks in one go and fails in the application.
+    Qt takes the visible tooltip down on every mouse press and release, so
+    showing one from inside either handler makes it appear and vanish again --
+    it has to go up once the click is over. That is what is checked here rather
+    than the tooltip being on screen: whether a tooltip renders at all depends
+    on the platform plugin, and the CI runner is not the machine the widget
+    runs on.
     """
-    from qtpy.QtWidgets import QToolTip
+    icon = _icon_for(widget, "Try to use GPU if available")
 
-    icon = _shown_icon(widget, "Try to use GPU if available")
-    QToolTip.hideText()
+    with patch.object(_settings_widget.QToolTip, "showText") as show_text:
+        _click(icon)
 
-    _click(icon)
+        # Not while the click is being delivered, or Qt hides it right away
+        assert not show_text.called
 
-    assert QToolTip.isVisible()
-    assert QToolTip.text() == "Try to use GPU if available"
+        QApplication.instance().processEvents()
+
+    assert show_text.called
+    _, text, owner = show_text.call_args[0]
+    assert text == "Try to use GPU if available"
+    assert owner is icon
 
 
-def test_clicking_the_icon_again_keeps_the_explanation_up(widget):
-    from qtpy.QtWidgets import QToolTip
+def test_clicking_the_icon_again_asks_again(widget):
+    icon = _icon_for(widget, "Try to use GPU if available")
 
-    icon = _shown_icon(widget, "Try to use GPU if available")
+    with patch.object(_settings_widget.QToolTip, "showText") as show_text:
+        _click(icon)
+        QApplication.instance().processEvents()
+        _click(icon)
+        QApplication.instance().processEvents()
 
-    _click(icon)
-    _click(icon)
-
-    assert QToolTip.isVisible()
-    assert QToolTip.text() == "Try to use GPU if available"
+    assert show_text.call_count == 2
 
 
 def test_the_explanation_is_shown_on_the_icon(widget):
-    """Not wherever the pointer happens to be."""
-    icon = _shown_icon(widget, "Try to use GPU if available")
+    """At the icon, not wherever the pointer happens to be."""
+    icon = _icon_for(widget, "Try to use GPU if available")
 
     with patch.object(_settings_widget.QToolTip, "showText") as show_text:
         icon._show_explanation()
 
-    position, text, owner = show_text.call_args[0]
-    assert text == "Try to use GPU if available"
-    assert owner is icon
-    assert icon.rect().contains(icon.mapFromGlobal(position))
+    position, _, _ = show_text.call_args[0]
+    assert position == icon.mapToGlobal(icon.rect().center())
 
 
 def test_the_icon_shows_that_it_can_be_clicked(widget):
