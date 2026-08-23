@@ -1,6 +1,375 @@
 import json
+import warnings
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+# Encoding used to read settings.json. "utf-8-sig" is plain UTF-8 except that
+# it also accepts a leading byte order mark, which Windows editors such as
+# Notepad and PowerShell add when saving. Reading with plain "utf-8" would
+# reject such a file, which is a needless way to lose someone's settings.
+SETTINGS_READ_ENCODING = "utf-8-sig"
+
+# Encoding used to write settings.json. Written without a BOM and, because
+# json.dump escapes non-ASCII by default, as pure ASCII.
+SETTINGS_WRITE_ENCODING = "utf-8"
+
+# ---------------------------------------------------------------------------
+# Default settings
+# ---------------------------------------------------------------------------
+# SINGLE SOURCE OF TRUTH for default settings. When adding a new setting, add
+# it here and nowhere else: at runtime every key missing from a user's
+# settings.json is filled in from this dictionary, while the values the user
+# already has are left untouched (see SettingsManager._load_settings).
+#
+# Never mutate this dictionary; hand out deepcopy()s of it.
+DEFAULT_SETTINGS: Dict[str, Any] = {
+    # Metadata settings with fields for UI
+    "samples_metadata": {
+        "fields": [
+            {
+                "id": "sample_name",
+                "label": "Name",
+                "widget_type": "QLineEdit",
+                "read_only": True,
+                "required": True,
+            },
+            # In anticipation of better inclusion of the stem path
+            # {
+            #     "id": "sample_stem_path",
+            #     "label": "Stem Path",
+            #     "widget_type": "QLineEdit",
+            #     "read_only": True,
+            #     "required": True,
+            # },
+            {
+                "id": "sample_type",
+                "label": "Type",
+                "widget_type": "QComboBox",
+                "items": ["conifer", "angiosperm"],
+                "editable": True,
+                "required": True,
+            },
+            {
+                "id": "meas_geometry",
+                "label": "Geometry",
+                "widget_type": "QComboBox",
+                "items": ["linear", "circular"],
+                "editable": True,
+                "required": True,
+            },
+            {
+                "id": "spatial_resolution",
+                "label": "Spatial Resolution (px/µm)",
+                "widget_type": "QDoubleSpinBox",
+                "default": 2.2675,
+                "min": 0.001,
+                "max": 1000.0,
+                "step": 0.01,
+                "decimals": 4,
+                "required": True,
+            },
+            {
+                "id": "rings_outmost_complete_year",
+                "label": "Outmost Complete Ring Year",
+                "widget_type": "QSpinBox",
+                "default": 9999,
+                "min": -10000,
+                "max": 9999,
+                "special_value_text": "Not set",
+                "required": True,
+            },
+        ]
+    },
+    # File extension settings
+    "file_extensions": {
+        "scan_file_extension": [
+            ".scan",
+            ".jpg",
+        ],  # Parts of scan file extension
+        "metadata_file_extension": [
+            ".metadata",
+            ".json",
+        ],  # Parts of metadata file extension
+        "cells_file_extension": [
+            ".cells",
+            ".png",
+        ],  # Parts of cells file extension
+        "cells_table_file_extension": [
+            ".cells_table",
+            ".csv",
+        ],  # And those of the cells table
+        "rings_file_extension": [
+            ".rings",
+            ".tif",
+        ],  # Parts of rings file extension
+        "rings_table_file_extension": [
+            ".rings_table",
+            ".csv",
+        ],  # And those of the rings table
+        "crossdating_file_extension": [
+            ".crossdating",
+            ".txt",
+        ],  # Parts of tucson file extension
+        "roxas_file_extensions": [
+            ".scan",
+            ".cells",
+            ".rings",
+            ".metadata",
+        ],  # roxas file extensions
+        "image_file_extensions": [
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".tif",
+            ".tiff",
+            ".bmp",
+            ".jp2",
+        ],  # Supported image file extensions
+        "text_file_extensions": [
+            ".rwl",  # for tucson files
+            ".tuc",  # for tucson files
+            ".txt",
+            ".csv",
+            ".tsv",
+        ],  # Supported text file extensions
+    },
+    # Tabular data settings
+    "tables": {
+        "index_column": "id",
+        "separator": ";",
+    },
+    # Image processing settings
+    "JPEG_compression": {
+        "quality": 95,  # Default JPEG quality
+        "optimize": True,  # Default optimize flag
+        "progressive": False,  # Default progressive flag
+    },
+    "processing": {
+        "try_to_use_gpu": False,  # Try to use GPU if available
+        "try_to_use_autocast": False,  # Try to use autocast if available
+    },
+    "vectorization": {
+        "cells_tolerance": 1,  # Default tolerance in pixels for cells vectorization
+        "cells_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
+        "cells_edge_color": "blue",  # Default color for vector shapes visualization
+        "cells_face_color": "cyan",  # Default color for vector shapes visualization (also used for cells edition in raster mode)
+        "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
+        "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
+        "rings_edge_color": "red",  # Default color for vector shapes visualization
+        "rerun_interactive_edge_color": "lime",  # Default color for vector shapes visualization
+    },
+    "rasterization": {
+        "uncomplete_ring_value": -1,
+        "uncomplete_ring_color": "red",
+        "rings_color_sequence": [
+            "blue",
+            "green",
+            "yellow",
+            "purple",
+            "orange",
+            "cyan",
+            "brown",
+            "pink",
+            "gray",
+            "lime",
+        ],
+        "cells_color": "lime",
+    },
+    "measurements": {
+        "cluster_dbl_cwt_threshold": 3.0,  # Default cluster DBL/CWT threshold in µm
+        "cells_smoothing_kernel_size": 5,  # Default smoothing kernel size (1 to disable)
+        "relwidth_cwt_integration": 0.75,  # Default wall fraction for thickness measurement
+        "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
+        "lower_limit_cwt_iqr_multiplier": 1.5,  # IQR multiplier for the lower CWT outlier fence
+        "upper_limit_cwt_iqr_multiplier": 3.0,  # IQR multiplier for the upper CWT outlier fence
+        "opposite_cwt_ratio_limit": 1.5,  # Max CWT ratio between opposite cell sides
+        "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
+    },
+    "project_directory": None,  # Current project directory
+}
+
+
+# ---------------------------------------------------------------------------
+# Legacy settings migration
+# ---------------------------------------------------------------------------
+# The settings file lives next to the installed package and survives a
+# `pip uninstall`, so a settings.json written by any past version can show up
+# under a current install. Settings variable names are not renamed any more,
+# but the renames that already happened still have to be applied, otherwise the
+# stale names silently keep their old (now unused) meaning.
+#
+# Entries in "measurements" that were renamed. The user's value is carried over
+# to the new name.
+LEGACY_MEASUREMENTS_KEY_RENAMES = {
+    "cells_cluster_separation_threshold": "cluster_dbl_cwt_threshold",
+    "cells_integration_interval": "relwidth_cwt_integration",
+}
+
+# Sample metadata field ids that were renamed. These ids end up verbatim as the
+# keys of a sample's .metadata.json, so a stale id here is what makes freshly
+# prepared samples unreadable by the current code.
+LEGACY_METADATA_FIELD_ID_RENAMES = {
+    "sample_geometry": "meas_geometry",
+    "sample_scale": "spatial_resolution",
+}
+
+
+def _merge_defaults(defaults: Dict[str, Any], stored: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Complete `stored` with everything missing from `defaults`.
+
+    Values already present in `stored` always win, so a user never loses a
+    setting they changed (e.g. "try_to_use_gpu": true). Keys that only exist in
+    `stored` are kept as well. Lists are treated as single values and are never
+    merged element-wise, because a user is expected to be able to shorten e.g.
+    "rings_color_sequence"; the one list that does get merged is the sample
+    metadata field list, handled separately by _merge_metadata_fields().
+    """
+    merged = deepcopy(stored)
+    for key, default_value in defaults.items():
+        if key not in merged:
+            merged[key] = deepcopy(default_value)
+        elif isinstance(default_value, dict) and isinstance(merged[key], dict):
+            merged[key] = _merge_defaults(default_value, merged[key])
+    return merged
+
+
+def _merge_metadata_fields(
+    default_fields: List[Dict[str, Any]], stored_fields: Any
+) -> List[Dict[str, Any]]:
+    """
+    Merge the sample metadata field definitions by field id.
+
+    New fields shipped with a newer version are inserted at their default
+    position, existing fields keep the properties the user set, and fields the
+    user added themselves are kept at the end of the list.
+    """
+    if not isinstance(stored_fields, list):
+        return deepcopy(default_fields)
+
+    stored_by_id = {
+        field["id"]: field
+        for field in stored_fields
+        if isinstance(field, dict) and isinstance(field.get("id"), str)
+    }
+
+    merged = []
+    for default_field in default_fields:
+        stored_field = stored_by_id.pop(default_field["id"], None)
+        if stored_field is None:
+            merged.append(deepcopy(default_field))
+        else:
+            merged.append(_merge_defaults(default_field, stored_field))
+
+    # Fields that are not part of the defaults are user additions, keep them
+    merged.extend(deepcopy(field) for field in stored_by_id.values())
+    return merged
+
+
+def _migrate_legacy_field_ids(fields: List[Any]) -> List[Any]:
+    """
+    Rename sample metadata fields whose id changed in a past version.
+
+    A rename means the field definition itself changed (label, widget), so the
+    current definition is taken as a whole; only the user's chosen `default`
+    value is carried over, as it keeps its meaning across the rename.
+    """
+    defaults_by_id = {
+        field["id"]: field
+        for field in DEFAULT_SETTINGS["samples_metadata"]["fields"]
+    }
+    present_ids = {
+        field.get("id") for field in fields if isinstance(field, dict)
+    }
+
+    migrated = []
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+
+        new_id = LEGACY_METADATA_FIELD_ID_RENAMES.get(field.get("id"))
+        if new_id is None:
+            migrated.append(field)
+            continue
+
+        if new_id in present_ids:
+            # The current field is already there, drop the stale duplicate
+            continue
+
+        new_field = deepcopy(
+            defaults_by_id.get(new_id, {**field, "id": new_id})
+        )
+        if "default" in field and "default" in new_field:
+            new_field["default"] = field["default"]
+        migrated.append(new_field)
+
+    return migrated
+
+
+def _migrate_legacy_settings(stored: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Apply every rename that happened in a past version to a loaded settings
+    dictionary, carrying the user's values over to the current names.
+    """
+    migrated = deepcopy(stored)
+
+    measurements = migrated.get("measurements")
+    if isinstance(measurements, dict):
+        for old_key, new_key in LEGACY_MEASUREMENTS_KEY_RENAMES.items():
+            if old_key in measurements:
+                value = measurements.pop(old_key)
+                measurements.setdefault(new_key, value)
+
+    samples_metadata = migrated.get("samples_metadata")
+    if isinstance(samples_metadata, dict) and isinstance(
+        samples_metadata.get("fields"), list
+    ):
+        samples_metadata["fields"] = _migrate_legacy_field_ids(
+            samples_metadata["fields"]
+        )
+
+    return migrated
+
+
+def upgrade_settings(stored: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Bring a settings dictionary loaded from disk up to date.
+
+    Renames legacy keys, then fills in everything that is missing from the
+    defaults. Values the user already has are never overwritten.
+
+    Parameters
+    ----------
+    stored : dict
+        Settings as loaded from a settings.json file.
+
+    Returns
+    -------
+    dict
+        A new, complete settings dictionary.
+    """
+    migrated = _migrate_legacy_settings(stored)
+    merged = _merge_defaults(DEFAULT_SETTINGS, migrated)
+
+    # _merge_defaults leaves a value alone when it is not a dict, so a
+    # hand-edited "samples_metadata": null (or a list) survives the merge and
+    # the field merge below would raise on it, which means a failed import
+    # rather than a settings file the user can still fix. Such a value carries
+    # no field definitions, so the defaults replace it -- the same fallback
+    # _merge_metadata_fields() already applies to a "fields" that is not a list.
+    if not isinstance(merged.get("samples_metadata"), dict):
+        merged["samples_metadata"] = deepcopy(
+            DEFAULT_SETTINGS["samples_metadata"]
+        )
+
+    # The field list is a list of dicts and needs to be merged by field id
+    merged["samples_metadata"]["fields"] = _merge_metadata_fields(
+        DEFAULT_SETTINGS["samples_metadata"]["fields"],
+        merged["samples_metadata"].get("fields"),
+    )
+
+    return merged
 
 
 class SettingsManager:
@@ -13,17 +382,19 @@ class SettingsManager:
 
     The settings are stored in a JSON file located in the _settings module
     directory. The file is automatically created with default values if it
-    doesn't exist.
+    doesn't exist, and an existing file is upgraded in place on load: legacy
+    key names are renamed and settings added by a newer version are filled in
+    from the defaults, while values the user changed are kept.
 
     Usage:
         # Get the settings manager instance
         settings = SettingsManager()
 
         # Get a setting value (supports dot notation for nested settings)
-        value = settings.get('samples_metadata.default_scale', default_value)
+        value = settings.get('samples_metadata.fields', default_value)
 
         # Set a setting value (supports dot notation for nested settings)
-        settings.set('samples_metadata.default_scale', new_value)
+        settings.set('processing.try_to_use_gpu', True)
     """
 
     # Class variables for Singleton implementation
@@ -67,20 +438,58 @@ class SettingsManager:
         """
         Load settings from the JSON file.
 
-        If the file exists, loads settings from it.
-        If the file doesn't exist or is corrupted, creates default settings.
+        If the file exists, its content is upgraded to the current schema
+        (legacy keys renamed, missing keys filled in from the defaults) and
+        written back if anything changed, so that a settings.json left behind
+        by an older install keeps working without losing user values.
+
+        If the file doesn't exist, it is created from the defaults. If it
+        exists but cannot be read, the defaults are used for this session only
+        and the file is left untouched (see _fall_back_to_defaults).
         """
-        if self.settings_file.exists():
-            try:
-                # Try to load existing settings
-                with open(self.settings_file) as f:
-                    self._settings = json.load(f)
-            except json.JSONDecodeError:
-                # If file is corrupted, use default settings
-                self.reset()
-        else:
+        if not self.settings_file.exists():
             # Create default settings if file doesn't exist
             self.reset()
+            return
+
+        try:
+            with open(self.settings_file, encoding=SETTINGS_READ_ENCODING) as f:
+                stored = json.load(f)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            self._fall_back_to_defaults(f"could not be read ({e})")
+            return
+
+        if not isinstance(stored, dict):
+            self._fall_back_to_defaults(
+                "does not contain a JSON object at the top level"
+            )
+            return
+
+        self._settings = upgrade_settings(stored)
+
+        # Only touch the file when the upgrade actually changed something
+        if self._settings != stored:
+            self.save_settings()
+
+    def _fall_back_to_defaults(self, problem: str) -> None:
+        """
+        Use the defaults for this session without writing them to the file.
+
+        An unreadable file is nearly always a typo in a hand-edited one. Saving
+        the defaults over it would silently destroy every value the user had
+        set, so the file is left exactly as it is and the reason is reported
+        instead, giving them the chance to fix the typo. Settings are only ever
+        overwritten on an explicit reset().
+        """
+        message = (
+            f"The ROXAS AI settings file {self.settings_file} {problem}. "
+            "The default settings are used for this session. The file has not "
+            "been modified, so you can correct it and restart."
+        )
+        print(f"[settings] {message}")
+        warnings.warn(message, RuntimeWarning, stacklevel=3)
+
+        self._settings = deepcopy(DEFAULT_SETTINGS)
 
     def save_settings(self):
         """
@@ -88,13 +497,15 @@ class SettingsManager:
 
         Writes the settings dictionary to the settings file with pretty formatting.
         """
-        with open(self.settings_file, "w") as f:
+        with open(
+            self.settings_file, "w", encoding=SETTINGS_WRITE_ENCODING
+        ) as f:
             json.dump(self._settings, f, indent=4)
 
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get a setting value by key.
-        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
+        Supports nested settings using dot notation (e.g., 'processing.try_to_use_gpu')
 
         Args:
             key: The setting key to retrieve
@@ -123,7 +534,7 @@ class SettingsManager:
     def set(self, key: str, value: Any):
         """
         Set a setting value and save to file.
-        Supports nested settings using dot notation (e.g., 'samples_metadata.default_scale')
+        Supports nested settings using dot notation (e.g., 'processing.try_to_use_gpu')
 
         Args:
             key: The setting key to set
@@ -153,219 +564,81 @@ class SettingsManager:
         Update multiple settings at once and save to file.
 
         IMPORTANT for developers:
-        This method is the SINGLE SOURCE OF TRUTH for default settings.
-        When adding a new setting:
-        --> Add it here in _set_defaults().
+        New default settings belong in DEFAULT_SETTINGS at the top of this
+        module, which is the single source of truth. At runtime, any keys
+        missing from the user's settings.json are populated from there by
+        _load_settings().
 
-        At runtime, any keys missing from the user's settings.json will be 
-        automatically populated from these defaults.
         Args:
             settings_dict: Dictionary of settings to update
         """
         self._settings.update(settings_dict)
         self.save_settings()
 
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Return a copy of all settings.
+
+        A copy rather than the live dictionary, because get() hands out the
+        nested objects themselves: a caller editing the result -- the settings
+        widget does exactly that -- would otherwise change the running settings
+        by accident, and without saving them.
+
+        Returns:
+            A deep copy of the complete settings dictionary
+        """
+        return deepcopy(self._settings)
+
+    def replace(self, new_settings: Dict[str, Any]) -> None:
+        """
+        Replace all settings at once and save them in a single file write.
+
+        Used by the settings widget, which always holds the complete tree.
+        `set()` would write the file once per field, and `update()` is a shallow
+        dict.update. Going through upgrade_settings() keeps the invariant that
+        the settings in memory are complete and use the current key names.
+
+        Args:
+            new_settings: The complete settings dictionary to store
+        """
+        self._settings = upgrade_settings(new_settings)
+        self.save_settings()
+
+    def reload(self) -> bool:
+        """
+        Re-read the settings file, picking up a change made outside the plugin.
+
+        Refuses to reload a file that is gone or unreadable, rather than falling
+        back to the defaults: the settings held in memory are the better copy in
+        that case, and _load_settings() would write the defaults over a merely
+        missing file.
+
+        Returns:
+            True if the file was read, False if it was left alone
+        """
+        if not self.settings_file.exists():
+            return False
+
+        try:
+            with open(
+                self.settings_file, encoding=SETTINGS_READ_ENCODING
+            ) as f:
+                if not isinstance(json.load(f), dict):
+                    return False
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return False
+
+        self._load_settings()
+        return True
+
     def reset(self):
         """
         Reset all settings to default values and save to file.
+
+        This is the only place that discards user values: everything a user
+        changed, added or shortened is replaced by the defaults. It is meant to
+        be reachable only through a deliberate action, such as a "reset to
+        defaults" button, never as a fallback when something goes wrong.
         """
-        self._settings = {
-            # Metadata settings with fields for UI
-            "samples_metadata": {
-                "fields": [
-                    {
-                        "id": "sample_name",
-                        "label": "Name",
-                        "widget_type": "QLineEdit",
-                        "read_only": True,
-                        "required": True,
-                    },
-                    # In anticipation of better inclusion of the stem path
-                    # {
-                    #     "id": "sample_stem_path",
-                    #     "label": "Stem Path",
-                    #     "widget_type": "QLineEdit",
-                    #     "read_only": True,
-                    #     "required": True,
-                    # },
-                    {
-                        "id": "sample_type",
-                        "label": "Type",
-                        "widget_type": "QComboBox",
-                        "items": ["conifer", "angiosperm"],
-                        "editable": True,
-                        "required": True,
-                    },
-                    {
-                        "id": "sample_geometry",
-                        "label": "Geometry",
-                        "widget_type": "QComboBox",
-                        "items": ["linear", "circular"],
-                        "editable": True,
-                        "required": True,
-                    },
-                    {
-                        "id": "sample_scale",
-                        "label": "Scale (px/µm)",
-                        "widget_type": "QDoubleSpinBox",
-                        "default": 2.2675,
-                        "min": 0.001,
-                        "max": 1000.0,
-                        "step": 0.01,
-                        "decimals": 4,
-                        "required": True,
-                    },
-                    {
-                        "id": "rings_outmost_complete_year",
-                        "label": "Outmost Complete Ring Year",
-                        "widget_type": "QSpinBox",
-                        "default": 9999,
-                        "min": -10000,
-                        "max": 9999,
-                        "special_value_text": "Not set",
-                        "required": True,
-                    },
-                ]
-            },
-            # File extension settings
-            "file_extensions": {
-                "scan_file_extension": [
-                    ".scan",
-                    ".jpg",
-                ],  # Parts of scan file extension
-                "metadata_file_extension": [
-                    ".metadata",
-                    ".json",
-                ],  # Parts of metadata file extension
-                "cells_file_extension": [
-                    ".cells",
-                    ".png",
-                ],  # Parts of cells file extension
-                "cells_table_file_extension": [
-                    ".cells_table",
-                    ".csv",
-                ],  # And those of the cells table
-                "rings_file_extension": [
-                    ".rings",
-                    ".tif",
-                ],  # Parts of rings file extension
-                "rings_table_file_extension": [
-                    ".rings_table",
-                    ".csv",
-                ],  # And those of the rings table
-                "crossdating_file_extension": [
-                    ".crossdating",
-                    ".txt",
-                ],  # Parts of tucson file extension
-                "roxas_file_extensions": [
-                    ".scan",
-                    ".cells",
-                    ".rings",
-                    ".metadata",
-                ],  # roxas file extensions
-                "image_file_extensions": [
-                    ".jpg",
-                    ".jpeg",
-                    ".png",
-                    ".tif",
-                    ".tiff",
-                    ".bmp",
-                    ".jp2",
-                ],  # Supported image file extensions
-                "text_file_extensions": [
-                    ".rwl",  # for tucson files
-                    ".tuc",  # for tucson files
-                    ".txt",
-                    ".csv",
-                    ".tsv",
-                ],  # Supported text file extensions
-            },
-            # Tabular data settings
-            "tables": {
-                "index_column": "id",
-                "separator": ";",
-            },
-            # Image processing settings
-            "JPEG_compression": {
-                "quality": 95,  # Default JPEG quality
-                "optimize": True,  # Default optimize flag
-                "progressive": False,  # Default progressive flag
-            },
-            "processing": {
-                "try_to_use_gpu": False,  # Try to use GPU if available
-                "try_to_use_autocast": False,  # Try to use autocast if available
-            },
-            "vectorization": {
-                "cells_tolerance": 1,  # Default tolerance in pixels for cells vectorization
-                "cells_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
-                "cells_edge_color": "blue",  # Default color for vector shapes visualization
-                "cells_face_color": "cyan",  # Default color for vector shapes visualization (also used for cells edition in raster mode)
-                "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
-                "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
-                "rings_edge_color": "red",  # Default color for vector shapes visualization
-                "rerun_interactive_edge_color": "lime",  # Default color for vector shapes visualization
-            },
-            "rasterization": {
-                "uncomplete_ring_value": -1,
-                "uncomplete_ring_color": "red",
-                "rings_color_sequence": [
-                    "blue",
-                    "green",
-                    "yellow",
-                    "purple",
-                    "orange",
-                    "cyan",
-                    "brown",
-                    "pink",
-                    "gray",
-                    "lime",
-                ],
-                "cells_color": "lime",
-            },
-            "measurements": {
-                "cells_cluster_separation_threshold": 3.0,  # Default cluster separation threshold in µm
-                "cells_smoothing_kernel_size": 5,  # Default smoothing kernel size (1 to disable)
-                "cells_integration_interval": 0.75,  # Default wall fraction for thickness measurement
-                "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
-            },
-            "project_directory": None,  # Current project directory
-        }
+        self._settings = deepcopy(DEFAULT_SETTINGS)
         self.save_settings()
-
-
-def open_settings_file():
-    """
-    Opens the settings file in the system's default text editor.
-
-    This function is used as an entry point for the plugin menu item.
-    It ensures the settings file exists and then opens it using the
-    appropriate system command based on the user's operating system.
-
-    Returns:
-        Path: The path to the settings file that was opened
-    """
-    # Get the settings file path
-    settings_manager = SettingsManager()
-    settings_file = settings_manager.settings_file
-
-    # Ensure the file exists
-    if not settings_file.exists():
-        settings_manager.save_settings()
-
-    # Open the file with the system's default application based on OS
-    import subprocess
-    import sys
-
-    if sys.platform == "win32":
-        # Windows - use Path.open() instead of os.startfile
-        import webbrowser
-
-        webbrowser.open(str(settings_file))
-    elif sys.platform == "darwin":
-        # macOS
-        subprocess.call(["open", str(settings_file)])
-    else:
-        # Linux and other UNIX-like systems
-        subprocess.call(["xdg-open", str(settings_file)])
-
-    return settings_file

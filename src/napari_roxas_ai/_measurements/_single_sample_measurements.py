@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any, Dict
+from datetime import datetime
 from pathlib import Path
 from qtpy.QtCore import QTimer
 from magicgui.widgets import (
@@ -13,6 +14,11 @@ from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
 from napari_roxas_ai._settings import SettingsManager
 from ._sample_measurer import SampleAnalyzer
+from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
+from .._utils._version_utils import (
+    get_measurement_operator,
+    get_software_version,
+)
 from napari_roxas_ai._writer import write_single_layer
 
 
@@ -88,18 +94,16 @@ class SingleSampleMeasurementsWidget(Container):
         # self._measure_cells_checkbox.visible = False
 
         # Create input fields for the config parameters
-        self._cluster_separation_threshold = FloatSpinBox(
-            value=settings.get(
-                "measurements.cells_cluster_separation_threshold"
-            ),
-            label="Cluster Separation Threshold (µm)",
+        self._cluster_dbl_cwt_threshold = FloatSpinBox(
+            value=settings.get("measurements.cluster_dbl_cwt_threshold"),
+            label="Cluster DBL CWT Threshold (µm)",
         )
         self._smoothing_kernel_size = SpinBox(
             value=settings.get("measurements.cells_smoothing_kernel_size"),
             label="Smoothing Kernel Size (1 to disable)",
         )
-        self._integration_interval = FloatSpinBox(
-            value=settings.get("measurements.cells_integration_interval"),
+        self._relwidth_cwt_integration = FloatSpinBox(
+            value=settings.get("measurements.relwidth_cwt_integration"),
             label="Wall Fraction for Thickness Measurement",
         )
 
@@ -107,9 +111,9 @@ class SingleSampleMeasurementsWidget(Container):
         self._cells_measurements_settings = Container()
         self._cells_measurements_settings.extend(
             [
-                self._cluster_separation_threshold,
+                self._cluster_dbl_cwt_threshold,
                 self._smoothing_kernel_size,
-                self._integration_interval,
+                self._relwidth_cwt_integration,
             ]
         )
 
@@ -210,7 +214,7 @@ class SingleSampleMeasurementsWidget(Container):
             self._rings_input_layer = self._viewer.layers[
                 self._rings_layer_name
             ]
-            scale = self._cells_input_layer.metadata["sample_scale"]
+            scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = self._rings_input_layer.features
             cells_table = self._cells_input_layer.features
@@ -223,7 +227,7 @@ class SingleSampleMeasurementsWidget(Container):
             self._cells_input_layer = self._viewer.layers[
                 self._cells_layer_name
             ]
-            scale = self._cells_input_layer.metadata["sample_scale"]
+            scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = pd.DataFrame()
             cells_table = pd.DataFrame()
@@ -236,7 +240,7 @@ class SingleSampleMeasurementsWidget(Container):
             self._rings_input_layer = self._viewer.layers[
                 self._rings_layer_name
             ]
-            scale = self._rings_input_layer.metadata["sample_scale"]
+            scale = self._rings_input_layer.metadata["spatial_resolution"]
             cells_array = np.zeros_like(self._rings_input_layer.data)
             rings_table = self._rings_input_layer.features
             cells_table = pd.DataFrame()
@@ -252,14 +256,37 @@ class SingleSampleMeasurementsWidget(Container):
 
         config = {
             "pixels_per_um": scale,
-            "cluster_separation_threshold": self._cluster_separation_threshold.value,
+            # Rounded to drop the float noise that spin box stepping produces
+            # (e.g. 3.5000000000000004), since this value is also recorded in
+            # the sample metadata.
+            "cluster_dbl_cwt_threshold": round(
+                self._cluster_dbl_cwt_threshold.value, 6
+            ),
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "integration_interval": self._integration_interval.value,
+            "relwidth_cwt_integration": round(
+                self._relwidth_cwt_integration.value, 6
+            ),
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
             ),
+            "lower_limit_cwt_iqr_multiplier": settings.get(
+                "measurements.lower_limit_cwt_iqr_multiplier"
+            ),
+            "upper_limit_cwt_iqr_multiplier": settings.get(
+                "measurements.upper_limit_cwt_iqr_multiplier"
+            ),
+            "opposite_cwt_ratio_limit": settings.get(
+                "measurements.opposite_cwt_ratio_limit"
+            ),
+            "adjacent_cwt_ratio_limit": settings.get(
+                "measurements.adjacent_cwt_ratio_limit"
+            ),
             "sample_type": sample_type,
         }
+
+        # Keep the config of this run so that _add_result_layers records the
+        # values actually used, even if a widget is changed while it runs.
+        self._run_config = config
 
         # Run the analysis in a separate thread
 
@@ -296,12 +323,26 @@ class SingleSampleMeasurementsWidget(Container):
         project_dir = Path(settings.get("project_directory"))
         project_dir.mkdir(parents=True, exist_ok=True)
 
+        # One timestamp per measurement run, so that cells and rings written by
+        # the same run carry the identical value.
+        meas_created_at = datetime.now().isoformat()
+        sw_version = get_software_version()
+        meas_by = get_measurement_operator()
+
         # ---------------------------
         # Export Cells
         # ---------------------------
         if not cells_table.empty:
             print("[Cells] Updating layer features...")
             self._cells_input_layer.features = cells_table
+            self._cells_input_layer.metadata["meas_created_at"] = (
+                meas_created_at
+            )
+            self._cells_input_layer.metadata["sw_version"] = sw_version
+            self._cells_input_layer.metadata["meas_by"] = meas_by
+            # Cells-only parameters, recorded so the run can be reproduced
+            for key in MEASUREMENT_PARAMETER_KEYS:
+                self._cells_input_layer.metadata[key] = self._run_config[key]
 
             cells_path = self._cells_input_layer.metadata.get("file_path")
 
@@ -331,6 +372,11 @@ class SingleSampleMeasurementsWidget(Container):
         if not rings_table.empty:
             print("[Rings] Updating layer features...")
             self._rings_input_layer.features = rings_table
+            self._rings_input_layer.metadata["meas_created_at"] = (
+                meas_created_at
+            )
+            self._rings_input_layer.metadata["sw_version"] = sw_version
+            self._rings_input_layer.metadata["meas_by"] = meas_by
 
             rings_path = self._rings_input_layer.metadata.get("file_path")
 

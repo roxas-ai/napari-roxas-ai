@@ -94,6 +94,26 @@ class PreparationWidget(Container):
             "file_extensions.text_file_extensions"
         )
 
+    def refresh_from_settings(self):
+        """
+        Pick up settings changed while this widget was open.
+
+        Called by the settings widget after applying. The file extensions are
+        copied into this widget when it is built, so they are re-read, and the
+        checkbox that shows one of them is relabelled.
+
+        self.project_directory is deliberately left alone: _open_project_dialog
+        does not write it back to the settings, so it may hold a directory the
+        user picked for this widget only, which must not be overwritten.
+        """
+        self._load_settings()
+
+        # A CheckBox is a button, so magicgui renders .text, not .label
+        self._process_processed_checkbox.text = (
+            "Process already processed files "
+            f"(with {self.scan_content_extension} extension)"
+        )
+
     def _create_ui_components(self):
         """Create and configure UI components."""
         # Project directory selector

@@ -17,6 +17,10 @@ from napari_roxas_ai._utils import (
     make_binary_labels_colormap,
     make_rings_colormap,
 )
+from napari_roxas_ai._utils._metadata_keys import (
+    SAMPLE_METADATA_PREFIXES,
+    migrate_legacy_metadata_keys,
+)
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -230,6 +234,9 @@ def get_metadata_from_file(
         with open(metadata_path) as f:
             meta = json.load(f)
 
+        # Samples prepared with an older version still carry the old key names
+        meta = migrate_legacy_metadata_keys(meta)
+
         return _map_sample_stem_path(
             meta,
             opened_path=path,
@@ -272,8 +279,8 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
 
     # Try to get sample scale from metadata file
     metadata = get_metadata_from_file(path)
-    if metadata and "sample_scale" in metadata:
-        scale_value = 1 / float(metadata["sample_scale"])
+    if metadata and "spatial_resolution" in metadata:
+        scale_value = 1 / float(metadata["spatial_resolution"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get tablular data associated with the cells
@@ -296,7 +303,9 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     add_kwargs["metadata"] = {}
     if metadata:
         metadata_keys = [
-            key for key in metadata if key.startswith(("sample_", "cells_"))
+            key
+            for key in metadata
+            if key.startswith((*SAMPLE_METADATA_PREFIXES, "cells_"))
         ]
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
@@ -335,8 +344,8 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
 
     # Try to get sample scale from metadata file
     metadata = get_metadata_from_file(path)
-    if metadata and "sample_scale" in metadata:
-        scale_value = 1 / float(metadata["sample_scale"])
+    if metadata and "spatial_resolution" in metadata:
+        scale_value = 1 / float(metadata["spatial_resolution"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
         # Try to get tabular data associated with the rings
@@ -398,7 +407,9 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     add_kwargs["metadata"] = {}
     if metadata:
         metadata_keys = [
-            key for key in metadata if key.startswith(("sample_", "rings_"))
+            key
+            for key in metadata
+            if key.startswith((*SAMPLE_METADATA_PREFIXES, "rings_"))
         ]
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
@@ -449,15 +460,17 @@ def read_scan_file(path: str) -> Tuple[np.ndarray, dict, str]:
     add_kwargs = {"name": layer_name}
 
     # Try to get sample scale from metadata file
-    if metadata and "sample_scale" in metadata:
-        scale_value = 1 / float(metadata["sample_scale"])
+    if metadata and "spatial_resolution" in metadata:
+        scale_value = 1 / float(metadata["spatial_resolution"])
         add_kwargs["scale"] = [scale_value, scale_value]
 
     # Try to get sample metadata and scan metadata from metadata file
     add_kwargs["metadata"] = {}
     if metadata:
         metadata_keys = [
-            key for key in metadata if key.startswith(("sample_", "scan_"))
+            key
+            for key in metadata
+            if key.startswith((*SAMPLE_METADATA_PREFIXES, "scan_"))
         ]
         add_kwargs["metadata"].update(
             {key: metadata[key] for key in metadata_keys}
