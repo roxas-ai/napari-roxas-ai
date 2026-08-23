@@ -10,6 +10,7 @@ editor it replaces.
 
 import json
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -742,7 +743,9 @@ def test_open_settings_file_hands_the_file_to_the_system(
 
     url = open_url.call_args[0][0]
     assert url.isLocalFile()
-    assert url.toLocalFile() == str(settings_file)
+    # As paths, not as strings: a QUrl spells a Windows path with forward
+    # slashes, where str(Path) uses backslashes
+    assert Path(url.toLocalFile()) == settings_file
 
 
 def test_open_settings_file_writes_a_missing_file_first(widget, settings_file):
