@@ -114,10 +114,6 @@ class CrossDatingPlotterWidget(Container):
         self.crossdating_columns = []
         self.plot_df = None
         self._layer_callback = None
-        # Guards the reference series write while the widget itself establishes
-        # the selection, so that reset_choices() does not persist a transient
-        # None as "NA" before the real value is assigned.
-        self._suppress_reference_store = False
 
         self._auto_offset_button = PushButton(
             text="Find best overlap",
@@ -275,6 +271,10 @@ class CrossDatingPlotterWidget(Container):
         if out_path is None:
             show_info("Export plot failed: plot not ready")
             return
+
+        # The exported plot is what the metadata entry stands for, so this is
+        # the only place that writes it
+        self._store_reference_series()
 
         show_info(f"Plot exported to: {out_path}")
 
@@ -521,22 +521,13 @@ class CrossDatingPlotterWidget(Container):
             and stored in self.crossdating_columns
         )
 
-        self._suppress_reference_store = True
-        try:
-            self._crossdating_column_combo.reset_choices()
-            if stored_is_usable:
-                self._crossdating_column_combo.value = stored
-            elif matching_columns:
-                self._crossdating_column_combo.value = matching_columns[0]
-            elif self.crossdating_columns:
-                self._crossdating_column_combo.value = (
-                    self.crossdating_columns[0]
-                )
-        finally:
-            self._suppress_reference_store = False
-
-        # Persist whatever ended up selected, including "NA" when nothing did
-        self._store_reference_series()
+        self._crossdating_column_combo.reset_choices()
+        if stored_is_usable:
+            self._crossdating_column_combo.value = stored
+        elif matching_columns:
+            self._crossdating_column_combo.value = matching_columns[0]
+        elif self.crossdating_columns:
+            self._crossdating_column_combo.value = self.crossdating_columns[0]
 
         if not self.crossdating_columns:
             show_info(
@@ -581,15 +572,18 @@ class CrossDatingPlotterWidget(Container):
 
     def _store_reference_series(self) -> None:
         """
-        Persist the selected reference series for the current sample.
+        Record the reference series of the plot that was just exported.
+
+        The entry stands for a crossdating that was checked and documented, so
+        it is written when a plot is exported and at no other time: merely
+        opening a sample preselects a series, which says nothing about anyone
+        having looked at it. A sample without an exported plot therefore keeps
+        the "NA" it is prepared with.
 
         Written straight to the metadata file rather than waiting for a layer
-        save, so that the selection survives even if nothing else is saved.
-        Only this one key is passed, so no other metadata can be touched.
+        save, so that it survives even if nothing else is saved. Only this one
+        key is passed, so no other metadata can be touched.
         """
-        if self._suppress_reference_store:
-            return
-
         layer = self._input_layer
         if layer is None:
             return
@@ -618,10 +612,6 @@ class CrossDatingPlotterWidget(Container):
 
     def _on_new_crossdating_column(self):
         """Called when a new reference series is selected."""
-        # Store first, so that the selection is persisted even when the value is
-        # None (no usable column) and the early return below applies.
-        self._store_reference_series()
-
         if self._crossdating_column_combo.value is None:
             return
 
