@@ -946,7 +946,8 @@ class RingsLayerEditorWidget(Container):
         self._delete_lasso_vertices_button.visible = enabled
 
         if enabled:
-            # Safely get scale, default to [1, 1] if input layer is missing
+            # Use the current layer's scale to ensure the lasso matches image coordinates accurately.
+            # Default to [1.0, 1.0] if the layer is not available or scale is not set.
             scale = [1.0, 1.0]
             try:
                 if hasattr(self, "_current_input_layer") and self._current_input_layer is not None:

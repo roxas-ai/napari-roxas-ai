@@ -105,7 +105,7 @@ class MatplotlibCanvas(Container):
         for spine in self.ax.spines.values():
             spine.set_edgecolor('lightgrey')
             
-        # Ensure grid lines are behind data
+        # Ensure grid lines are behind data curves
         self.ax.set_axisbelow(True)
             
         self.canvas.draw()
@@ -122,7 +122,7 @@ class CrossDatingPlotterWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # bunch of attributes
+        # attributes
         self.crossdating_files = []
         self.crossdating_columns = []
         self.plot_df = None
@@ -226,8 +226,6 @@ class CrossDatingPlotterWidget(Container):
         self._alignment_candidates = []
         self._current_alignment_data = None
         self._base_offset = 0  # Offset accumulated by auto-alignment or candidate selection
-        self._reference_scaling_factor = 1.0
-        self._file_scaling_factor = 1.0
         self._roxas_visibility_threshold = 0.90  # Re-center if less than this fraction is visible
         self._alignment_buttons_container = Container()
         self._alignment_buttons_container.native.setSizePolicy(
@@ -550,18 +548,7 @@ class CrossDatingPlotterWidget(Container):
                 f"No data found in the crossdating file {self._crossdating_file_combo.value} for layer {self._input_layer}."
             )
 
-        # Compute file-level scaling factor once for the entire crossdating file
-        self._file_scaling_factor = self._compute_file_scaling_factor()
-
         self._update_crossdating_plot()
-
-    def _compute_file_scaling_factor(self, candidate_alignment: Optional[dict] = None):
-        """
-        Compute file-level scaling factor once for the entire crossdating file.
-        In this version, we keep the method structure but return 1.0 to avoid 
-        scaling the series against each other, as requested.
-        """
-        return 1.0
 
     def _sample_metadata_path(self) -> Optional[Path]:
         """
@@ -702,42 +689,24 @@ class CrossDatingPlotterWidget(Container):
 
             # The first value in cells_above is the area above the first ring.
             # The ring width for year Y is cells_above(Y) - cells_above(Y-1).
-            # For the first ring in the table, it doesn't have a predecessor in the table.
-            # However, the table usually contains all rings.
-
-            # If we want to mirror the previous logic:
-            vals = layer_df["cells_above"].values
-            diffs = np.diff(vals, prepend=vals[0])  # prepend to keep same length
-            layer_df["ring_width"] = diffs
-
-            # Note: the previous logic did:
-            # layer_df.iloc[1:, layer_df.columns.tolist().index("cells_above")] = np.diff(layer_df["cells_above"].values)
-            # which modified cells_above in place and left the first one as is (which is area, not width).
-            # This seems slightly inconsistent but let's stick to a cleaner version if possible,
-            # or keep it if it's what's expected.
-
-            # Actually, the previous logic was:
-            # layer_df.iloc[1:, index] = np.diff(...)
-            # This means layer_df["cells_above"].iloc[0] remained the TOTAL area above the first ring.
-            # Subsequent ones became widths.
-
-            # Let's keep it exactly as it was but more robustly:
+            # We calculate this using np.diff on the total area above each ring.
             idx = layer_df.columns.get_loc("cells_above")
             layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
         else:
             show_info("Layer features missing 'cells_above' column.")
             return
 
-        # Removed values of disabled years
+        # Handle disabled years: set their area to NaN so they are not plotted
         if "enabled" in layer_df.columns:
             layer_df.loc[~layer_df["enabled"], "cells_above"] = np.nan
 
-        # Create ring width series
-        # Ensure data and metadata are present
+        # Create ring width series in micrometers
+        # We try to get the spatial resolution from metadata (preferring 'spatial_resolution')
         res = layer.metadata.get("spatial_resolution") or layer.metadata.get("sample_scale")
         if not hasattr(layer, "data") or res is None:
             return
 
+        # Width calculation: total area (pixels) / (image width * scale factor)
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
                 * res
@@ -809,9 +778,6 @@ class CrossDatingPlotterWidget(Container):
             r_avg = np.nan
             glk_avg = np.nan
 
-        # Use the pre-computed file scaling factor
-        self._reference_scaling_factor = self._file_scaling_factor
-
         # Clear the previous plot
         self.plot_widget.clear()
 
@@ -829,26 +795,7 @@ class CrossDatingPlotterWidget(Container):
         r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
         avg_label = f"Average{r_avg_text}"
 
-        if abs(self._reference_scaling_factor - 1.0) > 1e-5:
-            # We keep this block for potential future diagnostics but currently 
-            # it should not be triggered as scaling is disabled.
-            if abs(self._reference_scaling_factor - round(self._reference_scaling_factor)) < 1e-5:
-                scaling_text = f" * {int(round(self._reference_scaling_factor))}"
-            else:
-                scaling_text = f" * {self._reference_scaling_factor:.2f}"
-            
-            # Insert scaling factor before the colon
-            if ":" in ref_label:
-                ref_label = ref_label.replace(":", f"{scaling_text}:", 1)
-            else:
-                ref_label += scaling_text
-            
-            if ":" in avg_label:
-                avg_label = avg_label.replace(":", f"{scaling_text}:", 1)
-            else:
-                avg_label += scaling_text
-
-        # Plot both series
+        # Plot both series using original values (no scaling applied)
         years = self.plot_df.index.to_numpy(dtype=int)
 
         # Plot the ROXAS series first (top layer in legend)
@@ -999,12 +946,12 @@ class CrossDatingPlotterWidget(Container):
         visible_roxas.index = np.array(years) + total_offset
         visible_roxas = visible_roxas[(visible_roxas.index >= x_min) & (visible_roxas.index <= x_max)].dropna()
 
-        visible_ref = (self.plot_df["reference_series"] * self._reference_scaling_factor).copy()
+        visible_ref = self.plot_df["reference_series"].copy()
         visible_ref = visible_ref[(visible_ref.index >= x_min) & (visible_ref.index <= x_max)].dropna()
 
         all_visible_series = [visible_roxas, visible_ref]
 
-        visible_avg = (self.plot_df["average"] * self._reference_scaling_factor).copy()
+        visible_avg = self.plot_df["average"].copy()
         visible_avg = visible_avg[(visible_avg.index >= x_min) & (visible_avg.index <= x_max)].dropna()
         all_visible_series.append(visible_avg)
 
@@ -1043,59 +990,6 @@ class CrossDatingPlotterWidget(Container):
         # Redraw the canvas
         self.plot_widget.figure.tight_layout()
         self.plot_widget.canvas.draw()
-
-    def compute_reference_scaling(self,
-                                  sample: pd.Series,
-                                  reference: pd.Series,
-                                  min_overlap: int = 5,
-                                  return_raw: bool = False,
-                                  ) -> float:
-        """
-        Compute scaling factor for reference series to fit sample series.
-        The user asked to restrict factors to: 1, 10, or 100.
-        We find the best option among these.
-        """
-
-        # common years
-        common = sample.index.intersection(reference.index)
-
-        if len(common) < min_overlap:
-            return 1.0
-
-        s = sample.loc[common].astype(float).dropna()
-        r = reference.loc[common].astype(float).dropna()
-
-        common = s.index.intersection(r.index)
-        if len(common) < min_overlap:
-            return 1.0
-
-        s = s.loc[common]
-        r = r.loc[common]
-
-        # Use median ratio or ratio of amplitudes for scaling factor
-        s_amp = np.nanpercentile(s, 75) - np.nanpercentile(s, 25)
-        r_amp = np.nanpercentile(r, 75) - np.nanpercentile(r, 25)
-
-        if s_amp <= 0 or r_amp <= 0:
-            # Fallback to medians if amplitude is zero
-            s_med = np.nanmedian(s)
-            r_med = np.nanmedian(r)
-            if r_med <= 0:
-                raw_factor = 1.0
-            else:
-                raw_factor = float(s_med / r_med)
-        else:
-            raw_factor = float(s_amp / r_amp)
-
-        if return_raw:
-            return raw_factor
-
-        # Choose the best fit among 1, 10, 100
-        # We can do this by minimizing the difference in magnitude
-        factors = [1.0, 10.0, 100.0]
-        best_factor = min(factors, key=lambda x: abs(np.log10(raw_factor) - np.log10(x)))
-
-        return best_factor
 
     def _on_x_range_changed(self):
         """Called when the Year Range slider is manually adjusted."""
@@ -1261,13 +1155,6 @@ class CrossDatingPlotterWidget(Container):
         # Calculate required offset relative to current layer state
         current_end = layer.metadata.get("rings_outmost_complete_year", 0)
         offset = target_end - current_end
-
-        # If the image was undated (year 9999), we might need to re-assess scaling
-        # because the initial assessment likely had no overlap.
-        if current_end == 9999:
-            self._file_scaling_factor = self._compute_file_scaling_factor(
-                candidate_alignment=candidate
-            )
 
         # Store the found offset as base_offset and reset the slider to 0
         self._base_offset = offset

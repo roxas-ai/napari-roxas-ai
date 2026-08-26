@@ -165,13 +165,15 @@ class Worker(QObject):
                 cells_layer_name = (
                     f"{metadata['sample_name']}{self.cells_content_ext}"
                 )
-                # Ensure spatial_resolution is a float and present in metadata
+                # Ensure spatial_resolution is a float and present in metadata.
+                # We harmonize spatial_resolution and sample_scale keys for cross-plotter compatibility.
                 spatial_resolution = float(metadata.get("spatial_resolution") or metadata.get("sample_scale", 1.0))
                 metadata["spatial_resolution"] = spatial_resolution
                 metadata["sample_scale"] = spatial_resolution
 
                 cells_add_kwargs = {
                     "name": cells_layer_name,
+                    # Scale factor is 1/resolution (e.g. pixels to micrometers)
                     "scale": [1 / spatial_resolution, 1 / spatial_resolution],
                     "features": pd.DataFrame(),
                     "metadata": {
@@ -261,13 +263,15 @@ class Worker(QObject):
                     image_shape=rings_labels.shape,
                 )
             )
-            # Ensure spatial_resolution is a float and present in metadata
+            # Ensure spatial_resolution is a float and present in metadata.
+            # We harmonize spatial_resolution and sample_scale keys for cross-plotter compatibility.
             spatial_resolution = float(metadata.get("spatial_resolution") or metadata.get("sample_scale", 1.0))
             metadata["spatial_resolution"] = spatial_resolution
             metadata["sample_scale"] = spatial_resolution
 
             rings_add_kwargs = {
                 "name": rings_layer_name,
+                # Scale factor is 1/resolution (e.g. pixels to micrometers)
                 "scale": [1 / spatial_resolution, 1 / spatial_resolution],
                 "features": new_rings_table,
                 "metadata": {
