@@ -558,78 +558,9 @@ class CrossDatingPlotterWidget(Container):
     def _compute_file_scaling_factor(self, candidate_alignment: Optional[dict] = None):
         """
         Compute file-level scaling factor once for the entire crossdating file.
-        We use the average series as the reference for this calculation.
+        In this version, we keep the method structure but return 1.0 to avoid 
+        scaling the series against each other, as requested.
         """
-        layer = self._input_layer
-        res = None
-        if layer is not None:
-            res = layer.metadata.get("spatial_resolution") or layer.metadata.get("sample_scale")
-
-        if layer is not None and hasattr(layer, "data") and res is not None:
-            if getattr(layer, "features", None) is None or layer.features.empty or "YEAR" not in layer.features.columns:
-                return 1.0
-            # Re-calculating width_series here briefly to get its scale
-            layer_df = layer.features.set_index("YEAR").copy()
-            if "cells_above" in layer_df.columns:
-                layer_df = layer_df.sort_index()
-
-                # If we have a candidate alignment, shift the sample to that position
-                # to ensure we have an overlap for scaling calculation.
-                if candidate_alignment is not None:
-                    target_end = candidate_alignment["end_year"]
-                    current_end = layer_df.index.max()
-                    layer_df.index = layer_df.index + (int(target_end) - int(current_end))
-
-                idx = layer_df.columns.get_loc("cells_above")
-                layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
-                width_series = layer_df["cells_above"] / (
-                        layer.data.shape[1]
-                        * res
-                )
-
-                # 1. Scaling based on average series
-                avg_scaling = self.compute_reference_scaling(
-                    sample=width_series,
-                    reference=self.crossdating_dataframe["average"],
-                    return_raw=True
-                )
-
-                # 2. Scaling based on best matching single reference series
-                # We reuse the alignment logic to find the best match across all columns
-                best_ref_scaling = 1.0
-                best_corr = -1.0
-
-                # Create a temporary plot_df for alignment computation
-                temp_plot_df = pd.DataFrame(index=self.crossdating_dataframe.index)
-                temp_plot_df["layer_series"] = width_series
-
-                # Iterate through all columns (except 'average') to find the best matching one
-                for col in self.crossdating_columns:
-                    temp_plot_df["reference_series"] = self.crossdating_dataframe[col]
-                    candidates = self._compute_alignment_candidates(plot_df=temp_plot_df, top_k=1)
-                    if candidates:
-                        cand = candidates[0]
-                        if cand["corr"] > best_corr:
-                            best_corr = cand["corr"]
-                            # For the best candidate, calculate its raw scaling factor
-                            # Shift the sample to the best matching position
-                            shifted_sample = width_series.copy()
-                            shifted_sample.index = shifted_sample.index + (cand["end_year"] - width_series.index.max())
-                            best_ref_scaling = self.compute_reference_scaling(
-                                sample=shifted_sample,
-                                reference=self.crossdating_dataframe[col],
-                                return_raw=True
-                            )
-
-                # 50/50 blend of both raw factors
-                if best_corr > 0:
-                    raw_factor = 0.5 * avg_scaling + 0.5 * best_ref_scaling
-                else:
-                    raw_factor = avg_scaling
-
-                # Choose the best fit among 1, 10, 100
-                factors = [1.0, 10.0, 100.0]
-                return min(factors, key=lambda x: abs(np.log10(raw_factor) - np.log10(x)))
         return 1.0
 
     def _sample_metadata_path(self) -> Optional[Path]:
@@ -899,7 +830,8 @@ class CrossDatingPlotterWidget(Container):
         avg_label = f"Average{r_avg_text}"
 
         if abs(self._reference_scaling_factor - 1.0) > 1e-5:
-            # Format scaling factor nicely: if it's an integer, show it as such
+            # We keep this block for potential future diagnostics but currently 
+            # it should not be triggered as scaling is disabled.
             if abs(self._reference_scaling_factor - round(self._reference_scaling_factor)) < 1e-5:
                 scaling_text = f" * {int(round(self._reference_scaling_factor))}"
             else:
@@ -932,7 +864,7 @@ class CrossDatingPlotterWidget(Container):
         # Plot the reference second (middle layer in legend)
         self.plot_widget.ax.plot(
             years,
-            self.plot_df["reference_series"] * self._reference_scaling_factor,
+            self.plot_df["reference_series"],
             color='yellow',
             linestyle='-',
             label=ref_label,
@@ -942,7 +874,7 @@ class CrossDatingPlotterWidget(Container):
         # Plot the average last (bottom layer in legend)
         self.plot_widget.ax.plot(
             years,
-            self.plot_df["average"] * self._reference_scaling_factor,
+            self.plot_df["average"],
             color='white',
             linestyle='-',
             label=avg_label,
