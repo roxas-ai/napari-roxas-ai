@@ -22,6 +22,7 @@ from .._utils._ringtraces_utils import (
     get_instance_labels_linear,
     ring_labels_from_roxas,
 )
+from .._utils._metadata_keys import NO_REFERENCE_SERIES
 from .._utils._scl_utils import read_scl
 from .._utils._segmentation_postprocess import (
     remove_border_touching_components,
@@ -164,8 +165,14 @@ class Worker(QObject):
                 cells_layer_name = (
                     f"{metadata['sample_name']}{self.cells_content_ext}"
                 )
+                # Ensure spatial_resolution is a float and present in metadata
+                spatial_resolution = float(metadata.get("spatial_resolution") or metadata.get("sample_scale", 1.0))
+                metadata["spatial_resolution"] = spatial_resolution
+                metadata["sample_scale"] = spatial_resolution
+
                 cells_add_kwargs = {
                     "name": cells_layer_name,
+                    "scale": [1 / spatial_resolution, 1 / spatial_resolution],
                     "features": pd.DataFrame(),
                     "metadata": {
                         **metadata,
@@ -254,9 +261,14 @@ class Worker(QObject):
                     image_shape=rings_labels.shape,
                 )
             )
+            # Ensure spatial_resolution is a float and present in metadata
+            spatial_resolution = float(metadata.get("spatial_resolution") or metadata.get("sample_scale", 1.0))
+            metadata["spatial_resolution"] = spatial_resolution
+            metadata["sample_scale"] = spatial_resolution
+
             rings_add_kwargs = {
                 "name": rings_layer_name,
-                # "scale": metadata["Scale"],
+                "scale": [1 / spatial_resolution, 1 / spatial_resolution],
                 "features": new_rings_table,
                 "metadata": {
                     **metadata,
@@ -571,6 +583,7 @@ class Worker(QObject):
                     "scan_format": img.format,
                     "scan_size": [img.width, img.height],
                     "scan_mode": img.mode,
+                    "img_size": f"{Path(image_path).stat().st_size / 1_000_000:.2f} MB",
                 }
 
                 # Extract and preserve EXIF data if available
@@ -629,6 +642,11 @@ class Worker(QObject):
             metadata_path: Path to save the JSON file
         """
         try:
+            # A sample has no reference series until one is picked in the
+            # crossdating widget, but the key is written from the start so that
+            # every prepared sample carries it
+            metadata.setdefault("reference_series", NO_REFERENCE_SERIES)
+
             # Ensure all data is JSON serializable
             sanitized_metadata = self._sanitize_for_json(metadata)
 

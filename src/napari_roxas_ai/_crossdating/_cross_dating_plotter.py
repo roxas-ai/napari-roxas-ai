@@ -28,6 +28,8 @@ from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
     unregister_layer_callback,
 )
+from napari_roxas_ai._utils._metadata_keys import NO_REFERENCE_SERIES
+from napari_roxas_ai._writer._writer import update_metadata_file
 
 if TYPE_CHECKING:
     import napari
@@ -93,6 +95,19 @@ class MatplotlibCanvas(Container):
     def clear(self):
         """Clear the plot."""
         self.ax.clear()
+        
+        # Restore dark theme settings
+        self.ax.set_facecolor('black')
+        self.ax.tick_params(axis='both', colors='lightgrey')
+        self.ax.xaxis.label.set_color('lightgrey')
+        self.ax.yaxis.label.set_color('lightgrey')
+        
+        for spine in self.ax.spines.values():
+            spine.set_edgecolor('lightgrey')
+            
+        # Ensure grid lines are behind data
+        self.ax.set_axisbelow(True)
+            
         self.canvas.draw()
 
 
@@ -213,6 +228,7 @@ class CrossDatingPlotterWidget(Container):
         self._base_offset = 0  # Offset accumulated by auto-alignment or candidate selection
         self._reference_scaling_factor = 1.0
         self._file_scaling_factor = 1.0
+        self._roxas_visibility_threshold = 0.90  # Re-center if less than this fraction is visible
         self._alignment_buttons_container = Container()
         self._alignment_buttons_container.native.setSizePolicy(
             self._alignment_buttons_container.native.sizePolicy().Expanding,
@@ -270,6 +286,10 @@ class CrossDatingPlotterWidget(Container):
         if out_path is None:
             show_info("Export plot failed: plot not ready")
             return
+
+        # The exported plot is what the metadata entry stands for, so this is
+        # the only place that writes it
+        self._store_reference_series()
 
         show_info(f"Plot exported to: {out_path}")
 
@@ -387,6 +407,18 @@ class CrossDatingPlotterWidget(Container):
             # Move up to parent directory
             current_path = current_path.parent
 
+        # Refresh the crossdating file combo. Its choices are read from
+        # self.crossdating_files, which napari only re-evaluates on a layer
+        # event: opening the widget while the sample is already loaded fires no
+        # such event, so without this the combo stays empty, no reference
+        # series is ever selected and the plot silently stays empty.
+        self._crossdating_file_combo.reset_choices()
+        if (
+            self._crossdating_file_combo.value is None
+            and self.crossdating_files
+        ):
+            self._crossdating_file_combo.value = self.crossdating_files[0]
+
         self._update_crossdating_plot()
 
     def _connect_layer_callback(self):
@@ -494,9 +526,21 @@ class CrossDatingPlotterWidget(Container):
             name for name in column_names if name not in matching_columns
         ]
 
+        # Reset choices for column combo, then select in order of priority:
+        # a previously stored reference series, else the first name-matching
+        # column, else the first available one.
+        stored = self._input_layer.metadata.get("reference_series")
+        stored_is_usable = (
+            isinstance(stored, str)
+            and stored != NO_REFERENCE_SERIES
+            and stored in self.crossdating_columns
+        )
+
         # Reset choices for column combo and select first matching or first available column
         self._crossdating_column_combo.reset_choices()
-        if matching_columns:
+        if stored_is_usable:
+            self._crossdating_column_combo.value = stored
+        elif matching_columns:
             self._crossdating_column_combo.value = matching_columns[0]
         elif self.crossdating_columns:
             self._crossdating_column_combo.value = self.crossdating_columns[0]
@@ -517,14 +561,18 @@ class CrossDatingPlotterWidget(Container):
         We use the average series as the reference for this calculation.
         """
         layer = self._input_layer
-        if layer is not None and hasattr(layer, "data") and "sample_scale" in layer.metadata:
+        res = None
+        if layer is not None:
+            res = layer.metadata.get("spatial_resolution") or layer.metadata.get("sample_scale")
+
+        if layer is not None and hasattr(layer, "data") and res is not None:
             if getattr(layer, "features", None) is None or layer.features.empty or "YEAR" not in layer.features.columns:
                 return 1.0
             # Re-calculating width_series here briefly to get its scale
             layer_df = layer.features.set_index("YEAR").copy()
             if "cells_above" in layer_df.columns:
                 layer_df = layer_df.sort_index()
-                
+
                 # If we have a candidate alignment, shift the sample to that position
                 # to ensure we have an overlap for scaling calculation.
                 if candidate_alignment is not None:
@@ -536,7 +584,7 @@ class CrossDatingPlotterWidget(Container):
                 layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
                 width_series = layer_df["cells_above"] / (
                         layer.data.shape[1]
-                        * layer.metadata["sample_scale"]
+                        * res
                 )
 
                 # 1. Scaling based on average series
@@ -584,6 +632,80 @@ class CrossDatingPlotterWidget(Container):
                 return min(factors, key=lambda x: abs(np.log10(raw_factor) - np.log10(x)))
         return 1.0
 
+    def _sample_metadata_path(self) -> Optional[Path]:
+        """
+        Path of the metadata file belonging to the current input layer.
+
+        Mirrors the resolution used by the writer: the sample stem is stored
+        relative to the project directory.
+        """
+        layer = self._input_layer
+        if layer is None:
+            return None
+
+        metadata_file_extension = "".join(
+            SettingsManager().get("file_extensions.metadata_file_extension")
+        )
+
+        stem = layer.metadata.get("sample_stem_path")
+        if isinstance(stem, str) and stem.strip():
+            proj = SettingsManager().get("project_directory")
+            if isinstance(proj, str) and proj:
+                return Path(
+                    f"{(Path(proj).resolve() / stem)}{metadata_file_extension}"
+                )
+
+        # Fallback: next to the layer's own file
+        layer_file = layer.metadata.get("file_path")
+        sample_name = layer.metadata.get("sample_name")
+        if isinstance(layer_file, str) and layer_file and sample_name:
+            return (
+                Path(layer_file).parent
+                / f"{sample_name}{metadata_file_extension}"
+            )
+
+        return None
+
+    def _store_reference_series(self) -> None:
+        """
+        Record the reference series of the plot that was just exported.
+
+        The entry stands for a crossdating that was checked and documented, so
+        it is written when a plot is exported and at no other time: merely
+        opening a sample preselects a series, which says nothing about anyone
+        having looked at it. A sample without an exported plot therefore keeps
+        the "NA" it is prepared with.
+
+        Written straight to the metadata file rather than waiting for a layer
+        save, so that it survives even if nothing else is saved. Only this one
+        key is passed, so no other metadata can be touched.
+        """
+        layer = self._input_layer
+        if layer is None:
+            return
+
+        value = self._crossdating_column_combo.value or NO_REFERENCE_SERIES
+        if layer.metadata.get("reference_series") == value:
+            return  # nothing changed, skip the file write
+
+        layer.metadata["reference_series"] = value
+
+        path = self._sample_metadata_path()
+        if path is None or not path.exists():
+            return
+
+        try:
+            update_metadata_file(
+                str(path),
+                {
+                    "sample_name": layer.metadata.get("sample_name"),
+                    "reference_series": value,
+                },
+                ("reference_series",),
+            )
+        except OSError as e:
+            print(f"[crossdating] Could not store reference_series: {e}")
+
     def _on_new_crossdating_column(self):
         """Called when a new reference series is selected."""
         if self._crossdating_column_combo.value is None:
@@ -606,8 +728,7 @@ class CrossDatingPlotterWidget(Container):
         # Skip if no crossdating column is selected
         if self._crossdating_column_combo.value is None:
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
-                self.plot_widget.ax.clear()
-                self.plot_widget.canvas.draw()
+                self.plot_widget.clear()
             return
 
         layer = self._input_layer
@@ -619,8 +740,7 @@ class CrossDatingPlotterWidget(Container):
         if feats is None or feats.empty or "YEAR" not in feats.columns:
             # If no features yet, clear plot and return
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
-                self.plot_widget.ax.clear()
-                self.plot_widget.canvas.draw()
+                self.plot_widget.clear()
             return
 
         # Get reference series
@@ -634,6 +754,12 @@ class CrossDatingPlotterWidget(Container):
 
         # Get the average series
         average_series = self.crossdating_dataframe.get("average", pd.Series(dtype=float))
+        if average_series.empty:
+            # If no average column, calculate it from all columns that look like reference series
+            # (excluding known non-data columns if any)
+            numeric_cols = self.crossdating_dataframe.select_dtypes(include=[np.number]).columns
+            if not numeric_cols.empty:
+                average_series = self.crossdating_dataframe[numeric_cols].mean(axis=1)
 
         # Get the layer rings series
         layer_df = layer.features.set_index("YEAR").copy()
@@ -677,12 +803,13 @@ class CrossDatingPlotterWidget(Container):
 
         # Create ring width series
         # Ensure data and metadata are present
-        if not hasattr(layer, "data") or "sample_scale" not in layer.metadata:
+        res = layer.metadata.get("spatial_resolution") or layer.metadata.get("sample_scale")
+        if not hasattr(layer, "data") or res is None:
             return
 
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
-                * layer.metadata["sample_scale"]
+                * res
         )
 
         # Clear plot_df and rebuild it to ensure no stale data
@@ -700,6 +827,8 @@ class CrossDatingPlotterWidget(Container):
     def _plot_crossdating_data(self, target_range: Optional[tuple[int, int]] = None):
         """Plot the crossdating data comparison"""
         if self.plot_df is None or self.plot_df.empty:
+            if hasattr(self, "plot_widget") and self.plot_widget is not None:
+                self.plot_widget.clear()
             return
 
         # Calculate correlation and overlapping period
@@ -753,7 +882,7 @@ class CrossDatingPlotterWidget(Container):
         self._reference_scaling_factor = self._file_scaling_factor
 
         # Clear the previous plot
-        self.plot_widget.ax.clear()
+        self.plot_widget.clear()
 
         # Build labels
         layer = self._input_layer
