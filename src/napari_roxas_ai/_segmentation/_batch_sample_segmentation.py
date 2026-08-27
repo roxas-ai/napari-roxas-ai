@@ -23,6 +23,7 @@ from napari_roxas_ai._writer import write_single_layer
 
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
+from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 from .._utils._segmentation_postprocess import remove_border_touching_components
 
 # NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
@@ -204,14 +205,11 @@ class Worker(QObject):
         for scan_file_path in self.scan_file_paths:
             scan_data, scan_add_kwargs, _ = read_scan_file(scan_file_path)
 
-            # Get metadata
-            scan_metadata = scan_add_kwargs["metadata"]
-            scan_scale = scan_add_kwargs["scale"]
-
             sample_metadata = {
                 k: v
-                for k, v in scan_metadata.items()
-                if isinstance(k, str) and k.startswith("sample_")
+                for k, v in scan_add_kwargs["metadata"].items()
+                if isinstance(k, str)
+                and k.startswith(SAMPLE_METADATA_PREFIXES)
             }
 
             # Process cells if requested
@@ -227,7 +225,7 @@ class Worker(QObject):
                 cells_binary = remove_border_touching_components(cells_binary)
                 cells_data = (cells_binary * 255).astype("uint8")
 
-                cells_layer_name = f"{sample_metadata.get('sample_name', Path(scan_file_path).stem)}{self.cells_content_ext}"
+                cells_layer_name = f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 cells_add_kwargs = {
                     "name": cells_layer_name,
                     "scale": scan_scale,

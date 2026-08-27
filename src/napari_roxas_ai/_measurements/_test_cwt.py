@@ -26,10 +26,10 @@ class CellProcessor:
                 return
 
         # --- Settings ---
-        ll_scaling = float(config.get("ll_scaling", 1.5))
-        ul_scaling = float(config.get("ul_scaling", 3.0))
-        opp_scaling = float(config.get("opp_scaling", 1.5))
-        adj_scaling = float(config.get("adj_scaling", 2.5))
+        lower_limit_cwt_iqr_multiplier = float(config.get("lower_limit_cwt_iqr_multiplier", 1.5))
+        upper_limit_cwt_iqr_multiplier = float(config.get("upper_limit_cwt_iqr_multiplier", 3.0))
+        opposite_cwt_ratio_limit = float(config.get("opposite_cwt_ratio_limit", 1.5))
+        adjacent_cwt_ratio_limit = float(config.get("adjacent_cwt_ratio_limit", 2.5))
         px_per_um = float(config["pixels_per_um"])
         min_plausible = 1.0 / px_per_um
 
@@ -64,8 +64,8 @@ class CellProcessor:
         # Step 2: hard limits
         iqr_tan = max(q3_tan - q1_tan, 0.0)
         iqr_rad = max(q3_rad - q1_rad, 0.0)
-        ll_tan, ul_tan = max(q1_tan - ll_scaling * iqr_tan, min_plausible), q3_tan + ul_scaling * iqr_tan
-        ll_rad, ul_rad = max(q1_rad - ll_scaling * iqr_rad, min_plausible), q3_rad + ul_scaling * iqr_rad
+        ll_tan, ul_tan = max(q1_tan - lower_limit_cwt_iqr_multiplier * iqr_tan, min_plausible), q3_tan + upper_limit_cwt_iqr_multiplier * iqr_tan
+        ll_rad, ul_rad = max(q1_rad - lower_limit_cwt_iqr_multiplier * iqr_rad, min_plausible), q3_rad + upper_limit_cwt_iqr_multiplier * iqr_rad
 
         reason_pi = pd.Series([None]*len(pi), index=pi.index)
         reason_ba = pd.Series([None]*len(ba), index=ba.index)
@@ -85,19 +85,19 @@ class CellProcessor:
         ri = _apply_hard_limits(ri, cand_ri, ll_rad, ul_rad, reason_ri)
 
         # Step 3: opposite-side filtering
-        mask = cand_ba & ba.notna() & pi.notna() & (ba > opp_scaling * pi)
+        mask = cand_ba & ba.notna() & pi.notna() & (ba > opposite_cwt_ratio_limit * pi)
         ba.loc[mask] = np.nan
         reason_ba.loc[mask] = "opposite side"
 
-        mask = cand_pi & pi.notna() & ba.notna() & (pi > opp_scaling * ba)
+        mask = cand_pi & pi.notna() & ba.notna() & (pi > opposite_cwt_ratio_limit * ba)
         pi.loc[mask] = np.nan
         reason_pi.loc[mask] = "opposite side"
 
-        mask = cand_le & le.notna() & ri.notna() & (le > opp_scaling * ri)
+        mask = cand_le & le.notna() & ri.notna() & (le > opposite_cwt_ratio_limit * ri)
         le.loc[mask] = np.nan
         reason_le.loc[mask] = "opposite side"
 
-        mask = cand_ri & ri.notna() & le.notna() & (ri > opp_scaling * le)
+        mask = cand_ri & ri.notna() & le.notna() & (ri > opposite_cwt_ratio_limit * le)
         ri.loc[mask] = np.nan
         reason_ri.loc[mask] = "opposite side"
 
@@ -113,19 +113,19 @@ class CellProcessor:
             index=ba.index
         )
 
-        mask = cand_ba & ba.notna() & ave_lr.notna() & (ba > adj_scaling * ave_lr)
+        mask = cand_ba & ba.notna() & ave_lr.notna() & (ba > adjacent_cwt_ratio_limit * ave_lr)
         ba.loc[mask] = np.nan
         reason_ba.loc[mask] = "adjacent side"
 
-        mask = cand_pi & pi.notna() & ave_lr.notna() & (pi > adj_scaling * ave_lr)
+        mask = cand_pi & pi.notna() & ave_lr.notna() & (pi > adjacent_cwt_ratio_limit * ave_lr)
         pi.loc[mask] = np.nan
         reason_pi.loc[mask] = "adjacent side"
 
-        mask = cand_le & le.notna() & ave_pb.notna() & (le > adj_scaling * ave_pb)
+        mask = cand_le & le.notna() & ave_pb.notna() & (le > adjacent_cwt_ratio_limit * ave_pb)
         le.loc[mask] = np.nan
         reason_le.loc[mask] = "adjacent side"
 
-        mask = cand_ri & ri.notna() & ave_pb.notna() & (ri > adj_scaling * ave_pb)
+        mask = cand_ri & ri.notna() & ave_pb.notna() & (ri > adjacent_cwt_ratio_limit * ave_pb)
         ri.loc[mask] = np.nan
         reason_ri.loc[mask] = "adjacent side"
 
@@ -154,10 +154,10 @@ def test_filter_cells_with_reasons():
 
     config = {
         "pixels_per_um": 1.0,
-        "ll_scaling": 1.5,
-        "ul_scaling": 3.0,
-        "opp_scaling": 1.5,
-        "adj_scaling": 2.5
+        "lower_limit_cwt_iqr_multiplier": 1.5,
+        "upper_limit_cwt_iqr_multiplier": 3.0,
+        "opposite_cwt_ratio_limit": 1.5,
+        "adjacent_cwt_ratio_limit": 2.5
     }
 
     processor = CellProcessor(df.copy(), config)

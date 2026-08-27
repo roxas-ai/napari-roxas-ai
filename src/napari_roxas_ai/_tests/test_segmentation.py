@@ -18,6 +18,7 @@ from napari_roxas_ai._segmentation._batch_sample_segmentation import (
 from napari_roxas_ai._segmentation._single_sample_segmentation import (
     Worker as SingleWorker,
 )
+from napari_roxas_ai._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 
 
 # Helper function to create a test image
@@ -406,7 +407,8 @@ class TestBatchWorkerFunctionality:
                 sample_metadata = {
                     k: v
                     for k, v in scan_add_kwargs["metadata"].items()
-                    if isinstance(k, str) and k.startswith("sample_")
+                    if isinstance(k, str)
+                    and k.startswith(SAMPLE_METADATA_PREFIXES)
                 }
 
                 # Process cells and verify

@@ -95,19 +95,19 @@ class MatplotlibCanvas(Container):
     def clear(self):
         """Clear the plot."""
         self.ax.clear()
-        
+
         # Restore dark theme settings
         self.ax.set_facecolor('black')
         self.ax.tick_params(axis='both', colors='lightgrey')
         self.ax.xaxis.label.set_color('lightgrey')
         self.ax.yaxis.label.set_color('lightgrey')
-        
+
         for spine in self.ax.spines.values():
             spine.set_edgecolor('lightgrey')
-            
+
         # Ensure grid lines are behind data curves
         self.ax.set_axisbelow(True)
-            
+
         self.canvas.draw()
 
 
@@ -122,7 +122,7 @@ class CrossDatingPlotterWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # attributes
+        # bunch of attributes
         self.crossdating_files = []
         self.crossdating_columns = []
         self.plot_df = None
@@ -562,12 +562,12 @@ class CrossDatingPlotterWidget(Container):
             return None
 
         metadata_file_extension = "".join(
-            SettingsManager().get("file_extensions.metadata_file_extension")
+            settings.get("file_extensions.metadata_file_extension")
         )
 
         stem = layer.metadata.get("sample_stem_path")
         if isinstance(stem, str) and stem.strip():
-            proj = SettingsManager().get("project_directory")
+            proj = settings.get("project_directory")
             if isinstance(proj, str) and proj:
                 return Path(
                     f"{(Path(proj).resolve() / stem)}{metadata_file_extension}"
@@ -700,16 +700,15 @@ class CrossDatingPlotterWidget(Container):
         if "enabled" in layer_df.columns:
             layer_df.loc[~layer_df["enabled"], "cells_above"] = np.nan
 
-        # Create ring width series in micrometers
-        # We try to get the spatial resolution from metadata (preferring 'spatial_resolution')
-        res = layer.metadata.get("spatial_resolution") or layer.metadata.get("sample_scale")
-        if not hasattr(layer, "data") or res is None:
+        # Create ring width series
+        # Ensure data and metadata are present
+        if not hasattr(layer, "data") or "spatial_resolution" not in layer.metadata:
             return
 
         # Width calculation: total area (pixels) / (image width * scale factor)
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
-                * res
+                * layer.metadata["spatial_resolution"]
         )
 
         # Clear plot_df and rebuild it to ensure no stale data
@@ -880,15 +879,27 @@ class CrossDatingPlotterWidget(Container):
             # Get current x slider values
             current_x_low, current_x_high = self._x_range_slider.value
 
-            # Check if the current view still contains the ROXAS series
-            # If it doesn't, we should probably re-center anyway
+            # Check if enough of the ROXAS series is still visible
+            # If it isn't, we should re-center
             roxas_visible = False
             if len(roxas_years) > 0:
                 roxas_min = min(roxas_years)
                 roxas_max = max(roxas_years)
-                # Overlap between [current_x_low, current_x_high] and [roxas_min, roxas_max]
-                if not (roxas_max < current_x_low or roxas_min > current_x_high):
-                    roxas_visible = True
+                roxas_width = roxas_max - roxas_min
+
+                if roxas_width > 0:
+                    # Calculate intersection of [roxas_min, roxas_max] and [current_x_low, current_x_high]
+                    visible_min = max(roxas_min, current_x_low)
+                    visible_max = min(roxas_max, current_x_high)
+                    visible_width = max(0, visible_max - visible_min)
+
+                    # Trigger re-centering if visible width is less than threshold
+                    if visible_width >= (self._roxas_visibility_threshold * roxas_width):
+                        roxas_visible = True
+                else:
+                    # Single point curve is visible if within range
+                    if current_x_low <= roxas_min <= current_x_high:
+                        roxas_visible = True
 
             # Compute new x view range that preserves as much of previous view as possible
             if roxas_visible:
@@ -984,8 +995,11 @@ class CrossDatingPlotterWidget(Container):
             # Do NOT set self._y_range_slider_was_set = True here.
             # It should only be set to True by manual user interaction.
 
-        # Set the y axis limits
-        self.plot_widget.ax.set_ylim(min_value, max_value)
+            # Set the y axis limits
+            self.plot_widget.ax.set_ylim(min_value, max_value)
+        else:
+            # Use manual slider values if locked
+            self.plot_widget.ax.set_ylim(self._y_range_slider.value)
 
         # Redraw the canvas
         self.plot_widget.figure.tight_layout()

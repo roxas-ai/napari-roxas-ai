@@ -225,6 +225,20 @@ class SamplesLoadingWidget(Container):
 
         QTimer.singleShot(1000, _init_rings_editor)
 
+    def refresh_from_settings(self):
+        """
+        Pick up settings changed while this widget was open.
+
+        The project directory is copied into this widget when it is built and
+        shown on the button, so both are re-read, and the samples list is
+        rebuilt from the new directory.
+        """
+        self.project_directory = settings.get("project_directory")
+        self._project_dialog_button.text = (
+            f"Project Directory: {self.project_directory or 'Not set'}"
+        )
+        self._refresh_samples_list()
+
     def _open_project_dialog(self):
         """Open sample dialog to select project directory and refresh samples list."""
         directory = QFileDialog.getExistingDirectory(

@@ -24,6 +24,7 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
+from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 from .._utils._segmentation_postprocess import remove_border_touching_components
 
 # NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
@@ -557,7 +558,8 @@ class SingleSampleSegmentationWidget(Container):
         sample_metadata = {
             k: v
             for k, v in self.input_layer.metadata.items()
-            if isinstance(k, str) and k.startswith("sample_")
+            if isinstance(k, str)
+            and k.startswith(SAMPLE_METADATA_PREFIXES)
         }
 
         # Ensure stem is propagated to derived layers
