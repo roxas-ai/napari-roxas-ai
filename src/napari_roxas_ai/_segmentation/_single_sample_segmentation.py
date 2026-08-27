@@ -257,11 +257,15 @@ class Worker(QObject):
                 )
             )
             cells_model.to(device=cells_model.available_device)
-            # Ensure internal device attribute is synchronized if possible
+            # Synchronize internal device attribute for models that use it in infer()
             try:
                 cells_model.device = cells_model.available_device
             except Exception:
-                pass
+                try:
+                    setattr(cells_model, "device", cells_model.available_device)
+                except Exception:
+                    if hasattr(cells_model, "__dict__"):
+                        cells_model.__dict__["device"] = cells_model.available_device
             # Use local device variable for autocast checks to avoid restricted attribute assignment
             device_obj = torch.device(cells_model.available_device)
             cells_model.use_autocast = bool(
@@ -309,15 +313,13 @@ class Worker(QObject):
                 )
             )
             rings_model.to(device=rings_model.available_device)
-            # Force synchronization of the internal device attribute
-            # We use multiple methods because some models have read-only properties
+            # Synchronize internal device attribute for packaged models
             try:
                 rings_model.device = rings_model.available_device
             except Exception:
                 try:
                     setattr(rings_model, "device", rings_model.available_device)
                 except Exception:
-                    # Last resort for read-only properties in some model wrappers
                     if hasattr(rings_model, "__dict__"):
                         rings_model.__dict__["device"] = rings_model.available_device
             # Use local device variable for autocast checks

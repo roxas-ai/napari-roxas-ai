@@ -68,15 +68,9 @@ class MatplotlibCanvas(Container):
         self.figure = Figure(figsize=figsize, dpi=dpi, facecolor='black')
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111)
-        
+
         # Set dark theme for the axes
-        self.ax.set_facecolor('black')
-        self.ax.tick_params(axis='both', colors='lightgrey')
-        self.ax.xaxis.label.set_color('lightgrey')
-        self.ax.yaxis.label.set_color('lightgrey')
-        
-        for spine in self.ax.spines.values():
-            spine.set_edgecolor('lightgrey')
+        self._apply_theme()
 
         # Create a Qt widget to hold the canvas
         widget = QWidget()
@@ -92,11 +86,8 @@ class MatplotlibCanvas(Container):
         super().__init__(widgets=[])
         self.native.layout().addWidget(widget)
 
-    def clear(self):
-        """Clear the plot."""
-        self.ax.clear()
-
-        # Restore dark theme settings
+    def _apply_theme(self):
+        """Apply dark theme settings to the axes."""
         self.ax.set_facecolor('black')
         self.ax.tick_params(axis='both', colors='lightgrey')
         self.ax.xaxis.label.set_color('lightgrey')
@@ -108,7 +99,12 @@ class MatplotlibCanvas(Container):
         # Ensure grid lines are behind data curves
         self.ax.set_axisbelow(True)
 
-        self.canvas.draw()
+    def clear(self, redraw=True):
+        """Clear the plot."""
+        self.ax.clear()
+        self._apply_theme()
+        if redraw:
+            self.canvas.draw()
 
 
 class CrossDatingPlotterWidget(Container):
@@ -457,8 +453,7 @@ class CrossDatingPlotterWidget(Container):
                     hasattr(self, "plot_widget")
                     and self.plot_widget is not None
             ):
-                self.plot_widget.ax.clear()
-                self.plot_widget.canvas.draw()
+                self.plot_widget.clear()
             # Clear other dependent widgets
             self.crossdating_files = []
             self.crossdating_columns = []
@@ -672,12 +667,6 @@ class CrossDatingPlotterWidget(Container):
 
         # Get the average series
         average_series = self.crossdating_dataframe.get("average", pd.Series(dtype=float))
-        if average_series.empty:
-            # If no average column, calculate it from all columns that look like reference series
-            # (excluding known non-data columns if any)
-            numeric_cols = self.crossdating_dataframe.select_dtypes(include=[np.number]).columns
-            if not numeric_cols.empty:
-                average_series = self.crossdating_dataframe[numeric_cols].mean(axis=1)
 
         # Get the layer rings series
         layer_df = layer.features.set_index("YEAR").copy()
@@ -777,8 +766,8 @@ class CrossDatingPlotterWidget(Container):
             r_avg = np.nan
             glk_avg = np.nan
 
-        # Clear the previous plot
-        self.plot_widget.clear()
+        # Clear the previous plot (no redraw yet)
+        self.plot_widget.clear(redraw=False)
 
         # Build labels
         layer = self._input_layer

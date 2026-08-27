@@ -782,6 +782,43 @@ class RingsLayerEditorWidget(Container):
 
         self._update_year_spinbox()
 
+    def _restore_original_visibility(self) -> None:
+        """
+        Restore the original visibility state of layers that were hidden during editing.
+        Also ensures that the current input rings layer is visible.
+        """
+        try:
+            # First, restore states from the saved dictionary
+            for layer_name, visible in self._layer_visibility_states.items():
+                if layer_name in self._viewer.layers:
+                    self._viewer.layers[layer_name].visible = visible
+            
+            # Explicitly ensure the current input layer (.rings) is visible
+            # since it was definitely hidden by _edit_rings_geometries
+            input_layer = self._input_layer
+            if input_layer is not None:
+                input_layer.visible = True
+                # Force events to ensure UI and Vispy are updated
+                input_layer.events.visible()
+                input_layer.events.data()
+
+            self._layer_visibility_states = {}
+            
+            # Force a canvas update to ensure the restored layers are redrawn
+            qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
+            if qt_viewer is None:
+                qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+            
+            if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
+                canvas = qt_viewer.canvas
+                if canvas is not None:
+                    if hasattr(canvas, "update"):
+                        canvas.update()
+                    elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
+                        canvas.native.update()
+        except Exception:
+            pass
+
     def _cancel_rings_geometries(self) -> None:
         """Cancel the changes made to the input layer and cleanup the edit session."""
         if self._is_updating:
@@ -810,31 +847,8 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.value = False
             self._delete_lasso_vertices_button.visible = False
 
-            # Restore original visibility of .cells and .rings layers
-            def restore_visibility():
-                try:
-                    for layer_name, visible in self._layer_visibility_states.items():
-                        if layer_name in self._viewer.layers:
-                            self._viewer.layers[layer_name].visible = visible
-                    self._layer_visibility_states = {}
-                    
-                    # Force a canvas update to ensure the restored layers are redrawn
-                    qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
-                    if qt_viewer is None:
-                        qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
-                    
-                    if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
-                        canvas = qt_viewer.canvas
-                        if canvas is not None:
-                            if hasattr(canvas, "update"):
-                                canvas.update()
-                            elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
-                                canvas.native.update()
-                except Exception:
-                    pass
-
             # Defer visibility restoration slightly to let scenegraph settle from removals
-            QTimer.singleShot(100, restore_visibility)
+            QTimer.singleShot(100, self._restore_original_visibility)
 
             show_info("Rings geometries modification cancelled")
             self._years_update_timer.start(200)
@@ -901,31 +915,8 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.value = False
             self._delete_lasso_vertices_button.visible = False
 
-            # Restore original visibility of .cells and .rings layers
-            def restore_visibility():
-                try:
-                    for layer_name, visible in self._layer_visibility_states.items():
-                        if layer_name in self._viewer.layers:
-                            self._viewer.layers[layer_name].visible = visible
-                    self._layer_visibility_states = {}
-                    
-                    # Force a canvas update to ensure the restored layers are redrawn
-                    qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
-                    if qt_viewer is None:
-                        qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
-                    
-                    if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
-                        canvas = qt_viewer.canvas
-                        if canvas is not None:
-                            if hasattr(canvas, "update"):
-                                canvas.update()
-                            elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
-                                canvas.native.update()
-                except Exception:
-                    pass
-
             # Defer visibility restoration slightly to let scenegraph settle from removals
-            QTimer.singleShot(100, restore_visibility)
+            QTimer.singleShot(100, self._restore_original_visibility)
 
             # Defer updating years layer to ensure all other layer removals/modifications are settled
             self._years_update_timer.start(400)
@@ -1499,15 +1490,13 @@ class RingsLayerEditorWidget(Container):
             )
         )
         rings_model.to(device=rings_model.available_device)
-        # Force synchronization of the internal device attribute
-        # We use multiple methods because some models have read-only properties
+        # Synchronize internal device attribute for packaged models
         try:
             rings_model.device = rings_model.available_device
         except Exception:
             try:
                 setattr(rings_model, "device", rings_model.available_device)
             except Exception:
-                # Last resort for read-only properties in some model wrappers
                 if hasattr(rings_model, "__dict__"):
                     rings_model.__dict__["device"] = rings_model.available_device
         # Use local device variable for autocast checks

@@ -112,11 +112,15 @@ class Worker(QObject):
                 )
             )
             self.cells_model.to(device=self.cells_model.available_device)
-            # Ensure internal device attribute is synchronized if possible
+            # Synchronize internal device attribute for models that use it in infer()
             try:
                 self.cells_model.device = self.cells_model.available_device
             except Exception:
-                pass
+                try:
+                    setattr(self.cells_model, "device", self.cells_model.available_device)
+                except Exception:
+                    if hasattr(self.cells_model, "__dict__"):
+                        self.cells_model.__dict__["device"] = self.cells_model.available_device
             # Use local device variable for autocast checks to avoid restricted attribute assignment
             device_obj = torch.device(self.cells_model.available_device)
             self.cells_model.use_autocast = bool(
@@ -152,15 +156,13 @@ class Worker(QObject):
                 )
             )
             self.rings_model.to(device=self.rings_model.available_device)
-            # Force synchronization of the internal device attribute
-            # We use multiple methods because some models have read-only properties
+            # Synchronize internal device attribute for packaged models
             try:
                 self.rings_model.device = self.rings_model.available_device
             except Exception:
                 try:
                     setattr(self.rings_model, "device", self.rings_model.available_device)
                 except Exception:
-                    # Last resort for read-only properties in some model wrappers
                     if hasattr(self.rings_model, "__dict__"):
                         self.rings_model.__dict__["device"] = self.rings_model.available_device
             # Use local device variable for autocast checks
@@ -228,7 +230,7 @@ class Worker(QObject):
                 cells_layer_name = f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 cells_add_kwargs = {
                     "name": cells_layer_name,
-                    "scale": scan_scale,
+                    "scale": scan_add_kwargs.get("scale"),
                     "features": pd.DataFrame(),
                     "metadata": {
                         **sample_metadata,
@@ -281,7 +283,7 @@ class Worker(QObject):
 
                 rings_add_kwargs = {
                     "name": rings_layer_name,
-                    "scale": scan_scale,
+                    "scale": scan_add_kwargs.get("scale"),
                     "features": new_rings_table,
                     "metadata": {
                         **sample_metadata,
