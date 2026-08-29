@@ -341,6 +341,12 @@ class Worker(QObject):
 
             # Create a DataFrame from boundaries
             boundary_data = []
+
+            # Always prepend a dummy boundary at the top (row 0) to mark the uncomplete ring area
+            boundary_data.append(
+                {"RBXY": [[0, 0], [0, self.input_array.shape[1] - 1]]}
+            )
+
             for _i, boundary in enumerate(rings_boundaries):
                 # Convert to numpy or list, whichever is more appropriate
                 if isinstance(boundary, torch.Tensor):

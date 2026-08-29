@@ -1499,6 +1499,8 @@ class SampleAnalyzer:
         self.cells_table["bot_ring_id"] = np.nan
         self.cells_table["top_vert_dist"] = np.nan
         self.cells_table["bot_vert_dist"] = np.nan
+        self.cells_table["top_angled_dist"] = np.nan
+        self.cells_table["bot_angled_dist"] = np.nan
 
         for i in range(len(self.rings_table) - 1):
 

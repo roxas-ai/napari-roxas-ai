@@ -198,6 +198,20 @@ def update_rings_geometries(
         tuple: Updated rings table, rasterized rings, and colormap.
     """
 
+    # Defensive check: if table is empty or missing RBXY, ensure it has the required structure
+    if rings_table is None or rings_table.empty or "RBXY" not in rings_table.columns:
+        # If RBXY is missing, we can't do much, so initialize with a dummy if totally empty
+        if rings_table is None or rings_table.empty:
+            rings_table = pd.DataFrame(
+                {"RBXY": [[[0, 0], [0, image_shape[1] - 1]]]}
+            )
+        else:
+            # Table has some data but not RBXY? Should not happen with new workers, but just in case
+            if "RBXY" not in rings_table.columns:
+                rings_table["RBXY"] = [
+                    [[0, 0], [0, image_shape[1] - 1]]
+                ] * len(rings_table)
+
     # Rearrange coordinates from left to right if needed
     rings_table["RBXY"] = rings_table["RBXY"].apply(rearrange_coordinates)
 
@@ -224,15 +238,24 @@ def update_rings_geometries(
         .rename_axis("id")
     )
 
+    # Remove dummy boundary (at row 0) if other boundaries exist
+    if len(rings_table) > 1:
+        first_ring_coords = np.asarray(rings_table.iloc[0]["RBXY"])
+        # If all points in the first boundary are at row 0 (within a small tolerance)
+        if np.all(first_ring_coords[:, 0] <= 1e-3):
+            rings_table = (
+                rings_table.iloc[1:]
+                .reset_index(drop=True)
+                .rename_axis("id")
+            )
+
     rings_table["YEAR"] = [
         a + 1 for a in range(last_year - len(rings_table), last_year)
     ]
 
-    # Disable rings (by default, the first ring is considered uncomplete and is disabled)
-    if "enabled" not in rings_table.columns:
-        rings_table["enabled"] = True
-        # By default, mark the first ring as uncomplete only for legacy inputs
-        rings_table.loc[0, "enabled"] = False
+    # Disable rings (strictly enforce that ONLY the first ring is uncomplete/disabled)
+    rings_table["enabled"] = True
+    rings_table.loc[0, "enabled"] = False
 
     # Rings_rasterization
     rings_raster = rasterize_rings(rings_table, image_shape)

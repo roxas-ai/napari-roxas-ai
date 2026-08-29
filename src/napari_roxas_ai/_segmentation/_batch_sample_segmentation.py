@@ -249,6 +249,12 @@ class Worker(QObject):
                 rings_labels, rings_boundaries = self.rings_model.infer(scan_data)
 
                 boundary_data = []
+
+                # Always prepend a dummy boundary at the top (row 0) to mark the uncomplete ring area
+                boundary_data.append(
+                    {"RBXY": [[0, 0], [0, scan_data.shape[1] - 1]]}
+                )
+
                 for boundary in rings_boundaries:
                     if isinstance(boundary, torch.Tensor):
                         coords = boundary.cpu().numpy().tolist()
@@ -275,7 +281,7 @@ class Worker(QObject):
                     else default_rings_year_value
                 )
 
-                new_rings_table, _rings_raster_tmp, _cmap_tmp = update_rings_geometries(
+                new_rings_table, rings_raster, _cmap_tmp = update_rings_geometries(
                     rings_table=boundaries_df,
                     last_year=int(last_year),
                     image_shape=rings_labels.shape,
@@ -293,7 +299,7 @@ class Worker(QObject):
                     },
                 }
 
-                write_single_layer(path=scan_file_path, data=rings_data, meta=rings_add_kwargs)
+                write_single_layer(path=scan_file_path, data=rings_raster, meta=rings_add_kwargs)
 
         self.progress.emit(total, total)
         self.finished.emit()
