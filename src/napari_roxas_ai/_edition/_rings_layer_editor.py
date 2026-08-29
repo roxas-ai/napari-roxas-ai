@@ -305,6 +305,17 @@ class RingsLayerEditorWidget(Container):
         valid_layers = self._get_valid_layers()
         return valid_layers[0] if valid_layers else None
 
+    @property
+    def _scan_layer(self) -> Optional["napari.layers.Image"]:
+        """Get the single valid scan layer currently in the viewer."""
+        scan_extension = settings.get("file_extensions.scan_file_extension")[0]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Image) and layer.name.endswith(
+                scan_extension
+            ):
+                return layer
+        return None
+
     def _get_rings_data(self, source_layer: "napari.layers.Layer") -> pd.DataFrame:
         """
         Extract RBXY, YEAR, and enabled status from a layer.
@@ -705,9 +716,19 @@ class RingsLayerEditorWidget(Container):
         """Run the segmentation analysis in a separate thread."""
         # Get the selected input layer
         input_layer = self._input_layer
+        
+        # If no rings layer exists, we need at least a scan layer to determine dimensions
+        scan_layer = None
         if not input_layer:
-            QMessageBox.warning(None, "Error", "No valid rings layer found")
-            return
+            scan_layer = self._scan_layer
+            if not scan_layer:
+                QMessageBox.warning(
+                    None, 
+                    "Error", 
+                    "No valid rings or scan layer found.\n"
+                    "Please load a .scan image first to add rings manually."
+                )
+                return
 
         # --- LAYER VISIBILITY MANAGEMENT ---
         # Hide .cells and .rings layers to reduce clutter during ring boundary editing.
@@ -728,7 +749,18 @@ class RingsLayerEditorWidget(Container):
             self._deferred_remove_layer("Rings Modification")
 
         # Build a DF in the same logical order as the annotated export
-        df = input_layer.features.copy()
+        if input_layer:
+            df = input_layer.features.copy()
+        else:
+            # No rings layer: create a dummy table to enable editing
+            uncomplete_val = settings.get("rasterization.uncomplete_ring_value")
+            df = pd.DataFrame(
+                {
+                    "RBXY": [[ [0.0, 0.0], [0.0, scan_layer.data.shape[1]-1] ]],
+                    "YEAR": [9999],
+                    "enabled": [False],
+                }
+            )
 
         # Prefer YEAR ordering; otherwise fall back to cells_above if present
         if "YEAR" in df.columns:
@@ -777,6 +809,9 @@ class RingsLayerEditorWidget(Container):
             show_info("No valid rings to edit")
             return
 
+        # Determine scale
+        layer_scale = input_layer.scale if input_layer else scan_layer.scale
+
         # Create the editable Shapes layer
         shapes_layer = self._viewer.add_shapes(
             simplified_boundary_lines,
@@ -785,7 +820,7 @@ class RingsLayerEditorWidget(Container):
             edge_width=settings.get("vectorization.rings_edge_width"),
             opacity=1,
             name="Rings Modification",
-            scale=input_layer.scale,
+            scale=layer_scale,
             features={
                 "YEAR": df["YEAR"].tolist(),
                 "enabled": (
@@ -914,8 +949,41 @@ class RingsLayerEditorWidget(Container):
 
                 input_layer = self._input_layer
                 if input_layer is None:
-                    show_info("No valid rings layer found to apply geometries")
-                    return
+                    # If we don't have a rings layer, we must have a scan layer
+                    scan_layer = self._scan_layer
+                    if not scan_layer:
+                        show_info("No valid rings or scan layer found to apply geometries")
+                        return
+
+                    # Initialize a new rings layer based on scan layer dimensions
+                    rings_extension = settings.get("file_extensions.rings_file_extension")[0]
+                    rings_layer_name = f"{scan_layer.name.split('.')[0]}{rings_extension}"
+                    
+                    # Create empty data and default metadata
+                    data_shape = scan_layer.data.shape[:2]
+                    empty_data = np.zeros(data_shape, dtype=np.int32)
+                    
+                    # Copy sample metadata from scan layer
+                    rings_metadata = {}
+                    if scan_layer.metadata:
+                        for k, v in scan_layer.metadata.items():
+                            if k.startswith(("sample_", "spatial_resolution", "meas_geometry")):
+                                rings_metadata[k] = v
+                    
+                    rings_metadata["rings_outmost_complete_year"] = self._last_year_spinbox.value
+                    
+                    # Add new Labels layer to viewer
+                    input_layer = self._viewer.add_labels(
+                        empty_data,
+                        name=rings_layer_name,
+                        scale=scan_layer.scale,
+                        metadata=rings_metadata,
+                        features=pd.DataFrame(),
+                    )
+                    
+                    # Connect callback and ensure it's selected
+                    self._connect_layer_callback()
+                    self._viewer.layers.selection.active = input_layer
 
                 # Update the rings layer with the new geometries
                 new_rings_table, new_rings_raster, new_colormap = (
