@@ -143,16 +143,7 @@ class Worker(QObject):
             file_path: Path to the image file
         """
         print(f"Attempting to load cells from ROXAS SCL for {file_path}")
-        if file_path.endswith(
-            self.scan_content_extension + Path(file_path).suffix
-        ):
-            file_path = file_path.replace(
-                self.scan_content_extension + Path(file_path).suffix,
-                Path(file_path).suffix,
-            )
-            print(f"Adjusted file path for SCL loading: {file_path}")
         try:
-
             if os.path.exists(
                 scl_file_name := file_path.replace(
                     Path(file_path).suffix, "_Vessels.scl"
@@ -214,14 +205,6 @@ class Worker(QObject):
         print(
             f"Attempting to load rings from ROXAS RingTraces for {file_path}"
         )
-        if file_path.endswith(
-            self.scan_content_extension + Path(file_path).suffix
-        ):
-            file_path = file_path.replace(
-                self.scan_content_extension + Path(file_path).suffix,
-                Path(file_path).suffix,
-            )
-            print(f"Adjusted file path for RingTraces loading: {file_path}")
         try:
             rings_boundaries = ring_labels_from_roxas(
                 file_path,
@@ -342,8 +325,8 @@ class Worker(QObject):
                     filtered_files.append(file_path)
             all_files = filtered_files
 
-        # Sort files for consistent processing
-        self.all_files = sorted(all_files)
+        # Sort files for consistent processing and remove duplicates (e.g. on case-insensitive filesystems)
+        self.all_files = sorted(list(set(all_files)))
 
         # Process files or finish if none found
         total = len(self.all_files)
@@ -423,33 +406,16 @@ class Worker(QObject):
                 dir_path
                 / f"{clean_base_name}{self.scan_content_extension}{file_ext}"
             )
-            # Rename or copy file if needed
-            if file_path != str(new_image_path):
-                try:
-                    # Extract metadata before modifying the file
-                    img_metadata = self._extract_image_metadata(file_path)
-
-                    # Always avoid duplicates: rename if possible, else copy+delete
-                    moved_path = self._safe_rename_or_copy_delete(
-                        Path(file_path), Path(new_image_path)
-                    )
-                    print(f"Renamed file: {file_path} -> {moved_path}")
-
-                    file_path = str(moved_path)
-                except OSError as e:
-                    print(f"Error processing file {file_path}: {e}")
-                    self.current_file_index += 1
-                    self._process_next_file()
-                    return
 
         # Define metadata path - always use the clean base name without scan extension
         metadata_path = (
             dir_path / f"{clean_base_name}{self.metadata_file_extension}"
         )
 
-        # Extract image metadata if we haven't already
-        if "img_metadata" not in locals():
-            img_metadata = self._extract_image_metadata(file_path)
+        # Extract image metadata BEFORE renaming
+        # We try to extract metadata from the current file_path.
+        # If the file was renamed in a previous step, we catch the error.
+        img_metadata = self._extract_image_metadata(file_path)
 
         # Add sample_stem_path to the image metadata
         img_metadata["sample_stem_path"] = sample_stem_path
@@ -477,12 +443,26 @@ class Worker(QObject):
 
             # Load data from old roxas file formats if needed
             if self.default_loading_params.get("load_cells_from_roxas", False):
-                self.load_cells_from_roxas_scl(str(file_path_obj), metadata)
+                self.load_cells_from_roxas_scl(file_path, metadata)
 
             if self.default_loading_params.get("load_rings_from_roxas", False):
                 self.load_rings_from_roxas_ringtraces(
-                    str(file_path_obj), metadata
+                    file_path, metadata
                 )
+
+            # Rename or copy file if needed AFTER metadata and data extraction
+            if not original_has_scan_ext and file_path != str(new_image_path):
+                try:
+                    # Always avoid duplicates: rename if possible, else copy+delete
+                    moved_path = self._safe_rename_or_copy_delete(
+                        Path(file_path), Path(new_image_path)
+                    )
+                    print(f"Renamed file: {file_path} -> {moved_path}")
+                    file_path = str(moved_path)
+                    # Update the path in the list so that subsequent calls to self.all_files use the new path
+                    self.all_files[self.current_file_index] = file_path
+                except OSError as e:
+                    print(f"Error processing file {file_path}: {e}")
 
             # Move to next file
             self.current_file_index += 1
@@ -546,6 +526,25 @@ class Worker(QObject):
 
         if loading_params.get("load_rings_from_roxas", False):
             self.load_rings_from_roxas_ringtraces(file_path, metadata)
+
+        # Rename or copy file if needed AFTER metadata and data extraction
+        original_has_scan_ext = self.scan_content_extension in Path(file_path).stem
+        clean_base_name = Path(file_path).stem.replace(self.scan_content_extension, "")
+        file_ext = Path(file_path).suffix
+        new_image_path = Path(file_path).parent / f"{clean_base_name}{self.scan_content_extension}{file_ext}"
+
+        if not original_has_scan_ext and file_path != str(new_image_path):
+            try:
+                # Always avoid duplicates: rename if possible, else copy+delete
+                moved_path = self._safe_rename_or_copy_delete(
+                    Path(file_path), Path(new_image_path)
+                )
+                print(f"Renamed file: {file_path} -> {moved_path}")
+                file_path = str(moved_path)
+                # Update the path in the list so that subsequent calls to self.all_files use the new path
+                self.all_files[self.current_file_index] = file_path
+            except OSError as e:
+                print(f"Error processing file {file_path}: {e}")
 
         # Clean up the temporary metadata cache
         self._current_img_metadata = None

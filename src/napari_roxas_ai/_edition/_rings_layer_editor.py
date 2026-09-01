@@ -88,6 +88,11 @@ def horizontal_rings_completion(coords: list, width: int) -> list:
     Returns:
         list: Completed coordinates.
     """
+    if hasattr(coords, "tolist"):
+        coords = coords.tolist()
+
+    if not coords:
+        return []
 
     if coords[0][1] > 0:
         coords = [[coords[0][0], 0]] + coords
@@ -96,14 +101,14 @@ def horizontal_rings_completion(coords: list, width: int) -> list:
     return coords
 
 
-def horizontal_rings_clippping(coords: list, width: int) -> list:
+def horizontal_rings_clipping(coords: list, shape: tuple) -> list:
     """
-    Clip the coordinates of the rings to a specified width.
-    This ensures that all ring boundary vertices stay within the image boundaries [0, width].
+    Clip the coordinates of the rings to the image shape.
+    This ensures that all ring boundary vertices stay within the image boundaries.
 
     Args:
         coords (list): List of coordinates (y, x).
-        width (int): Width of the image.
+        shape (tuple): Shape of the image (height, width).
     Returns:
         list: Clipped coordinates.
     """
@@ -113,6 +118,7 @@ def horizontal_rings_clippping(coords: list, width: int) -> list:
     coords = np.array(coords)
 
     # Find the indices of points that are at or beyond the left (x<=0) and right (x>=width) boundaries
+    width = shape[1]
     left_points = np.where(coords[:, 1] <= 0)[0]
     right_points = np.where(coords[:, 1] >= width)[0]
 
@@ -125,9 +131,10 @@ def horizontal_rings_clippping(coords: list, width: int) -> list:
     # Slice the coordinates to only include the relevant range within the boundaries
     coords = coords[start_idx:end_idx]
 
-    # Final safeguard: Ensure we don't operate on empty arrays and clip everything precisely to [0, width]
+    # Final safeguard: Ensure we don't operate on empty arrays and clip everything precisely to [0, shape]
     if len(coords) > 0:
-        coords[:, 1] = np.clip(coords[:, 1], 0, width)
+        coords[:, 0] = np.clip(coords[:, 0], 0, shape[0])
+        coords[:, 1] = np.clip(coords[:, 1], 0, shape[1])
 
     return coords.tolist()
 
@@ -142,6 +149,11 @@ def calculate_polygon_area(coords: list, width: int) -> int:
     Returns:
         int: Number of pixels that would be drawn for the polygon.
     """
+    if hasattr(coords, "tolist"):
+        coords = coords.tolist()
+
+    if not coords:
+        return 0
 
     coords = np.array([[0, 0]] + coords + [[0, width]])
     x, y = coords[:, 0], coords[:, 1]
@@ -223,9 +235,9 @@ def update_rings_geometries(
         lambda x: horizontal_rings_completion(x, image_shape[1])
     )
 
-    # Clip rings to the image width
+    # Clip rings to the image dimensions
     rings_table["RBXY"] = rings_table["RBXY"].apply(
-        lambda x: horizontal_rings_clippping(x, image_shape[1])
+        lambda x: horizontal_rings_clipping(x, image_shape)
     )
 
     # Sort new rings chronologically by using the area of the polygon formed with the ring and the image top edge
@@ -1693,8 +1705,8 @@ class RingsLayerEditorWidget(Container):
         n_shapes = len(all_coords)
 
         # Compute cells_above for spatial ordering
-        image_width = self.input_layer.data.shape[1]
-        areas = [calculate_polygon_area(c, image_width) for c in all_coords]
+        image_shape = self.input_layer.data.shape
+        areas = [calculate_polygon_area(c, image_shape[1]) for c in all_coords]
         order = np.argsort(areas)
 
         # Assign years: range is (last_year - n_shapes + 1) .. last_year
