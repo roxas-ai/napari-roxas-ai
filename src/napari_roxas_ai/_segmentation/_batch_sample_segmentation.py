@@ -265,7 +265,6 @@ class Worker(QObject):
                 boundaries_df = pd.DataFrame(boundary_data)
 
                 rings_layer_name = f"{sample_metadata.get('sample_name', Path(scan_file_path).stem)}{self.rings_content_ext}"
-                rings_data = rings_labels.astype("int32")
 
                 sample_stem_path = sample_metadata.get("sample_stem_path")
                 if not sample_stem_path:

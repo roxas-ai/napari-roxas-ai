@@ -389,6 +389,16 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
 
+    def _abort_editing_mode(self, message: str) -> None:
+        """Leave editing mode cleanly when an edit session cannot be started/finished.
+
+        Without this the UI would stay in "editing" state (Apply/Cancel buttons
+        shown) while the .cells/.rings layers remain hidden, leaving the user stuck.
+        """
+        show_info(message)
+        self._set_ui_editing_mode(False)
+        self._restore_original_visibility()
+
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(labels=False)
         self._viewer = viewer
@@ -586,9 +596,9 @@ class RingsLayerEditorWidget(Container):
         try:
             # Safely access the qt_viewer and its canvas using getattr to avoid deprecation warnings
             # and to handle different napari versions.
-            qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
+            qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
             if qt_viewer is None:
-                qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+                qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
 
             if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
                 canvas = qt_viewer.canvas
@@ -765,7 +775,6 @@ class RingsLayerEditorWidget(Container):
             df = input_layer.features.copy()
         else:
             # No rings layer: create a dummy table to enable editing
-            uncomplete_val = settings.get("rasterization.uncomplete_ring_value")
             df = pd.DataFrame(
                 {
                     "RBXY": [[ [0.0, 0.0], [0.0, scan_layer.data.shape[1]-1] ]],
@@ -788,7 +797,7 @@ class RingsLayerEditorWidget(Container):
             df["enabled"] = df["enabled"].fillna(True)
 
         if df.empty or "RBXY" not in df.columns or "YEAR" not in df.columns:
-            show_info("No valid rings to edit")
+            self._abort_editing_mode("No valid rings to edit")
             return
 
         # Simplify boundary coordinates using cv2.approxPolyDP if tolerance is > 0
@@ -818,7 +827,7 @@ class RingsLayerEditorWidget(Container):
         # Ensure features rows match the number of shapes
         df = df.iloc[keep_rows].reset_index(drop=True)
         if df.empty:
-            show_info("No valid rings to edit")
+            self._abort_editing_mode("No valid rings to edit")
             return
 
         # Determine scale
@@ -875,9 +884,9 @@ class RingsLayerEditorWidget(Container):
             self._layer_visibility_states = {}
             
             # Force a canvas update to ensure the restored layers are redrawn
-            qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
+            qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
             if qt_viewer is None:
-                qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+                qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
             
             if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
                 canvas = qt_viewer.canvas
@@ -937,7 +946,7 @@ class RingsLayerEditorWidget(Container):
         try:
             with self._pause_rendering():
                 if "Rings Modification" not in self._viewer.layers:
-                    show_info("No editing layer found")
+                    self._abort_editing_mode("No editing layer found")
                     return
 
                 layer = self._viewer.layers["Rings Modification"]
@@ -964,7 +973,9 @@ class RingsLayerEditorWidget(Container):
                     # If we don't have a rings layer, we must have a scan layer
                     scan_layer = self._scan_layer
                     if not scan_layer:
-                        show_info("No valid rings or scan layer found to apply geometries")
+                        self._abort_editing_mode(
+                            "No valid rings or scan layer found to apply geometries"
+                        )
                         return
 
                     # Initialize a new rings layer based on scan layer dimensions
@@ -1044,7 +1055,12 @@ class RingsLayerEditorWidget(Container):
             # Default to [1.0, 1.0] if the layer is not available or scale is not set.
             scale = [1.0, 1.0]
             try:
-                if hasattr(self, "_current_input_layer") and self._current_input_layer is not None:
+                # The lasso is tested against the vertices of "Rings Modification",
+                # so its scale must match that layer (which may be derived from the
+                # scan layer when no rings layer existed yet).
+                if "Rings Modification" in self._viewer.layers:
+                    scale = self._viewer.layers["Rings Modification"].scale
+                elif getattr(self, "_current_input_layer", None) is not None:
                     scale = self._current_input_layer.scale
                 elif self._input_layer is not None:
                     scale = self._input_layer.scale
@@ -1155,13 +1171,12 @@ class RingsLayerEditorWidget(Container):
         
         for lasso_poly in lasso_layer.data:
             for i, shape_data in enumerate(edit_layer.data):
-                if i not in self._selected_vertices:
-                    self._selected_vertices[i] = set()
-                
+                # Only register a shape once a vertex was actually hit, so that
+                # an empty selection stays falsy for the caller.
                 for j, vertex in enumerate(shape_data):
                     try:
                         if self._is_point_in_polygon(vertex, lasso_poly):
-                            self._selected_vertices[i].add(j)
+                            self._selected_vertices.setdefault(i, set()).add(j)
                     except Exception:
                         continue
         
@@ -1405,8 +1420,16 @@ class RingsLayerEditorWidget(Container):
                 centers_r.append(0.5 * (upper + y_on_left[i]))
 
             years = [str(int(y)) for y in df["YEAR"].tolist()]
-            h, w = source_layer.data.shape[:2]
-            centers_r = [max(0, min(h - 1, r)) for r in centers_r]
+
+            # The geometry source may be the "Rings Modification" Shapes layer,
+            # whose .data is a list of paths and therefore has no .shape.
+            # Fall back to the rings (or scan) raster layer for the image height.
+            raster_layer = self._input_layer or self._scan_layer
+            if raster_layer is not None:
+                h = int(raster_layer.data.shape[0])
+                centers_r = [max(0, min(h - 1, r)) for r in centers_r]
+            else:
+                centers_r = [max(0, r) for r in centers_r]
 
             points_rc = np.column_stack([
                 np.array(centers_r, dtype=float),
@@ -1552,7 +1575,7 @@ class RingsLayerEditorWidget(Container):
         rows_sorted = rows[sort_idx]
 
         # Interpolate at every pixel column from 0 to width-1
-        w = self.input_layer.data.shape[1]
+        w = self._input_layer.data.shape[1]
         downsample_factor = 4.0
         all_cols = np.arange(0, w, downsample_factor, dtype=float)
 
@@ -1697,7 +1720,7 @@ class RingsLayerEditorWidget(Container):
         # Reassign YEAR values for all shapes based on spatial ordering
         # Keep the same approach as update_rings_geometries: sort by cells_above
         # area, then assign years as (last_year - n + 1) .. last_year
-        last_year = self.input_layer.metadata["rings_outmost_complete_year"]
+        last_year = self._input_layer.metadata["rings_outmost_complete_year"]
         all_coords = [
             coords.tolist() if hasattr(coords, "tolist") else coords
             for coords in layer.data
@@ -1705,7 +1728,7 @@ class RingsLayerEditorWidget(Container):
         n_shapes = len(all_coords)
 
         # Compute cells_above for spatial ordering
-        image_shape = self.input_layer.data.shape
+        image_shape = self._input_layer.data.shape
         areas = [calculate_polygon_area(c, image_shape[1]) for c in all_coords]
         order = np.argsort(areas)
 
