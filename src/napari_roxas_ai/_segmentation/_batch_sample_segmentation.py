@@ -112,14 +112,25 @@ class Worker(QObject):
                 )
             )
             self.cells_model.to(device=self.cells_model.available_device)
+            # Synchronize internal device attribute for models that use it in infer()
+            try:
+                self.cells_model.device = self.cells_model.available_device
+            except Exception:
+                try:
+                    setattr(self.cells_model, "device", self.cells_model.available_device)
+                except Exception:
+                    if hasattr(self.cells_model, "__dict__"):
+                        self.cells_model.__dict__["device"] = self.cells_model.available_device
+            # Use local device variable for autocast checks to avoid restricted attribute assignment
+            device_obj = torch.device(self.cells_model.available_device)
             self.cells_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.cells_model.device.type
+                    device_obj.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.cells_model.device == "cuda"
-                    or self.cells_model.device == "mps"
+                    self.cells_model.available_device == "cuda"
+                    or self.cells_model.available_device == "mps"
                 )
             )
 
@@ -145,16 +156,26 @@ class Worker(QObject):
                 )
             )
             self.rings_model.to(device=self.rings_model.available_device)
+            # Synchronize internal device attribute for packaged models
+            try:
+                self.rings_model.device = self.rings_model.available_device
+            except Exception:
+                try:
+                    setattr(self.rings_model, "device", self.rings_model.available_device)
+                except Exception:
+                    if hasattr(self.rings_model, "__dict__"):
+                        self.rings_model.__dict__["device"] = self.rings_model.available_device
+            # Use local device variable for autocast checks
+            device_obj = torch.device(self.rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
-            self.rings_model.device = self.rings_model.available_device
             self.rings_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.rings_model.device
+                    device_obj.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.rings_model.device == "cuda"
-                    or self.rings_model.device == "mps"
+                    self.rings_model.available_device == "cuda"
+                    or self.rings_model.available_device == "mps"
                 )
             )
 
@@ -209,7 +230,7 @@ class Worker(QObject):
                 cells_layer_name = f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 cells_add_kwargs = {
                     "name": cells_layer_name,
-                    "scale": scan_add_kwargs["scale"],
+                    "scale": scan_add_kwargs.get("scale"),
                     "features": pd.DataFrame(),
                     "metadata": {
                         **sample_metadata,
@@ -228,6 +249,12 @@ class Worker(QObject):
                 rings_labels, rings_boundaries = self.rings_model.infer(scan_data)
 
                 boundary_data = []
+
+                # Always prepend a dummy boundary at the top (row 0) to mark the uncomplete ring area
+                boundary_data.append(
+                    {"RBXY": [[0, 0], [0, scan_data.shape[1] - 1]]}
+                )
+
                 for boundary in rings_boundaries:
                     if isinstance(boundary, torch.Tensor):
                         coords = boundary.cpu().numpy().tolist()
@@ -237,11 +264,15 @@ class Worker(QObject):
 
                 boundaries_df = pd.DataFrame(boundary_data)
 
-                rings_layer_name = f"{sample_metadata['sample_name']}{self.rings_content_ext}"
-                rings_data = rings_labels.astype("int32")
+                rings_layer_name = f"{sample_metadata.get('sample_name', Path(scan_file_path).stem)}{self.rings_content_ext}"
+
+                sample_stem_path = sample_metadata.get("sample_stem_path")
+                if not sample_stem_path:
+                    # Fallback to file path without extensions if not in metadata
+                    sample_stem_path = str(Path(scan_file_path).parent / Path(scan_file_path).stem)
 
                 metadata_file_contents = get_metadata_from_file(
-                    path=sample_metadata["sample_stem_path"], path_is_stem=True
+                    path=sample_stem_path, path_is_stem=True
                 )
                 last_year = (
                     metadata_file_contents.get("rings_outmost_complete_year", default_rings_year_value)
@@ -249,7 +280,7 @@ class Worker(QObject):
                     else default_rings_year_value
                 )
 
-                new_rings_table, _rings_raster_tmp, _cmap_tmp = update_rings_geometries(
+                new_rings_table, rings_raster, _cmap_tmp = update_rings_geometries(
                     rings_table=boundaries_df,
                     last_year=int(last_year),
                     image_shape=rings_labels.shape,
@@ -257,7 +288,7 @@ class Worker(QObject):
 
                 rings_add_kwargs = {
                     "name": rings_layer_name,
-                    "scale": scan_add_kwargs["scale"],
+                    "scale": scan_add_kwargs.get("scale"),
                     "features": new_rings_table,
                     "metadata": {
                         **sample_metadata,
@@ -267,7 +298,7 @@ class Worker(QObject):
                     },
                 }
 
-                write_single_layer(path=scan_file_path, data=rings_data, meta=rings_add_kwargs)
+                write_single_layer(path=scan_file_path, data=rings_raster, meta=rings_add_kwargs)
 
         self.progress.emit(total, total)
         self.finished.emit()

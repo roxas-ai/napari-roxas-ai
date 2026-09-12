@@ -25,6 +25,7 @@ from napari_roxas_ai.shortcuts import (
     has_shortcuts_applied,
     mark_shortcuts_applied,
 )
+from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
 
 
 
@@ -189,6 +190,40 @@ class SamplesLoadingWidget(Container):
             ]
         )
         self._refresh_samples_list()
+
+        # --- BACKGROUND MONITORING INITIALIZATION ---
+        # Initialize the RingsLayerEditorWidget to start tracking ring years in the background.
+        # This ensures that 'Rings Years' labels appear even if the user hasn't opened the editor widget yet.
+        # A small delay is used to allow the napari viewer and other widgets to settle.
+        from qtpy.QtCore import QTimer
+        def _init_rings_editor():
+            # Check if an instance of the editor widget already exists in any dock window
+            # to avoid redundant background monitors.
+            found = False
+            try:
+                # Iterate through all dock widgets using public-compatible APIs.
+                # Accessing Window._qt_window and findChildren is a safer alternative
+                # to using internal viewer attributes directly.
+                qt_window = getattr(self._viewer.window, "_qt_window", None)
+                if qt_window is not None:
+                    from qtpy.QtWidgets import QWidget
+                    for dock in qt_window.findChildren(QWidget):
+                        if "RingsLayerEditorWidget" in str(type(dock)):
+                            found = True
+                            break
+            except Exception:
+                pass
+            
+            if not found:
+                try:
+                    # Instantiate the widget. Even if not docked, it connects to viewer events
+                    # to manage the 'Rings Years' layer. A reference is kept on the loader
+                    # widget to prevent the editor from being garbage collected.
+                    self._rings_editor = RingsLayerEditorWidget(self._viewer)
+                except Exception as e:
+                    print(f"Failed to auto-initialize RingsLayerEditorWidget: {e}")
+
+        QTimer.singleShot(1000, _init_rings_editor)
 
     def refresh_from_settings(self):
         """

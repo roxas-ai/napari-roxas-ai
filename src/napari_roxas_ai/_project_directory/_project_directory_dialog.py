@@ -13,7 +13,7 @@ def open_project_directory_dialog():
     new_project_directory = QFileDialog.getExistingDirectory(
         parent=None,
         caption="Select Project Directory",
-        directory=project_directory,
+        directory=str(project_directory) if project_directory else None,
     )
     if new_project_directory:
         settings.set("project_directory", new_project_directory)

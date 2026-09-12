@@ -68,15 +68,9 @@ class MatplotlibCanvas(Container):
         self.figure = Figure(figsize=figsize, dpi=dpi, facecolor='black')
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111)
-        
+
         # Set dark theme for the axes
-        self.ax.set_facecolor('black')
-        self.ax.tick_params(axis='both', colors='lightgrey')
-        self.ax.xaxis.label.set_color('lightgrey')
-        self.ax.yaxis.label.set_color('lightgrey')
-        
-        for spine in self.ax.spines.values():
-            spine.set_edgecolor('lightgrey')
+        self._apply_theme()
 
         # Create a Qt widget to hold the canvas
         widget = QWidget()
@@ -92,10 +86,25 @@ class MatplotlibCanvas(Container):
         super().__init__(widgets=[])
         self.native.layout().addWidget(widget)
 
-    def clear(self):
+    def _apply_theme(self):
+        """Apply dark theme settings to the axes."""
+        self.ax.set_facecolor('black')
+        self.ax.tick_params(axis='both', colors='lightgrey')
+        self.ax.xaxis.label.set_color('lightgrey')
+        self.ax.yaxis.label.set_color('lightgrey')
+
+        for spine in self.ax.spines.values():
+            spine.set_edgecolor('lightgrey')
+
+        # Ensure grid lines are behind data curves
+        self.ax.set_axisbelow(True)
+
+    def clear(self, redraw=True):
         """Clear the plot."""
         self.ax.clear()
-        self.canvas.draw()
+        self._apply_theme()
+        if redraw:
+            self.canvas.draw()
 
 
 class CrossDatingPlotterWidget(Container):
@@ -444,8 +453,7 @@ class CrossDatingPlotterWidget(Container):
                     hasattr(self, "plot_widget")
                     and self.plot_widget is not None
             ):
-                self.plot_widget.ax.clear()
-                self.plot_widget.canvas.draw()
+                self.plot_widget.clear()
             # Clear other dependent widgets
             self.crossdating_files = []
             self.crossdating_columns = []
@@ -521,6 +529,7 @@ class CrossDatingPlotterWidget(Container):
             and stored in self.crossdating_columns
         )
 
+        # Reset choices for column combo and select first matching or first available column
         self._crossdating_column_combo.reset_choices()
         if stored_is_usable:
             self._crossdating_column_combo.value = stored
@@ -632,8 +641,7 @@ class CrossDatingPlotterWidget(Container):
         # Skip if no crossdating column is selected
         if self._crossdating_column_combo.value is None:
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
-                self.plot_widget.ax.clear()
-                self.plot_widget.canvas.draw()
+                self.plot_widget.clear()
             return
 
         layer = self._input_layer
@@ -645,8 +653,7 @@ class CrossDatingPlotterWidget(Container):
         if feats is None or feats.empty or "YEAR" not in feats.columns:
             # If no features yet, clear plot and return
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
-                self.plot_widget.ax.clear()
-                self.plot_widget.canvas.draw()
+                self.plot_widget.clear()
             return
 
         # Get reference series
@@ -671,33 +678,14 @@ class CrossDatingPlotterWidget(Container):
 
             # The first value in cells_above is the area above the first ring.
             # The ring width for year Y is cells_above(Y) - cells_above(Y-1).
-            # For the first ring in the table, it doesn't have a predecessor in the table.
-            # However, the table usually contains all rings.
-
-            # If we want to mirror the previous logic:
-            vals = layer_df["cells_above"].values
-            diffs = np.diff(vals, prepend=vals[0])  # prepend to keep same length
-            layer_df["ring_width"] = diffs
-
-            # Note: the previous logic did:
-            # layer_df.iloc[1:, layer_df.columns.tolist().index("cells_above")] = np.diff(layer_df["cells_above"].values)
-            # which modified cells_above in place and left the first one as is (which is area, not width).
-            # This seems slightly inconsistent but let's stick to a cleaner version if possible,
-            # or keep it if it's what's expected.
-
-            # Actually, the previous logic was:
-            # layer_df.iloc[1:, index] = np.diff(...)
-            # This means layer_df["cells_above"].iloc[0] remained the TOTAL area above the first ring.
-            # Subsequent ones became widths.
-
-            # Let's keep it exactly as it was but more robustly:
+            # We calculate this using np.diff on the total area above each ring.
             idx = layer_df.columns.get_loc("cells_above")
             layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
         else:
             show_info("Layer features missing 'cells_above' column.")
             return
 
-        # Removed values of disabled years
+        # Handle disabled years: set their area to NaN so they are not plotted
         if "enabled" in layer_df.columns:
             layer_df.loc[~layer_df["enabled"], "cells_above"] = np.nan
 
@@ -706,6 +694,7 @@ class CrossDatingPlotterWidget(Container):
         if not hasattr(layer, "data") or "spatial_resolution" not in layer.metadata:
             return
 
+        # Width calculation: total area (pixels) / (image width * scale factor)
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
                 * layer.metadata["spatial_resolution"]
@@ -726,6 +715,8 @@ class CrossDatingPlotterWidget(Container):
     def _plot_crossdating_data(self, target_range: Optional[tuple[int, int]] = None):
         """Plot the crossdating data comparison"""
         if self.plot_df is None or self.plot_df.empty:
+            if hasattr(self, "plot_widget") and self.plot_widget is not None:
+                self.plot_widget.clear()
             return
 
         # Calculate correlation and overlapping period
@@ -775,8 +766,8 @@ class CrossDatingPlotterWidget(Container):
             r_avg = np.nan
             glk_avg = np.nan
 
-        # Clear the previous plot
-        self.plot_widget.ax.clear()
+        # Clear the previous plot (no redraw yet)
+        self.plot_widget.clear(redraw=False)
 
         # Build labels
         layer = self._input_layer
@@ -792,7 +783,7 @@ class CrossDatingPlotterWidget(Container):
         r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
         avg_label = f"Average{r_avg_text}"
 
-        # Plot both series
+        # Plot both series using original values (no scaling applied)
         years = self.plot_df.index.to_numpy(dtype=int)
 
         # Plot the ROXAS series first (top layer in legend)

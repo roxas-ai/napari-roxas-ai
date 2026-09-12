@@ -12,6 +12,33 @@ imported when a segmentation widget is actually opened.
 """
 
 import importlib
+import os
+import warnings
+
+# Suppress Albumentations update check
+os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
+
+# Suppress PyTorch TypedStorage deprecation warning (common when using torch.package)
+warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
+
+# NumPy 2.0 Compatibility Patch
+# Many older models/packages use np.Inf, np.NaN, etc. which were removed in NumPy 2.0.
+try:
+    import numpy as np
+    if not hasattr(np, 'Inf'):
+        np.Inf = np.inf
+    if not hasattr(np, 'NaN'):
+        np.NaN = np.nan
+    if not hasattr(np, 'bool'):
+        np.bool = bool
+    if not hasattr(np, 'int'):
+        np.int = int
+    if not hasattr(np, 'float'):
+        np.float = float
+    if not hasattr(np, 'complex'):
+        np.complex = complex
+except ImportError:
+    pass
 
 __version__ = "0.1.2"
 
@@ -19,7 +46,6 @@ __version__ = "0.1.2"
 # Mirrors the ``python_name`` references in napari.yaml and the previous
 # eager imports / ``__all__`` of this module.
 _LAZY_IMPORTS = {
-    "cells_vectorization_widget": "._conversion",
     "CrossDatingPlotterWidget": "._crossdating",
     "CellsLayerEditorWidget": "._edition",
     "RingsLayerEditorWidget": "._edition",
