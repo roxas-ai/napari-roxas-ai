@@ -26,7 +26,7 @@ flowchart TD
 | Widget Number & Name | Primary Purpose | Input | Output |
 | :--- | :--- | :--- | :--- |
 | **0 - Define project directory** | Set the active working directory for the project | Folder path | Global project path in settings |
-| **1 - Prepare project images for analysis** | Standardize filenames, extract EXIF/DPI, store initial metadata | Raw images (`.jpg`, `.tif`, etc.) & cross-dating files | `.scan.<ext>`, `.metadata.json`, `rings_series.*` |
+| **1 - Prepare project images for analysis** | Standardize filenames, extract EXIF/DPI, store initial metadata | Raw images (`.jpg`, `.tif`, etc.) & cross-dating files | `.scan.<ext>`, `.metadata.json`, `rings_series.crossdating.txt` |
 | **2/4 - Load image(s)** | Load sample scans and existing label masks into napari | Prepared sample files | Napari Image & Labels layers |
 | **3A - Detect cells & rings (individual image)** | Run deep-learning segmentation on currently loaded scan | Active napari scan layer | `.cells` and `.rings` Labels layers |
 | **3B - Batch detect cells & rings** | Run AI segmentation on multiple samples in the background | Prepared project directory | `.cells.png`, `.rings.tif`, `.metadata.json` |
@@ -66,7 +66,7 @@ The **Prepare Project Images** widget standardizes raw microscopy or flatbed sca
 1. Scans the selected project directory (and subdirectories) for supported image formats (`.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`, `.bmp`, `.jp2`).
 2. Opens an interactive **Metadata Dialog** for each sample to capture physical dimensions, spatial resolution ($\mu\text{m}/\text{px}$ or DPI), sample type (e.g., `conifer`), measurement geometry (`linear`), and the outermost complete calendar year.
 3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` and creates a synchronized `<sample_name>.metadata.json`.
-4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.csv` or `rings_series.txt`) scaled to micrometers ($\mu\text{m}$).
+4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
 
 ![Screenshot: Metadata Dialog](../assets/screenshots/01_metadata_dialog.png)
 *Figure 3: Interactive metadata prompt dialog during image preparation.*
@@ -88,7 +88,7 @@ The cross-dating parser automatically recognizes and parses several standard den
 
     *Example Tabular Input (`sample_series.txt` or `sample_series.csv`, values in $1/100\,\text{mm}$):*
 
-    | YEAR | CON01 | CON02 |
+    | YEAR | Series01 | Series02 |
     | :--- | :--- | :--- |
     | 2018 | 142 | 165 |
     | 2019 | 118 | 130 |
@@ -103,8 +103,8 @@ The cross-dating parser automatically recognizes and parses several standard den
     *Example Tucson Input (`site_chronology.rwl`, values in $1/100\,\text{mm}$):*
 
     ```text
-    SITE_REF 2010   110  125  130  142  118  155   98  125  140  150
-    SITE_REF 2020   160  135  120 -9999
+    Series01 2010   110  125  130  142  118  155   98  125  140  150
+    Series01 2020   160  135  120 -9999
     ```
 
 #### Unit Scaling Conversion
@@ -118,22 +118,22 @@ Because tree-ring measurement devices export widths in varying units, the select
 | **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ | Raw values recorded in tenths of micrometers |
 
 #### Output File Structure
-The compiled series is saved in the root of the project directory as `rings_series<crossdating_file_extension>` (e.g. `rings_series.csv` or `rings_series.txt`, configured in `settings.json`):
+The compiled series is saved in the root of the project directory as `rings_series<crossdating_file_extension>` (by default `rings_series.crossdating.txt`, where `file_extensions.crossdating_file_extension` in `settings.json` is configured as `[".crossdating", ".txt"]`, which concatenates to `[".crossdating.txt"]`:
 
 - **Format & Delimiter**: Tab-delimited plain text file (`\t` separator).
 - **Index (`YEAR`)**: The first column is named `YEAR` and contains unique calendar years spanning the complete chronological range across all imported series, sorted in ascending order.
 - **Series Columns**: Each imported file/series forms its own named column header (derived from series IDs or column labels in the source files).
 - **Data Alignment & Missing Values**: Ring widths are aligned by year across all series in micrometers ($\mu\text{m}$). Years not covered by a given series are left empty (`NaN`), allowing seamless integration of chronologies with differing time spans.
 
-*Example Output File (`rings_series.csv`, tab-delimited, values in $\mu\text{m}$ after applying $\times 10.0$ scaling):*
+*Example Output File (`rings_series.crossdating.txt`, tab-delimited, values in $\mu\text{m}$ after applying $\times 10.0$ scaling):*
 
-| YEAR | CON01 | CON02 | SITE_REF |
-| :--- | :--- | :--- | :--- |
-| **2018** | 1420.0 | 1650.0 | 1535.0 |
-| **2019** | 1180.0 | 1300.0 | 1240.0 |
-| **2020** | 1550.0 | 1480.0 | 1515.0 |
-| **2021** | 980.0 | 1120.0 | 1050.0 |
-| **2022** | 1250.0 | 1350.0 | 1300.0 |
+| YEAR | Series01 | Series02 |
+| :--- | :--- | :--- |
+| **2018** | 1420.0 | 1650.0 |
+| **2019** | 1180.0 | 1300.0 |
+| **2020** | 1550.0 | 1480.0 |
+| **2021** | 980.0 | 1120.0 |
+| **2022** | 1250.0 | 1350.0 |
 
 ### Key Controls & Options
 - **Project Directory Button**: Displays and allows switching the active project directory.
@@ -320,18 +320,18 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 
 1. **Starting Point**: The search begins in the directory containing the active sample scan (determined from `sample_stem_path`, the layer's file path, or the global `project_directory`).
 2. **Search Direction (Strictly Upward)**:
-   - The search is strictly **upward** (from the sample's directory towards the root of the file system).
-   - The widget does **not** search downwards into subdirectories.
+    - The search is strictly **upward** (from the sample's directory towards the root of the file system).
+    - The widget does **not** search downwards into subdirectories.
 3. **Search Pattern & Prefix Requirements**:
-   - The search matches files using the pattern `*<crossdating_file_extension>`, where `<crossdating_file_extension>` is the configured extension in `settings.json` under `file_extensions.crossdating_file_extension` (by default `[".crossdating", ".txt"]`, which concatenates to `.crossdating.txt`).
-   - **Prefixes are supported**: Because of the leading wildcard `*`, any custom prefix before the extension is detected (e.g., `rings_series.crossdating.txt`, `siteA_chronology.crossdating.txt`, or `conifer_ref.crossdating.txt`).
-   - **Suffixes are NOT supported after the extension**: The file must strictly end with the configured cross-dating extension (e.g., `.crossdating.txt`). If a file has an additional suffix after the extension (e.g., `.crossdating.txt.bak`) or a different extension (such as `.csv` when `.crossdating.txt` is configured), it will not be matched unless the extension setting in `settings.json` is updated.
+    - The search matches files using the pattern `*<crossdating_file_extension>`, where `<crossdating_file_extension>` is the configured extension in `settings.json` under `file_extensions.crossdating_file_extension` (by default `[".crossdating", ".txt"]`, which concatenates to `.crossdating.txt`).
+    - **Prefixes are supported**: Because of the leading wildcard `*`, any custom prefix before the extension is detected (e.g., `rings_series.crossdating.txt`, `siteA_chronology.crossdating.txt`, or `conifer_ref.crossdating.txt`).
+    - **Suffixes are NOT supported after the extension**: The file must strictly end with the configured cross-dating extension (e.g., `.crossdating.txt`). If a file has an additional suffix after the extension (e.g., `.crossdating.txt.bak`) or a different extension (such as `.csv` when `.crossdating.txt` is configured), it will not be matched unless the extension setting in `settings.json` is updated.
 4. **Upward Directory Tree Traversal Process**:
-   - The widget first inspects the sample's immediate folder (`current_path.glob(pattern)`).
-   - If one or more matching cross-dating files are found in that folder, search stops and those files are loaded.
-   - If no matching file is found, it moves up to the parent directory (`current_path = current_path.parent`) and repeats the check.
-   - The upward search continues through parent folders until matching files are found or it reaches the file system root.
-   - **Architectural Workflow**: This allows placing a single global reference file at the project root directory (e.g., `<project_root>/rings_series.crossdating.txt`) to serve all samples in subfolders, or placing local reference files in specific sample subfolders (e.g., `<project_root>/SiteA/rings_series.crossdating.txt`), which automatically take priority for samples located within `SiteA`.
+    - The widget first inspects the sample's immediate folder (`current_path.glob(pattern)`).
+    - If one or more matching cross-dating files are found in that folder, search stops and those files are loaded.
+    - If no matching file is found, it moves up to the parent directory (`current_path = current_path.parent`) and repeats the check.
+    - The upward search continues through parent folders until matching files are found or it reaches the file system root.
+    - **Architectural Workflow**: This allows placing a single global reference file at the project root directory (e.g., `<project_root>/rings_series.crossdating.txt`) to serve all samples in subfolders, or placing local reference files in specific sample subfolders (e.g., `<project_root>/SiteA/rings_series.crossdating.txt`), which automatically take priority for samples located within `SiteA`.
 
 ### Behavior When Multiple Cross-Dating Files Are Present
 
@@ -433,15 +433,16 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 - Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.
 
 ### Key Settings Categories
-1. **File Extensions**: Configure standardized file suffixes for scans, cell masks, ring masks, metadata files, and tables.
+1. **File Extensions**:
+    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, and tables.
 2. **Hardware & Processing**:
-   - `try_to_use_gpu`: Toggle CUDA / GPU acceleration for deep-learning segmentation.
-   - Batch size and worker thread settings.
+    - `try_to_use_gpu`: Toggle CUDA / GPU acceleration for deep-learning segmentation.
+    - Worker thread and batch settings.
 3. **Visualization & Vectorization**:
-   - Default colormaps for cell lumen layers.
-   - Ring color sequence (alternating colormap for adjacent annual rings).
-   - Display line widths and point sizes.
+    - Default colormaps for cell lumen layers.
+    - Ring color sequence (alternating colormap for adjacent annual rings).
+    - Display line widths and point sizes.
 4. **Measurement Defaults**:
-   - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
+    - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
 5. **Metadata Schema**:
-   - Configure default metadata prompts and fields presented during sample preparation.
+    - Default metadata prompts and fields presented during sample preparation.
