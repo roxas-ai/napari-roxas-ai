@@ -28,7 +28,7 @@ def create_test_metadata(metadata=None):
     if metadata is None:
         metadata = {
             "sample_name": "test_sample",
-            "sample_scale": 2.5,
+            "spatial_resolution": 2.5,
             "sample_type": "conifer",
             "scan_date": "2023-01-01",
             "cells_count": 100,
@@ -104,7 +104,7 @@ class TestWriterModule:
         metadata_path = temp_dir / "test_sample.metadata.json"
         original_metadata = {
             "sample_name": "original_name",
-            "sample_scale": 1.0,
+            "spatial_resolution": 1.0,
         }
 
         # Write an actual existing metadata file
@@ -112,7 +112,7 @@ class TestWriterModule:
             json.dump(original_metadata, f)
 
         # New metadata to add
-        new_metadata = {"scan_date": "2023-01-01", "sample_scale": 2.5}
+        new_metadata = {"scan_date": "2023-01-01", "spatial_resolution": 2.5}
 
         # Test updating an existing metadata file
         result = update_metadata_file(
@@ -125,8 +125,8 @@ class TestWriterModule:
         # Read back and verify the file was updated
         with open(metadata_path, "r", encoding="utf-8") as f:
             saved_metadata = json.load(f)
-        # sample_scale is not updated because it doesn't match prefix "scan_"
-        assert saved_metadata["sample_scale"] == 1.0
+        # spatial_resolution is not updated because it doesn't match prefix "scan_"
+        assert saved_metadata["spatial_resolution"] == 1.0
         assert saved_metadata["scan_date"] == "2023-01-01"
         # sample_name is derived from filename when not in new_metadata
         assert saved_metadata["sample_name"] == "test_sample"
@@ -187,7 +187,7 @@ class TestWriterModule:
             "name": "test_scan",
             "metadata": {
                 "sample_name": "test_sample",
-                "sample_scale": 2.5,
+                "spatial_resolution": 2.5,
                 "scan_date": "2023-01-01",
             },
         }

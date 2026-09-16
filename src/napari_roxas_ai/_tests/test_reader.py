@@ -46,7 +46,7 @@ def create_test_metadata(path, metadata=None):
     if metadata is None:
         metadata = {
             "sample_name": "test_sample",
-            "sample_scale": 2.5,
+            "spatial_resolution": 2.5,
             "sample_type": "conifer",
             "scan_date": "2023-01-01",
             "cells_count": 100,
@@ -195,7 +195,7 @@ class TestReaderModule:
             "builtins.open", create=True
         ), patch(
             "json.load",
-            return_value={"sample_name": "test_sample", "sample_scale": 2.5},
+            return_value={"sample_name": "test_sample", "spatial_resolution": 2.5},
         ):
 
             metadata = get_metadata_from_file(str(test_files["scan_file"]))
@@ -233,7 +233,7 @@ class TestReaderModule:
             ):
                 # Mock metadata
                 mock_get_metadata.return_value = {
-                    "sample_scale": 2.5,
+                    "spatial_resolution": 2.5,
                     "sample_name": "test_sample",
                 }
 
@@ -271,7 +271,7 @@ class TestReaderModule:
             ):
                 # Mock metadata
                 mock_get_metadata.return_value = {
-                    "sample_scale": 2.5,
+                    "spatial_resolution": 2.5,
                     "sample_name": "test_sample",
                 }
 
@@ -305,7 +305,7 @@ class TestReaderModule:
             ):
                 # Mock metadata
                 mock_get_metadata.return_value = {
-                    "sample_scale": 2.5,
+                    "spatial_resolution": 2.5,
                     "sample_name": "test_sample",
                 }
 

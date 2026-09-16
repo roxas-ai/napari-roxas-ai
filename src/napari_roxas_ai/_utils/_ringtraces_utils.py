@@ -100,7 +100,7 @@ def paths_to_image_coordinates(
 
 
 def ring_traces_to_image_coordinates(
-    ring_data, spatial_resolution, origin, angle_interval
+    ring_data, pix_per_unit, origin, angle_interval
 ):
     ring_data, angle_limits, _ = ring_data
     x_origin, y_origin = origin
@@ -118,8 +118,8 @@ def ring_traces_to_image_coordinates(
         ring = ring_data[i]
         if np.sum(ring) == 0:
             continue
-        y = (ring * spatial_resolution) * np.cos(angles) + y_origin
-        x = -(ring * spatial_resolution) * np.sin(angles) + x_origin
+        y = (ring * pix_per_unit) * np.cos(angles) + y_origin
+        x = -(ring * pix_per_unit) * np.sin(angles) + x_origin
         lines.append(np.stack((x, y)))
     return lines
 

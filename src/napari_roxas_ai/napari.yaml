@@ -56,9 +56,9 @@ contributions:
       python_name: napari_roxas_ai:BatchSampleMeasurementsWidget
       title: Batch sample measurements widget
 
-    - id: napari-roxas-ai.open_settings_file
-      python_name: napari_roxas_ai:open_settings_file
-      title: Settings
+    - id: napari-roxas-ai.make_settings_widget
+      python_name: napari_roxas_ai:SettingsWidget
+      title: Settings widget
 
     # Readers contributions
     - id: napari-roxas-ai.napari_get_reader
@@ -134,5 +134,5 @@ contributions:
     - command: napari-roxas-ai.make_batch_sample_measurements_widget
       display_name: 9B - Batch measure cells & rings
 
-    - command: napari-roxas-ai.open_settings_file
+    - command: napari-roxas-ai.make_settings_widget
       display_name: ZZ - Settings

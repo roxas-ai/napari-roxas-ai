@@ -22,6 +22,7 @@ from .._utils._ringtraces_utils import (
     get_instance_labels_linear,
     ring_labels_from_roxas,
 )
+from .._utils._metadata_keys import NO_REFERENCE_SERIES
 from .._utils._scl_utils import read_scl
 from .._utils._segmentation_postprocess import (
     remove_border_touching_components,
@@ -142,16 +143,7 @@ class Worker(QObject):
             file_path: Path to the image file
         """
         print(f"Attempting to load cells from ROXAS SCL for {file_path}")
-        if file_path.endswith(
-            self.scan_content_extension + Path(file_path).suffix
-        ):
-            file_path = file_path.replace(
-                self.scan_content_extension + Path(file_path).suffix,
-                Path(file_path).suffix,
-            )
-            print(f"Adjusted file path for SCL loading: {file_path}")
         try:
-
             if os.path.exists(
                 scl_file_name := file_path.replace(
                     Path(file_path).suffix, "_Vessels.scl"
@@ -164,8 +156,16 @@ class Worker(QObject):
                 cells_layer_name = (
                     f"{metadata['sample_name']}{self.cells_content_ext}"
                 )
+                # Ensure spatial_resolution is a float and present in metadata.
+                # We harmonize spatial_resolution and sample_scale keys for cross-plotter compatibility.
+                spatial_resolution = float(metadata.get("spatial_resolution") or metadata.get("sample_scale", 1.0))
+                metadata["spatial_resolution"] = spatial_resolution
+                metadata["sample_scale"] = spatial_resolution
+
                 cells_add_kwargs = {
                     "name": cells_layer_name,
+                    # Scale factor is 1/resolution (e.g. pixels to micrometers)
+                    "scale": [1 / spatial_resolution, 1 / spatial_resolution],
                     "features": pd.DataFrame(),
                     "metadata": {
                         **metadata,
@@ -205,14 +205,6 @@ class Worker(QObject):
         print(
             f"Attempting to load rings from ROXAS RingTraces for {file_path}"
         )
-        if file_path.endswith(
-            self.scan_content_extension + Path(file_path).suffix
-        ):
-            file_path = file_path.replace(
-                self.scan_content_extension + Path(file_path).suffix,
-                Path(file_path).suffix,
-            )
-            print(f"Adjusted file path for RingTraces loading: {file_path}")
         try:
             rings_boundaries = ring_labels_from_roxas(
                 file_path,
@@ -254,9 +246,16 @@ class Worker(QObject):
                     image_shape=rings_labels.shape,
                 )
             )
+            # Ensure spatial_resolution is a float and present in metadata.
+            # We harmonize spatial_resolution and sample_scale keys for cross-plotter compatibility.
+            spatial_resolution = float(metadata.get("spatial_resolution") or metadata.get("sample_scale", 1.0))
+            metadata["spatial_resolution"] = spatial_resolution
+            metadata["sample_scale"] = spatial_resolution
+
             rings_add_kwargs = {
                 "name": rings_layer_name,
-                # "scale": metadata["Scale"],
+                # Scale factor is 1/resolution (e.g. pixels to micrometers)
+                "scale": [1 / spatial_resolution, 1 / spatial_resolution],
                 "features": new_rings_table,
                 "metadata": {
                     **metadata,
@@ -326,8 +325,8 @@ class Worker(QObject):
                     filtered_files.append(file_path)
             all_files = filtered_files
 
-        # Sort files for consistent processing
-        self.all_files = sorted(all_files)
+        # Sort files for consistent processing and remove duplicates (e.g. on case-insensitive filesystems)
+        self.all_files = sorted(list(set(all_files)))
 
         # Process files or finish if none found
         total = len(self.all_files)
@@ -407,33 +406,16 @@ class Worker(QObject):
                 dir_path
                 / f"{clean_base_name}{self.scan_content_extension}{file_ext}"
             )
-            # Rename or copy file if needed
-            if file_path != str(new_image_path):
-                try:
-                    # Extract metadata before modifying the file
-                    img_metadata = self._extract_image_metadata(file_path)
-
-                    # Always avoid duplicates: rename if possible, else copy+delete
-                    moved_path = self._safe_rename_or_copy_delete(
-                        Path(file_path), Path(new_image_path)
-                    )
-                    print(f"Renamed file: {file_path} -> {moved_path}")
-
-                    file_path = str(moved_path)
-                except OSError as e:
-                    print(f"Error processing file {file_path}: {e}")
-                    self.current_file_index += 1
-                    self._process_next_file()
-                    return
 
         # Define metadata path - always use the clean base name without scan extension
         metadata_path = (
             dir_path / f"{clean_base_name}{self.metadata_file_extension}"
         )
 
-        # Extract image metadata if we haven't already
-        if "img_metadata" not in locals():
-            img_metadata = self._extract_image_metadata(file_path)
+        # Extract image metadata BEFORE renaming
+        # We try to extract metadata from the current file_path.
+        # If the file was renamed in a previous step, we catch the error.
+        img_metadata = self._extract_image_metadata(file_path)
 
         # Add sample_stem_path to the image metadata
         img_metadata["sample_stem_path"] = sample_stem_path
@@ -461,12 +443,26 @@ class Worker(QObject):
 
             # Load data from old roxas file formats if needed
             if self.default_loading_params.get("load_cells_from_roxas", False):
-                self.load_cells_from_roxas_scl(str(file_path_obj), metadata)
+                self.load_cells_from_roxas_scl(file_path, metadata)
 
             if self.default_loading_params.get("load_rings_from_roxas", False):
                 self.load_rings_from_roxas_ringtraces(
-                    str(file_path_obj), metadata
+                    file_path, metadata
                 )
+
+            # Rename or copy file if needed AFTER metadata and data extraction
+            if not original_has_scan_ext and file_path != str(new_image_path):
+                try:
+                    # Always avoid duplicates: rename if possible, else copy+delete
+                    moved_path = self._safe_rename_or_copy_delete(
+                        Path(file_path), Path(new_image_path)
+                    )
+                    print(f"Renamed file: {file_path} -> {moved_path}")
+                    file_path = str(moved_path)
+                    # Update the path in the list so that subsequent calls to self.all_files use the new path
+                    self.all_files[self.current_file_index] = file_path
+                except OSError as e:
+                    print(f"Error processing file {file_path}: {e}")
 
             # Move to next file
             self.current_file_index += 1
@@ -531,6 +527,25 @@ class Worker(QObject):
         if loading_params.get("load_rings_from_roxas", False):
             self.load_rings_from_roxas_ringtraces(file_path, metadata)
 
+        # Rename or copy file if needed AFTER metadata and data extraction
+        original_has_scan_ext = self.scan_content_extension in Path(file_path).stem
+        clean_base_name = Path(file_path).stem.replace(self.scan_content_extension, "")
+        file_ext = Path(file_path).suffix
+        new_image_path = Path(file_path).parent / f"{clean_base_name}{self.scan_content_extension}{file_ext}"
+
+        if not original_has_scan_ext and file_path != str(new_image_path):
+            try:
+                # Always avoid duplicates: rename if possible, else copy+delete
+                moved_path = self._safe_rename_or_copy_delete(
+                    Path(file_path), Path(new_image_path)
+                )
+                print(f"Renamed file: {file_path} -> {moved_path}")
+                file_path = str(moved_path)
+                # Update the path in the list so that subsequent calls to self.all_files use the new path
+                self.all_files[self.current_file_index] = file_path
+            except OSError as e:
+                print(f"Error processing file {file_path}: {e}")
+
         # Clean up the temporary metadata cache
         self._current_img_metadata = None
 
@@ -566,11 +581,16 @@ class Worker(QObject):
         """
         try:
             with Image.open(image_path) as img:
-                # Store scan image information for metadata
+                # Store scan image information for metadata.
+                # img_size is the size of the image file on disk, formatted with
+                # its unit (MB = 10^6 bytes). Preparation renames/copies the
+                # scan without re-encoding it, so this holds for the resulting
+                # scan file too.
                 img_metadata = {
                     "scan_format": img.format,
                     "scan_size": [img.width, img.height],
                     "scan_mode": img.mode,
+                    "img_size": f"{Path(image_path).stat().st_size / 1_000_000:.2f} MB",
                 }
 
                 # Extract and preserve EXIF data if available
@@ -629,6 +649,11 @@ class Worker(QObject):
             metadata_path: Path to save the JSON file
         """
         try:
+            # A sample has no reference series until one is picked in the
+            # crossdating widget, but the key is written from the start so that
+            # every prepared sample carries it
+            metadata.setdefault("reference_series", NO_REFERENCE_SERIES)
+
             # Ensure all data is JSON serializable
             sanitized_metadata = self._sanitize_for_json(metadata)
 

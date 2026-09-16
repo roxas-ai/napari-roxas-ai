@@ -24,6 +24,7 @@ from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
+from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 from .._utils._segmentation_postprocess import remove_border_touching_components
 
 # NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
@@ -256,13 +257,24 @@ class Worker(QObject):
                 )
             )
             cells_model.to(device=cells_model.available_device)
+            # Synchronize internal device attribute for models that use it in infer()
+            try:
+                cells_model.device = cells_model.available_device
+            except Exception:
+                try:
+                    setattr(cells_model, "device", cells_model.available_device)
+                except Exception:
+                    if hasattr(cells_model, "__dict__"):
+                        cells_model.__dict__["device"] = cells_model.available_device
+            # Use local device variable for autocast checks to avoid restricted attribute assignment
+            device_obj = torch.device(cells_model.available_device)
             cells_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    cells_model.device.type
+                    device_obj.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
                 and (
-                    cells_model.device == "cuda" or cells_model.device == "mps"
+                    cells_model.available_device == "cuda" or cells_model.available_device == "mps"
                 )
             )
 
@@ -301,15 +313,24 @@ class Worker(QObject):
                 )
             )
             rings_model.to(device=rings_model.available_device)
-            # Fix for problem with model object; device attribute is not updated with to()
-            rings_model.device = rings_model.available_device
+            # Synchronize internal device attribute for packaged models
+            try:
+                rings_model.device = rings_model.available_device
+            except Exception:
+                try:
+                    setattr(rings_model, "device", rings_model.available_device)
+                except Exception:
+                    if hasattr(rings_model, "__dict__"):
+                        rings_model.__dict__["device"] = rings_model.available_device
+            # Use local device variable for autocast checks
+            device_obj = torch.device(rings_model.available_device)
             rings_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    rings_model.device
+                    device_obj.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
                 and (
-                    rings_model.device == "cuda" or rings_model.device == "mps"
+                    rings_model.available_device == "cuda" or rings_model.available_device == "mps"
                 )
             )
 
@@ -320,6 +341,12 @@ class Worker(QObject):
 
             # Create a DataFrame from boundaries
             boundary_data = []
+
+            # Always prepend a dummy boundary at the top (row 0) to mark the uncomplete ring area
+            boundary_data.append(
+                {"RBXY": [[0, 0], [0, self.input_array.shape[1] - 1]]}
+            )
+
             for _i, boundary in enumerate(rings_boundaries):
                 # Convert to numpy or list, whichever is more appropriate
                 if isinstance(boundary, torch.Tensor):
@@ -539,7 +566,8 @@ class SingleSampleSegmentationWidget(Container):
         sample_metadata = {
             k: v
             for k, v in self.input_layer.metadata.items()
-            if isinstance(k, str) and k.startswith("sample_")
+            if isinstance(k, str)
+            and k.startswith(SAMPLE_METADATA_PREFIXES)
         }
 
         # Ensure stem is propagated to derived layers

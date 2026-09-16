@@ -29,8 +29,16 @@ if TYPE_CHECKING:
 # Get file extensions from settings
 settings = SettingsManager()
 
+from napari_roxas_ai._utils._metadata_keys import (
+    RUN_METADATA_PREFIXES,
+    SAMPLE_METADATA_PREFIXES,
+    migrate_legacy_metadata_keys,
+)
 
-def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
+
+def update_metadata_file(
+    path: str, metadata: dict, keys_prefix: Union[str, tuple[str, ...]]
+) -> str:
     """
     Update the metadata file with new metadata.
     If the metadata file does not exist, it will be created.
@@ -41,8 +49,10 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
         The path to the metadata file.
     metadata : dict
         The metadata to be added to the file.
-    keys_prefix : str
-        The prefix of the keys to be included in the metadata file.
+    keys_prefix : str or tuple of str
+        The prefix(es) of the keys to be included in the metadata file. Keys
+        that match none of them are dropped, so any new metadata key must be
+        covered by a prefix passed here to end up in the file.
     Returns
     -------
     str
@@ -53,10 +63,15 @@ def update_metadata_file(path: str, metadata: dict, keys_prefix: str) -> str:
     if path_p.exists():
         with path_p.open("r", encoding="utf-8") as f:
             existing_metadata = json.load(f)
+        # Rewrite legacy key names, so that saving a sample prepared with an
+        # older version upgrades its metadata file instead of keeping both
+        # spellings side by side
+        existing_metadata = migrate_legacy_metadata_keys(existing_metadata)
     else:
         existing_metadata = {
             k: v for k, v in (metadata or {}).items()
-            if isinstance(k, str) and k.startswith("sample_")
+            if isinstance(k, str)
+            and k.startswith(SAMPLE_METADATA_PREFIXES)
         }
 
     src_meta = metadata or {}
@@ -569,7 +584,9 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
         settings.get("file_extensions.metadata_file_extension")
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
-    update_metadata_file(metadata_file_path, meta["metadata"], "cells_")
+    update_metadata_file(
+        metadata_file_path, meta["metadata"], ("cells_", *RUN_METADATA_PREFIXES)
+    )
     written_file_paths.append(metadata_file_path)
 
     # Save the tabular data
@@ -639,7 +656,9 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
         settings.get("file_extensions.metadata_file_extension")
     )
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
-    update_metadata_file(metadata_file_path, meta["metadata"], "rings_")
+    update_metadata_file(
+        metadata_file_path, meta["metadata"], ("rings_", *RUN_METADATA_PREFIXES)
+    )
     written_file_paths.append(metadata_file_path)
 
     # Save the tabular data

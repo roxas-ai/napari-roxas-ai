@@ -31,10 +31,14 @@ class SampleAnalyzer:
         Args:
             config: Dictionary containing analysis parameters:
                 - pixels_per_um: Conversion factor from pixels to micrometers
-                - cluster_separation_threshold: Minimum distance between clusters (µm)
+                - cluster_dbl_cwt_threshold: Minimum distance between clusters (µm)
                 - smoothing_kernel_size: Size of morphological operation kernel
-                - integration_interval: Fraction of wall used for thickness measurement
+                - relwidth_cwt_integration: Fraction of wall used for thickness measurement
                 - tangential_angle : Sample angle (degrees, clockwise)
+                - lower_limit_cwt_iqr_multiplier: IQR multiplier for the lower CWT outlier fence
+                - upper_limit_cwt_iqr_multiplier: IQR multiplier for the upper CWT outlier fence
+                - opposite_cwt_ratio_limit: Max CWT ratio between opposite cell sides
+                - adjacent_cwt_ratio_limit: Max CWT ratio between a side and its adjacent sides
         """
         self.config = config
         self.cells_array = cells_array
@@ -48,18 +52,38 @@ class SampleAnalyzer:
 
         # Derived parameters
         self.pixels_per_um = float(config["pixels_per_um"])
-        self.cluster_separation_px = (
-            config["cluster_separation_threshold"] * self.pixels_per_um
+        self.cluster_dbl_cwt_px = (
+            config["cluster_dbl_cwt_threshold"] * self.pixels_per_um
         )
         self.kernel = np.ones(
             (config["smoothing_kernel_size"], config["smoothing_kernel_size"])
         )
-        self.integration_margin = (1 - config["integration_interval"]) / 2
+        self.relwidth_cwt_margin = (
+            1 - config["relwidth_cwt_integration"]
+        ) / 2
         self.radial_angle = config["tangential_angle"] - 90
-        self.ll_scaling = float(config.get("ll_scaling", 1.5))
-        self.ul_scaling = float(config.get("ul_scaling", 3.0))
-        self.opp_scaling = float(config.get("opp_scaling", 1.5))
-        self.adj_scaling = float(config.get("adj_scaling", 3.0))
+        self.lower_limit_cwt_iqr_multiplier = self._config_float(
+            "lower_limit_cwt_iqr_multiplier", 1.5
+        )
+        self.upper_limit_cwt_iqr_multiplier = self._config_float(
+            "upper_limit_cwt_iqr_multiplier", 3.0
+        )
+        self.opposite_cwt_ratio_limit = self._config_float(
+            "opposite_cwt_ratio_limit", 1.5
+        )
+        self.adjacent_cwt_ratio_limit = self._config_float(
+            "adjacent_cwt_ratio_limit", 3.0
+        )
+
+    def _config_float(self, key: str, default: float) -> float:
+        """
+        Read a float from config, falling back to default.
+
+        The fallback also covers a present-but-None value, which happens when a
+        settings.json predates the key and SettingsManager.get() returns None.
+        """
+        value = self.config.get(key)
+        return default if value is None else float(value)
 
     # TODO: Check whether smoothing is necessary / desired after DL cell detection
     def _smooth_cells_array(self) -> None:
@@ -364,12 +388,12 @@ class SampleAnalyzer:
                 np.where(contour_labels == label)[0], :
             ]
 
-            # Crop to keep the middle % as defined by integration_margin (typically 75%)
+            # Crop to keep the middle % as defined by relwidth_cwt_margin (typically 75%)
             lower_bound = np.ceil(
-                self.integration_margin * wall_pixel_coords.shape[0]
+                self.relwidth_cwt_margin * wall_pixel_coords.shape[0]
             ).astype("int32")
             upper_bound = np.ceil(
-                (1 - self.integration_margin) * wall_pixel_coords.shape[0]
+                (1 - self.relwidth_cwt_margin) * wall_pixel_coords.shape[0]
             ).astype("int32")
 
             # Write the mean thickness in the cell dict (might be median in the future)
@@ -389,7 +413,7 @@ class SampleAnalyzer:
         # Threshold distance transform for clustering
         _, dist_thresh = cv2.threshold(
             self.dist_transform / self.pixels_per_um,
-            self.config["cluster_separation_threshold"],
+            self.config["cluster_dbl_cwt_threshold"],
             255,
             cv2.THRESH_BINARY,
         )
@@ -450,7 +474,6 @@ class SampleAnalyzer:
             self.cells_table.index.name = "id"
         return self.cells_table
 
-    # TODO add ll_scaling etc. to settings json
     def _apply_cwt_filters(self) -> None:
         """
         Automatic filtering of cell wall thickness (CWT) measurements using the IQR method for outlier detection. (Tukey's fences method)
@@ -468,10 +491,10 @@ class SampleAnalyzer:
             return
 
         # --- Settings ---
-        ll_scaling = self.ll_scaling
-        ul_scaling = self.ul_scaling
-        opp_scaling = self.opp_scaling
-        adj_scaling = self.adj_scaling
+        lower_limit_cwt_iqr_multiplier = self.lower_limit_cwt_iqr_multiplier
+        upper_limit_cwt_iqr_multiplier = self.upper_limit_cwt_iqr_multiplier
+        opposite_cwt_ratio_limit = self.opposite_cwt_ratio_limit
+        adjacent_cwt_ratio_limit = self.adjacent_cwt_ratio_limit
         min_plausible = 1.0 / self.pixels_per_um  # 1 pixel in µm (sub-pixel range is implausible)
 
         df = self.cells_table
@@ -496,11 +519,15 @@ class SampleAnalyzer:
         iqr_tan = max(0.0, q3_tan - q1_tan)
         iqr_rad = max(0.0, q3_rad - q1_rad)
 
-        ll_tan = max(q1_tan - ll_scaling * iqr_tan, min_plausible)
-        ul_tan = q3_tan + ul_scaling * iqr_tan
+        ll_tan = max(
+            q1_tan - lower_limit_cwt_iqr_multiplier * iqr_tan, min_plausible
+        )
+        ul_tan = q3_tan + upper_limit_cwt_iqr_multiplier * iqr_tan
 
-        ll_rad = max(q1_rad - ll_scaling * iqr_rad, min_plausible)
-        ul_rad = q3_rad + ul_scaling * iqr_rad
+        ll_rad = max(
+            q1_rad - lower_limit_cwt_iqr_multiplier * iqr_rad, min_plausible
+        )
+        ul_rad = q3_rad + upper_limit_cwt_iqr_multiplier * iqr_rad
 
         def _apply_limits(s, ll, ul):
             s = s.copy()
@@ -513,19 +540,19 @@ class SampleAnalyzer:
         ri = _apply_limits(ri, ll_rad, ul_rad)
 
         # --- Filter larger value of opposite sides if much larger ---
-        ba.loc[ba > (opp_scaling * pi)] = np.nan
-        pi.loc[pi > (opp_scaling * ba)] = np.nan
-        le.loc[le > (opp_scaling * ri)] = np.nan
-        ri.loc[ri > (opp_scaling * le)] = np.nan
+        ba.loc[ba > (opposite_cwt_ratio_limit * pi)] = np.nan
+        pi.loc[pi > (opposite_cwt_ratio_limit * ba)] = np.nan
+        le.loc[le > (opposite_cwt_ratio_limit * ri)] = np.nan
+        ri.loc[ri > (opposite_cwt_ratio_limit * le)] = np.nan
 
         # --- Filter larger value compared to adjacent sides if much larger ---
         ave_lr = pd.concat([le, ri], axis=1).mean(axis=1, skipna=True)
         ave_pb = pd.concat([pi, ba], axis=1).mean(axis=1, skipna=True)
 
-        ba.loc[ba > (adj_scaling * ave_lr)] = np.nan
-        pi.loc[pi > (adj_scaling * ave_lr)] = np.nan
-        le.loc[le > (adj_scaling * ave_pb)] = np.nan
-        ri.loc[ri > (adj_scaling * ave_pb)] = np.nan
+        ba.loc[ba > (adjacent_cwt_ratio_limit * ave_lr)] = np.nan
+        pi.loc[pi > (adjacent_cwt_ratio_limit * ave_lr)] = np.nan
+        le.loc[le > (adjacent_cwt_ratio_limit * ave_pb)] = np.nan
+        ri.loc[ri > (adjacent_cwt_ratio_limit * ave_pb)] = np.nan
 
         # Write back filtered base values
         df["CWT_pith"] = pi
@@ -631,7 +658,6 @@ class SampleAnalyzer:
 
     def _compute_rings_metrics(self):
         """Compute metrics for rings."""
-
         # Compute rings regressions
         self.rings_table[["boundary_slope", "boundary_intercept"]] = (
             self.rings_table["RBXY"]
@@ -644,15 +670,18 @@ class SampleAnalyzer:
 
         # Compute rings average widths
         self.rings_table["ring_vert_width"] = np.nan
-        self.rings_table.iloc[
-            1:, self.rings_table.columns.tolist().index("ring_vert_width")
-        ] = np.diff(self.rings_table["cells_above"].values)
-        self.rings_table["ring_vert_width"] = self.rings_table[
-            "ring_vert_width"
-        ] / (self.pixels_per_um * self.cells_array.shape[1])
-        self.rings_table.loc[
-            ~self.rings_table["enabled"], "ring_vert_width"
-        ] = np.nan
+        if "cells_above" in self.rings_table.columns and len(self.rings_table) > 1:
+            self.rings_table.iloc[
+                1:, self.rings_table.columns.tolist().index("ring_vert_width")
+            ] = np.diff(self.rings_table["cells_above"].values)
+            self.rings_table["ring_vert_width"] = self.rings_table[
+                "ring_vert_width"
+            ] / (self.pixels_per_um * self.cells_array.shape[1])
+            
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[
+                ~self.rings_table["enabled"], "ring_vert_width"
+            ] = np.nan
 
         # Compute ring angle width
         self.rings_table["ring_angle_width"] = self.rings_table[
@@ -667,7 +696,6 @@ class SampleAnalyzer:
 
     def _compute_ring_area(self) -> None:
         # Compute ring area (RA) in mm² and store in rings_table["RA"].
-
         h, w = self.cells_array.shape[:2]
 
         # Ensure RA exists and reset
@@ -721,7 +749,8 @@ class SampleAnalyzer:
                 self.rings_table.loc[ring_id, "CNO"] = int(cnt)
 
         # disabled rings -> NaN
-        self.rings_table.loc[~self.rings_table["enabled"], "CNO"] = np.nan
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "CNO"] = np.nan
 
     def _compute_cd(self) -> None:
         self.rings_table["CD"] = np.nan
@@ -876,8 +905,8 @@ class SampleAnalyzer:
 
         self.rings_table.loc[valid, "KS"] = kh[valid] / ra_m2[valid]
 
-        self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
-
+        if "enabled" in self.rings_table.columns:
+            self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
 
         return self.rings_table
 
@@ -891,7 +920,6 @@ class SampleAnalyzer:
         For conifers: metrics are not applicable and are always NA.
         For angiosperms: computed based on cluster IDs (cell-level "cluster") within each ring.
         """
-
         # Init columns
         self.rings_table["RVGI"] = np.nan
         self.rings_table["RVSF"] = np.nan
@@ -1071,6 +1099,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwttan(self) -> None:
         # CWTTAN = Mean thickness of tangential cell walls per ring [µm]. Uses cell-level CWTTAN and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWTTAN"] = np.nan
 
         if self.cells_table.empty:
@@ -1099,6 +1129,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwtrad(self) -> None:
         # CWTRAD = Mean thickness of radial cell walls per ring [µm]. Uses cell-level CWTRAD and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWTRAD"] = np.nan
 
         if self.cells_table.empty:
@@ -1127,6 +1159,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwtall(self) -> None:
         # CWTALL = Mean thickness of all cell walls per ring [µm]. Uses cell-level CWTALL and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWTALL"] = np.nan
 
         if self.cells_table.empty:
@@ -1155,6 +1189,8 @@ class SampleAnalyzer:
 
     def _compute_mean_rtsr(self) -> None:
         # RTSR = Mean radial Thickness-to-span ratio per ring (Mork's index). Uses cell-level RTSR and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["RTSR"] = np.nan
 
         if self.cells_table.empty:
@@ -1183,6 +1219,8 @@ class SampleAnalyzer:
 
     def _compute_mean_ctsr(self) -> None:
         # CTSR = Mean circular Thickness-to-span ratio per ring. Uses cell-level CTSR and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CTSR"] = np.nan
 
         if self.cells_table.empty:
@@ -1211,6 +1249,8 @@ class SampleAnalyzer:
 
     def _compute_mean_dh(self) -> None:
         # DHW = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DHW"] = np.nan
 
         if self.cells_table.empty:
@@ -1252,6 +1292,8 @@ class SampleAnalyzer:
 
     def _compute_mean_dh2(self) -> None:
         # DHM = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DHM"] = np.nan
 
         if self.cells_table.empty:
@@ -1296,6 +1338,8 @@ class SampleAnalyzer:
 
     def _compute_mean_drad(self) -> None:
         # DRAD = Mean radial cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_rad and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DRAD"] = np.nan
 
         if self.cells_table.empty:
@@ -1324,6 +1368,8 @@ class SampleAnalyzer:
 
     def _compute_mean_dtan(self) -> None:
         # DTAN = Mean tangential cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_tang and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["DTAN"] = np.nan
 
         if self.cells_table.empty:
@@ -1352,6 +1398,8 @@ class SampleAnalyzer:
 
     def _compute_mean_tb2(self) -> None:
         # TB2 = Mean cell wall reinforcement index (t/b)^2 per ring. Uses cell-level TB2 and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["TB2"] = np.nan
 
         if self.cells_table.empty:
@@ -1380,6 +1428,8 @@ class SampleAnalyzer:
 
     def _compute_mean_cwa(self) -> None:
         # CWA = Mean cell wall area per ring [µm²]. Uses cell-level CWA and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["CWA"] = np.nan
 
         if self.cells_table.empty:
@@ -1408,6 +1458,8 @@ class SampleAnalyzer:
 
     def _compute_mean_rwd(self) -> None:
         # RWD = Mean relative anatomical cell density per ring. Uses cell-level RWD and aggregates by bot_ring_id.
+        if self.rings_table is None or self.rings_table.empty:
+            return
         self.rings_table["RWD"] = np.nan
 
         if self.cells_table.empty:
@@ -1447,6 +1499,8 @@ class SampleAnalyzer:
         self.cells_table["bot_ring_id"] = np.nan
         self.cells_table["top_vert_dist"] = np.nan
         self.cells_table["bot_vert_dist"] = np.nan
+        self.cells_table["top_angled_dist"] = np.nan
+        self.cells_table["bot_angled_dist"] = np.nan
 
         for i in range(len(self.rings_table) - 1):
 
@@ -1580,6 +1634,9 @@ class SampleAnalyzer:
 
     def analyze_rings(self) -> pd.DataFrame:
         """Main method to analyze rings."""
+        if self.rings_table is None or self.rings_table.empty:
+            return self.rings_table
+
         self._compute_rings_metrics()
         if not self.cells_table.empty:
             self._compute_cells_to_rings_distances()
@@ -1625,10 +1682,14 @@ if __name__ == "__main__":
     # Example configuration
     CONFIG = {
         "pixels_per_um": 2.2675,
-        "cluster_separation_threshold": 3,  # µm
+        "cluster_dbl_cwt_threshold": 3,  # µm
         "smoothing_kernel_size": 5,
-        "integration_interval": 0.75,
+        "relwidth_cwt_integration": 0.75,
         "tangential_angle": 0,  # Assuming vertical orientation
+        "lower_limit_cwt_iqr_multiplier": 1.5,
+        "upper_limit_cwt_iqr_multiplier": 3.0,
+        "opposite_cwt_ratio_limit": 1.5,
+        "adjacent_cwt_ratio_limit": 3.0,
     }
 
     import argparse
