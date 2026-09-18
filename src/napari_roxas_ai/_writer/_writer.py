@@ -436,8 +436,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
           .pipe(round_column, "MLA", 2)
           .pipe(round_column, "MINLA", 2)
           .pipe(round_column, "MAXLA", 2)
-          .pipe(round_column_sci, "KH", 3)  # round KH to 5 decimals keeping a scientific notation format
-          .pipe(round_column_sci, "KS", 3)  # round KS to 5 decimals keeping a scientific notation format
+          .pipe(round_column_sci, "KH", 3)  # round KH using a scientific notation format
+          .pipe(round_column_sci, "KS", 3)  # round KS using a scientific notation format
           .pipe(round_column, "CWTPI", 2)
           .pipe(round_column, "CWTBA", 2)
           .pipe(round_column, "CWTLE", 2)
@@ -538,7 +538,7 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
           .pipe(round_column, "RRADDISTR", 2)
           .pipe(round_column, "ASP", 2)
           .pipe(round_column, "MAJAX", 2)
-          .pipe(round_column_sci, "KH", 3)  # round KH to 5 decimals keeping a scientific notation format
+          .pipe(round_column_sci, "KH", 3)  # round KH using a scientific notation format
           .pipe(round_column, "CWTPI", 2)
           .pipe(round_column, "CWTBA", 2)
           .pipe(round_column, "CWTLE", 2)
