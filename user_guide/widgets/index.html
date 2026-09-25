@@ -1,0 +1,2651 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for the napari-roxas-ai plugin.">
+      
+      
+        <meta name="author" content="The WSL Dendrosciences Group">
+      
+      
+        <link rel="canonical" href="https://roxas-ai.github.io/napari-roxas-ai/user_guide/widgets/">
+      
+      
+        <link rel="prev" href="../../getting_started/installation/">
+      
+      
+        <link rel="next" href="../../tutorials/workflows/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Widgets - ROXAS AI</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#user-guide-widgets-tools" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ROXAS AI" class="md-header__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ROXAS AI
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Widgets
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting_started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/workflows/" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/technical_reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ROXAS AI" class="md-nav__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    ROXAS AI
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Widgets
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Widgets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview-of-the-workflow-widgets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview of the Workflow &amp; Widgets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0-define-project-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0 - Define Project Directory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0 - Define Project Directory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-prepare-project-images-for-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 - Prepare Project Images for Analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 - Prepare Project Images for Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-dating-text-files-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Dating Text Files Processing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Dating Text Files Processing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-input-file-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Input File Formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unit-scaling-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unit Scaling Conversion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output File Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#24-load-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2/4 - Load Image(s)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2/4 - Load Image(s)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3a-detect-cells-rings-individual-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3A - Detect Cells &amp; Rings (Individual Image)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3A - Detect Cells &amp; Rings (Individual Image)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3b-batch-detect-cells-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3B - Batch Detect Cells &amp; Rings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3B - Batch Detect Cells &amp; Rings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-edit-cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 - Edit Cells
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 - Edit Cells">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vectorization-rasterization-smoothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vectorization, Rasterization &amp; Smoothing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-edit-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 - Edit Rings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6 - Edit Rings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vectorization-rasterization-smoothing_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vectorization, Rasterization &amp; Smoothing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-visual-cross-dating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7 - Visual Cross-Dating
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7 - Visual Cross-Dating">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-dating-files-discovery-folder-hierarchy-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Dating Files Discovery &amp; Folder Hierarchy Traversal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior-when-multiple-cross-dating-files-are-present" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior When Multiple Cross-Dating Files Are Present
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-save-cells-rings-editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8 - Save Cells &amp; Rings Editing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8 - Save Cells &amp; Rings Editing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9a-measure-cells-rings-individual-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9A - Measure Cells &amp; Rings (Individual Image)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9A - Measure Cells &amp; Rings (Individual Image)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9b-batch-measure-cells-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9B - Batch Measure Cells &amp; Rings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9B - Batch Measure Cells &amp; Rings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zz-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ZZ - Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ZZ - Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-settings-categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Settings Categories
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/technical_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview-of-the-workflow-widgets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview of the Workflow &amp; Widgets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0-define-project-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0 - Define Project Directory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0 - Define Project Directory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-prepare-project-images-for-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 - Prepare Project Images for Analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 - Prepare Project Images for Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-dating-text-files-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Dating Text Files Processing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Dating Text Files Processing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-input-file-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Input File Formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unit-scaling-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unit Scaling Conversion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output File Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#24-load-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2/4 - Load Image(s)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2/4 - Load Image(s)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3a-detect-cells-rings-individual-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3A - Detect Cells &amp; Rings (Individual Image)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3A - Detect Cells &amp; Rings (Individual Image)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3b-batch-detect-cells-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3B - Batch Detect Cells &amp; Rings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3B - Batch Detect Cells &amp; Rings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-edit-cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 - Edit Cells
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 - Edit Cells">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vectorization-rasterization-smoothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vectorization, Rasterization &amp; Smoothing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-edit-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 - Edit Rings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6 - Edit Rings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vectorization-rasterization-smoothing_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vectorization, Rasterization &amp; Smoothing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-visual-cross-dating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7 - Visual Cross-Dating
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7 - Visual Cross-Dating">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-dating-files-discovery-folder-hierarchy-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Dating Files Discovery &amp; Folder Hierarchy Traversal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior-when-multiple-cross-dating-files-are-present" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior When Multiple Cross-Dating Files Are Present
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls-options_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls &amp; Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-save-cells-rings-editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8 - Save Cells &amp; Rings Editing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8 - Save Cells &amp; Rings Editing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9a-measure-cells-rings-individual-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9A - Measure Cells &amp; Rings (Individual Image)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9A - Measure Cells &amp; Rings (Individual Image)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9b-batch-measure-cells-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9B - Batch Measure Cells &amp; Rings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9B - Batch Measure Cells &amp; Rings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-controls_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zz-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ZZ - Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ZZ - Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-settings-categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Settings Categories
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="user-guide-widgets-tools">User Guide: Widgets &amp; Tools<a class="headerlink" href="#user-guide-widgets-tools" title="Permanent link">&para;</a></h1>
+<p><code>napari-roxas-ai</code> provides a modular suite of widgets within the napari environment designed to take your wood cross-section images through the entire Quantitative Wood Anatomy (QWA) pipeline—from raw image preparation to deep-learning segmentation, interactive manual curation, visual cross-dating, and anatomical feature extraction.</p>
+<p>Widgets are numbered in the napari <strong>Plugins &gt; ROXAS AI</strong> menu according to their typical execution sequence.</p>
+<hr />
+<h2 id="overview-of-the-workflow-widgets">Overview of the Workflow &amp; Widgets<a class="headerlink" href="#overview-of-the-workflow-widgets" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TD
+    A["0 - Define Project Directory"] --&gt; B["1 - Prepare Project Images"]
+    B --&gt; C["2/4 - Load Image(s)"]
+    C --&gt; D["3A - Detect Cells &amp; Rings / 3B - Batch Detect"]
+    D --&gt; E["5 - Edit Cells"]
+    D --&gt; F["6 - Edit Rings"]
+    F --&gt; G["7 - Visual Cross-Dating"]
+    E --&gt; H["8 - Save Editing"]
+    F --&gt; H
+    G --&gt; H
+    H --&gt; I["9A - Measure Cells &amp; Rings / 9B - Batch Measure"]
+    J["ZZ - Settings"] -.-&gt; A &amp; B &amp; C &amp; D &amp; E &amp; F &amp; G &amp; H &amp; I</code></pre>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Widget Number &amp; Name</th>
+<th style="text-align: left;">Primary Purpose</th>
+<th style="text-align: left;">Input</th>
+<th style="text-align: left;">Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>0 - Define project directory</strong></td>
+<td style="text-align: left;">Set the active working directory for the project</td>
+<td style="text-align: left;">Folder path</td>
+<td style="text-align: left;">Global project path in settings</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>1 - Prepare project images for analysis</strong></td>
+<td style="text-align: left;">Standardize filenames, extract EXIF/DPI, store initial metadata</td>
+<td style="text-align: left;">Raw images (<code>.jpg</code>, <code>.tif</code>, etc.) &amp; cross-dating files</td>
+<td style="text-align: left;"><code>.scan.&lt;ext&gt;</code>, <code>.metadata.json</code>, <code>rings_series.crossdating.txt</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>2/4 - Load image(s)</strong></td>
+<td style="text-align: left;">Load sample scans and existing label masks into napari</td>
+<td style="text-align: left;">Prepared sample files</td>
+<td style="text-align: left;">Napari Image &amp; Labels layers</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>3A - Detect cells &amp; rings (individual image)</strong></td>
+<td style="text-align: left;">Run deep-learning segmentation on currently loaded scan</td>
+<td style="text-align: left;">Active napari scan layer</td>
+<td style="text-align: left;"><code>.cells</code> and <code>.rings</code> Labels layers</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>3B - Batch detect cells &amp; rings</strong></td>
+<td style="text-align: left;">Run AI segmentation on multiple samples in the background</td>
+<td style="text-align: left;">Prepared project directory</td>
+<td style="text-align: left;"><code>.cells.png</code>, <code>.rings.tif</code>, <code>.metadata.json</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>5 - Edit cells</strong></td>
+<td style="text-align: left;">Manually refine cell segmentations (raster brush/eraser or vector contours)</td>
+<td style="text-align: left;"><code>.cells</code> layer</td>
+<td style="text-align: left;">Edited <code>.cells</code> layer</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>6 - Edit rings</strong></td>
+<td style="text-align: left;">Manually adjust, add, delete, or re-detect tree-ring boundaries</td>
+<td style="text-align: left;"><code>.rings</code> layer</td>
+<td style="text-align: left;">Edited <code>.rings</code> layer &amp; updated ring years</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>7 - Visual cross-dating</strong></td>
+<td style="text-align: left;">Synchronize ring-width series against master reference chronologies</td>
+<td style="text-align: left;"><code>.rings</code> layer &amp; crossdating file</td>
+<td style="text-align: left;">Calibrated ring years &amp; verified sample dating</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>8 - Save cells &amp; rings editing</strong></td>
+<td style="text-align: left;">Persist manual edits from napari viewer back to disk</td>
+<td style="text-align: left;">Active napari layers</td>
+<td style="text-align: left;">Updated <code>.cells.png</code>, <code>.rings.tif</code>, <code>.metadata.json</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>9A - Measure cells &amp; rings (individual image)</strong></td>
+<td style="text-align: left;">Calculate anatomical variables for active sample in viewer</td>
+<td style="text-align: left;"><code>.cells</code> &amp; <code>.rings</code> layers</td>
+<td style="text-align: left;"><code>.cells_table.txt</code>, <code>.rings_table.txt</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>9B - Batch measure cells &amp; rings</strong></td>
+<td style="text-align: left;">Calculate anatomical variables for all samples in directory</td>
+<td style="text-align: left;">Project directory</td>
+<td style="text-align: left;">Measurement tables for all samples</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>ZZ - Settings</strong></td>
+<td style="text-align: left;">Configure global defaults, hardware acceleration, file extensions, and thresholds</td>
+<td style="text-align: left;">User settings</td>
+<td style="text-align: left;"><code>settings.json</code> configuration file</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="0-define-project-directory">0 - Define Project Directory<a class="headerlink" href="#0-define-project-directory" title="Permanent link">&para;</a></h2>
+<p>The <strong>Define Project Directory</strong> widget configures the root folder where your sample images, metadata, and analysis tables reside.</p>
+<p><img alt="Screenshot: Project Directory Selector" src="../assets/screenshots/00_define_project_directory.png" />
+<em>Figure 1: Project directory selection dialog.</em></p>
+<h3 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
+<p>When triggered from the menu, it opens a system folder browser. Selecting a folder updates the <code>project_directory</code> entry in <code>settings.json</code>. All subsequent loading, saving, and batch processing widgets default to this directory.</p>
+<h3 id="key-controls">Key Controls<a class="headerlink" href="#key-controls" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Select Project Directory</strong>: Prompts the user to pick a folder. Upon confirmation, a notification displays the chosen path.</li>
+</ul>
+<hr />
+<h2 id="1-prepare-project-images-for-analysis">1 - Prepare Project Images for Analysis<a class="headerlink" href="#1-prepare-project-images-for-analysis" title="Permanent link">&para;</a></h2>
+<p>The <strong>Prepare Project Images</strong> widget standardizes raw microscopy or flatbed scans and associated cross-dating text files into the structured file naming conventions and data structures required by ROXAS AI.</p>
+<p><img alt="Screenshot: Sample Preparation Widget" src="../assets/screenshots/01_preparation_widget.png" />
+<em>Figure 2: Sample preparation widget interface.</em></p>
+<h3 id="how-it-works_1">How It Works<a class="headerlink" href="#how-it-works_1" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Scans the selected project directory (and subdirectories) for supported image formats (<code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.tif</code>, <code>.tiff</code>, <code>.bmp</code>, <code>.jp2</code>).</li>
+<li>Opens an interactive <strong>Metadata Dialog</strong> for each sample to capture physical dimensions, spatial resolution (<span class="arithmatex">\(\mu\text{m}/\text{px}\)</span> or DPI), sample type (e.g., <code>conifer</code>), measurement geometry (<code>linear</code>), and the outermost complete calendar year.</li>
+<li>Automatically standardizes filenames to <code>&lt;sample_name&gt;.scan.&lt;ext&gt;</code> and creates a synchronized <code>&lt;sample_name&gt;.metadata.json</code>.</li>
+<li>Discovers and merges external cross-dating series (e.g., Tucson <code>.rwl</code>, <code>.tuc</code>, or tabular <code>.txt</code>/<code>.csv</code> files) into a unified reference file (<code>rings_series.crossdating.txt</code>, configured as <code>[".crossdating", ".txt"]</code> in <code>settings.json</code>) scaled to micrometers (<span class="arithmatex">\(\mu\text{m}\)</span>).</li>
+</ol>
+<p><img alt="Screenshot: Metadata Dialog" src="../assets/screenshots/01_metadata_dialog.png" />
+<em>Figure 3: Interactive metadata prompt dialog during image preparation.</em></p>
+<h3 id="cross-dating-text-files-processing">Cross-Dating Text Files Processing<a class="headerlink" href="#cross-dating-text-files-processing" title="Permanent link">&para;</a></h3>
+<p>The <strong>Start Processing Crossdating Files</strong> action allows you to import and compile one or more external tree-ring width (TRW) measurement files or master reference chronologies into a single synchronized project cross-dating file.</p>
+<p><img alt="Screenshot: Crossdating Selection Dialog" src="../assets/screenshots/01_crossdating_selection_dialog.png" />
+<em>Figure 4: Dialog for selecting cross-dating files and setting unit scaling.</em></p>
+<h4 id="supported-input-file-formats">Supported Input File Formats<a class="headerlink" href="#supported-input-file-formats" title="Permanent link">&para;</a></h4>
+<p>The cross-dating parser automatically recognizes and parses several standard dendrochronological and tabular formats:</p>
+<ul>
+<li>
+<p><strong>Tabular Files (<code>.csv</code>, <code>.tsv</code>, <code>.txt</code>)</strong>:</p>
+<ul>
+<li><strong>Delimiters</strong>: Auto-detected among tab (<code>\t</code>), comma (<code>,</code>), or semicolon (<code>;</code>).</li>
+<li><strong>Structure</strong>: Column-oriented or matrix tables where the first column or index contains the calendar year (<code>YEAR</code>), and additional columns contain tree-ring width series for individual trees, radii, or site chronologies.</li>
+<li><strong>Header handling</strong>: Automatically detects whether headers with series names exist or if the file contains pure numeric columns.</li>
+</ul>
+<p><em>Example Tabular Input (<code>sample_series.txt</code> or <code>sample_series.csv</code>, values in <span class="arithmatex">\(1/100\,\text{mm}\)</span>):</em></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">YEAR</th>
+<th style="text-align: left;">Series01</th>
+<th style="text-align: left;">Series02</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">2018</td>
+<td style="text-align: left;">142</td>
+<td style="text-align: left;">165</td>
+</tr>
+<tr>
+<td style="text-align: left;">2019</td>
+<td style="text-align: left;">118</td>
+<td style="text-align: left;">130</td>
+</tr>
+<tr>
+<td style="text-align: left;">2020</td>
+<td style="text-align: left;">155</td>
+<td style="text-align: left;">148</td>
+</tr>
+<tr>
+<td style="text-align: left;">2021</td>
+<td style="text-align: left;">98</td>
+<td style="text-align: left;">112</td>
+</tr>
+<tr>
+<td style="text-align: left;">2022</td>
+<td style="text-align: left;">125</td>
+<td style="text-align: left;">135</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p><strong>Tucson / Decadal Files (<code>.rwl</code>, <code>.tuc</code>)</strong>:</p>
+<ul>
+<li><strong>Raw Tucson Decadal Format</strong>: Standard space-delimited format used by dendrochronology software (e.g., COFECHA, ARSTAN, TSAP-Win). Each line contains <code>series_id</code>, <code>start_year</code>, and up to 10 ring-width values followed by end-of-series sentinel markers (<code>-9999</code>, <code>-999</code>, <code>9999</code>, or <code>999</code>).</li>
+<li><strong>Tab-Delimited ("Doctored") Tucson Format</strong>: Tucson decadal files where fields are separated by tab characters. The parser identifies sentinel stop values and pivots the decadal entries into continuous annual time series.</li>
+</ul>
+<blockquote>
+<p><strong>ATTENTION</strong>: Tucson/decadal files must be saved with the <code>.rwl</code> or <code>.tuc</code> extension. If an RWL file is saved or renamed with a <code>.txt</code> extension, it will not be processed correctly because the parser will attempt to read it as a standard tabular file rather than a decadal file.</p>
+</blockquote>
+<p><em>Example Tucson Input (<code>site_chronology.rwl</code>, values in <span class="arithmatex">\(1/100\,\text{mm}\)</span>):</em></p>
+<div class="highlight"><pre><span></span><code>Series01 2010   110  125  130  142  118  155   98  125  140  150
+Series01 2020   160  135  120 -9999
+</code></pre></div>
+</li>
+</ul>
+<h4 id="unit-scaling-conversion">Unit Scaling Conversion<a class="headerlink" href="#unit-scaling-conversion" title="Permanent link">&para;</a></h4>
+<p>Because tree-ring measurement devices export widths in varying units, the selection dialog allows specifying the unit scale of the input files to convert all values into standard <strong>micrometers (<span class="arithmatex">\(\mu\text{m}\)</span>)</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Selected Unit Option</th>
+<th style="text-align: left;">Multiplier Applied</th>
+<th style="text-align: left;">Resulting Unit</th>
+<th style="text-align: left;">Typical Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong><code>1 / 100 mm</code></strong> <em>(default)</em></td>
+<td style="text-align: left;"><span class="arithmatex">\(\times 10.0\)</span></td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Standard LINTAB / TSAP 1/100 mm resolution</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>1 / 10 mm</code></strong></td>
+<td style="text-align: left;"><span class="arithmatex">\(\times 100.0\)</span></td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Low-resolution 0.1 mm measurement systems</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>1 / 1000 mm</code></strong></td>
+<td style="text-align: left;"><span class="arithmatex">\(\times 1.0\)</span></td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Precision 1/1000 mm (<span class="arithmatex">\(1\,\mu\text{m}\)</span>) stage micrometers</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>divide values by 10</code></strong></td>
+<td style="text-align: left;"><span class="arithmatex">\(\times 0.1\)</span></td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Raw values recorded in tenths of micrometers</td>
+</tr>
+</tbody>
+</table>
+<h4 id="output-file-structure">Output File Structure<a class="headerlink" href="#output-file-structure" title="Permanent link">&para;</a></h4>
+<p>The compiled series is saved in the root of the project directory as <code>rings_series&lt;crossdating_file_extension&gt;</code> (by default <code>rings_series.crossdating.txt</code>, where <code>file_extensions.crossdating_file_extension</code> in <code>settings.json</code> is configured as <code>[".crossdating", ".txt"]</code>, which concatenates to <code>[".crossdating.txt"]</code>:</p>
+<ul>
+<li><strong>Format &amp; Delimiter</strong>: Tab-delimited plain text file (<code>\t</code> separator).</li>
+<li><strong>Index (<code>YEAR</code>)</strong>: The first column is named <code>YEAR</code> and contains unique calendar years spanning the complete chronological range across all imported series, sorted in ascending order.</li>
+<li><strong>Series Columns</strong>: Each imported file/series forms its own named column header (derived from series IDs or column labels in the source files).</li>
+<li><strong>Data Alignment &amp; Missing Values</strong>: Ring widths are aligned by year across all series in micrometers (<span class="arithmatex">\(\mu\text{m}\)</span>). Years not covered by a given series are left empty (<code>NaN</code>), allowing seamless integration of chronologies with differing time spans.</li>
+</ul>
+<p><em>Example Output File (<code>rings_series.crossdating.txt</code>, tab-delimited, values in <span class="arithmatex">\(\mu\text{m}\)</span> after applying <span class="arithmatex">\(\times 10.0\)</span> scaling):</em></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">YEAR</th>
+<th style="text-align: left;">Series01</th>
+<th style="text-align: left;">Series02</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>2018</strong></td>
+<td style="text-align: left;">1420.0</td>
+<td style="text-align: left;">1650.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>2019</strong></td>
+<td style="text-align: left;">1180.0</td>
+<td style="text-align: left;">1300.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>2020</strong></td>
+<td style="text-align: left;">1550.0</td>
+<td style="text-align: left;">1480.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>2021</strong></td>
+<td style="text-align: left;">980.0</td>
+<td style="text-align: left;">1120.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>2022</strong></td>
+<td style="text-align: left;">1250.0</td>
+<td style="text-align: left;">1350.0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-controls-options">Key Controls &amp; Options<a class="headerlink" href="#key-controls-options" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Project Directory Button</strong>: Displays and allows switching the active project directory.</li>
+<li><strong>Process already processed files</strong>: When unchecked (default), skips files that already have the <code>.scan</code> extension.</li>
+<li><strong>Manually select files to process</strong>: Expands a multi-selection list allowing selective processing of specific samples instead of the entire directory.</li>
+<li><strong>Reverse Selection</strong>: Inverts the current file selection in the list.</li>
+<li><strong>Ignore ROXAS Output files</strong>: Filters out visualization previews (e.g., <code>_annotated.jpg</code>, <code>_ReferenceSeries.jpg</code>).</li>
+<li><strong>Start Processing Image Files</strong>: Launches the preparation worker thread with a live progress bar.</li>
+<li><strong>Start Processing Crossdating Files</strong>: Opens the cross-dating file selection and unit conversion dialog to merge external ring-width files into the project reference series.</li>
+</ul>
+<hr />
+<h2 id="24-load-images">2/4 - Load Image(s)<a class="headerlink" href="#24-load-images" title="Permanent link">&para;</a></h2>
+<p>The <strong>Samples Loading Widget</strong> loads prepared sample images (<code>.scan</code>), cell labels (<code>.cells</code>), and tree-ring labels (<code>.rings</code>) into napari with standardized colormaps, scaling, and navigation shortcuts.</p>
+<p><img alt="Screenshot: Samples Loading Widget" src="../assets/screenshots/02_samples_loading_widget.png" />
+<em>Figure 5: Samples loading widget with multi-sample selection.</em></p>
+<h3 id="how-it-works_2">How It Works<a class="headerlink" href="#how-it-works_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Queries the project directory for prepared sample stems.</li>
+<li>Reads image layers along with their associated metadata (scale in <span class="arithmatex">\(\mu\text{m}/\text{px}\)</span>, sample stem paths, and ring year metadata).</li>
+<li>Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).</li>
+<li>Automatically configures keyboard shortcuts (such as WASD keys for quick viewport panning) to streamline navigation across large high-resolution images.</li>
+</ul>
+<h3 id="key-controls_1">Key Controls<a class="headerlink" href="#key-controls_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Project Directory</strong>: Displays current project directory path.</li>
+<li><strong>Samples List</strong>: Multi-select list showing all discovered samples.</li>
+<li><strong>Load Selected Samples</strong>: Loads only highlighted samples into the layer list.</li>
+<li><strong>Load All Samples</strong>: Loads all samples found in the project.</li>
+<li><strong>Progress Bar</strong>: Displays sample loading progress.</li>
+</ul>
+<hr />
+<h2 id="3a-detect-cells-rings-individual-image">3A - Detect Cells &amp; Rings (Individual Image)<a class="headerlink" href="#3a-detect-cells-rings-individual-image" title="Permanent link">&para;</a></h2>
+<p>The <strong>Single Sample Segmentation Widget</strong> performs automated deep-learning inference to identify tracheid cell lumens and annual tree-ring boundaries on the currently displayed image.</p>
+<p><img alt="Screenshot: Single Sample Segmentation Widget" src="../assets/screenshots/03a_single_segmentation_widget.png" />
+<em>Figure 6: Single sample AI segmentation interface.</em></p>
+<h3 id="how-it-works_3">How It Works<a class="headerlink" href="#how-it-works_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Runs neural network models (PyTorch / PyTorch Lightning / SMP architectures) locally on either GPU or CPU.</li>
+<li><strong>Cells Detection</strong>: Predicts individual cell lumen instances and outputs a labeled mask layer (<code>&lt;sample&gt;.cells</code>).</li>
+<li><strong>Rings Detection</strong>: Detects continuous tree-ring boundaries, sorts boundaries from bark to pith, enforces boundary continuity across the sample width, and constructs labeled annual ring bands (<code>&lt;sample&gt;.rings</code>).</li>
+<li>Post-processes masks to eliminate edge artefacts (e.g., boundary-touching partial cells).</li>
+</ul>
+<h3 id="key-controls-options_1">Key Controls &amp; Options<a class="headerlink" href="#key-controls-options_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Sample Selection</strong>: Dropdown selecting the active <code>.scan</code> image layer.</li>
+<li><strong>Segment Cells / Segment Rings</strong>: Checkboxes enabling cell detection, ring boundary detection, or both simultaneously.</li>
+<li><strong>Cells Model / Rings Model</strong>: Selects the trained model checkpoint (<code>.pth</code>) to use from the <code>_models</code> directory.</li>
+<li><strong>Remove Border Touching Components</strong>: Filters out cells that touch the scan boundary to avoid distorted anatomical metrics.</li>
+<li><strong>Overwrite Existing Layers</strong>: Controls whether previous segmentation layers are replaced or updated.</li>
+<li><strong>Segment Sample Button</strong>: Initiates the background segmentation process.</li>
+</ul>
+<hr />
+<h2 id="3b-batch-detect-cells-rings">3B - Batch Detect Cells &amp; Rings<a class="headerlink" href="#3b-batch-detect-cells-rings" title="Permanent link">&para;</a></h2>
+<p>The <strong>Batch Sample Segmentation Widget</strong> executes AI detection across multiple samples in the background without needing to load each image into the viewer.</p>
+<p><img alt="Screenshot: Batch Segmentation Widget" src="../assets/screenshots/03b_batch_segmentation_widget.png" />
+<em>Figure 7: Batch segmentation widget.</em></p>
+<h3 id="how-it-works_4">How It Works<a class="headerlink" href="#how-it-works_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Iterates over all discovered sample scans in the project directory.</li>
+<li>Applies the selected neural network models sequentially.</li>
+<li>Automatically saves segmentation masks (<code>.cells.png</code> and <code>.rings.tif</code>) directly to disk alongside updated <code>.metadata.json</code> files.</li>
+</ul>
+<h3 id="key-controls_2">Key Controls<a class="headerlink" href="#key-controls_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Project Directory Selection</strong>: Choose the target folder containing prepared samples.</li>
+<li><strong>File Selection Mode</strong>: Toggle between batch processing all samples or handpicked subsets.</li>
+<li><strong>Segmentation Targets</strong>: Checkboxes for <strong>Segment Cells</strong> and <strong>Segment Rings</strong>.</li>
+<li><strong>Model Dropdowns</strong>: Select weights for cell and ring models.</li>
+<li><strong>Start Batch Segmentation</strong>: Launches the batch worker with overall progress tracking.</li>
+</ul>
+<hr />
+<h2 id="5-edit-cells">5 - Edit Cells<a class="headerlink" href="#5-edit-cells" title="Permanent link">&para;</a></h2>
+<p>The <strong>Cells Layer Editor Widget</strong> provides interactive manual editing tools to correct, split, merge, add, or erase cell lumen detections.</p>
+<p><img alt="Screenshot: Cells Layer Editor Widget" src="../assets/screenshots/05_cells_layer_editor.png" />
+<em>Figure 8: Cells layer editor widget.</em></p>
+<h3 id="how-it-works_5">How It Works<a class="headerlink" href="#how-it-works_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Temporarily transfers the active <code>.cells</code> layer into an editable working state.</li>
+<li>Supports two distinct editing paradigms:</li>
+<li><strong>Edit As Raster</strong>: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.</li>
+<li><strong>Edit As Vector</strong>: Converts cell outlines into editable polygon shapes for precise vertex editing and splitting.</li>
+<li>When applied, rasterizes vectors back to label masks, re-indexes cell IDs uniquely, and preserves layer metadata.</li>
+</ul>
+<h3 id="vectorization-rasterization-smoothing">Vectorization, Rasterization &amp; Smoothing<a class="headerlink" href="#vectorization-rasterization-smoothing" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Vectorization &amp; Contour Smoothing</strong>:</li>
+<li>When entering vector editing mode, cell lumen boundaries are extracted from the binary mask using <code>cv2.findContours</code>.</li>
+<li>Contours are geometrically simplified and smoothed using the <strong>Ramer-Douglas-Peucker algorithm</strong> (<code>cv2.approxPolyDP</code> with <code>closed=True</code>) to eliminate single-pixel staircase artefacts while preserving anatomical shape fidelity.</li>
+<li>Simplified polygons with fewer than 3 vertices are automatically discarded.</li>
+<li><strong>Rasterization</strong>:</li>
+<li>When applying vector edits, polygon vertices are rounded to integer pixel coordinates and filled onto a zero-initialized raster grid via OpenCV polygon contour rendering (<code>cv2.drawContours</code>). No secondary morphological smoothing is applied during this rasterization step.</li>
+<li><strong>Corresponding Settings &amp; Default Values</strong>:</li>
+<li><code>vectorization.cells_tolerance</code>: Maximum approximation distance <span class="arithmatex">\(\epsilon\)</span> (in pixels) for Douglas-Peucker contour simplification. (<em>Default:</em> <code>1</code>)</li>
+<li><code>vectorization.cells_edge_width</code>: Display line width (in pixels) of cell vector boundaries in the viewer. (<em>Default:</em> <code>5</code>)</li>
+<li><code>vectorization.cells_edge_color</code>: Display outline color for cell vector shapes. (<em>Default:</em> <code>"blue"</code>)</li>
+<li><code>vectorization.cells_face_color</code>: Fill color for cell vector shapes. (<em>Default:</em> <code>"cyan"</code>)</li>
+<li><code>rasterization.cells_color</code>: Default colormap color for rasterized cell lumens. (<em>Default:</em> <code>"lime"</code>)</li>
+</ul>
+<h3 id="key-controls_3">Key Controls<a class="headerlink" href="#key-controls_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Cells Layer</strong>: Dropdown selecting the target cells layer.</li>
+<li><strong>Edition Mode</strong>: Switch between <code>Edit As Raster</code> and <code>Edit As Vector</code>.</li>
+<li><strong>Edit Cells Geometries</strong>: Enters editing mode, hides original layers, and provides the temporary working canvas.</li>
+<li><strong>Apply Geometries Changes</strong>: Commits edits, updates the <code>.cells</code> layer, and exits editing mode.</li>
+<li><strong>Cancel Geometries Changes</strong>: Discards all pending modifications and restores the original layer state.</li>
+</ul>
+<hr />
+<h2 id="6-edit-rings">6 - Edit Rings<a class="headerlink" href="#6-edit-rings" title="Permanent link">&para;</a></h2>
+<p>The <strong>Rings Layer Editor Widget</strong> enables precise curation of annual tree-ring boundaries, outermost year re-numbering, and targeted model-assisted re-detection.</p>
+<p><img alt="Screenshot: Rings Layer Editor Widget" src="../assets/screenshots/06_rings_layer_editor.png" />
+<em>Figure 9: Rings layer editor with interactive shapes and year labels.</em></p>
+<h3 id="how-it-works_6">How It Works<a class="headerlink" href="#how-it-works_6" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Converts the raster ring mask into continuous polyline shapes representing each ring boundary.</li>
+<li>Displays real-time calendar year labels (<code>Rings Years</code> overlay) along the sample.</li>
+<li>Allows interactive vertex adjustments, insertion of missing boundaries, or deletion of false boundaries using napari shape tools.</li>
+<li>Includes a <strong>Lasso Selection Tool</strong> to select and delete unwanted boundary vertices over a designated area.</li>
+<li>Offers <strong>Re-run Rings Model</strong>: Re-runs the ring boundary detection AI specifically in areas where manual deletions occurred, using previous edits as boundary constraints.</li>
+<li>When saved, completes boundary paths from edge to edge, validates ring ordering, and reconstructs the colored ring mask.</li>
+</ol>
+<h3 id="vectorization-rasterization-smoothing_1">Vectorization, Rasterization &amp; Smoothing<a class="headerlink" href="#vectorization-rasterization-smoothing_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Vectorization &amp; Polyline Smoothing</strong>:</li>
+<li>Ring boundaries stored in the rings table (<code>RBXY</code> coordinate arrays) are converted into open polyline shapes (<code>path</code> shape type in napari).</li>
+<li>Polyline smoothing and vertex reduction are performed using the <strong>Ramer-Douglas-Peucker algorithm</strong> (<code>cv2.approxPolyDP</code> with <code>closed=False</code>). Setting the tolerance to <code>0</code> disables smoothing and preserves all original pixel coordinates.</li>
+<li>The same Douglas-Peucker simplification is applied to new boundary segments generated when using the interactive <strong>Re-run Rings Model</strong> feature.</li>
+<li><strong>Rasterization</strong>:</li>
+<li>When committing edits via <strong>Apply Geometries Changes</strong> (<code>update_rings_geometries</code> / <code>rasterize_rings</code>):<ol>
+<li>Boundary coordinates are rearranged from left to right (<code>rearrange_coordinates</code>), clipped to image boundaries (<code>horizontal_rings_clipping</code>), and horizontally extrapolated to touch the canvas edges from <span class="arithmatex">\(x=0\)</span> to <span class="arithmatex">\(x=\text{width}\)</span> (<code>horizontal_rings_completion</code>).</li>
+<li>Boundaries are chronologically ordered from the outermost (bark side) to innermost (pith side) based on polygon area above each boundary (<code>calculate_polygon_area</code>).</li>
+<li>Adjacent boundary pairs are joined into closed polygons and rasterized into integer label masks using OpenCV filled polygon rendering (<code>cv2.fillPoly</code>).</li>
+</ol>
+</li>
+<li><strong>Corresponding Settings &amp; Default Values</strong>:</li>
+<li><code>vectorization.rings_tolerance</code>: Maximum approximation distance <span class="arithmatex">\(\epsilon\)</span> (in pixels) for Douglas-Peucker polyline smoothing. Set to <code>0</code> to disable simplification. (<em>Default:</em> <code>5</code>)</li>
+<li><code>vectorization.rings_edge_width</code>: Display line thickness (in pixels) for ring boundary polylines. (<em>Default:</em> <code>10</code>)</li>
+<li><code>vectorization.rings_edge_color</code>: Display color for active ring boundary polylines. (<em>Default:</em> <code>"black"</code>)</li>
+<li><code>vectorization.rerun_interactive_edge_color</code>: Display color for newly detected boundaries generated by the interactive AI re-run tool. (<em>Default:</em> <code>"lime"</code>)</li>
+<li><code>rasterization.uncomplete_ring_value</code>: Integer label assigned to the topmost uncompleted ring zone. (<em>Default:</em> <code>-1</code>)</li>
+<li><code>rasterization.uncomplete_ring_color</code>: Display color for uncompleted ring regions. (<em>Default:</em> <code>"red"</code>)</li>
+<li><code>rasterization.rings_color_sequence</code>: List of alternating colors assigned cyclically to successive annual rings. (<em>Default:</em> <code>["blue", "green", "yellow", "purple", "orange", "cyan", "brown", "pink", "gray", "lime"]</code>)</li>
+</ul>
+<h3 id="key-controls-options_2">Key Controls &amp; Options<a class="headerlink" href="#key-controls-options_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Last Ring Year (SpinBox)</strong>: Specifies the calendar year of the outermost complete annual ring.</li>
+<li><strong>Edit Rings Geometries</strong>: Enters vector polyline editing mode and displays boundary lines.</li>
+<li><strong>Lasso Selection</strong>: Checkbox activating lasso-based vertex selection.</li>
+<li><strong>Delete Lasso Vertices</strong>: Removes all vertices enclosed by the lasso selection.</li>
+<li><strong>Re-run Rings Model</strong>: Re-evaluates ring boundaries with tunable parameters:</li>
+<li><em>Confidence Threshold</em>: Minimum model confidence for boundary detection.</li>
+<li><em>Min Peak Distance</em>: Minimum distance between adjacent ring boundaries.</li>
+<li><em>Edge Margin</em>: Margin around borders excluded from peak detection.</li>
+<li><strong>Apply Geometries Changes</strong>: Validates topology, updates <code>.rings</code> labels, updates <code>.rings_table.txt</code>, and saves year metadata.</li>
+<li><strong>Cancel Geometries Changes</strong>: Reverts to original ring boundaries.</li>
+</ul>
+<hr />
+<h2 id="7-visual-cross-dating">7 - Visual Cross-Dating<a class="headerlink" href="#7-visual-cross-dating" title="Permanent link">&para;</a></h2>
+<p>The <strong>Cross-Dating Plotter Widget</strong> couples tree-ring width (TRW) time series derived from detected rings with master reference chronologies in an interactive plotting environment.</p>
+<p><img alt="Screenshot: Cross-Dating Plotter Widget" src="../assets/screenshots/07_cross_dating_plotter.png" />
+<em>Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.</em></p>
+<h3 id="how-it-works_7">How It Works<a class="headerlink" href="#how-it-works_7" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Computes mean ring width (MRW) from the ring boundaries currently in the viewer.</li>
+<li>Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.</li>
+<li>Allows interactive shifting along the time axis (year offset slider) or automated alignment to evaluate dating synchronization.</li>
+<li>Calculates statistical synchrony metrics in real time:</li>
+<li><strong>Correlation coefficient (<span class="arithmatex">\(r\)</span>)</strong></li>
+<li><strong>Gleichläufigkeit (GLK / % sign agreement)</strong></li>
+<li><strong><span class="arithmatex">\(t\)</span>-value / statistical significance</strong></li>
+<li><strong>Bidirectional Viewport Linking</strong>: Clicking any data point in the cross-dating plot automatically centers and zooms the napari viewer onto the corresponding tree-ring boundary in the image.</li>
+</ul>
+<h3 id="cross-dating-files-discovery-folder-hierarchy-traversal">Cross-Dating Files Discovery &amp; Folder Hierarchy Traversal<a class="headerlink" href="#cross-dating-files-discovery-folder-hierarchy-traversal" title="Permanent link">&para;</a></h3>
+<p>When a sample's tree-ring layer is selected in napari, the widget automatically locates associated cross-dating text files using an upward directory traversal algorithm:</p>
+<ol>
+<li><strong>Starting Point</strong>: The search begins in the directory containing the active sample scan (determined from <code>sample_stem_path</code>, the layer's file path, or the global <code>project_directory</code>).</li>
+<li><strong>Search Direction (Strictly Upward)</strong>:<ul>
+<li>The search is strictly <strong>upward</strong> (from the sample's directory towards the root of the file system).</li>
+<li>The widget does <strong>not</strong> search downwards into subdirectories.</li>
+</ul>
+</li>
+<li><strong>Search Pattern &amp; Prefix Requirements</strong>:<ul>
+<li>The search matches files using the pattern <code>*&lt;crossdating_file_extension&gt;</code>, where <code>&lt;crossdating_file_extension&gt;</code> is the configured extension in <code>settings.json</code> under <code>file_extensions.crossdating_file_extension</code> (by default <code>[".crossdating", ".txt"]</code>, which concatenates to <code>.crossdating.txt</code>).</li>
+<li><strong>Prefixes are supported</strong>: Because of the leading wildcard <code>*</code>, any custom prefix before the extension is detected (e.g., <code>rings_series.crossdating.txt</code>, <code>siteA_chronology.crossdating.txt</code>, or <code>conifer_ref.crossdating.txt</code>).</li>
+<li><strong>Suffixes are NOT supported after the extension</strong>: The file must strictly end with the configured cross-dating extension (e.g., <code>.crossdating.txt</code>). If a file has an additional suffix after the extension (e.g., <code>.crossdating.txt.bak</code>) or a different extension (such as <code>.csv</code> when <code>.crossdating.txt</code> is configured), it will not be matched unless the extension setting in <code>settings.json</code> is updated.</li>
+</ul>
+</li>
+<li><strong>Upward Directory Tree Traversal Process</strong>:<ul>
+<li>The widget first inspects the sample's immediate folder (<code>current_path.glob(pattern)</code>).</li>
+<li>If one or more matching cross-dating files are found in that folder, search stops and those files are loaded.</li>
+<li>If no matching file is found, it moves up to the parent directory (<code>current_path = current_path.parent</code>) and repeats the check.</li>
+<li>The upward search continues through parent folders until matching files are found or it reaches the file system root.</li>
+<li><strong>Architectural Workflow</strong>: This allows placing a single global reference file at the project root directory (e.g., <code>&lt;project_root&gt;/rings_series.crossdating.txt</code>) to serve all samples in subfolders, or placing local reference files in specific sample subfolders (e.g., <code>&lt;project_root&gt;/SiteA/rings_series.crossdating.txt</code>), which automatically take priority for samples located within <code>SiteA</code>.</li>
+</ul>
+</li>
+</ol>
+<h3 id="behavior-when-multiple-cross-dating-files-are-present">Behavior When Multiple Cross-Dating Files Are Present<a class="headerlink" href="#behavior-when-multiple-cross-dating-files-are-present" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Multiple Files in the Same Directory</strong>:</li>
+<li>If two or more matching cross-dating files exist within the first directory where matches are found (e.g., <code>&lt;project_root&gt;/rings_series_site1.crossdating.txt</code> and <code>&lt;project_root&gt;/rings_series_site2.crossdating.txt</code>):<ul>
+<li>All discovered cross-dating files are collected and populated into the <strong>Crossdating File</strong> dropdown combobox (<code>_crossdating_file_combo</code>).</li>
+<li>The widget automatically selects the first file in the list by default.</li>
+<li>Users can freely switch between files using the <strong>Crossdating File</strong> dropdown. Selecting a different file immediately re-reads the dataset, recalculates the series average, updates the <strong>Reference Series</strong> dropdown with all series columns from that file, and refreshes the plot.</li>
+</ul>
+</li>
+<li><strong>Files in Different Directory Levels</strong>:</li>
+<li>Because traversal stops at the first directory containing matches, a cross-dating file located in a sample's local subfolder takes precedence over a cross-dating file located in parent or root directories.</li>
+</ul>
+<h3 id="key-controls-options_3">Key Controls &amp; Options<a class="headerlink" href="#key-controls-options_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Crossdating File Dropdown</strong>: Selects among multiple detected cross-dating files in the directory tree.</li>
+<li><strong>Reference Series Dropdown</strong>: Selects from individual series, site chronologies, or the auto-computed <code>"average"</code> column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.</li>
+<li><strong>Find Best Overlap Button</strong>: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.</li>
+<li><strong>Year Range &amp; Width Range Dual Sliders</strong>: Interactively set X (calendar year) and Y (ring width in <span class="arithmatex">\(\mu\text{m}\)</span>) viewing windows.</li>
+<li><strong>Offset Slider</strong>: Manually shifts sample dating by <span class="arithmatex">\(-50\)</span> to <span class="arithmatex">\(+50\)</span> years relative to the reference chronology.</li>
+<li><strong>Apply Changes Button</strong>: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the <code>.rings</code> layer labels, and records the new outermost year in sample metadata.</li>
+<li><strong>Export Plot Button</strong>: Saves the current cross-dating plot as a publication-ready <code>.jpg</code> image in the sample directory and records the validated reference series in <code>&lt;sample_name&gt;.metadata.json</code>.</li>
+</ul>
+<hr />
+<h2 id="8-save-cells-rings-editing">8 - Save Cells &amp; Rings Editing<a class="headerlink" href="#8-save-cells-rings-editing" title="Permanent link">&para;</a></h2>
+<p>The <strong>Samples Saving Widget</strong> writes modified cell masks, ring boundaries, and updated sample metadata from napari back to their respective files on disk.</p>
+<p><img alt="Screenshot: Samples Saving Widget" src="../assets/screenshots/08_samples_saving_widget.png" />
+<em>Figure 11: Samples saving widget.</em></p>
+<h3 id="how-it-works_8">How It Works<a class="headerlink" href="#how-it-works_8" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Gathers data, layer parameters, and metadata from active napari layers.</li>
+<li>Formats and writes <code>.cells.png</code> (8-bit or 16-bit label rasters) and <code>.rings.tif</code>.</li>
+<li>Updates <code>&lt;sample_name&gt;.metadata.json</code> with updated ring counts, outermost year, and timestamps.</li>
+<li>Operates in a non-blocking background worker thread.</li>
+</ul>
+<h3 id="key-controls_4">Key Controls<a class="headerlink" href="#key-controls_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Save Selected Layers</strong>: Saves only the layers currently highlighted in the napari layer list.</li>
+<li><strong>Save All Layers</strong>: Saves all recognized ROXAS AI layers in the viewer.</li>
+<li><strong>Progress Bar</strong>: Shows disk write progress.</li>
+</ul>
+<hr />
+<h2 id="9a-measure-cells-rings-individual-image">9A - Measure Cells &amp; Rings (Individual Image)<a class="headerlink" href="#9a-measure-cells-rings-individual-image" title="Permanent link">&para;</a></h2>
+<p>The <strong>Single Sample Measurements Widget</strong> computes the full suite of Quantitative Wood Anatomy (QWA) metrics for the sample currently loaded in napari.</p>
+<p><img alt="Screenshot: Single Sample Measurements Widget" src="../assets/screenshots/09a_single_measurements_widget.png" />
+<em>Figure 12: Single sample measurements interface and parameter configuration.</em></p>
+<h3 id="how-it-works_9">How It Works<a class="headerlink" href="#how-it-works_9" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Combines the <code>.cells</code> lumen mask and <code>.rings</code> boundary geometry with spatial resolution metadata (<span class="arithmatex">\(\mu\text{m}/\text{px}\)</span>).</li>
+<li>Uses Continuous Wavelet Transform (CWT) and radial/tangential wall profiling to calculate:</li>
+<li><strong>Cell Lumen Metrics</strong>: Lumen Area (<span class="arithmatex">\(LA\)</span>), Hydraulic Diameter (<span class="arithmatex">\(DH\)</span>), Theoretical Hydraulic Conductance (<span class="arithmatex">\(KH\)</span>), Aspect Ratio (<span class="arithmatex">\(ASP\)</span>).</li>
+<li><strong>Cell Wall Thickness (CWT)</strong>: Radial (<span class="arithmatex">\(CWTRAD\)</span>), Tangential (<span class="arithmatex">\(CWTTAN\)</span>), Pith-side (<span class="arithmatex">\(CWTPI\)</span>), Bark-side (<span class="arithmatex">\(CWTBA\)</span>), Overall (<span class="arithmatex">\(CWTALL\)</span>).</li>
+<li><strong>Ring-Level Aggregates</strong>: Mean Ring Width (<span class="arithmatex">\(MRW\)</span>), Cell Density (<span class="arithmatex">\(CD\)</span>), Conductive Area Fraction (<span class="arithmatex">\(RCTA\)</span>), Mork's Index (<span class="arithmatex">\(RTSR\)</span>), Relative Anatomical Density (<span class="arithmatex">\(RWD\)</span>).</li>
+<li>Outputs tab-delimited tables: <code>&lt;sample_name&gt;.cells_table.txt</code> and <code>&lt;sample_name&gt;.rings_table.txt</code>.</li>
+</ul>
+<h3 id="key-parameters">Key Parameters<a class="headerlink" href="#key-parameters" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Sample Selection</strong>: Dropdown choosing the target sample from loaded layers.</li>
+<li><strong>Measure Cells / Measure Rings</strong>: Checkboxes selecting which measurement levels to run.</li>
+<li><strong>Cluster DBL CWT Threshold (<span class="arithmatex">\(\mu\text{m}\)</span>)</strong>: Maximum double cell wall distance for identifying clustered cells / pit fields.</li>
+<li><strong>Smoothing Kernel Size</strong>: Moving average kernel size for boundary smoothing (set to <code>1</code> to disable).</li>
+<li><strong>Wall Fraction for Thickness Measurement (<code>relwidth_cwt_integration</code>)</strong>: Fraction of cell wall profile used to integrate wall thickness measurements.</li>
+<li><strong>Measure Sample Button</strong>: Launches analysis in a background worker and attaches measurements to layer properties for interactive table inspection.</li>
+</ul>
+<hr />
+<h2 id="9b-batch-measure-cells-rings">9B - Batch Measure Cells &amp; Rings<a class="headerlink" href="#9b-batch-measure-cells-rings" title="Permanent link">&para;</a></h2>
+<p>The <strong>Batch Sample Measurements Widget</strong> runs the anatomical measurement engine across all samples in a project folder without requiring interactive display in the napari viewer.</p>
+<p><img alt="Screenshot: Batch Measurements Widget" src="../assets/screenshots/09b_batch_measurements_widget.png" />
+<em>Figure 13: Batch measurements widget.</em></p>
+<h3 id="how-it-works_10">How It Works<a class="headerlink" href="#how-it-works_10" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Discovers all matched pairs of <code>.cells</code> and <code>.rings</code> files in the project directory.</li>
+<li>Reads image scale and configuration from each sample's <code>.metadata.json</code>.</li>
+<li>Computes cell-level and ring-level measurement tables in batch mode.</li>
+<li>Writes <code>&lt;sample&gt;.cells_table.txt</code> and <code>&lt;sample&gt;.rings_table.txt</code> directly to each sample folder.</li>
+</ul>
+<h3 id="key-controls_5">Key Controls<a class="headerlink" href="#key-controls_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Input Directory</strong>: Path to project directory containing segmented samples.</li>
+<li><strong>Measure Cells / Measure Rings</strong>: Checkboxes for target measurement outputs.</li>
+<li><strong>Measurement Configuration</strong>: Adjust global CWT thresholds, integration fractions, and smoothing settings.</li>
+<li><strong>Start Batch Measurements Button</strong>: Runs batch extraction with real-time progress updates.</li>
+</ul>
+<hr />
+<h2 id="zz-settings">ZZ - Settings<a class="headerlink" href="#zz-settings" title="Permanent link">&para;</a></h2>
+<p>The <strong>Settings Widget</strong> is a visual preferences manager that allows adjusting global defaults, file extensions, visualization parameters, and hardware settings without manual editing of JSON files.</p>
+<p><img alt="Screenshot: Settings Manager Widget" src="../assets/screenshots/zz_settings_widget.png" />
+<em>Figure 14: Global settings manager widget with collapsible categories.</em></p>
+<h3 id="how-it-works_11">How It Works<a class="headerlink" href="#how-it-works_11" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Directly manages <code>settings.json</code> with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).</li>
+<li>Prevents syntax errors, invalid datatypes, or formatting corruption.</li>
+<li>Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.</li>
+</ul>
+<h3 id="key-settings-categories">Key Settings Categories<a class="headerlink" href="#key-settings-categories" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>File Extensions</strong>:<ul>
+<li>Standardized file suffixes for scans, cell masks, ring masks, metadata files, and tables.</li>
+</ul>
+</li>
+<li><strong>Hardware &amp; Processing</strong>:<ul>
+<li><code>try_to_use_gpu</code>: Toggle CUDA / GPU acceleration for deep-learning segmentation.</li>
+<li>Worker thread and batch settings.</li>
+</ul>
+</li>
+<li><strong>Visualization &amp; Vectorization</strong>:<ul>
+<li>Default colormaps for cell lumen layers.</li>
+<li>Ring color sequence (alternating colormap for adjacent annual rings).</li>
+<li>Display line widths and point sizes.</li>
+</ul>
+</li>
+<li><strong>Measurement Defaults</strong>:<ul>
+<li>Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.</li>
+</ul>
+</li>
+<li><strong>Metadata Schema</strong>:<ul>
+<li>Default metadata prompts and fields presented during sample preparation.</li>
+</ul>
+</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
