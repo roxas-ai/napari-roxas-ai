@@ -22,8 +22,8 @@ def test_cells_layer_editor_lasso_selection_and_deletion(make_napari_viewer, qtb
     assert not widget._lasso_selection_checkbox.visible
     assert not widget._delete_lasso_cells_button.visible
 
-    # Set mode to Edit As Vector and enter edit mode
-    widget._edition_mode_combo.value = "Edit As Vector"
+    # Set mode to Vector and enter edit mode
+    widget._edition_mode_combo.value = "Vector"
     widget._edit_cells_geometries()
 
     # Wait for the background vectorization worker to complete
@@ -94,7 +94,7 @@ def test_lasso_delete_vertex_criteria(make_napari_viewer, qtbot):
 
     widget = CellsLayerEditorWidget(viewer)
     widget.show()
-    widget._edition_mode_combo.value = "Edit As Vector"
+    widget._edition_mode_combo.value = "Vector"
     widget._edit_cells_geometries()
 
     qtbot.wait_until(
@@ -162,7 +162,7 @@ def test_lasso_near_boundary(make_napari_viewer, qtbot):
 
     widget = CellsLayerEditorWidget(viewer)
     widget.show()
-    widget._edition_mode_combo.value = "Edit As Vector"
+    widget._edition_mode_combo.value = "Vector"
     widget._edit_cells_geometries()
 
     qtbot.wait_until(
@@ -267,7 +267,7 @@ def test_delete_selected_cells_button_enabled_disabled_state(make_napari_viewer,
 
     widget = CellsLayerEditorWidget(viewer)
     widget.show()
-    widget._edition_mode_combo.value = "Edit As Vector"
+    widget._edition_mode_combo.value = "Vector"
     widget._edit_cells_geometries()
 
     qtbot.wait_until(
@@ -325,10 +325,13 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert hasattr(widget, "_progress_bar")
     assert not widget._progress_bar.visible
     assert widget._progress_bar.label == "Progress"
+    assert widget._edition_mode_combo.label == "Editing Mode"
+    assert tuple(widget._edition_mode_combo.choices) == ("Vector", "Raster")
+    assert widget._edition_mode_combo.value == "Vector"
 
-    # Layout order: save button is after edition mode combo, progress bar is after save button
+    # Layout order: save button is after edition mode row, progress bar is after save button
     widget_list = list(widget)
-    combo_idx = widget_list.index(widget._edition_mode_combo)
+    combo_idx = widget_list.index(widget._edition_mode_row)
     save_btn_idx = widget_list.index(widget._save_all_layers_button)
     prog_bar_idx = widget_list.index(widget._progress_bar)
     assert save_btn_idx == combo_idx + 1
@@ -338,6 +341,7 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert widget._save_all_layers_button.enabled
     assert widget._edit_cells_geometries_button.enabled
     assert widget._edition_mode_combo.enabled
+    assert widget._edition_mode_row.enabled
 
     saved_how = None
 
@@ -351,11 +355,13 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert not widget._save_all_layers_button.enabled
     assert not widget._edit_cells_geometries_button.enabled
     assert not widget._edition_mode_combo.enabled
+    assert not widget._edition_mode_row.enabled
 
     # Simulate worker completion if worker_thread exists
     widget._save_all_layers_button.enabled = True
     widget._edit_cells_geometries_button.enabled = True
     widget._edition_mode_combo.enabled = True
+    widget._edition_mode_row.enabled = True
 
     # Progress bar updates
     widget._update_progress(1, 2)
@@ -363,7 +369,7 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert widget._progress_bar.visible
 
     # 3. Enter raster edit mode -> button should be hidden
-    widget._edition_mode_combo.value = "Edit As Raster"
+    widget._edition_mode_combo.value = "Raster"
     widget._edit_cells_geometries()
     assert not widget._save_all_layers_button.visible
     assert not widget._progress_bar.visible
@@ -373,7 +379,7 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert widget._save_all_layers_button.visible
 
     # 4. Enter vector edit mode -> button should be hidden
-    widget._edition_mode_combo.value = "Edit As Vector"
+    widget._edition_mode_combo.value = "Vector"
     widget._edit_cells_geometries()
     qtbot.wait_until(
         lambda: "Cells Modification" in viewer.layers,

@@ -114,10 +114,19 @@ class CellsLayerEditorWidget(Container):
 
         # Create an edition mode combo box
         self._edition_mode_combo = ComboBox(
-            label="Edition Mode",
-            choices=["Edit As Vector", "Edit As Raster"],
-            value="Edit As Vector",
+            label="Editing Mode",
+            choices=["Vector", "Raster"],
+            value="Vector",
         )
+        self._edition_mode_row = Container(
+            widgets=[self._edition_mode_combo],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._edition_mode_row.native, "layout"):
+            layout = self._edition_mode_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
 
         # Create a button to save all layers
         self._saving_widget = SamplesSavingWidget(self._viewer)
@@ -154,7 +163,7 @@ class CellsLayerEditorWidget(Container):
             [
                 self._lasso_container,
                 self._edit_cells_geometries_button,
-                self._edition_mode_combo,
+                self._edition_mode_row,
                 self._save_all_layers_button,
                 self._progress_bar,
                 self._cancel_cells_geometries_button,
@@ -349,7 +358,7 @@ class CellsLayerEditorWidget(Container):
             show_info(f"Error during cell deletion: {str(e)}")
         finally:
             self._lasso_selection_checkbox.value = False
-            if self._edition_mode == "Edit As Vector":
+            if self._edition_mode == "Vector":
                 self._lasso_container.visible = True
 
     def _restore_original_visibility(self) -> None:
@@ -369,6 +378,7 @@ class CellsLayerEditorWidget(Container):
         self._save_all_layers_button.enabled = False
         self._edit_cells_geometries_button.enabled = False
         self._edition_mode_combo.enabled = False
+        self._edition_mode_row.enabled = False
         self._saving_widget._save_layers(how="all")
         if hasattr(self._saving_widget, "worker") and self._saving_widget.worker is not None:
             self._saving_widget.worker.progress.connect(self._update_progress)
@@ -381,6 +391,9 @@ class CellsLayerEditorWidget(Container):
             )
             self._saving_widget.worker_thread.finished.connect(
                 lambda: setattr(self._edition_mode_combo, "enabled", True)
+            )
+            self._saving_widget.worker_thread.finished.connect(
+                lambda: setattr(self._edition_mode_row, "enabled", True)
             )
             self._saving_widget.worker_thread.finished.connect(
                 lambda: setattr(self._progress_bar, "visible", False)
@@ -416,9 +429,10 @@ class CellsLayerEditorWidget(Container):
         sample_name = self.input_layer.metadata.get("sample_name")
         sample_stem_path = self.input_layer.metadata.get("sample_stem_path")
 
-        if self._edition_mode == "Edit As Raster":
+        if self._edition_mode == "Raster":
             # Update button visibility
             self._edition_mode_combo.visible = False
+            self._edition_mode_row.visible = False
             self._edit_cells_geometries_button.visible = False
             self._save_all_layers_button.visible = False
             self._progress_bar.visible = False
@@ -445,10 +459,11 @@ class CellsLayerEditorWidget(Container):
             if sample_stem_path is not None:
                 work_layer.metadata["sample_stem_path"] = sample_stem_path
 
-        elif self._edition_mode == "Edit As Vector":
+        elif self._edition_mode == "Vector":
             # Disable controls while background worker is running
             self._edit_cells_geometries_button.enabled = False
             self._edition_mode_combo.enabled = False
+            self._edition_mode_row.enabled = False
             self._save_all_layers_button.enabled = False
             show_info("Vectorizing cells, please wait...")
 
@@ -479,6 +494,7 @@ class CellsLayerEditorWidget(Container):
 
                     # Update button visibility for vector editing
                     self._edition_mode_combo.visible = False
+                    self._edition_mode_row.visible = False
                     self._edit_cells_geometries_button.visible = False
                     self._save_all_layers_button.visible = False
                     self._progress_bar.visible = False
@@ -492,11 +508,13 @@ class CellsLayerEditorWidget(Container):
                 finally:
                     self._edit_cells_geometries_button.enabled = True
                     self._edition_mode_combo.enabled = True
+                    self._edition_mode_row.enabled = True
                     self._save_all_layers_button.enabled = True
 
             def _on_vectorization_errored(error):
                 self._edit_cells_geometries_button.enabled = True
                 self._edition_mode_combo.enabled = True
+                self._edition_mode_row.enabled = True
                 self._save_all_layers_button.enabled = True
                 self._restore_original_visibility()
                 show_info(f"Vectorization failed: {error}")
@@ -526,6 +544,7 @@ class CellsLayerEditorWidget(Container):
 
         # Reset the button visibility
         self._edition_mode_combo.visible = True
+        self._edition_mode_row.visible = True
         self._edit_cells_geometries_button.visible = True
         self._save_all_layers_button.visible = True
         self._progress_bar.visible = False
@@ -547,11 +566,11 @@ class CellsLayerEditorWidget(Container):
         self._lasso_container.visible = False
         self._delete_lasso_cells_button.visible = False
 
-        if getattr(self, "_edition_mode", None) == "Edit As Raster":
+        if getattr(self, "_edition_mode", None) == "Raster":
             new_cells_raster = self._viewer.layers["Cells Modification"].data
             self._viewer.layers.remove("Cells Modification")
 
-        elif getattr(self, "_edition_mode", None) == "Edit As Vector":
+        elif getattr(self, "_edition_mode", None) == "Vector":
             # Recover new shapes data from the viewer
             new_cells_shapes = self._viewer.layers["Cells Modification"].data
             new_cells_shapes = [
@@ -572,6 +591,7 @@ class CellsLayerEditorWidget(Container):
 
         # Reset the button visibility
         self._edition_mode_combo.visible = True
+        self._edition_mode_row.visible = True
         self._edit_cells_geometries_button.visible = True
         self._save_all_layers_button.visible = True
         self._progress_bar.visible = False
