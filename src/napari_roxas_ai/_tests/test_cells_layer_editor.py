@@ -193,6 +193,63 @@ def test_lasso_near_boundary(make_napari_viewer, qtbot):
     assert np.allclose(edit_layer.data[0], cell_away)
 
 
+def test_overlapping_lassos_deletion(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((100, 100), dtype=np.uint8)
+    data[0:5, 0:5] = 1
+    viewer.add_labels(data, name="sample.cells")
+
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edition_mode_combo.value = "Vector"
+    widget._edit_cells_geometries()
+
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
+
+    edit_layer = viewer.layers["Cells Modification"]
+    widget._lasso_selection_checkbox.value = True
+    lasso_layer = viewer.layers["Lasso Selection"]
+
+    # Two overlapping lasso polygons:
+    # Lasso 1: [10, 10] to [40, 40]
+    lasso_1 = np.array([
+        [10, 10],
+        [10, 40],
+        [40, 40],
+        [40, 10]
+    ], dtype=np.float32)
+
+    # Lasso 2: [30, 30] to [60, 60] (overlaps with lasso_1 in [30, 30]..[40, 40])
+    lasso_2 = np.array([
+        [30, 30],
+        [30, 60],
+        [60, 60],
+        [60, 30]
+    ], dtype=np.float32)
+
+    lasso_layer.data = [lasso_1, lasso_2]
+
+    # Cell in lasso 1 only: [15, 15]..[25, 25]
+    cell_lasso1_only = np.array([[15, 15], [15, 25], [25, 25], [25, 15]], dtype=np.float32)
+    # Cell in lasso 2 only: [45, 45]..[55, 55]
+    cell_lasso2_only = np.array([[45, 45], [45, 55], [55, 55], [55, 45]], dtype=np.float32)
+    # Cell in the intersection: [32, 32]..[38, 38]
+    cell_intersection = np.array([[32, 32], [32, 38], [38, 38], [38, 32]], dtype=np.float32)
+    # Cell outside both: [80, 80]..[90, 90]
+    cell_outside = np.array([[80, 80], [80, 90], [90, 90], [90, 80]], dtype=np.float32)
+
+    edit_layer.data = [cell_lasso1_only, cell_lasso2_only, cell_intersection, cell_outside]
+
+    widget._execute_lasso_deletion()
+
+    # All three cells in lasso1, lasso2, and their intersection should be deleted
+    assert len(edit_layer.data) == 1
+    assert np.allclose(edit_layer.data[0], cell_outside)
+
+
 def test_layer_visibility_management_on_edit_and_cancel(make_napari_viewer, qtbot):
     viewer = make_napari_viewer()
     data = np.zeros((50, 50), dtype=np.uint8)

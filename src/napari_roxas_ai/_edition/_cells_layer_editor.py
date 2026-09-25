@@ -309,8 +309,10 @@ class CellsLayerEditorWidget(Container):
             height = max_r - min_r + 1
             width = max_c - min_c + 1
 
-            # Rasterize lasso polygons once into a local bounding box binary mask.
+            # Rasterize each lasso polygon into the local bounding box binary mask.
             # cv2.drawContours/fillPoly expects (x, y) = (col, row).
+            # Each polygon is filled individually so overlapping lassos union (OR operation)
+            # rather than toggling via even-odd rule.
             mask = np.zeros((height, width), dtype=np.uint8)
             lasso_cv_contours = [
                 np.round(
@@ -318,8 +320,9 @@ class CellsLayerEditorWidget(Container):
                 ).astype(np.int32)
                 for poly in lasso_shapes
             ]
-            cv2.fillPoly(mask, lasso_cv_contours, 1)
-            cv2.drawContours(mask, lasso_cv_contours, -1, 1, 1)
+            for poly_cnt in lasso_cv_contours:
+                cv2.fillPoly(mask, [poly_cnt], 1)
+                cv2.drawContours(mask, [poly_cnt], -1, 1, 1)
 
             remaining_shapes = []
             deleted_count = 0
