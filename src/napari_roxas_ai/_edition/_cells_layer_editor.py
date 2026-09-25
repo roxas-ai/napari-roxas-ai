@@ -394,7 +394,7 @@ class CellsLayerEditorWidget(Container):
                 if poly.shape[0] > 2:
                     cells_polygons.append(poly.squeeze(axis=1)[:, ::-1])
 
-            work_layer = self._viewer.add_shapes(
+            work_layer = napari.layers.Shapes(
                 cells_polygons,
                 shape_type="polygon",
                 face_color=settings.get("vectorization.cells_face_color"),
@@ -403,11 +403,13 @@ class CellsLayerEditorWidget(Container):
                 opacity=1,
                 name="Cells Modification",
                 scale=self.input_layer.scale,
+                ndim=2,
                 metadata={
                     "sample_name": sample_name,
                     "sample_stem_path": sample_stem_path,
                 },
             )
+            self._viewer.add_layer(work_layer)
 
         else:
             QMessageBox.warning(None, "Error", "Unknown edition mode selected")
