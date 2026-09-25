@@ -37,19 +37,19 @@ class CellsLayerEditorWidget(Container):
         self._viewer = viewer
         self.settings = SettingsManager()
 
-        # Create an edition mode combo box
-        self._edition_mode_combo = ComboBox(
-            label="Edition Mode",
-            choices=["Edit As Raster", "Edit As Vector"],
-            value="Edit As Raster",
-        )
-
         # Create a button to create the cells working layer
         self._edit_cells_geometries_button = PushButton(
             text="Edit Cells Geometries"
         )
         self._edit_cells_geometries_button.changed.connect(
             self._edit_cells_geometries
+        )
+
+        # Create an edition mode combo box
+        self._edition_mode_combo = ComboBox(
+            label="Edition Mode",
+            choices=["Edit As Vector", "Edit As Raster"],
+            value="Edit As Vector",
         )
 
         # Create a button to cancel the changes
@@ -71,8 +71,8 @@ class CellsLayerEditorWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._edition_mode_combo,
                 self._edit_cells_geometries_button,
+                self._edition_mode_combo,
                 self._cancel_cells_geometries_button,
                 self._apply_cells_geometries_button,
             ]
