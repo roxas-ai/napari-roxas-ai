@@ -11,6 +11,7 @@ from magicgui.widgets import (
     Container,
     PushButton,
 )
+from napari.qt.threading import thread_worker
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtCore import QTimer
@@ -25,6 +26,29 @@ if TYPE_CHECKING:
 Image.MAX_IMAGE_PIXELS = None
 
 settings = SettingsManager()
+
+
+@thread_worker
+def vectorize_cells_worker(layer_data: np.ndarray, tolerance: float):
+    """
+    Extract polygons from binary cells mask in a background worker thread.
+    """
+    contours, _ = cv2.findContours(
+        layer_data.astype("uint8"),
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    cells_polygons = []
+    for contour in contours:
+        if len(contour) < 3:
+            continue
+        if tolerance > 0:
+            poly = cv2.approxPolyDP(contour, epsilon=tolerance, closed=True)
+        else:
+            poly = contour
+        if poly.shape[0] > 2:
+            cells_polygons.append(poly.squeeze(axis=1)[:, ::-1])
+    return cells_polygons
 
 
 class CellsLayerEditorWidget(Container):
@@ -323,7 +347,7 @@ class CellsLayerEditorWidget(Container):
             pass
 
     def _edit_cells_geometries(self) -> None:
-        """Run the segmentation analysis in a separate thread."""
+        """Run the segmentation analysis / vectorization."""
         # Get the selected input layer
         input_layer = self._input_layer
         if not input_layer:
@@ -340,27 +364,19 @@ class CellsLayerEditorWidget(Container):
                 layer.visible = False
 
         self._edition_mode = self._edition_mode_combo.value
-
-        # Update button visibility
-        self._edition_mode_combo.visible = False
-        self._edit_cells_geometries_button.visible = False
-        self._cancel_cells_geometries_button.visible = True
-        self._apply_cells_geometries_button.visible = True
-
-        if self._edition_mode == "Edit As Vector":
-            self._lasso_container.visible = True
-            self._lasso_selection_checkbox.visible = True
-            self._lasso_selection_checkbox.value = False
-            self._delete_lasso_cells_button.visible = False
-        else:
-            self._lasso_container.visible = False
-
         self.input_layer = input_layer
 
         sample_name = self.input_layer.metadata.get("sample_name")
         sample_stem_path = self.input_layer.metadata.get("sample_stem_path")
 
         if self._edition_mode == "Edit As Raster":
+            # Update button visibility
+            self._edition_mode_combo.visible = False
+            self._edit_cells_geometries_button.visible = False
+            self._cancel_cells_geometries_button.visible = True
+            self._apply_cells_geometries_button.visible = True
+            self._lasso_container.visible = False
+
             colormap = defaultdict(lambda: [0, 0, 0, 0])
             colormap[1] = self.settings.get("vectorization.cells_face_color")
 
@@ -375,51 +391,70 @@ class CellsLayerEditorWidget(Container):
                     "sample_stem_path": sample_stem_path,
                 },
             )
+            if sample_name is not None:
+                work_layer.metadata["sample_name"] = sample_name
+            if sample_stem_path is not None:
+                work_layer.metadata["sample_stem_path"] = sample_stem_path
 
         elif self._edition_mode == "Edit As Vector":
-            contours, _ = cv2.findContours(
-                self.input_layer.data.astype("uint8"),
-                cv2.RETR_EXTERNAL,
-                cv2.CHAIN_APPROX_SIMPLE,
-            )
-            tolerance = float(settings.get("vectorization.cells_tolerance") or 0)
-            cells_polygons = []
-            for contour in contours:
-                if len(contour) < 3:
-                    continue
-                if tolerance > 0:
-                    poly = cv2.approxPolyDP(contour, epsilon=tolerance, closed=True)
-                else:
-                    poly = contour
-                if poly.shape[0] > 2:
-                    cells_polygons.append(poly.squeeze(axis=1)[:, ::-1])
+            # Disable controls while background worker is running
+            self._edit_cells_geometries_button.enabled = False
+            self._edition_mode_combo.enabled = False
+            show_info("Vectorizing cells, please wait...")
 
-            work_layer = napari.layers.Shapes(
-                cells_polygons,
-                shape_type="polygon",
-                face_color=settings.get("vectorization.cells_face_color"),
-                edge_color=settings.get("vectorization.cells_edge_color"),
-                edge_width=settings.get("vectorization.cells_edge_width"),
-                opacity=1,
-                name="Cells Modification",
-                scale=self.input_layer.scale,
-                ndim=2,
-                metadata={
-                    "sample_name": sample_name,
-                    "sample_stem_path": sample_stem_path,
-                },
-            )
-            self._viewer.add_layer(work_layer)
+            tolerance = float(settings.get("vectorization.cells_tolerance") or 0)
+
+            def _on_vectorization_finished(cells_polygons):
+                try:
+                    work_layer = napari.layers.Shapes(
+                        cells_polygons,
+                        shape_type="polygon",
+                        face_color=settings.get("vectorization.cells_face_color"),
+                        edge_color=settings.get("vectorization.cells_edge_color"),
+                        edge_width=settings.get("vectorization.cells_edge_width"),
+                        opacity=1,
+                        name="Cells Modification",
+                        scale=self.input_layer.scale,
+                        ndim=2,
+                        metadata={
+                            "sample_name": sample_name,
+                            "sample_stem_path": sample_stem_path,
+                        },
+                    )
+                    self._viewer.add_layer(work_layer)
+                    if sample_name is not None:
+                        work_layer.metadata["sample_name"] = sample_name
+                    if sample_stem_path is not None:
+                        work_layer.metadata["sample_stem_path"] = sample_stem_path
+
+                    # Update button visibility for vector editing
+                    self._edition_mode_combo.visible = False
+                    self._edit_cells_geometries_button.visible = False
+                    self._cancel_cells_geometries_button.visible = True
+                    self._apply_cells_geometries_button.visible = True
+
+                    self._lasso_container.visible = True
+                    self._lasso_selection_checkbox.visible = True
+                    self._lasso_selection_checkbox.value = False
+                    self._delete_lasso_cells_button.visible = False
+                finally:
+                    self._edit_cells_geometries_button.enabled = True
+                    self._edition_mode_combo.enabled = True
+
+            def _on_vectorization_errored(error):
+                self._edit_cells_geometries_button.enabled = True
+                self._edition_mode_combo.enabled = True
+                self._restore_original_visibility()
+                show_info(f"Vectorization failed: {error}")
+
+            worker = vectorize_cells_worker(self.input_layer.data, tolerance)
+            worker.returned.connect(_on_vectorization_finished)
+            worker.errored.connect(_on_vectorization_errored)
+            worker.start()
 
         else:
             QMessageBox.warning(None, "Error", "Unknown edition mode selected")
             return
-
-        # Attach required metadata so other widgets don't crash when iterating layers
-        if sample_name is not None:
-            work_layer.metadata["sample_name"] = sample_name
-        if sample_stem_path is not None:
-            work_layer.metadata["sample_stem_path"] = sample_stem_path
 
     def _cancel_cells_geometries(self) -> None:
         """Cancel the changes made to the input layer."""

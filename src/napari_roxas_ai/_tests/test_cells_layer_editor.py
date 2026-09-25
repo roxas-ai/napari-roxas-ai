@@ -26,6 +26,12 @@ def test_cells_layer_editor_lasso_selection_and_deletion(make_napari_viewer, qtb
     widget._edition_mode_combo.value = "Edit As Vector"
     widget._edit_cells_geometries()
 
+    # Wait for the background vectorization worker to complete
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers and isinstance(viewer.layers["Cells Modification"], Shapes),
+        timeout=5000,
+    )
+
     # In vector edit mode, lasso container is visible with checkbox unchecked
     assert widget._lasso_container.visible
     assert widget._lasso_selection_checkbox.visible
@@ -91,6 +97,11 @@ def test_lasso_delete_vertex_criteria(make_napari_viewer, qtbot):
     widget._edition_mode_combo.value = "Edit As Vector"
     widget._edit_cells_geometries()
 
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
+
     edit_layer = viewer.layers["Cells Modification"]
     widget._lasso_selection_checkbox.value = True
     lasso_layer = viewer.layers["Lasso Selection"]
@@ -153,6 +164,11 @@ def test_lasso_near_boundary(make_napari_viewer, qtbot):
     widget.show()
     widget._edition_mode_combo.value = "Edit As Vector"
     widget._edit_cells_geometries()
+
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
 
     edit_layer = viewer.layers["Cells Modification"]
     widget._lasso_selection_checkbox.value = True
@@ -228,6 +244,10 @@ def test_layer_visibility_management_on_apply_and_initially_hidden(make_napari_v
 
     # Enter edit mode
     widget._edit_cells_geometries()
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
     assert not rings_layer.visible
     assert not rings_years_layer.visible
 
@@ -249,6 +269,11 @@ def test_delete_selected_cells_button_enabled_disabled_state(make_napari_viewer,
     widget.show()
     widget._edition_mode_combo.value = "Edit As Vector"
     widget._edit_cells_geometries()
+
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
 
     # Initially hidden and enabled
     assert not widget._delete_lasso_cells_button.visible
