@@ -307,3 +307,80 @@ def test_delete_selected_cells_button_enabled_disabled_state(make_napari_viewer,
     widget._lasso_selection_checkbox.value = True
     assert widget._delete_lasso_cells_button.visible
     assert widget._delete_lasso_cells_button.enabled
+
+
+def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot, monkeypatch):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    viewer.add_labels(data, name="sample.cells")
+
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+
+    # 1. Start view checks
+    assert hasattr(widget, "_save_all_layers_button")
+    assert widget._save_all_layers_button.text == "Save All Layers"
+    assert widget._save_all_layers_button.visible
+    assert hasattr(widget, "_progress_bar")
+    assert not widget._progress_bar.visible
+    assert widget._progress_bar.label == "Progress"
+
+    # Layout order: save button is after edition mode combo, progress bar is after save button
+    widget_list = list(widget)
+    combo_idx = widget_list.index(widget._edition_mode_combo)
+    save_btn_idx = widget_list.index(widget._save_all_layers_button)
+    prog_bar_idx = widget_list.index(widget._progress_bar)
+    assert save_btn_idx == combo_idx + 1
+    assert prog_bar_idx == save_btn_idx + 1
+
+    # 2. Check delegate callback when clicked and disabled controls
+    assert widget._save_all_layers_button.enabled
+    assert widget._edit_cells_geometries_button.enabled
+    assert widget._edition_mode_combo.enabled
+
+    saved_how = None
+
+    def fake_save_layers(how):
+        nonlocal saved_how
+        saved_how = how
+
+    monkeypatch.setattr(widget._saving_widget, "_save_layers", fake_save_layers)
+    widget._save_all_layers_button.native.click()
+    assert saved_how == "all"
+    assert not widget._save_all_layers_button.enabled
+    assert not widget._edit_cells_geometries_button.enabled
+    assert not widget._edition_mode_combo.enabled
+
+    # Simulate worker completion if worker_thread exists
+    widget._save_all_layers_button.enabled = True
+    widget._edit_cells_geometries_button.enabled = True
+    widget._edition_mode_combo.enabled = True
+
+    # Progress bar updates
+    widget._update_progress(1, 2)
+    assert widget._progress_bar.value == 50
+    assert widget._progress_bar.visible
+
+    # 3. Enter raster edit mode -> button should be hidden
+    widget._edition_mode_combo.value = "Edit As Raster"
+    widget._edit_cells_geometries()
+    assert not widget._save_all_layers_button.visible
+    assert not widget._progress_bar.visible
+
+    # Cancel -> button visible again
+    widget._cancel_cells_geometries()
+    assert widget._save_all_layers_button.visible
+
+    # 4. Enter vector edit mode -> button should be hidden
+    widget._edition_mode_combo.value = "Edit As Vector"
+    widget._edit_cells_geometries()
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
+    assert not widget._save_all_layers_button.visible
+
+    # Apply -> button visible again
+    widget._apply_cells_geometries()
+    assert widget._save_all_layers_button.visible

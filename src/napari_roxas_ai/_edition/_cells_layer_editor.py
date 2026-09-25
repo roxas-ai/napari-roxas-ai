@@ -9,6 +9,7 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
+    ProgressBar,
     PushButton,
 )
 from napari.qt.threading import thread_worker
@@ -17,6 +18,7 @@ from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
 
+from napari_roxas_ai._saving._samples_saving_widget import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 
 if TYPE_CHECKING:
@@ -117,6 +119,20 @@ class CellsLayerEditorWidget(Container):
             value="Edit As Vector",
         )
 
+        # Create a button to save all layers
+        self._saving_widget = SamplesSavingWidget(self._viewer)
+        self._save_all_layers_button = PushButton(
+            text="Save All Layers", visible=True
+        )
+        self._save_all_layers_button.changed.connect(
+            self._save_all_layers
+        )
+
+        # Add a progress bar with a description
+        self._progress_bar = ProgressBar(
+            value=0, min=0, max=100, visible=False, label="Progress"
+        )
+
         # Create a button to cancel the changes
         self._cancel_cells_geometries_button = PushButton(
             text="Cancel Cell Changes", visible=False
@@ -139,6 +155,8 @@ class CellsLayerEditorWidget(Container):
                 self._lasso_container,
                 self._edit_cells_geometries_button,
                 self._edition_mode_combo,
+                self._save_all_layers_button,
+                self._progress_bar,
                 self._cancel_cells_geometries_button,
                 self._apply_cells_geometries_button,
             ]
@@ -346,6 +364,35 @@ class CellsLayerEditorWidget(Container):
         except Exception:
             pass
 
+    def _save_all_layers(self) -> None:
+        """Save all layers using the saving widget logic with progress bar."""
+        self._save_all_layers_button.enabled = False
+        self._edit_cells_geometries_button.enabled = False
+        self._edition_mode_combo.enabled = False
+        self._saving_widget._save_layers(how="all")
+        if hasattr(self._saving_widget, "worker") and self._saving_widget.worker is not None:
+            self._saving_widget.worker.progress.connect(self._update_progress)
+        if hasattr(self._saving_widget, "worker_thread") and self._saving_widget.worker_thread is not None:
+            self._saving_widget.worker_thread.finished.connect(
+                lambda: setattr(self._save_all_layers_button, "enabled", True)
+            )
+            self._saving_widget.worker_thread.finished.connect(
+                lambda: setattr(self._edit_cells_geometries_button, "enabled", True)
+            )
+            self._saving_widget.worker_thread.finished.connect(
+                lambda: setattr(self._edition_mode_combo, "enabled", True)
+            )
+            self._saving_widget.worker_thread.finished.connect(
+                lambda: setattr(self._progress_bar, "visible", False)
+            )
+
+    def _update_progress(self, current: int, total: int) -> None:
+        """Update the progress bar."""
+        if total > 0:
+            percentage = int(100 * current / total)
+            self._progress_bar.value = percentage
+            self._progress_bar.visible = True
+
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis / vectorization."""
         # Get the selected input layer
@@ -373,6 +420,8 @@ class CellsLayerEditorWidget(Container):
             # Update button visibility
             self._edition_mode_combo.visible = False
             self._edit_cells_geometries_button.visible = False
+            self._save_all_layers_button.visible = False
+            self._progress_bar.visible = False
             self._cancel_cells_geometries_button.visible = True
             self._apply_cells_geometries_button.visible = True
             self._lasso_container.visible = False
@@ -400,6 +449,7 @@ class CellsLayerEditorWidget(Container):
             # Disable controls while background worker is running
             self._edit_cells_geometries_button.enabled = False
             self._edition_mode_combo.enabled = False
+            self._save_all_layers_button.enabled = False
             show_info("Vectorizing cells, please wait...")
 
             tolerance = float(settings.get("vectorization.cells_tolerance") or 0)
@@ -430,6 +480,8 @@ class CellsLayerEditorWidget(Container):
                     # Update button visibility for vector editing
                     self._edition_mode_combo.visible = False
                     self._edit_cells_geometries_button.visible = False
+                    self._save_all_layers_button.visible = False
+                    self._progress_bar.visible = False
                     self._cancel_cells_geometries_button.visible = True
                     self._apply_cells_geometries_button.visible = True
 
@@ -440,10 +492,12 @@ class CellsLayerEditorWidget(Container):
                 finally:
                     self._edit_cells_geometries_button.enabled = True
                     self._edition_mode_combo.enabled = True
+                    self._save_all_layers_button.enabled = True
 
             def _on_vectorization_errored(error):
                 self._edit_cells_geometries_button.enabled = True
                 self._edition_mode_combo.enabled = True
+                self._save_all_layers_button.enabled = True
                 self._restore_original_visibility()
                 show_info(f"Vectorization failed: {error}")
 
@@ -473,6 +527,8 @@ class CellsLayerEditorWidget(Container):
         # Reset the button visibility
         self._edition_mode_combo.visible = True
         self._edit_cells_geometries_button.visible = True
+        self._save_all_layers_button.visible = True
+        self._progress_bar.visible = False
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
 
@@ -517,6 +573,8 @@ class CellsLayerEditorWidget(Container):
         # Reset the button visibility
         self._edition_mode_combo.visible = True
         self._edit_cells_geometries_button.visible = True
+        self._save_all_layers_button.visible = True
+        self._progress_bar.visible = False
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
 
