@@ -6,12 +6,14 @@ import napari.layers
 import numpy as np
 import pandas as pd
 from magicgui.widgets import (
+    CheckBox,
     ComboBox,
     Container,
     PushButton,
 )
 from napari.utils.notifications import show_info
 from PIL import Image
+from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
 
 from napari_roxas_ai._settings import SettingsManager
@@ -33,9 +35,45 @@ class CellsLayerEditorWidget(Container):
         return valid_layers[0] if valid_layers else None
 
     def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__()
+        super().__init__(labels=False)
         self._viewer = viewer
         self.settings = SettingsManager()
+
+        # --- LASSO SELECTION UI ---
+        self._lasso_selection_checkbox = CheckBox(
+            label="Lasso Select",
+            value=False,
+            visible=False,
+        )
+        self._lasso_selection_checkbox.changed.connect(
+            lambda val: self._toggle_lasso_selection_mode(val)
+        )
+
+        self._delete_lasso_cells_button = PushButton(
+            text="Delete Selected Cells",
+            visible=False,
+        )
+        self._delete_lasso_cells_button.changed.connect(
+            self._execute_lasso_deletion
+        )
+
+        # Horizontal row for lasso selection controls
+        self._lasso_container = Container(
+            widgets=[
+                self._lasso_selection_checkbox,
+                self._delete_lasso_cells_button,
+            ],
+            layout="horizontal",
+            labels=False,
+            visible=False,
+        )
+        self._lasso_container.visible = False
+
+        if hasattr(self._lasso_container.native, "layout"):
+            layout = self._lasso_container.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(10)
 
         # Create a button to create the cells working layer
         self._edit_cells_geometries_button = PushButton(
@@ -71,6 +109,7 @@ class CellsLayerEditorWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
+                self._lasso_container,
                 self._edit_cells_geometries_button,
                 self._edition_mode_combo,
                 self._cancel_cells_geometries_button,
@@ -93,6 +132,188 @@ class CellsLayerEditorWidget(Container):
 
         return valid_layers
 
+    def _deferred_remove_layer(self, name: str) -> None:
+        """Safely remove a layer by name in the next event loop iteration."""
+        def _rm():
+            if name in self._viewer.layers:
+                try:
+                    self._viewer.layers[name].visible = False
+                    self._viewer.layers.remove(name)
+                except Exception:
+                    pass
+
+        QTimer.singleShot(50, _rm)
+
+    def _toggle_lasso_selection_mode(self, enabled: bool) -> None:
+        """
+        Toggle the lasso selection mode.
+        When enabled, a temporary yellow shapes layer is created to allow users
+        to draw polygons defining areas for cell deletion.
+        """
+        self._delete_lasso_cells_button.visible = enabled
+
+        if enabled:
+            scale = [1.0, 1.0]
+            try:
+                if "Cells Modification" in self._viewer.layers:
+                    scale = self._viewer.layers["Cells Modification"].scale
+                elif self._input_layer is not None:
+                    scale = self._input_layer.scale
+            except Exception:
+                pass
+
+            if "Lasso Selection" not in self._viewer.layers:
+                self._viewer.add_shapes(
+                    name="Lasso Selection",
+                    shape_type="polygon",
+                    edge_color="yellow",
+                    face_color=[1, 1, 0, 0.3],
+                    edge_width=5,
+                    scale=scale,
+                )
+
+            if "Lasso Selection" in self._viewer.layers:
+                lasso_layer = self._viewer.layers["Lasso Selection"]
+                self._viewer.layers.selection.active = lasso_layer
+                lasso_layer.mode = "add_polygon_lasso"
+
+            self._delete_lasso_cells_button.visible = True
+            show_info("Lasso Mode: Draw polygons and click 'Delete Selected Cells' (or press 'Delete')")
+        else:
+            if "Lasso Selection" in self._viewer.layers:
+                self._deferred_remove_layer("Lasso Selection")
+
+            if "Cells Modification" in self._viewer.layers:
+                try:
+                    edit_layer = self._viewer.layers["Cells Modification"]
+                    self._viewer.layers.selection.active = edit_layer
+                    if isinstance(edit_layer, napari.layers.Shapes):
+                        edit_layer.mode = "direct"
+                except (ValueError, KeyError, IndexError):
+                    pass
+            self._delete_lasso_cells_button.visible = False
+
+        # Bind the Delete key to our custom handler
+        @self._viewer.bind_key("Delete", overwrite=True)
+        def _delete_selected(viewer):
+            if not self._cancel_cells_geometries_button.visible:
+                return
+
+            if self._lasso_selection_checkbox.value:
+                if "Lasso Selection" in self._viewer.layers:
+                    self._viewer.layers["Lasso Selection"].selected_data = set()
+                self._execute_lasso_deletion()
+                return
+
+    @staticmethod
+    def _do_polygons_intersect(poly1: np.ndarray, poly2: np.ndarray) -> bool:
+        """
+        Check if two polygons (Nx2 and Mx2 in (row, col) or (x, y)) touch or overlap.
+        """
+        pts1 = np.array(poly1, dtype=np.float32)
+        pts2 = np.array(poly2, dtype=np.float32)
+
+        # 1. Any vertex of poly1 inside or on boundary of poly2
+        for pt in pts1:
+            if cv2.pointPolygonTest(pts2, (float(pt[0]), float(pt[1])), False) >= 0:
+                return True
+
+        # 2. Any vertex of poly2 inside or on boundary of poly1
+        for pt in pts2:
+            if cv2.pointPolygonTest(pts1, (float(pt[0]), float(pt[1])), False) >= 0:
+                return True
+
+        # 3. Check if any edge of poly1 intersects any edge of poly2
+        def _ccw(A, B, C):
+            return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+
+        def _intersect(A, B, C, D):
+            return _ccw(A, C, D) != _ccw(B, C, D) and _ccw(A, B, C) != _ccw(A, B, D)
+
+        n1 = len(pts1)
+        n2 = len(pts2)
+        for i in range(n1):
+            p1a, p1b = pts1[i], pts1[(i + 1) % n1]
+            for j in range(n2):
+                p2a, p2b = pts2[j], pts2[(j + 1) % n2]
+                if _intersect(p1a, p1b, p2a, p2b):
+                    return True
+
+        return False
+
+    def _execute_lasso_deletion(self) -> None:
+        """
+        Deletes any cells in 'Cells Modification' that are touched or included in any lasso polygon.
+        """
+        if not self._lasso_selection_checkbox.value:
+            return
+
+        if "Lasso Selection" not in self._viewer.layers:
+            return
+
+        lasso_layer = self._viewer.layers["Lasso Selection"]
+        if len(lasso_layer.data) == 0:
+            show_info("No lasso polygon drawn")
+            self._lasso_selection_checkbox.value = False
+            return
+
+        if "Cells Modification" not in self._viewer.layers:
+            return
+
+        edit_layer = self._viewer.layers["Cells Modification"]
+        if not isinstance(edit_layer, napari.layers.Shapes):
+            return
+
+        try:
+            lasso_shapes = [
+                np.array(shape, dtype=np.float32)
+                for shape in lasso_layer.data
+                if len(shape) >= 3
+            ]
+
+            if not lasso_shapes:
+                show_info("No valid lasso polygons found")
+                return
+
+            remaining_shapes = []
+            deleted_count = 0
+
+            for cell_shape in edit_layer.data:
+                cell_pts = np.array(cell_shape, dtype=np.float32)
+
+                # Check if cell touches or is included in any lasso polygon
+                is_deleted = False
+                for lasso_pts in lasso_shapes:
+                    if len(cell_pts) < 3:
+                        for pt in cell_pts:
+                            if cv2.pointPolygonTest(lasso_pts, (float(pt[0]), float(pt[1])), False) >= 0:
+                                is_deleted = True
+                                break
+                    else:
+                        if self._do_polygons_intersect(cell_pts, lasso_pts):
+                            is_deleted = True
+                            break
+
+                if is_deleted:
+                    deleted_count += 1
+                else:
+                    remaining_shapes.append(cell_shape)
+
+            edit_layer.data = remaining_shapes
+            if deleted_count > 0:
+                show_info(f"Deleted {deleted_count} cell(s)")
+            else:
+                show_info("No cells touched or included in the lasso area")
+
+            # Clear the lasso polygons
+            lasso_layer.data = []
+        except Exception as e:
+            show_info(f"Error during cell deletion: {str(e)}")
+        finally:
+            self._lasso_selection_checkbox.value = False
+            if self._edition_mode == "Edit As Vector":
+                self._lasso_container.visible = True
+
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
         # Get the selected input layer
@@ -101,18 +322,28 @@ class CellsLayerEditorWidget(Container):
             QMessageBox.warning(None, "Error", "No cells layer found in the viewer")
             return
 
+        self._edition_mode = self._edition_mode_combo.value
+
         # Update button visibility
         self._edition_mode_combo.visible = False
         self._edit_cells_geometries_button.visible = False
         self._cancel_cells_geometries_button.visible = True
         self._apply_cells_geometries_button.visible = True
 
+        if self._edition_mode == "Edit As Vector":
+            self._lasso_container.visible = True
+            self._lasso_selection_checkbox.visible = True
+            self._lasso_selection_checkbox.value = False
+            self._delete_lasso_cells_button.visible = False
+        else:
+            self._lasso_container.visible = False
+
         self.input_layer = input_layer
 
         sample_name = self.input_layer.metadata.get("sample_name")
         sample_stem_path = self.input_layer.metadata.get("sample_stem_path")
 
-        if self._edition_mode_combo.value == "Edit As Raster":
+        if self._edition_mode == "Edit As Raster":
             colormap = defaultdict(lambda: [0, 0, 0, 0])
             colormap[1] = self.settings.get("vectorization.cells_face_color")
 
@@ -128,7 +359,7 @@ class CellsLayerEditorWidget(Container):
                 },
             )
 
-        elif self._edition_mode_combo.value == "Edit As Vector":
+        elif self._edition_mode == "Edit As Vector":
             cells_contours = [
                 np.maximum(contour - 1, 0)
                 for contour in cv2.findContours(
@@ -178,8 +409,17 @@ class CellsLayerEditorWidget(Container):
 
     def _cancel_cells_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
+        if self._lasso_selection_checkbox.value:
+            self._lasso_selection_checkbox.value = False
+        if "Lasso Selection" in self._viewer.layers:
+            self._viewer.layers.remove("Lasso Selection")
+
+        self._lasso_container.visible = False
+        self._delete_lasso_cells_button.visible = False
+
         # Remove the working layer - original layer was never modified
-        self._viewer.layers.remove("Cells Modification")
+        if "Cells Modification" in self._viewer.layers:
+            self._viewer.layers.remove("Cells Modification")
 
         # Reset the button visibility
         self._edition_mode_combo.visible = True
@@ -192,12 +432,19 @@ class CellsLayerEditorWidget(Container):
 
     def _apply_cells_geometries(self) -> None:
         """Apply the changes to the input layer."""
+        if self._lasso_selection_checkbox.value:
+            self._lasso_selection_checkbox.value = False
+        if "Lasso Selection" in self._viewer.layers:
+            self._viewer.layers.remove("Lasso Selection")
 
-        if self._edition_mode_combo.value == "Edit As Raster":
+        self._lasso_container.visible = False
+        self._delete_lasso_cells_button.visible = False
+
+        if getattr(self, "_edition_mode", None) == "Edit As Raster":
             new_cells_raster = self._viewer.layers["Cells Modification"].data
             self._viewer.layers.remove("Cells Modification")
 
-        elif self._edition_mode_combo.value == "Edit As Vector":
+        elif getattr(self, "_edition_mode", None) == "Edit As Vector":
             # Recover new shapes data from the viewer
             new_cells_shapes = self._viewer.layers["Cells Modification"].data
             new_cells_shapes = [
@@ -223,4 +470,4 @@ class CellsLayerEditorWidget(Container):
         self._apply_cells_geometries_button.visible = False
 
         # Show confirmation message
-        show_info("Ring geometries successfully updated")
+        show_info("Cells geometries successfully updated")
