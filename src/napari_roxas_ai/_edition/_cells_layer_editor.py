@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import cv2
 import napari.layers
@@ -26,17 +26,16 @@ settings = SettingsManager()
 
 
 class CellsLayerEditorWidget(Container):
+    @property
+    def _input_layer(self) -> Optional["napari.layers.Labels"]:
+        """Get the single valid cells layer currently in the viewer."""
+        valid_layers = self._get_valid_layers()
+        return valid_layers[0] if valid_layers else None
+
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self._viewer = viewer
         self.settings = SettingsManager()
-
-        # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = ComboBox(
-            label="Cells Layer",
-            annotation="napari.layers.Labels",
-            choices=self._get_valid_layers,
-        )
 
         # Create an edition mode combo box
         self._edition_mode_combo = ComboBox(
@@ -72,7 +71,6 @@ class CellsLayerEditorWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_layer_combo,
                 self._edition_mode_combo,
                 self._edit_cells_geometries_button,
                 self._cancel_cells_geometries_button,
@@ -98,8 +96,9 @@ class CellsLayerEditorWidget(Container):
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
         # Get the selected input layer
-        if not self._input_layer_combo.value:
-            QMessageBox.warning(None, "Error", "Please select an input layer")
+        input_layer = self._input_layer
+        if not input_layer:
+            QMessageBox.warning(None, "Error", "No cells layer found in the viewer")
             return
 
         # Update button visibility
@@ -108,7 +107,7 @@ class CellsLayerEditorWidget(Container):
         self._cancel_cells_geometries_button.visible = True
         self._apply_cells_geometries_button.visible = True
 
-        self.input_layer = self._input_layer_combo.value
+        self.input_layer = input_layer
 
         sample_name = self.input_layer.metadata.get("sample_name")
         sample_stem_path = self.input_layer.metadata.get("sample_stem_path")
