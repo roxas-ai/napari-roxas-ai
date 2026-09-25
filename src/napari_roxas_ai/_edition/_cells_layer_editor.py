@@ -154,6 +154,7 @@ class CellsLayerEditorWidget(Container):
         to draw polygons defining areas for cell deletion.
         """
         self._delete_lasso_cells_button.visible = enabled
+        self._delete_lasso_cells_button.enabled = True
 
         if enabled:
             scale = [1.0, 1.0]
@@ -215,6 +216,8 @@ class CellsLayerEditorWidget(Container):
         """
         if not self._lasso_selection_checkbox.value:
             return
+
+        self._delete_lasso_cells_button.enabled = False
 
         if "Lasso Selection" not in self._viewer.layers:
             return

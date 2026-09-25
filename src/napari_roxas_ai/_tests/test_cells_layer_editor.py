@@ -237,3 +237,48 @@ def test_layer_visibility_management_on_apply_and_initially_hidden(make_napari_v
     # .rings restored to True, rings years restored to its original False
     assert rings_layer.visible
     assert not rings_years_layer.visible
+
+
+def test_delete_selected_cells_button_enabled_disabled_state(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    viewer.add_labels(data, name="sample.cells")
+
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edition_mode_combo.value = "Edit As Vector"
+    widget._edit_cells_geometries()
+
+    # Initially hidden and enabled
+    assert not widget._delete_lasso_cells_button.visible
+    assert widget._delete_lasso_cells_button.enabled
+
+    # Toggle lasso on -> button visible and enabled
+    widget._lasso_selection_checkbox.value = True
+    assert widget._delete_lasso_cells_button.visible
+    assert widget._delete_lasso_cells_button.enabled
+
+    # Add a lasso shape
+    lasso_layer = viewer.layers["Lasso Selection"]
+    lasso_layer.data = [np.array([[0, 0], [0, 20], [20, 20], [20, 0]], dtype=np.float32)]
+
+    # Mock or wrap _execute_lasso_deletion to check intermediate disabled state if desired, or test direct execution
+    btn_disabled_during_exec = False
+    original_shapes = viewer.layers["Cells Modification"].data
+
+    def check_state_during_exec():
+        nonlocal btn_disabled_during_exec
+        btn_disabled_during_exec = not widget._delete_lasso_cells_button.enabled
+
+    # Execute deletion
+    widget._execute_lasso_deletion()
+
+    # After deletion, lasso selection checkbox is reset to False, button is hidden and re-enabled
+    assert not widget._delete_lasso_cells_button.visible
+    assert widget._delete_lasso_cells_button.enabled
+
+    # When lasso is enabled again, button should be visible and enabled
+    widget._lasso_selection_checkbox.value = True
+    assert widget._delete_lasso_cells_button.visible
+    assert widget._delete_lasso_cells_button.enabled
