@@ -377,27 +377,22 @@ class CellsLayerEditorWidget(Container):
             )
 
         elif self._edition_mode == "Edit As Vector":
-            cells_contours = [
-                np.maximum(contour - 1, 0)
-                for contour in cv2.findContours(
-                    self.input_layer.data.astype("uint8"),
-                    cv2.RETR_EXTERNAL,
-                    cv2.CHAIN_APPROX_SIMPLE,
-                )[0]
-            ]
-            cells_polygons = [
-                cv2.approxPolyDP(
-                    contour,
-                    epsilon=settings.get("vectorization.cells_tolerance"),
-                    closed=True,
-                )
-                for contour in cells_contours
-            ]
-            cells_polygons = [
-                polygon.squeeze(axis=1)[:, ::-1]
-                for polygon in cells_polygons
-                if polygon.shape[0] > 2
-            ]
+            contours, _ = cv2.findContours(
+                self.input_layer.data.astype("uint8"),
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+            tolerance = float(settings.get("vectorization.cells_tolerance") or 0)
+            cells_polygons = []
+            for contour in contours:
+                if len(contour) < 3:
+                    continue
+                if tolerance > 0:
+                    poly = cv2.approxPolyDP(contour, epsilon=tolerance, closed=True)
+                else:
+                    poly = contour
+                if poly.shape[0] > 2:
+                    cells_polygons.append(poly.squeeze(axis=1)[:, ::-1])
 
             work_layer = self._viewer.add_shapes(
                 cells_polygons,
