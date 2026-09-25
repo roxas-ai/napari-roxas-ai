@@ -205,45 +205,10 @@ class CellsLayerEditorWidget(Container):
                 self._execute_lasso_deletion()
                 return
 
-    @staticmethod
-    def _do_polygons_intersect(poly1: np.ndarray, poly2: np.ndarray) -> bool:
-        """
-        Check if two polygons (Nx2 and Mx2 in (row, col) or (x, y)) touch or overlap.
-        """
-        pts1 = np.array(poly1, dtype=np.float32)
-        pts2 = np.array(poly2, dtype=np.float32)
-
-        # 1. Any vertex of poly1 inside or on boundary of poly2
-        for pt in pts1:
-            if cv2.pointPolygonTest(pts2, (float(pt[0]), float(pt[1])), False) >= 0:
-                return True
-
-        # 2. Any vertex of poly2 inside or on boundary of poly1
-        for pt in pts2:
-            if cv2.pointPolygonTest(pts1, (float(pt[0]), float(pt[1])), False) >= 0:
-                return True
-
-        # 3. Check if any edge of poly1 intersects any edge of poly2
-        def _ccw(A, B, C):
-            return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
-
-        def _intersect(A, B, C, D):
-            return _ccw(A, C, D) != _ccw(B, C, D) and _ccw(A, B, C) != _ccw(A, B, D)
-
-        n1 = len(pts1)
-        n2 = len(pts2)
-        for i in range(n1):
-            p1a, p1b = pts1[i], pts1[(i + 1) % n1]
-            for j in range(n2):
-                p2a, p2b = pts2[j], pts2[(j + 1) % n2]
-                if _intersect(p1a, p1b, p2a, p2b):
-                    return True
-
-        return False
-
     def _execute_lasso_deletion(self) -> None:
         """
-        Deletes any cells in 'Cells Modification' that are touched or included in any lasso polygon.
+        Deletes any cells in 'Cells Modification' that have at least one vertex
+        inside or on the boundary of any lasso polygon.
         """
         if not self._lasso_selection_checkbox.value:
             return
@@ -266,38 +231,63 @@ class CellsLayerEditorWidget(Container):
 
         try:
             lasso_shapes = [
-                np.array(shape, dtype=np.float32)
-                for shape in lasso_layer.data
-                if len(shape) >= 3
+                shape for shape in lasso_layer.data if len(shape) >= 3
             ]
 
             if not lasso_shapes:
                 show_info("No valid lasso polygons found")
                 return
 
+            cell_shapes = edit_layer.data
+            if not cell_shapes:
+                return
+
+            # Compute bounding box of all lasso polygons (coordinates in (row, col) / (y, x))
+            all_lasso_pts = np.concatenate(lasso_shapes, axis=0)
+            min_r = int(np.floor(np.min(all_lasso_pts[:, 0]))) - 1
+            max_r = int(np.ceil(np.max(all_lasso_pts[:, 0]))) + 1
+            min_c = int(np.floor(np.min(all_lasso_pts[:, 1]))) - 1
+            max_c = int(np.ceil(np.max(all_lasso_pts[:, 1]))) + 1
+
+            height = max_r - min_r + 1
+            width = max_c - min_c + 1
+
+            # Rasterize lasso polygons once into a local bounding box binary mask.
+            # cv2.drawContours/fillPoly expects (x, y) = (col, row).
+            mask = np.zeros((height, width), dtype=np.uint8)
+            lasso_cv_contours = [
+                np.round(
+                    np.column_stack((poly[:, 1] - min_c, poly[:, 0] - min_r))
+                ).astype(np.int32)
+                for poly in lasso_shapes
+            ]
+            cv2.fillPoly(mask, lasso_cv_contours, 1)
+            cv2.drawContours(mask, lasso_cv_contours, -1, 1, 1)
+
             remaining_shapes = []
             deleted_count = 0
 
-            for cell_shape in edit_layer.data:
-                cell_pts = np.array(cell_shape, dtype=np.float32)
+            for cell_shape in cell_shapes:
+                # cell_shape is an Nx2 array of (row, col) vertices
+                v_rows = np.round(cell_shape[:, 0]).astype(int) - min_r
+                v_cols = np.round(cell_shape[:, 1]).astype(int) - min_c
 
-                # Check if cell touches or is included in any lasso polygon
-                is_deleted = False
-                for lasso_pts in lasso_shapes:
-                    if len(cell_pts) < 3:
-                        for pt in cell_pts:
-                            if cv2.pointPolygonTest(lasso_pts, (float(pt[0]), float(pt[1])), False) >= 0:
-                                is_deleted = True
-                                break
-                    else:
-                        if self._do_polygons_intersect(cell_pts, lasso_pts):
-                            is_deleted = True
-                            break
+                # Check which vertices fall within the mask bounding box
+                in_bounds = (
+                    (v_rows >= 0)
+                    & (v_rows < height)
+                    & (v_cols >= 0)
+                    & (v_cols < width)
+                )
 
-                if is_deleted:
-                    deleted_count += 1
-                else:
-                    remaining_shapes.append(cell_shape)
+                if np.any(in_bounds):
+                    valid_rows = v_rows[in_bounds]
+                    valid_cols = v_cols[in_bounds]
+                    if np.any(mask[valid_rows, valid_cols] > 0):
+                        deleted_count += 1
+                        continue
+
+                remaining_shapes.append(cell_shape)
 
             edit_layer.data = remaining_shapes
             if deleted_count > 0:
