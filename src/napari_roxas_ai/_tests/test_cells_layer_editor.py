@@ -175,3 +175,65 @@ def test_lasso_near_boundary(make_napari_viewer, qtbot):
 
     assert len(edit_layer.data) == 1
     assert np.allclose(edit_layer.data[0], cell_away)
+
+
+def test_layer_visibility_management_on_edit_and_cancel(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    viewer.add_labels(data, name="sample.cells")
+
+    rings_data = np.zeros((50, 50), dtype=np.uint8)
+    rings_layer = viewer.add_labels(rings_data, name="sample.rings", visible=True)
+    rings_years_layer = viewer.add_points([[10, 10]], name="Rings Years", visible=True)
+    other_layer = viewer.add_labels(data.copy(), name="sample.other", visible=True)
+
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+
+    assert rings_layer.visible
+    assert rings_years_layer.visible
+    assert other_layer.visible
+
+    # Enter edit mode
+    widget._edit_cells_geometries()
+
+    # .rings and Rings Years should be hidden; other layers remain untouched
+    assert not rings_layer.visible
+    assert not rings_years_layer.visible
+    assert other_layer.visible
+
+    # Cancel editing
+    widget._cancel_cells_geometries()
+
+    # Visibility states should be restored
+    assert rings_layer.visible
+    assert rings_years_layer.visible
+    assert other_layer.visible
+
+
+def test_layer_visibility_management_on_apply_and_initially_hidden(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    viewer.add_labels(data, name="sample.cells")
+
+    rings_data = np.zeros((50, 50), dtype=np.uint8)
+    rings_layer = viewer.add_labels(rings_data, name="sample.rings", visible=True)
+    # rings years layer is initially hidden
+    rings_years_layer = viewer.add_points([[10, 10]], name="Rings Years", visible=False)
+
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+
+    # Enter edit mode
+    widget._edit_cells_geometries()
+    assert not rings_layer.visible
+    assert not rings_years_layer.visible
+
+    # Apply editing
+    widget._apply_cells_geometries()
+
+    # .rings restored to True, rings years restored to its original False
+    assert rings_layer.visible
+    assert not rings_years_layer.visible

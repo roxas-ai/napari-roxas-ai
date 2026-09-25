@@ -39,6 +39,9 @@ class CellsLayerEditorWidget(Container):
         self._viewer = viewer
         self.settings = SettingsManager()
 
+        # Stores visibility of .rings and Rings Year layers before editing to restore them later
+        self._layer_visibility_states = {}
+
         # --- LASSO SELECTION UI ---
         self._lasso_selection_checkbox = CheckBox(
             label="Lasso Select",
@@ -77,7 +80,7 @@ class CellsLayerEditorWidget(Container):
 
         # Create a button to create the cells working layer
         self._edit_cells_geometries_button = PushButton(
-            text="Edit Cells Geometries"
+            text="Edit Cells"
         )
         self._edit_cells_geometries_button.changed.connect(
             self._edit_cells_geometries
@@ -92,7 +95,7 @@ class CellsLayerEditorWidget(Container):
 
         # Create a button to cancel the changes
         self._cancel_cells_geometries_button = PushButton(
-            text="Cancel Geometries Changes", visible=False
+            text="Cancel Cell Changes", visible=False
         )
         self._cancel_cells_geometries_button.changed.connect(
             self._cancel_cells_geometries
@@ -100,7 +103,7 @@ class CellsLayerEditorWidget(Container):
 
         # Create a button to apply the changes
         self._apply_cells_geometries_button = PushButton(
-            text="Apply Geometries Changes", visible=False
+            text="Apply Cell Changes", visible=False
         )
         self._apply_cells_geometries_button.changed.connect(
             self._apply_cells_geometries
@@ -304,6 +307,18 @@ class CellsLayerEditorWidget(Container):
             if self._edition_mode == "Edit As Vector":
                 self._lasso_container.visible = True
 
+    def _restore_original_visibility(self) -> None:
+        """
+        Restore the original visibility state of layers that were hidden during editing.
+        """
+        try:
+            for layer_name, visible in self._layer_visibility_states.items():
+                if layer_name in self._viewer.layers:
+                    self._viewer.layers[layer_name].visible = visible
+            self._layer_visibility_states = {}
+        except Exception:
+            pass
+
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
         # Get the selected input layer
@@ -311,6 +326,15 @@ class CellsLayerEditorWidget(Container):
         if not input_layer:
             QMessageBox.warning(None, "Error", "No cells layer found in the viewer")
             return
+
+        # --- LAYER VISIBILITY MANAGEMENT ---
+        # Hide .rings and Rings Year layers to reduce clutter during cell editing.
+        # Store their original visibility state to restore it when editing is finished.
+        self._layer_visibility_states = {}
+        for layer in self._viewer.layers:
+            if layer.name.endswith(".rings") or layer.name.startswith("Rings Year"):
+                self._layer_visibility_states[layer.name] = layer.visible
+                layer.visible = False
 
         self._edition_mode = self._edition_mode_combo.value
 
@@ -417,6 +441,8 @@ class CellsLayerEditorWidget(Container):
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
 
+        self._restore_original_visibility()
+
         # Show confirmation message
         show_info("Cells geometries modification cancelled")
 
@@ -458,6 +484,8 @@ class CellsLayerEditorWidget(Container):
         self._edit_cells_geometries_button.visible = True
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
+
+        self._restore_original_visibility()
 
         # Show confirmation message
         show_info("Cells geometries successfully updated")
