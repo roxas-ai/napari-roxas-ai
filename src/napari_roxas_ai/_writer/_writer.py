@@ -298,7 +298,12 @@ def save_annotated_scan_image(
 
 
 def write_scan_file(path: str, data: Any, meta: dict) -> str:
-    """Writes a scan file.
+    """Writes the metadata of a scan layer.
+
+    The scan image itself is never written: it is the untouched input image,
+    and re-encoding it would either lose quality (JPEG) or create a second
+    scan file next to the original when its extension differs from the
+    default one (e.g. ".scan.jpeg" next to a new ".scan.jpg").
 
     Parameters
     ----------
@@ -312,7 +317,7 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     Returns
     -------
-    written_file_paths : A list containing the string path to the saved file.
+    written_file_paths : A list containing the string path to the metadata file.
     """
 
     written_file_paths = []
@@ -338,14 +343,6 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
     metadata_file_path = f"{sample_path}{metadata_file_extension}"
     update_metadata_file(metadata_file_path, meta["metadata"], "scan_")
     written_file_paths.append(metadata_file_path)
-
-    # Save the image data
-    scan_file_extension = "".join(
-        settings.get("file_extensions.scan_file_extension")
-    )
-    scan_file_path = f"{sample_path}{scan_file_extension}"
-    save_image(scan_file_path, data, rescale=False)
-    written_file_paths.append(scan_file_path)
 
     # return path to any file(s) that were successfully written
     return written_file_paths
@@ -689,13 +686,23 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     basename = sample_path.name  # use for annotated naming
     scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
     scan_file_path = f"{sample_path}{scan_file_extension}"
+    if not Path(scan_file_path).exists():
+        # The scan may use another image extension (e.g. ".scan.jpeg"), as when loading
+        scan_content_ext = settings.get("file_extensions.scan_file_extension")[0]
+        for ext in settings.get("file_extensions.image_file_extensions"):
+            alt_path = f"{sample_path}{scan_content_ext}{ext}"
+            if Path(alt_path).exists():
+                scan_file_path = alt_path
+                break
 
     # annotated filename: <sample>_annotated.<ext>
     scan_suffix = Path(scan_file_path).suffix  # e.g. ".jpg"
     annotated_path = str(Path(sample_path).with_name(f"{basename}_annotated{scan_suffix}"))
 
     try:
-        if Path(scan_file_path).exists() and (not meta["features"].empty):
+        if not Path(scan_file_path).exists():
+            print(f"Annotated image export skipped for {basename}: no scan file found")
+        elif not meta["features"].empty:
             save_annotated_scan_image(
                 scan_path=scan_file_path,
                 annotated_path=annotated_path,

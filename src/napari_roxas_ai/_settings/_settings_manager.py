@@ -139,12 +139,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "index_column": "id",
         "separator": ";",
     },
-    # Image processing settings
-    "JPEG_compression": {
-        "quality": 95,  # Default JPEG quality
-        "optimize": True,  # Default optimize flag
-        "progressive": False,  # Default progressive flag
-    },
     "processing": {
         "try_to_use_gpu": False,  # Try to use GPU if available
         "try_to_use_autocast": False,  # Try to use autocast if available
