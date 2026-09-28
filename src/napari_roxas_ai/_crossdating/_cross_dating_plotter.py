@@ -19,7 +19,7 @@ from matplotlib.ticker import MultipleLocator
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
-from superqt import QRangeSlider
+from superqt import QLabeledRangeSlider, QRangeSlider
 
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
@@ -58,6 +58,25 @@ def simplify_string(string: str) -> str:
     return "".join(
         character for character in string if character.isalnum()
     ).lower()
+
+
+def show_range_values_at_edges(slider: RangeSlider) -> None:
+    """
+    Show the selected low/high values in the editable fields at both ends
+    of a range slider instead of floating labels above the handles.
+
+    The floating labels overlap as soon as the handles are close together,
+    which is the normal case for a narrow year window within a wide range.
+    The edge fields never overlap and let the user type exact values.
+
+    Parameters
+    ----------
+    slider : RangeSlider
+        The magicgui range slider to configure.
+    """
+    native = slider.native
+    native.setHandleLabelPosition(QLabeledRangeSlider.LabelPosition.NoLabel)
+    native.setEdgeLabelMode(QLabeledRangeSlider.EdgeLabelMode.LabelIsValue)
 
 
 class MatplotlibCanvas(Container):
@@ -158,6 +177,7 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=(0, 100),
         )
+        show_range_values_at_edges(self._x_range_slider)
         self._x_range_slider.changed.connect(self._on_x_range_changed)
         self._x_range_slider_was_set = False
 
@@ -169,6 +189,7 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=(0, 100),
         )
+        show_range_values_at_edges(self._y_range_slider)
         self._y_range_slider.changed.connect(self._on_y_range_changed)
         self._y_range_slider_was_set = False
 
@@ -873,12 +894,22 @@ class CrossDatingPlotterWidget(Container):
         roxas_years_raw = self.plot_df["layer_series"].dropna().index.to_numpy()
         roxas_years = roxas_years_raw + total_offset
 
-        if len(roxas_years) > 0:
-            min_year = int(min(min(years), min(roxas_years)) - 10)
-            max_year = int(max(max(years), max(roxas_years)) + 10)
-        else:
-            min_year = int(min(years) - 10)
-            max_year = int(max(years) + 10)
+        # The slider bounds follow what is actually drawn: the reference/average
+        # years and the shifted ROXAS years. The plot_df index also holds the
+        # unshifted ROXAS years, which would keep the slider stretched to the
+        # sample's original dating after an alignment moved it elsewhere.
+        reference_mask = (
+            self.plot_df["reference_series"].notna()
+            | self.plot_df["average"].notna()
+        )
+        drawn_years = np.concatenate(
+            [self.plot_df.index[reference_mask].to_numpy(dtype=int), roxas_years]
+        )
+        if len(drawn_years) == 0:
+            drawn_years = years
+
+        min_year = int(min(drawn_years) - 10)
+        max_year = int(max(drawn_years) + 10)
 
         # Clip min_year to the technical buffer limit (-1,001,000)
         # to ensure the x-range slider doesn't hit a boundary wall during visualization.
