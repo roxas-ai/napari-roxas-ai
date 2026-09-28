@@ -61,4 +61,6 @@ def make_rings_colormap(unique_rings_raster_values):
         color_idx = i % len(qualitative_colors)
         colormap[year] = qualitative_colors[color_idx]
 
-    return colormap
+    # Create a DirectLabelColormap for improved performance and stability in napari,
+    # especially when dealing with many rings or large/negative label values (years).
+    return DirectLabelColormap(color_dict=colormap)
