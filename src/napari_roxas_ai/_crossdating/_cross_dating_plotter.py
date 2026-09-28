@@ -15,7 +15,7 @@ from magicgui.widgets import (
 )
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, StrMethodFormatter
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
@@ -60,6 +60,31 @@ def simplify_string(string: str) -> str:
     ).lower()
 
 
+def year_grid_step(span: float, max_lines: int = 20) -> int:
+    """
+    Return the year spacing of the major x-axis grid lines for a view of the
+    given span: 10 years if that gives at most `max_lines` lines, otherwise
+    the smallest of 20, 50, 100, 200, 500, 1000, ... years that does.
+
+    Parameters
+    ----------
+    span : float
+        Number of years covered by the view.
+    max_lines : int
+        Maximum number of major grid lines.
+
+    Returns
+    -------
+    int
+        The spacing in years.
+    """
+    step = 10
+    while span / step > max_lines:
+        # 10 -> 20 -> 50 -> 100 -> 200 -> 500 -> ...
+        step = step * 5 // 2 if str(step).startswith("2") else step * 2
+    return step
+
+
 def split_handle_labels(slider: RangeSlider) -> None:
     """
     Show the lower handle's value below the bar and the upper handle's value
@@ -86,6 +111,14 @@ def split_handle_labels(slider: RangeSlider) -> None:
 
     native._reposition_labels = reposition_labels
     native.layout().setContentsMargins(0, 25, 0, 25)
+
+    # Always show whole numbers: superqt sizes a label from its text but falls
+    # back to scientific notation ("-1e+05") when the current size is too
+    # small, so large years were shown depending on the previous value
+    for label in [native._min_label, native._max_label, *native._handle_labels]:
+        label._format_value = lambda value: str(int(round(value)))
+        label.updateText()
+        label._update_size()
 
 
 class MatplotlibCanvas(Container):
@@ -505,6 +538,16 @@ class CrossDatingPlotterWidget(Container):
                 self._x_range_slider_was_set = False
                 self._y_range_slider_was_set = False
 
+                # A new outmost year set by the user replaces any alignment that
+                # was not applied yet: its offset was relative to the old year
+                self._base_offset = 0
+                self._offset_slider.native.blockSignals(True)
+                self._offset_slider.value = 0
+                self._offset_slider.native.blockSignals(False)
+                self._clear_alignment_buttons()
+                self._alignment_candidates = []
+                self._current_alignment_data = None
+
             # Update the plot if we have a valid column selected
             self._update_crossdating_plot()
 
@@ -886,9 +929,11 @@ class CrossDatingPlotterWidget(Container):
         for text, color in zip(legend.get_texts(), series_colors):
             text.set_color(color)
 
-        # Configure grid: 5-year vertical lines (minor), 10-year labels (major)
-        self.plot_widget.ax.xaxis.set_major_locator(MultipleLocator(10))
-        self.plot_widget.ax.xaxis.set_minor_locator(MultipleLocator(5))
+        # Configure grid: solid major lines with year labels, dashed minor lines
+        # in between (the spacing follows the visible range, see below)
+        # Plain year labels: the default formatter switches to an offset
+        # (e.g. "-40 ... 10" with "-1e5") for large years in a narrow view
+        self.plot_widget.ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
         
         # Major vertical grid lines (every 10 years) - solid
         self.plot_widget.ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey')
@@ -997,6 +1042,14 @@ class CrossDatingPlotterWidget(Container):
 
         # Set the x axis limits before calculating y limits
         self.plot_widget.ax.set_xlim(self._x_range_slider.value)
+
+        # Year grid: 10-year major / 5-year minor lines for a normal view, wider
+        # steps when the view spans many years, so that a view over e.g. 100,000
+        # years doesn't draw tens of thousands of grid lines
+        x_low, x_high = self._x_range_slider.value
+        major_step = year_grid_step(x_high - x_low)
+        self.plot_widget.ax.xaxis.set_major_locator(MultipleLocator(major_step))
+        self.plot_widget.ax.xaxis.set_minor_locator(MultipleLocator(major_step / 2))
 
         # UPDATED: We use the target_range (if provided) or the slider's value to determine visible range.
         # This is crucial for first-time auto-alignment where the slider isn't yet visually updated.
