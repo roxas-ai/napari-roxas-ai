@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 # Get file extensions from settings
 settings = SettingsManager()
 
+# JPEG quality (1-100) of the annotated rings image. It only serves to check
+# ring boundaries and years, so it trades detail for about half the file size
+# of a quality 95 scan.
+ANNOTATED_IMAGE_JPEG_QUALITY = 75
+
 from napari_roxas_ai._utils._metadata_keys import (
     RUN_METADATA_PREFIXES,
     SAMPLE_METADATA_PREFIXES,
@@ -293,7 +298,7 @@ def save_annotated_scan_image(
         return
 
     out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    Image.fromarray(out_rgb).save(annotated_path)
+    Image.fromarray(out_rgb).save(annotated_path, quality=ANNOTATED_IMAGE_JPEG_QUALITY)
 
 
 
@@ -695,9 +700,9 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
                 scan_file_path = alt_path
                 break
 
-    # annotated filename: <sample>_annotated.<ext>
-    scan_suffix = Path(scan_file_path).suffix  # e.g. ".jpg"
-    annotated_path = str(Path(sample_path).with_name(f"{basename}_annotated{scan_suffix}"))
+    # annotated filename: <sample>_annotated.jpg, whatever the scan format:
+    # JPEG keeps it small, and the preparation skips exactly this name
+    annotated_path = str(Path(sample_path).with_name(f"{basename}_annotated.jpg"))
 
     try:
         if not Path(scan_file_path).exists():
