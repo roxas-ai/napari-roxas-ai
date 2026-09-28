@@ -74,7 +74,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
                 "label": "Outmost Complete Ring Year",
                 "widget_type": "QSpinBox",
                 "default": 9999,
-                "min": -10000,
+                "min": -1000000,
                 "max": 9999,
                 "special_value_text": "Not set",
                 "required": True,

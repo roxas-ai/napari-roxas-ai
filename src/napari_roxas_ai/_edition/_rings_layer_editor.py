@@ -426,18 +426,16 @@ class RingsLayerEditorWidget(Container):
         self._rerun_model_header = Label(value="Rerun Model from year:", visible=False)
         self._rerun_model_header.native.setFixedWidth(140)  # Ensure consistent width for alignment
 
-        # Create spinbox for the last year
-        year_value = (
-            self._input_layer.metadata[
-                "rings_outmost_complete_year"
-            ]
-            if self._input_layer
-            else 9999
-        )
+        # Create spinbox for the user-facing "Last Complete Ring Year".
+        # We enforce a limit of -100,000 as requested, while internal buffers go further.
+        year_value = 9999
+        if self._input_layer and "rings_outmost_complete_year" in self._input_layer.metadata:
+            year_value = self._input_layer.metadata["rings_outmost_complete_year"]
+
         self._last_year_spinbox = SpinBox(
-            value=year_value,
+            value=max(-100000, min(9999, int(year_value))),
             label="Last Complete Ring Year",
-            min=-999999,
+            min=-100000,
             max=9999,
             step=1,
         )
@@ -474,11 +472,13 @@ class RingsLayerEditorWidget(Container):
 
         # --- RERUN MODEL UI ---
         # Line 1: Rerun Model from year: --- spinbox --- Rings Model --- combo
+        # The minimum value is set to -1,001,000 to provide a 1,000-year internal buffer
+        # relative to the user limit (-100,000), supporting long series and padding.
         self._rerun_model_year_spinbox = SpinBox(
             value=9999,
             label="Rerun from Year",  # Use a simple label
-            min=-100000,
-            max=10000,
+            min=-1001000,
+            max=9999,
             step=1,
         )
 
