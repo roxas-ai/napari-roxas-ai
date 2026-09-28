@@ -148,11 +148,13 @@ class CrossDatingPlotterWidget(Container):
             self._on_new_crossdating_column
         )
 
-        # Range slider for x-axis limits
+        # Range slider for x-axis limits.
+        # Initial technical bounds are set to -1,001,000 to support deep prehistoric samples
+        # and ensure visualization padding (+/- 10 years) doesn't hit a technical wall.
         self._x_range_slider = RangeSlider(
             label="Year Range",
-            min=0,
-            max=100,
+            min=-1001000,
+            max=9999,
             step=1,
             value=(0, 100),
         )
@@ -694,20 +696,42 @@ class CrossDatingPlotterWidget(Container):
         if not hasattr(layer, "data") or "spatial_resolution" not in layer.metadata:
             return
 
+        # JUST-IN-TIME YEAR SYNCHRONIZATION:
+        # Before creating the plotting width_series, we ensure the index (YEARs)
+        # aligns with the outmost complete ring year in the metadata.
+        # This fixes the issue where prehistoric years (e.g. -99,999) might
+        # incorrectly default to year 1 in the visual plot if the table is stale.
+        metadata_outmost_year = layer.metadata.get("rings_outmost_complete_year", 9999)
+        if not layer_df.empty:
+            current_outmost_year = layer_df.index.max()
+            if current_outmost_year != metadata_outmost_year:
+                # Shift all years in the plotting copy to match metadata
+                year_offset = int(metadata_outmost_year - current_outmost_year)
+                layer_df.index = layer_df.index + year_offset
+                # Ensure index is integer type after shift
+                layer_df.index = layer_df.index.astype(int)
+
         # Width calculation: total area (pixels) / (image width * scale factor)
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
                 * layer.metadata["spatial_resolution"]
         )
 
-        # Clear plot_df and rebuild it to ensure no stale data
+        # Build the final plotting DataFrame
+        # We start with the reference series index
         self.plot_df = pd.DataFrame(index=self.crossdating_dataframe.index)
         self.plot_df["reference_series"] = reference_series
         self.plot_df["average"] = average_series
 
-        # Merge layer_series (width_series) - it might have different years
-        self.plot_df = self.plot_df.join(width_series.rename("layer_series"), how="outer")
+        # Merge layer_series (width_series) - it might have different years (prehistoric)
+        # Use how='outer' and sort=True to ensure the index covers both ranges correctly
+        self.plot_df = self.plot_df.join(width_series.rename("layer_series"), how="outer", sort=True)
         self.plot_df.index.name = "YEAR"
+
+        # FINAL SANITY CHECK: Ensure the combined index is of integer type and sorted.
+        # Mixed types (e.g. floats and ints) or unsorted indices can cause plotting misalignment.
+        self.plot_df.index = self.plot_df.index.astype(int)
+        self.plot_df = self.plot_df.sort_index()
 
         # Update the plot
         self._plot_crossdating_data()
@@ -855,6 +879,10 @@ class CrossDatingPlotterWidget(Container):
         else:
             min_year = int(min(years) - 10)
             max_year = int(max(years) + 10)
+
+        # Clip min_year to the technical buffer limit (-1,001,000)
+        # to ensure the x-range slider doesn't hit a boundary wall during visualization.
+        min_year = max(-1001000, min_year)
 
         # Update x slider range but preserve values if possible
         self._x_range_slider.native.blockSignals(True)
@@ -1155,8 +1183,9 @@ class CrossDatingPlotterWidget(Container):
         target_end = int(candidate["end_year"])
         target_start = int(candidate["start_year"])
 
-        # Calculate required offset relative to current layer state
-        current_end = layer.metadata.get("rings_outmost_complete_year", 0)
+        # Calculate required offset relative to current layer state.
+        # Use a fallback of 9999 for undated samples as per project convention.
+        current_end = layer.metadata.get("rings_outmost_complete_year", 9999)
         offset = target_end - current_end
 
         # Store the found offset as base_offset and reset the slider to 0
