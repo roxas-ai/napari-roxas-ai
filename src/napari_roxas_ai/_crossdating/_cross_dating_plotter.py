@@ -19,7 +19,7 @@ from matplotlib.ticker import MultipleLocator
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
-from superqt import QLabeledRangeSlider, QRangeSlider
+from superqt import QRangeSlider
 
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
@@ -60,14 +60,13 @@ def simplify_string(string: str) -> str:
     ).lower()
 
 
-def show_range_values_at_edges(slider: RangeSlider) -> None:
+def split_handle_labels(slider: RangeSlider) -> None:
     """
-    Show the selected low/high values in the editable fields at both ends
-    of a range slider instead of floating labels above the handles.
+    Show the lower handle's value below the bar and the upper handle's value
+    above it, so the two never overlap when the handles are close together.
 
-    The floating labels overlap as soon as the handles are close together,
-    which is the normal case for a narrow year window within a wide range.
-    The edge fields never overlap and let the user type exact values.
+    superqt can only place all handle labels on the same side, so this
+    replaces its (private) label placement on this slider instance.
 
     Parameters
     ----------
@@ -75,8 +74,18 @@ def show_range_values_at_edges(slider: RangeSlider) -> None:
         The magicgui range slider to configure.
     """
     native = slider.native
-    native.setHandleLabelPosition(QLabeledRangeSlider.LabelPosition.NoLabel)
-    native.setEdgeLabelMode(QLabeledRangeSlider.EdgeLabelMode.LabelIsValue)
+
+    def reposition_labels() -> None:
+        for index, label in enumerate(native._handle_labels):
+            handle = native._slider._handleRect(index).center()
+            center = native._slider.mapToParent(handle)
+            dy = -1.5 * label.height() if index else 0.5 * label.height()
+            label.move(int(center.x() - label.width() / 2), int(center.y() + dy))
+            label.raise_()
+            label.show()
+
+    native._reposition_labels = reposition_labels
+    native.layout().setContentsMargins(0, 25, 0, 25)
 
 
 class MatplotlibCanvas(Container):
@@ -177,7 +186,7 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=(0, 100),
         )
-        show_range_values_at_edges(self._x_range_slider)
+        split_handle_labels(self._x_range_slider)
         self._x_range_slider.changed.connect(self._on_x_range_changed)
         self._x_range_slider_was_set = False
 
@@ -189,7 +198,7 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=(0, 100),
         )
-        show_range_values_at_edges(self._y_range_slider)
+        split_handle_labels(self._y_range_slider)
         self._y_range_slider.changed.connect(self._on_y_range_changed)
         self._y_range_slider_was_set = False
 
