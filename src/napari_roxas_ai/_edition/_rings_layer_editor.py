@@ -787,7 +787,12 @@ class RingsLayerEditorWidget(Container):
         if "YEAR" in df.columns:
             df = df.sort_values("YEAR").reset_index(drop=True)
             # set value here to run model from the first year in the table by default
-            self._rerun_model_year_spinbox.value = df["YEAR"].iloc[0]
+            first_year = df["YEAR"].iloc[0]
+            # Ensure the value is within spinbox bounds to avoid ValueError
+            self._rerun_model_year_spinbox.value = max(
+                self._rerun_model_year_spinbox.min,
+                min(self._rerun_model_year_spinbox.max, int(first_year)),
+            )
         elif "cells_above" in df.columns:
             df = df.sort_values("cells_above").reset_index(drop=True)
 
@@ -1329,13 +1334,20 @@ class RingsLayerEditorWidget(Container):
         if self._input_layer:
             layer = self._input_layer
             if "rings_outmost_complete_year" in layer.metadata:
-                self._last_year_spinbox.value = layer.metadata[
-                    "rings_outmost_complete_year"
-                ]
+                year = layer.metadata["rings_outmost_complete_year"]
+                # Clip value to spinbox range to prevent ValueError
+                self._last_year_spinbox.value = max(
+                    self._last_year_spinbox.min,
+                    min(self._last_year_spinbox.max, int(year)),
+                )
             # Update the rerun model year spinbox with the first year in the table
             if hasattr(layer, "features") and "YEAR" in layer.features.columns:
                 first_year = layer.features["YEAR"].min()
-                self._rerun_model_year_spinbox.value = int(first_year)
+                # Clip value to spinbox range to prevent ValueError
+                self._rerun_model_year_spinbox.value = max(
+                    self._rerun_model_year_spinbox.min,
+                    min(self._rerun_model_year_spinbox.max, int(first_year)),
+                )
 
     def _update_rings_years_layer(self) -> None:
         """
