@@ -714,25 +714,32 @@ class RingsLayerEditorWidget(Container):
 
 
     def _update_layer_year(self) -> None:
-        """Update the last year value in the layer metadata."""
+        """Update the metadata and features year of the current layer."""
         if self._input_layer:
             layer = self._input_layer
-            layer.metadata["rings_outmost_complete_year"] = (
-                self._last_year_spinbox.value
-            )
-            new_rings_table, new_rings_raster, new_colormap = (
-                update_rings_geometries(
-                    rings_table=layer.features,
-                    last_year=self._last_year_spinbox.value,
-                    image_shape=layer.data.shape,
+            new_outmost_year = self._last_year_spinbox.value
+
+            # ATOMIC-LIKE UPDATE WITH EVENT BLOCKER:
+            # We block events during the update to prevent feedback loops with other widgets
+            # (like the cross-dating plotter) while the data is in an intermediate state.
+            with layer.events.blocker():
+                layer.metadata["rings_outmost_complete_year"] = new_outmost_year
+                new_rings_table, new_rings_raster, new_colormap = (
+                    update_rings_geometries(
+                        rings_table=layer.features,
+                        last_year=new_outmost_year,
+                        image_shape=layer.data.shape,
+                    )
                 )
-            )
-            layer.data = new_rings_raster
-            layer.features = new_rings_table
-            layer.colormap = new_colormap
+                layer.data = new_rings_raster
+                layer.features = new_rings_table
+                layer.colormap = new_colormap
+
+            # Manually trigger events after the update is complete and consistent
             layer.events.metadata()
-            layer.events.data()
             layer.events.features()
+            layer.events.data()
+            show_info(f"Year successfully updated to {new_outmost_year}")
 
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
