@@ -223,5 +223,5 @@ class CellsLayerEditorWidget(Container):
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
 
-        # Show confirmation message
-        show_info("Ring geometries successfully updated")
+        # Show confirmation message (Fix: Ensure "Cell" is used instead of "Ring")
+        show_info("Cell geometries successfully updated")
