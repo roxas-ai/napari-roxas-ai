@@ -23,7 +23,11 @@ from napari_roxas_ai._settings._settings_manager import SettingsManager
 
 from ._crossdating_handler import process_crossdating_files
 from ._metadata_dialog import MetadataDialog
-from ._worker import Worker
+from ._worker import (
+    ROXAS_CLASSIC_OUTPUT_SUFFIXES,
+    Worker,
+    is_roxas_ai_output_file,
+)
 
 if TYPE_CHECKING:
     import napari
@@ -249,6 +253,11 @@ class PreparationWidget(Container):
                     )
                 )
 
+            # ROXAS AI outputs (.cells/.rings rasters, annotated image) are never inputs
+            self.source_files = [
+                f for f in self.source_files if not is_roxas_ai_output_file(f)
+            ]
+
             # Filter based on whether to include already processed files
 
             if not self._process_processed_checkbox.value:
@@ -264,19 +273,10 @@ class PreparationWidget(Container):
 
         # Filter out roxas output files if the checkbox is checked
         if self._ignore_roxas_output_checkbox.value:
-            roxas_output_suffixes = (
-                "_annotated.jpg",
-                "_annotated_cells.jpg",
-                "_annotated_twin.jpg",
-                "_ReferenceSeries.gif",
-                "_ReferenceSeries.jpg",
-                "_ReferenceSeriesLong.jpg",
-                "_Preview.jpg",
-            )
             self.source_files = [
                 f
                 for f in self.source_files
-                if not f.endswith(roxas_output_suffixes)
+                if not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
             ]
 
         # Update the file selection widget if it's visible

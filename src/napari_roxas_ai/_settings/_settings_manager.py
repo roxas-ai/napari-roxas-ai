@@ -62,11 +62,11 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
                 "id": "spatial_resolution",
                 "label": "Spatial Resolution (px/µm)",
                 "widget_type": "QDoubleSpinBox",
-                "default": 2.2675,
+                "default": 2.267574,
                 "min": 0.001,
                 "max": 1000.0,
-                "step": 0.01,
-                "decimals": 4,
+                "step": 0.000001,
+                "decimals": 6,
                 "required": True,
             },
             {
@@ -74,7 +74,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
                 "label": "Outmost Complete Ring Year",
                 "widget_type": "QSpinBox",
                 "default": 9999,
-                "min": -10000,
+                "min": -1000000,
                 "max": 9999,
                 "special_value_text": "Not set",
                 "required": True,
@@ -138,12 +138,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "tables": {
         "index_column": "id",
         "separator": ";",
-    },
-    # Image processing settings
-    "JPEG_compression": {
-        "quality": 95,  # Default JPEG quality
-        "optimize": True,  # Default optimize flag
-        "progressive": False,  # Default progressive flag
     },
     "processing": {
         "try_to_use_gpu": False,  # Try to use GPU if available
