@@ -60,6 +60,14 @@ class Worker(QObject):
         self.rings_file_extension = "".join(
             settings.get("file_extensions.rings_file_extension")
         )
+        # Fetch supported image extensions and the base scan extension from settings.
+        # This allows the loader to be flexible with different image formats (e.g. .jpg, .png, .tif).
+        self.image_file_extensions = settings.get(
+            "file_extensions.image_file_extensions"
+        )
+        self.scan_content_extension = settings.get(
+            "file_extensions.scan_file_extension"
+        )[0]
 
     def run(self):
 
@@ -76,7 +84,19 @@ class Worker(QObject):
                 relative_stem = sample_path
 
 
+            # FLEXIBLE IMAGE EXTENSION RESOLUTION:
+            # If the default scan file doesn't exist, we iterate through supported image extensions
+            # defined in settings to find a match. This supports JPEG scans and other formats
+            # without requiring strict filename conventions.
             scan_file_path = f"{sample_stem_path}{self.scan_file_extension}"
+            if not Path(scan_file_path).exists():
+                # Try alternative extensions defined in settings
+                for ext in self.image_file_extensions:
+                    alt_path = f"{sample_stem_path}{self.scan_content_extension}{ext}"
+                    if Path(alt_path).exists():
+                        scan_file_path = alt_path
+                        break
+
             if Path(scan_file_path).exists():
                 self.progress.emit(i, total)
                 scan_data, scan_add_kwargs, scan_layer_type = read_scan_file(

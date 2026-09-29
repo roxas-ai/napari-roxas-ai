@@ -1679,9 +1679,10 @@ class SampleAnalyzer:
 
 
 if __name__ == "__main__":
-    # Example configuration
+    # Example configuration with updated high-precision pixels_per_um factor
+    # for improved year resolution and scaling accuracy.
     CONFIG = {
-        "pixels_per_um": 2.2675,
+        "pixels_per_um": 2.267574,
         "cluster_dbl_cwt_threshold": 3,  # µm
         "smoothing_kernel_size": 5,
         "relwidth_cwt_integration": 0.75,
