@@ -14,10 +14,11 @@ from magicgui.widgets import (
     PushButton,
     SpinBox,
 )
-from napari.utils.notifications import show_info
+from napari.utils.notifications import show_info, show_warning
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
 
+from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
 from napari_roxas_ai._utils._callback_manager import (
@@ -483,9 +484,7 @@ class RingsLayerEditorWidget(Container):
         )
 
         self._rings_model_weights_file = ComboBox(
-            choices=tuple(
-                path.name for path in Path(RINGS_MODELS_PATH).iterdir()
-            ),
+            choices=self._get_rings_model_files(),
             label="Model",
         )
 
@@ -578,6 +577,28 @@ class RingsLayerEditorWidget(Container):
         # Use a slightly longer delay and immediate follow-up to ensure visibility.
         self._years_update_timer.start(500)
         QTimer.singleShot(1000, lambda: self._years_update_timer.start(10))
+
+    def _get_rings_model_files(self) -> tuple:
+        """
+        Get the available rings model weight files, downloading them first if
+        they are missing (e.g. on a fresh installation where no segmentation
+        widget has been opened yet). The model is only needed for rerunning
+        the model from a given year, so a failed download must not prevent the
+        editor from opening.
+        """
+        try:
+            check_assets_and_download(
+                str(RINGS_MODELS_PATH), "rings_models.zip"
+            )
+        except Exception as e:  # noqa: BLE001
+            show_warning(
+                f"Could not download the rings models ({e}). "
+                "'Rerun from Year' is unavailable until the models are downloaded."
+            )
+
+        if not RINGS_MODELS_PATH.is_dir():
+            return ()
+        return tuple(path.name for path in RINGS_MODELS_PATH.iterdir())
 
     @contextmanager
     def _pause_rendering(self) -> ContextManager[None]:
@@ -1543,6 +1564,13 @@ class RingsLayerEditorWidget(Container):
         Uses the 'Rings Modification' Shapes layer as the geometry source.
         """
         selected_year = self._rerun_model_year_spinbox.value
+
+        if not self._rings_model_weights_file.value:
+            show_info(
+                "No rings model available — the models could not be downloaded. "
+                "Check your internet connection and reopen the widget."
+            )
+            return
 
         if not self._input_layer:
             show_info("No layer selected")

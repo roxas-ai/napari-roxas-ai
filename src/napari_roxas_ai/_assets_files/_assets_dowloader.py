@@ -29,6 +29,7 @@ def get_asset_file_url(asset_name: str) -> str:
         headers["Authorization"] = f"Bearer {github_token}"
         print("Using GitHub token for authentication")
 
+    resp = None
     try:
         print(f"Requesting GitHub API at {url}")
         resp = requests.get(url, headers=headers, timeout=10)
@@ -42,9 +43,10 @@ def get_asset_file_url(asset_name: str) -> str:
             "WARNING: Unable to connect to GitHub API. No internet connection or GitHub API is unavailable."
         )
         print(f"Error: {e}")
-        print(
-            f"Rate limit headers: {resp.headers.get('X-RateLimit-Limit')}, Remaining: {resp.headers.get('X-RateLimit-Remaining')}"
-        )
+        if resp is not None:
+            print(
+                f"Rate limit headers: {resp.headers.get('X-RateLimit-Limit')}, Remaining: {resp.headers.get('X-RateLimit-Remaining')}"
+            )
         raise ConnectionError(
             "Cannot access GitHub releases. Please check your internet connection and try again."
         ) from e
@@ -115,18 +117,21 @@ def download_and_decompress_file(url: str, dest: str) -> None:
 
 def check_assets_and_download(directory: str, asset_name: str) -> None:
     """
-    Check if the directory exits
+    Check if the directory exists and contains files.
     If not, download and decompress assets in their directory.
+    An empty directory is treated as missing, since it is left behind when a
+    previous download was interrupted.
 
     Args:
         directory (str): The directory where the assets are stored.
         asset_name (str): The name of the asset file to download.
     """
 
-    if not Path(directory).exists():
+    directory_path = Path(directory)
+    if not directory_path.exists() or not any(directory_path.iterdir()):
 
         print(
-            f"Directory {directory} does not exist. Downloading assets in {asset_name}..."
+            f"Directory {directory} does not exist or is empty. Downloading assets in {asset_name}..."
         )
         url = get_asset_file_url(asset_name)
         download_and_decompress_file(url, directory)
