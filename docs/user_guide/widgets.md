@@ -30,7 +30,7 @@ flowchart TD
 | **2/4 - Load image(s)** | Load sample scans and existing label masks into napari | Prepared sample files | Napari Image & Labels layers |
 | **3A - Detect cells & rings (individual image)** | Run deep-learning segmentation on currently loaded scan | Active napari scan layer | `.cells` and `.rings` Labels layers |
 | **3B - Batch detect cells & rings** | Run AI segmentation on multiple samples in the background | Prepared project directory | `.cells.png`, `.rings.tif`, `.metadata.json` |
-| **5 - Edit cells** | Manually refine cell segmentations (raster brush/eraser or vector contours) | `.cells` layer | Edited `.cells` layer |
+| **5 - Edit cells** | Manually refine cell segmentations (raster brush/eraser, vector contours, lasso deletion) | `.cells` layer | Edited `.cells` layer |
 | **6 - Edit rings** | Manually adjust, add, delete, or re-detect tree-ring boundaries | `.rings` layer | Edited `.rings` layer & updated ring years |
 | **7 - Visual cross-dating** | Synchronize ring-width series against master reference chronologies | `.rings` layer & crossdating file | Calibrated ring years & verified sample dating |
 | **8 - Save cells & rings editing** | Persist manual edits from napari viewer back to disk | Active napari layers | Updated `.cells.png`, `.rings.tif`, `.metadata.json` |
@@ -222,11 +222,12 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 *Figure 8: Cells layer editor widget.*
 
 ### How It Works
-- Temporarily transfers the active `.cells` layer into an editable working state.
+- Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
 - Supports two distinct editing paradigms:
   - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
-  - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing and splitting.
-- When applied, rasterizes vectors back to label masks, re-indexes cell IDs uniquely, and preserves layer metadata.
+  - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
+- Includes a **Lasso Selection Tool** in Vector editing mode to quickly encircle and batch-delete unwanted cell polygons across a designated region.
+- When applied, rasterizes vectors back to label masks, resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
 
 ### Vectorization, Rasterization & Smoothing
 - **Vectorization & Contour Smoothing**:
@@ -242,12 +243,14 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
   - `vectorization.cells_face_color`: Fill color for cell vector shapes. (*Default:* `"cyan"`)
   - `rasterization.cells_color`: Default colormap color for rasterized cell lumens. (*Default:* `"lime"`)
 
-### Key Controls
-- **Cells Layer**: Dropdown selecting the target cells layer.
-- **Edition Mode**: Switch between `Edit As Raster` and `Edit As Vector`.
-- **Edit Cells Geometries**: Enters editing mode, hides original layers, and provides the temporary working canvas.
-- **Apply Geometries Changes**: Commits edits, updates the `.cells` layer, and exits editing mode.
-- **Cancel Geometries Changes**: Discards all pending modifications and restores the original layer state.
+### Key Controls & Options
+- **Editing Mode**: Switch between `Vector` and `Raster` editing modes.
+- **Edit Cells**: Enters editing mode, hides ring layers, and creates the working canvas (`Cells Modification`).
+- **Lasso Select**: Checkbox (available during Vector editing) that activates a yellow `Lasso Selection` shapes layer for freehand polygon area selection.
+- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the `Delete` key).
+- **Apply Cell Changes**: Commits edits, updates the `.cells` layer, restores layer visibility, and exits editing mode.
+- **Cancel Cell Changes**: Discards pending modifications, removes the working layer, restores original layer visibility, and exits editing mode.
+- **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar.
 
 ---
 
