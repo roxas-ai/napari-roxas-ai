@@ -69,6 +69,7 @@ def mock_settings():
             "file_extensions.metadata_file_extension": [".metadata", ".json"],
             "file_extensions.cells_table_file_extension": [".cells", ".csv"],
             "file_extensions.rings_table_file_extension": [".rings", ".csv"],
+            "file_extensions.image_file_extensions": [".jpg", ".jpeg", ".png"],
             "tables.separator": "\t",
             "tables.index_column": "index",
         }.get(key, default)
@@ -207,12 +208,10 @@ class TestWriterModule:
             # Test writing scan file
             result = write_scan_file(str(path), data, meta)
 
-            # Verify results
-            assert (
-                len(result) == 2
-            )  # Should return paths to metadata and image files
+            # Only the metadata is written, the scan image stays untouched
+            assert len(result) == 1
             assert mock_update_metadata.called
-            assert mock_save_image.called
+            assert not mock_save_image.called
 
     def test_write_cells_file(self, temp_dir, mock_settings):
         """Test write_cells_file function."""
