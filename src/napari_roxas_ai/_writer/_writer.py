@@ -396,6 +396,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "RVGI",
         "RVSF",
         "RGSGV",
+        "AOIAR",
+        "RAOIAR",
         "CWTPI",
         "CWTBA",
         "CWTLE",
@@ -428,7 +430,7 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
 
     # round columns with column name and number of decimals
     df = (df
-          .pipe(round_column, "MRW", 2)
+          .pipe(round_column, "MRW", 0, integer=True)
           .pipe(round_column, "RA", 3)
           .pipe(round_column, "CD", 2)
           .pipe(round_column, "CTA", 3)
@@ -436,6 +438,8 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
           .pipe(round_column, "MLA", 2)
           .pipe(round_column, "MINLA", 2)
           .pipe(round_column, "MAXLA", 2)
+          .pipe(round_column_sci, "KH", 3)  # round KH using a scientific notation format
+          .pipe(round_column_sci, "KS", 3)  # round KS using a scientific notation format
           .pipe(round_column, "CWTPI", 2)
           .pipe(round_column, "CWTBA", 2)
           .pipe(round_column, "CWTLE", 2)
@@ -443,15 +447,15 @@ def format_rings_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
           .pipe(round_column, "CWTTAN", 2)
           .pipe(round_column, "CWTRAD", 2)
           .pipe(round_column, "CWTALL", 2)
-          .pipe(round_column, "RTSR", 2)
-          .pipe(round_column, "CTSR", 2)
+          .pipe(round_column, "RTSR", 3)
+          .pipe(round_column, "CTSR", 3)
           .pipe(round_column, "DHW", 2)
           .pipe(round_column, "DHM", 2)
           .pipe(round_column, "DRAD", 2)
           .pipe(round_column, "DTAN", 2)
-          .pipe(round_column, "TB2", 2)
+          .pipe(round_column, "TB2", 4)
           .pipe(round_column, "CWA", 2)
-          .pipe(round_column, "RWD", 2)
+          .pipe(round_column, "RWD", 3)
           )
 
     return df
@@ -504,6 +508,7 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
         "ASP",
         "MAJAX",
         "KH",
+        "AOI",
         "CWTPI",
         "CWTBA",
         "CWTLE",
@@ -530,11 +535,27 @@ def format_cells_output_table(df: pd.DataFrame, sample_name: str) -> pd.DataFram
     df = df[columns_order_existing]
 
     df = (df
-          .pipe(round_column, "LA", 2)                          # round LA to 2 decimals
-          .pipe(round_column, "RADDISTR", 0, integer=True)      # round RADDISTR to 0 decimals
-          .pipe(round_column, "RRADDISTR", 0, integer=True)     # round RRADDISTR to 0 decimals
-          .pipe(round_column, "ASP", 3)                         # round ASP to 3 decimals
-          .pipe(round_column, "MAJAX", 0, integer=True)         # round MAJAX to 0 decimals
+          .pipe(round_column, "LA", 1)
+          .pipe(round_column, "RADDISTR", 1)
+          .pipe(round_column, "RRADDISTR", 2)
+          .pipe(round_column, "ASP", 2)
+          .pipe(round_column, "MAJAX", 2)
+          .pipe(round_column_sci, "KH", 3)  # round KH using a scientific notation format
+          .pipe(round_column, "CWTPI", 2)
+          .pipe(round_column, "CWTBA", 2)
+          .pipe(round_column, "CWTLE", 2)
+          .pipe(round_column, "CWTRI", 2)
+          .pipe(round_column, "CWTTAN", 2)
+          .pipe(round_column, "CWTRAD", 2)
+          .pipe(round_column, "CWTALL", 2)
+          .pipe(round_column, "RTSR", 3)
+          .pipe(round_column, "CTSR", 3)
+          .pipe(round_column, "DH", 2)
+          .pipe(round_column, "DRAD", 2)
+          .pipe(round_column, "DTAN", 2)
+          .pipe(round_column, "TB2", 4)
+          .pipe(round_column, "CWA", 0, integer=True)
+          .pipe(round_column, "RWD", 3)
           )
 
     return df
@@ -546,6 +567,13 @@ def round_column(df, col, decimals, integer=False):
             df[col] = df[col].astype("Int64")
     return df
 
+def round_column_sci(df, col, decimals):
+    if col in df.columns:
+        df[col] = (
+            pd.to_numeric(df[col], errors="coerce")
+            .apply(lambda x: f"{x:.{decimals}E}" if pd.notna(x) else np.nan)
+        )
+    return df
 
 def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     """Writes a cells file.
