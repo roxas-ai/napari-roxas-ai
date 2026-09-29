@@ -15,7 +15,7 @@ from magicgui.widgets import (
 )
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, StrMethodFormatter
 from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtWidgets import QVBoxLayout, QWidget
@@ -58,6 +58,67 @@ def simplify_string(string: str) -> str:
     return "".join(
         character for character in string if character.isalnum()
     ).lower()
+
+
+def year_grid_step(span: float, max_lines: int = 20) -> int:
+    """
+    Return the year spacing of the major x-axis grid lines for a view of the
+    given span: 10 years if that gives at most `max_lines` lines, otherwise
+    the smallest of 20, 50, 100, 200, 500, 1000, ... years that does.
+
+    Parameters
+    ----------
+    span : float
+        Number of years covered by the view.
+    max_lines : int
+        Maximum number of major grid lines.
+
+    Returns
+    -------
+    int
+        The spacing in years.
+    """
+    step = 10
+    while span / step > max_lines:
+        # 10 -> 20 -> 50 -> 100 -> 200 -> 500 -> ...
+        step = step * 5 // 2 if str(step).startswith("2") else step * 2
+    return step
+
+
+def split_handle_labels(slider: RangeSlider) -> None:
+    """
+    Show the lower handle's value below the bar and the upper handle's value
+    above it, so the two never overlap when the handles are close together.
+
+    superqt can only place all handle labels on the same side, so this
+    replaces its (private) label placement on this slider instance.
+
+    Parameters
+    ----------
+    slider : RangeSlider
+        The magicgui range slider to configure.
+    """
+    native = slider.native
+
+    def reposition_labels() -> None:
+        for index, label in enumerate(native._handle_labels):
+            handle = native._slider._handleRect(index).center()
+            center = native._slider.mapToParent(handle)
+            dy = -1.5 * label.height() if index else 0.5 * label.height()
+            label.move(int(center.x() - label.width() / 2), int(center.y() + dy))
+            label.raise_()
+            label.show()
+
+    native._reposition_labels = reposition_labels
+    native.layout().setContentsMargins(0, 25, 0, 25)
+
+    # Always show whole numbers: superqt sizes a label from its text but falls
+    # back to scientific notation ("-1e+05") when the current size is too
+    # small, so large years were shown depending on the previous value
+    for label in [native._min_label, native._max_label, *native._handle_labels]:
+        label._format_value = lambda value: str(int(round(value)))
+        label.updateText()
+        label._update_size()
 
 
 class MatplotlibCanvas(Container):
@@ -148,14 +209,17 @@ class CrossDatingPlotterWidget(Container):
             self._on_new_crossdating_column
         )
 
-        # Range slider for x-axis limits
+        # Range slider for x-axis limits.
+        # Initial technical bounds are set to -1,001,000 to support deep prehistoric samples
+        # and ensure visualization padding (+/- 10 years) doesn't hit a technical wall.
         self._x_range_slider = RangeSlider(
             label="Year Range",
-            min=0,
-            max=100,
+            min=-1001000,
+            max=9999,
             step=1,
             value=(0, 100),
         )
+        split_handle_labels(self._x_range_slider)
         self._x_range_slider.changed.connect(self._on_x_range_changed)
         self._x_range_slider_was_set = False
 
@@ -167,6 +231,7 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=(0, 100),
         )
+        split_handle_labels(self._y_range_slider)
         self._y_range_slider.changed.connect(self._on_y_range_changed)
         self._y_range_slider_was_set = False
 
@@ -473,6 +538,16 @@ class CrossDatingPlotterWidget(Container):
                 self._x_range_slider_was_set = False
                 self._y_range_slider_was_set = False
 
+                # A new outmost year set by the user replaces any alignment that
+                # was not applied yet: its offset was relative to the old year
+                self._base_offset = 0
+                self._offset_slider.native.blockSignals(True)
+                self._offset_slider.value = 0
+                self._offset_slider.native.blockSignals(False)
+                self._clear_alignment_buttons()
+                self._alignment_candidates = []
+                self._current_alignment_data = None
+
             # Update the plot if we have a valid column selected
             self._update_crossdating_plot()
 
@@ -694,20 +769,42 @@ class CrossDatingPlotterWidget(Container):
         if not hasattr(layer, "data") or "spatial_resolution" not in layer.metadata:
             return
 
+        # JUST-IN-TIME YEAR SYNCHRONIZATION:
+        # Before creating the plotting width_series, we ensure the index (YEARs)
+        # aligns with the outmost complete ring year in the metadata.
+        # This fixes the issue where prehistoric years (e.g. -99,999) might
+        # incorrectly default to year 1 in the visual plot if the table is stale.
+        metadata_outmost_year = layer.metadata.get("rings_outmost_complete_year", 9999)
+        if not layer_df.empty:
+            current_outmost_year = layer_df.index.max()
+            if current_outmost_year != metadata_outmost_year:
+                # Shift all years in the plotting copy to match metadata
+                year_offset = int(metadata_outmost_year - current_outmost_year)
+                layer_df.index = layer_df.index + year_offset
+                # Ensure index is integer type after shift
+                layer_df.index = layer_df.index.astype(int)
+
         # Width calculation: total area (pixels) / (image width * scale factor)
         width_series = layer_df["cells_above"] / (
                 layer.data.shape[1]
                 * layer.metadata["spatial_resolution"]
         )
 
-        # Clear plot_df and rebuild it to ensure no stale data
+        # Build the final plotting DataFrame
+        # We start with the reference series index
         self.plot_df = pd.DataFrame(index=self.crossdating_dataframe.index)
         self.plot_df["reference_series"] = reference_series
         self.plot_df["average"] = average_series
 
-        # Merge layer_series (width_series) - it might have different years
-        self.plot_df = self.plot_df.join(width_series.rename("layer_series"), how="outer")
+        # Merge layer_series (width_series) - it might have different years (prehistoric)
+        # Use how='outer' and sort=True to ensure the index covers both ranges correctly
+        self.plot_df = self.plot_df.join(width_series.rename("layer_series"), how="outer", sort=True)
         self.plot_df.index.name = "YEAR"
+
+        # FINAL SANITY CHECK: Ensure the combined index is of integer type and sorted.
+        # Mixed types (e.g. floats and ints) or unsorted indices can cause plotting misalignment.
+        self.plot_df.index = self.plot_df.index.astype(int)
+        self.plot_df = self.plot_df.sort_index()
 
         # Update the plot
         self._plot_crossdating_data()
@@ -832,9 +929,11 @@ class CrossDatingPlotterWidget(Container):
         for text, color in zip(legend.get_texts(), series_colors):
             text.set_color(color)
 
-        # Configure grid: 5-year vertical lines (minor), 10-year labels (major)
-        self.plot_widget.ax.xaxis.set_major_locator(MultipleLocator(10))
-        self.plot_widget.ax.xaxis.set_minor_locator(MultipleLocator(5))
+        # Configure grid: solid major lines with year labels, dashed minor lines
+        # in between (the spacing follows the visible range, see below)
+        # Plain year labels: the default formatter switches to an offset
+        # (e.g. "-40 ... 10" with "-1e5") for large years in a narrow view
+        self.plot_widget.ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
         
         # Major vertical grid lines (every 10 years) - solid
         self.plot_widget.ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey')
@@ -849,12 +948,26 @@ class CrossDatingPlotterWidget(Container):
         roxas_years_raw = self.plot_df["layer_series"].dropna().index.to_numpy()
         roxas_years = roxas_years_raw + total_offset
 
-        if len(roxas_years) > 0:
-            min_year = int(min(min(years), min(roxas_years)) - 10)
-            max_year = int(max(max(years), max(roxas_years)) + 10)
-        else:
-            min_year = int(min(years) - 10)
-            max_year = int(max(years) + 10)
+        # The slider bounds follow what is actually drawn: the reference/average
+        # years and the shifted ROXAS years. The plot_df index also holds the
+        # unshifted ROXAS years, which would keep the slider stretched to the
+        # sample's original dating after an alignment moved it elsewhere.
+        reference_mask = (
+            self.plot_df["reference_series"].notna()
+            | self.plot_df["average"].notna()
+        )
+        drawn_years = np.concatenate(
+            [self.plot_df.index[reference_mask].to_numpy(dtype=int), roxas_years]
+        )
+        if len(drawn_years) == 0:
+            drawn_years = years
+
+        min_year = int(min(drawn_years) - 10)
+        max_year = int(max(drawn_years) + 10)
+
+        # Clip min_year to the technical buffer limit (-1,001,000)
+        # to ensure the x-range slider doesn't hit a boundary wall during visualization.
+        min_year = max(-1001000, min_year)
 
         # Update x slider range but preserve values if possible
         self._x_range_slider.native.blockSignals(True)
@@ -929,6 +1042,14 @@ class CrossDatingPlotterWidget(Container):
 
         # Set the x axis limits before calculating y limits
         self.plot_widget.ax.set_xlim(self._x_range_slider.value)
+
+        # Year grid: 10-year major / 5-year minor lines for a normal view, wider
+        # steps when the view spans many years, so that a view over e.g. 100,000
+        # years doesn't draw tens of thousands of grid lines
+        x_low, x_high = self._x_range_slider.value
+        major_step = year_grid_step(x_high - x_low)
+        self.plot_widget.ax.xaxis.set_major_locator(MultipleLocator(major_step))
+        self.plot_widget.ax.xaxis.set_minor_locator(MultipleLocator(major_step / 2))
 
         # UPDATED: We use the target_range (if provided) or the slider's value to determine visible range.
         # This is crucial for first-time auto-alignment where the slider isn't yet visually updated.
@@ -1155,8 +1276,9 @@ class CrossDatingPlotterWidget(Container):
         target_end = int(candidate["end_year"])
         target_start = int(candidate["start_year"])
 
-        # Calculate required offset relative to current layer state
-        current_end = layer.metadata.get("rings_outmost_complete_year", 0)
+        # Calculate required offset relative to current layer state.
+        # Use a fallback of 9999 for undated samples as per project convention.
+        current_end = layer.metadata.get("rings_outmost_complete_year", 9999)
         offset = target_end - current_end
 
         # Store the found offset as base_offset and reset the slider to 0

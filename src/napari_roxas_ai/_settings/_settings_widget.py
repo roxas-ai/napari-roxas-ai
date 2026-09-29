@@ -148,9 +148,6 @@ SETTING_HINTS: Dict[str, str] = {
     "file_extensions.roxas_file_extensions": "roxas file extensions",
     "file_extensions.image_file_extensions": "Supported image file extensions",
     "file_extensions.text_file_extensions": "Supported text file extensions",
-    "JPEG_compression.quality": "Default JPEG quality",
-    "JPEG_compression.optimize": "Default optimize flag",
-    "JPEG_compression.progressive": "Default progressive flag",
     "processing.try_to_use_gpu": "Try to use GPU if available",
     "processing.try_to_use_autocast": "Try to use autocast if available",
     "vectorization.cells_tolerance": (

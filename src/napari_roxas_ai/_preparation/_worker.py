@@ -30,6 +30,45 @@ from .._utils._segmentation_postprocess import (
 from .._writer import write_single_layer
 
 
+# Output files of ROXAS Classic that may sit next to the input images
+ROXAS_CLASSIC_OUTPUT_SUFFIXES = (
+    "_annotated.jpg",
+    "_annotated_cells.jpg",
+    "_annotated_twin.jpg",
+    "_ReferenceSeries.gif",
+    "_ReferenceSeries.jpg",
+    "_ReferenceSeriesLong.jpg",
+    "_Preview.jpg",
+)
+
+
+def is_roxas_ai_output_file(file_path: str) -> bool:
+    """
+    Tell whether a file is an output of ROXAS AI (cells/rings rasters, the
+    annotated rings image or the exported cross-dating plot) rather than an
+    input image to prepare.
+
+    Parameters
+    ----------
+    file_path : str
+        Path of the file to check.
+
+    Returns
+    -------
+    bool
+        True if the file was written by ROXAS AI.
+    """
+    settings = SettingsManager()
+    output_suffixes = (
+        "".join(settings.get("file_extensions.cells_file_extension")),
+        "".join(settings.get("file_extensions.rings_file_extension")),
+        "_annotated.jpg",
+        "_ReferenceSeries.jpg",
+    )
+    name = Path(file_path).name.lower()
+    return name.endswith(tuple(suffix.lower() for suffix in output_suffixes))
+
+
 class Worker(QObject):
     """
     Worker for processing files in a separate thread.
@@ -306,6 +345,9 @@ class Worker(QObject):
                 )
             )
 
+        # ROXAS AI outputs are never inputs, also when all files are processed
+        all_files = [f for f in all_files if not is_roxas_ai_output_file(f)]
+
         # Filter based on selected files if provided
         if self.selected_files and len(self.selected_files) > 0:
             # Create a set of absolute paths for fast lookup
@@ -315,6 +357,12 @@ class Worker(QObject):
                 f for f in all_files if Path(f).absolute() in selected_paths
             ]
             all_files = filtered_files
+        else:
+            # All files are processed: skip ROXAS Classic outputs as well, as
+            # the file list does with "Ignore ROXAS Output files" checked
+            all_files = [
+                f for f in all_files if not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
+            ]
 
         # Filter out already processed files if needed
         if not self.process_processed:

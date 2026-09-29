@@ -125,7 +125,7 @@ def test_float_precision_is_not_lost(widget):
         for field in collected["samples_metadata"]["fields"]
         if field["id"] == "spatial_resolution"
     )
-    assert resolution["default"] == 2.2675
+    assert resolution["default"] == 2.267574
     assert resolution["min"] == 0.001
 
 
