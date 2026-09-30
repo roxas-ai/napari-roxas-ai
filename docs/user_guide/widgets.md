@@ -459,6 +459,8 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
 - Prevents syntax errors, invalid datatypes, or formatting corruption.
 - Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.
+- **Default Settings Source**: Default values are defined in the Python codebase (`DEFAULT_SETTINGS`). When starting the plugin with an existing `settings.json`, existing user settings are preserved, and only new/missing fields are filled from the defaults.
+- **Reset to Defaults**: The **Reset to defaults** button discards custom user values and overwrites `settings.json` with a clean copy of `DEFAULT_SETTINGS`.
 
 ### Key Settings Categories
 1. **File Extensions**:
@@ -473,4 +475,25 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 4. **Measurement Defaults**:
     - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
 5. **Metadata Schema**:
-    - Default metadata prompts and fields presented during sample preparation.
+    - Default metadata prompts and fields presented during sample preparation (e.g. spatial resolution, measurement geometry, tree-ring complete year).
+
+### Troubleshooting: Settings Not Updating After an App Upgrade
+
+When updating or installing a new version of `napari-roxas-ai` over an older installation, you may occasionally find that updated defaults do not immediately take effect:
+
+1. **Why this happens**:
+   - The settings manager automatically preserves your existing `settings.json` file on disk so custom configurations are not accidentally lost during everyday use. Because existing values take precedence over new defaults during upgrade merges, previously saved properties are retained.
+   - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
+
+2. **How to resolve**:
+   - **Step 1 — Reset from the UI**: Open the **ZZ - Settings** widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
+   - **Step 2 — Clean Reinstall**: If the settings or precision still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
+     1. Uninstall the package:
+        ```bash
+        pip uninstall napari-roxas-ai -y
+        ```
+     2. Remove any leftover `_settings` directory or `settings.json` file in your Python environment's `site-packages/napari_roxas_ai/`.
+     3. Reinstall the latest package version:
+        ```bash
+        pip install .
+        ```
