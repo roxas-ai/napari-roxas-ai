@@ -218,8 +218,11 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 
 The **Cells Layer Editor Widget** provides interactive manual editing tools to correct, split, merge, add, or erase cell lumen detections.
 
-![Screenshot: Cells Layer Editor Widget](../assets/screenshots/05_cells_layer_editor.png)
-*Figure 8: Cells layer editor widget.*
+![Screenshot: Cells Layer Editor Widget - Startup](../assets/screenshots/05_cells_layer_editor_startup.png)
+![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/screenshots/05_cells_layer_editor_vector_startup.png)
+![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/screenshots/05_cells_layer_editor_vector_lasso.png)
+![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/screenshots/05_cells_layer_editor_raster.png)
+*Figure 8: Cells layer editor widget in its four states: (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
 
 ### How It Works
 - Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
@@ -294,7 +297,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 - **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
 - **Lasso Selection Mode**: Checkbox activating lasso-based vertex selection.
 - **Delete Vertices in Lasso**: Removes all vertices enclosed by the lasso selection.
-- **Rerun Model from year**: Re-evaluates ring boundaries with tunable parameters starting from a selected calendar year (supporting years down to `-1,001,000`):
+- **Rerun Model from year**: Re-evaluates ring boundaries with tunable parameters starting from a selected calendar year:
   - *Rerun from Year (SpinBox)*: Calendar year to start re-detecting boundaries from.
   - *Model (ComboBox)*: Ring segmentation model weights file to use for boundary re-detection.
   - *Run (PushButton)*: Executes targeted boundary re-detection in edited areas.
