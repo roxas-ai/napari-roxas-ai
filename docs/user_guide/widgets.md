@@ -289,16 +289,17 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
   - `rasterization.rings_color_sequence`: List of alternating colors assigned cyclically to successive annual rings. (*Default:* `["blue", "green", "yellow", "purple", "orange", "cyan", "brown", "pink", "gray", "lime"]`)
 
 ### Key Controls & Options
-- **Last Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring.
-- **Edit Rings Geometries**: Enters vector polyline editing mode and displays boundary lines.
-- **Lasso Selection**: Checkbox activating lasso-based vertex selection.
-- **Delete Lasso Vertices**: Removes all vertices enclosed by the lasso selection.
-- **Re-run Rings Model**: Re-evaluates ring boundaries with tunable parameters:
-  - *Confidence Threshold*: Minimum model confidence for boundary detection.
-  - *Min Peak Distance*: Minimum distance between adjacent ring boundaries.
-  - *Edge Margin*: Margin around borders excluded from peak detection.
-- **Apply Geometries Changes**: Validates topology, updates `.rings` labels, updates `.rings_table.txt`, and saves year metadata.
-- **Cancel Geometries Changes**: Reverts to original ring boundaries.
+- **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
+- **Update Year**: Updates the calendar year metadata and recalculates ring year labels in the viewer.
+- **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
+- **Lasso Selection Mode**: Checkbox activating lasso-based vertex selection.
+- **Delete Vertices in Lasso**: Removes all vertices enclosed by the lasso selection.
+- **Rerun Model from year**: Re-evaluates ring boundaries with tunable parameters starting from a selected calendar year (supporting years down to `-1,001,000`):
+  - *Rerun from Year (SpinBox)*: Calendar year to start re-detecting boundaries from.
+  - *Model (ComboBox)*: Ring segmentation model weights file to use for boundary re-detection.
+  - *Run (PushButton)*: Executes targeted boundary re-detection in edited areas.
+- **Apply Ring Changes**: Validates topology, updates `.rings` labels, updates `.rings_table.txt`, and saves year metadata.
+- **Cancel Ring Changes**: Reverts to original ring boundaries and restores previous layer states.
 
 ---
 
@@ -312,6 +313,8 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 ### How It Works
 - Computes mean ring width (MRW) from the ring boundaries currently in the viewer.
 - Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.
+- Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** (with technical bounds down to `-1,001,000` for buffer padding) up to **`9,999`** (CE).
+- Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
 - Allows interactive shifting along the time axis (year offset slider) or automated alignment to evaluate dating synchronization.
 - Calculates statistical synchrony metrics in real time:
   - **Correlation coefficient ($r$)**
@@ -352,7 +355,7 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
 - **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.
-- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year) and Y (ring width in $\mu\text{m}$) viewing windows.
+- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999` with $-1,001,000$ internal buffer limits) and Y (ring width in $\mu\text{m}$) viewing windows.
 - **Offset Slider**: Manually shifts sample dating by $-50$ to $+50$ years relative to the reference chronology.
 - **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, and records the new outermost year in sample metadata.
 - **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `.jpg` image in the sample directory and records the validated reference series in `<sample_name>.metadata.json`.
