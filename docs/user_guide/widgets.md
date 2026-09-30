@@ -219,10 +219,14 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 The **Cells Layer Editor Widget** provides interactive manual editing tools to correct, split, merge, add, or erase cell lumen detections.
 
 ![Screenshot: Cells Layer Editor Widget - Startup](../assets/screenshots/05_cells_layer_editor_startup.png)
+
 ![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/screenshots/05_cells_layer_editor_vector_startup.png)
+
 ![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/screenshots/05_cells_layer_editor_vector_lasso.png)
+
 ![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/screenshots/05_cells_layer_editor_raster.png)
-*Figure 8: Cells layer editor widget in its four states: (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
+
+*Figure 8: Cells layer editor widget in its four states (from top to bottom): (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
 
 ### How It Works
 - Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
