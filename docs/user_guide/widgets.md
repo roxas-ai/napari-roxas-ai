@@ -66,7 +66,7 @@ The **Prepare Project Images** widget standardizes raw microscopy or flatbed sca
 
 ### How It Works
 1. Scans the selected project directory (and subdirectories) for supported image formats (`.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`, `.bmp`, `.jp2`).
-2. Opens an interactive **Metadata Dialog** for each sample to capture physical dimensions, spatial resolution ($\mu\text{m}/\text{px}$ or DPI), sample type (e.g., `conifer`), measurement geometry (`linear`), and the outermost complete calendar year.
+2. Opens an interactive **Metadata Dialog** for each sample to capture physical dimensions, spatial resolution ($\mu\text{m}/\text{px}$), sample type (e.g., `conifer`), measurement geometry (`linear`), and the outermost complete calendar year.
 3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` and creates a synchronized `<sample_name>.metadata.json`.
 4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
 
@@ -121,7 +121,7 @@ Because tree-ring measurement devices export widths in varying units, the select
 | **`1 / 100 mm`** *(default)* | $\times 10.0$ | $\mu\text{m}$ | Standard LINTAB / TSAP 1/100 mm resolution |
 | **`1 / 10 mm`** | $\times 100.0$ | $\mu\text{m}$ | Low-resolution 0.1 mm measurement systems |
 | **`1 / 1000 mm`** | $\times 1.0$ | $\mu\text{m}$ | Precision 1/1000 mm ($1\,\mu\text{m}$) stage micrometers |
-| **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ | Raw values recorded in tenths of micrometers |
+| **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ | To rescale in case of mistakes |
 
 #### Output File Structure
 The compiled series is saved in the root of the project directory as `rings_series<crossdating_file_extension>` (by default `rings_series.crossdating.txt`, where `file_extensions.crossdating_file_extension` in `settings.json` is configured as `[".crossdating", ".txt"]`, which concatenates to `[".crossdating.txt"]`:
@@ -459,6 +459,8 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
 - Prevents syntax errors, invalid datatypes, or formatting corruption.
 - Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.
+- **Default Settings Source**: Default values are defined in the Python codebase (`DEFAULT_SETTINGS`). When starting the plugin with an existing `settings.json`, existing user settings are preserved, and only new/missing fields are filled from the defaults.
+- **Reset to Defaults**: The **Reset to defaults** button discards custom user values and overwrites `settings.json` with a clean copy of `DEFAULT_SETTINGS`.
 
 ### Key Settings Categories
 1. **File Extensions**:
@@ -473,4 +475,25 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 4. **Measurement Defaults**:
     - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
 5. **Metadata Schema**:
-    - Default metadata prompts and fields presented during sample preparation.
+    - Default metadata prompts and fields presented during sample preparation (e.g. spatial resolution, measurement geometry, tree-ring complete year).
+
+### Troubleshooting: Settings Not Updating After an App Upgrade
+
+When updating or installing a new version of `napari-roxas-ai` over an older installation, you may occasionally find that updated defaults do not immediately take effect:
+
+**Why this happens**:
+   - The settings manager automatically preserves your existing `settings.json` file on disk so custom configurations are not accidentally lost during everyday use. Because existing values take precedence over new defaults during upgrade merges, previously saved properties are retained.
+   - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
+
+**How to resolve**:
+   - **Step 1 — Reset from the UI**: Open the **ZZ - Settings** widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
+   - **Step 2 — Clean Reinstall**: If the settings still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
+     1. Uninstall the package:
+        ```bash
+        pip uninstall napari-roxas-ai -y
+        ```
+     2. Remove any leftover `_settings` directory or `settings.json` file in your Python environment's `site-packages/napari_roxas_ai/`.
+     3. Reinstall the latest package version:
+        ```bash
+        pip install .
+        ```
