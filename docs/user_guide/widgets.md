@@ -45,6 +45,7 @@ flowchart TD
 The **Define Project Directory** widget configures the root folder where your sample images, metadata, and analysis tables reside.
 
 ![Screenshot: Project Directory Selector](../assets/screenshots/00_define_project_directory.png)
+
 *Figure 1: Project directory selection dialog.*
 
 ### How It Works
@@ -60,6 +61,7 @@ When triggered from the menu, it opens a system folder browser. Selecting a fold
 The **Prepare Project Images** widget standardizes raw microscopy or flatbed scans and associated cross-dating text files into the structured file naming conventions and data structures required by ROXAS AI.
 
 ![Screenshot: Sample Preparation Widget](../assets/screenshots/01_preparation_widget.png)
+
 *Figure 2: Sample preparation widget interface.*
 
 ### How It Works
@@ -69,6 +71,7 @@ The **Prepare Project Images** widget standardizes raw microscopy or flatbed sca
 4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
 
 ![Screenshot: Metadata Dialog](../assets/screenshots/01_metadata_dialog.png)
+
 *Figure 3: Interactive metadata prompt dialog during image preparation.*
 
 ### Cross-Dating Text Files Processing
@@ -76,6 +79,7 @@ The **Prepare Project Images** widget standardizes raw microscopy or flatbed sca
 The **Start Processing Crossdating Files** action allows you to import and compile one or more external tree-ring width (TRW) measurement files or master reference chronologies into a single synchronized project cross-dating file.
 
 ![Screenshot: Crossdating Selection Dialog](../assets/screenshots/01_crossdating_selection_dialog.png)
+
 *Figure 4: Dialog for selecting cross-dating files and setting unit scaling.*
 
 #### Supported Input File Formats
@@ -153,6 +157,7 @@ The compiled series is saved in the root of the project directory as `rings_seri
 The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labels (`.cells`), and tree-ring labels (`.rings`) into napari with standardized colormaps, scaling, and navigation shortcuts.
 
 ![Screenshot: Samples Loading Widget](../assets/screenshots/02_samples_loading_widget.png)
+
 *Figure 5: Samples loading widget with multi-sample selection.*
 
 ### How It Works
@@ -175,6 +180,7 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 The **Single Sample Segmentation Widget** performs automated deep-learning inference to identify tracheid cell lumens and annual tree-ring boundaries on the currently displayed image.
 
 ![Screenshot: Single Sample Segmentation Widget](../assets/screenshots/03a_single_segmentation_widget.png)
+
 *Figure 6: Single sample AI segmentation interface.*
 
 ### How It Works
@@ -198,6 +204,7 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 The **Batch Sample Segmentation Widget** executes AI detection across multiple samples in the background without needing to load each image into the viewer.
 
 ![Screenshot: Batch Segmentation Widget](../assets/screenshots/03b_batch_segmentation_widget.png)
+
 *Figure 7: Batch segmentation widget.*
 
 ### How It Works
@@ -266,6 +273,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 The **Rings Layer Editor Widget** enables precise curation of annual tree-ring boundaries, outermost year re-numbering, and targeted model-assisted re-detection.
 
 ![Screenshot: Rings Layer Editor Widget](../assets/screenshots/06_rings_layer_editor.png)
+
 *Figure 9: Rings layer editor with interactive shapes and year labels.*
 
 ### How It Works
@@ -315,6 +323,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series derived from detected rings with master reference chronologies in an interactive plotting environment.
 
 ![Screenshot: Cross-Dating Plotter Widget](../assets/screenshots/07_cross_dating_plotter.png)
+
 *Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
 
 ### How It Works
@@ -374,6 +383,7 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 The **Samples Saving Widget** writes modified cell masks, ring boundaries, and updated sample metadata from napari back to their respective files on disk.
 
 ![Screenshot: Samples Saving Widget](../assets/screenshots/08_samples_saving_widget.png)
+
 *Figure 11: Samples saving widget.*
 
 ### How It Works
@@ -394,6 +404,7 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 The **Single Sample Measurements Widget** computes the full suite of Quantitative Wood Anatomy (QWA) metrics for the sample currently loaded in napari.
 
 ![Screenshot: Single Sample Measurements Widget](../assets/screenshots/09a_single_measurements_widget.png)
+
 *Figure 12: Single sample measurements interface and parameter configuration.*
 
 ### How It Works
@@ -419,6 +430,7 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 The **Batch Sample Measurements Widget** runs the anatomical measurement engine across all samples in a project folder without requiring interactive display in the napari viewer.
 
 ![Screenshot: Batch Measurements Widget](../assets/screenshots/09b_batch_measurements_widget.png)
+
 *Figure 13: Batch measurements widget.*
 
 ### How It Works
@@ -440,6 +452,7 @@ The **Batch Sample Measurements Widget** runs the anatomical measurement engine 
 The **Settings Widget** is a visual preferences manager that allows adjusting global defaults, file extensions, visualization parameters, and hardware settings without manual editing of JSON files.
 
 ![Screenshot: Settings Manager Widget](../assets/screenshots/zz_settings_widget.png)
+
 *Figure 14: Global settings manager widget with collapsible categories.*
 
 ### How It Works
