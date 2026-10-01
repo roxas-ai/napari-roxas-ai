@@ -389,6 +389,7 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 ### How It Works
 - Gathers data, layer parameters, and metadata from active napari layers.
 - Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif`.
+- Whenever a `.rings` layer is saved, also generates and writes an annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years, provided the original scan image exists.
 - Updates `<sample_name>.metadata.json` with updated ring counts, outermost year, and timestamps.
 - Operates in a non-blocking background worker thread.
 
