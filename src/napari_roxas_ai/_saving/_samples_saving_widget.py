@@ -110,15 +110,29 @@ class SamplesSavingWidget(Container):
 
     def _save_layers(self, how: str):
         """Save selected or all layers to their original location."""
+        rings_ext = settings.get("file_extensions.rings_file_extension")[0]
+        cells_ext = settings.get("file_extensions.cells_file_extension")[0]
+        allowed_exts = (rings_ext, cells_ext)
+
+        if how == "selected":
+            candidate_layers = self._viewer.layers.selection
+        elif how == "all":
+            candidate_layers = self._viewer.layers
+        else:
+            candidate_layers = []
+
+        layers_to_save = [
+            layer
+            for layer in candidate_layers
+            if any(layer.name.endswith(ext) for ext in allowed_exts)
+        ]
+
+        if not layers_to_save:
+            return
 
         # Disable the run button while processing
         self._save_selected_layers_button.enabled = False
         self._save_all_layers_button.enabled = False
-
-        if how == "selected":
-            layers_to_save = self._viewer.layers.selection
-        elif how == "all":
-            layers_to_save = self._viewer.layers
 
         self.worker_thread = QThread()
         self.worker = Worker(layers_to_save)
