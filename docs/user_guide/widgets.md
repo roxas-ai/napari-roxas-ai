@@ -121,7 +121,7 @@ Because tree-ring measurement devices export widths in varying units, the select
 | **`1 / 100 mm`** *(default)* | $\times 10.0$ | $\mu\text{m}$ | Standard LINTAB / TSAP 1/100 mm resolution |
 | **`1 / 10 mm`** | $\times 100.0$ | $\mu\text{m}$ | Low-resolution 0.1 mm measurement systems |
 | **`1 / 1000 mm`** | $\times 1.0$ | $\mu\text{m}$ | Precision 1/1000 mm ($1\,\mu\text{m}$) stage micrometers |
-| **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ | To rescale in case of mistakes |
+| **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ | Raw values recorded in tenths of micrometers |
 
 #### Output File Structure
 The compiled series is saved in the root of the project directory as `rings_series<crossdating_file_extension>` (by default `rings_series.crossdating.txt`, where `file_extensions.crossdating_file_extension` in `settings.json` is configured as `[".crossdating", ".txt"]`, which concatenates to `[".crossdating.txt"]`:
@@ -146,7 +146,7 @@ The compiled series is saved in the root of the project directory as `rings_seri
 - **Process already processed files**: When unchecked (default), skips files that already have the `.scan` extension.
 - **Manually select files to process**: Expands a multi-selection list allowing selective processing of specific samples instead of the entire directory.
 - **Reverse Selection**: Inverts the current file selection in the list.
-- **Ignore ROXAS Output files**: When enabled, filters out preview and reference output files from classic ROXAS runs (`_annotated.jpg`, `_annotated_cells.jpg`, `_annotated_twin.jpg`, `_ReferenceSeries.gif`, `_ReferenceSeries.jpg`, `_ReferenceSeriesLong.jpg`, `_Preview.jpg`) so they are not treated as raw input scans. (Note: ROXAS AI output files such as `.cells`, `.rings`, and default annotations are automatically excluded).
+- **Ignore ROXAS Output files**: Filters out visualization previews (e.g., `_annotated.jpg`, `_ReferenceSeries.jpg`).
 - **Start Processing Image Files**: Launches the preparation worker thread with a live progress bar.
 - **Start Processing Crossdating Files**: Opens the cross-dating file selection and unit conversion dialog to merge external ring-width files into the project reference series.
 
@@ -327,17 +327,15 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 *Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
 
 ### How It Works
-- Computes mean ring width (MRW) in micrometers ($\mu\text{m}$) from the ring boundaries currently in the active `.rings` layer.
-- Renders dual interactive curves in a Matplotlib canvas:
-  - **Sample Series** (red curve): The ring-width time series derived from the active sample in napari.
-  - **Reference Series** (yellow curve): The selected individual series or site chronology from the cross-dating file.
-  - **Average Series** (white curve): The mean chronology computed across all reference series in the file.
+- Computes mean ring width (MRW) from the ring boundaries currently in the viewer.
+- Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.
 - Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** (with technical bounds down to `-1,001,000` for buffer padding) up to **`9,999`** (CE).
 - Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
 - Allows interactive shifting along the time axis (year offset slider) or automated alignment to evaluate dating synchronization.
-- Calculates statistical synchrony metrics in real time displayed directly in the legend:
+- Calculates statistical synchrony metrics in real time:
   - **Correlation coefficient ($r$)**
   - **Gleichläufigkeit (GLK / % sign agreement)**
+  - **$t$-value / statistical significance**
 - **Bidirectional Viewport Linking**: Clicking any data point in the cross-dating plot automatically centers and zooms the napari viewer onto the corresponding tree-ring boundary in the image.
 
 ### Cross-Dating Files Discovery & Folder Hierarchy Traversal
@@ -372,7 +370,7 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 ### Key Controls & Options
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
-- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation. When clicked, it generates interactive candidate alignment buttons (top matches showing shift offset, $r$, and GLK) allowing one-click preview and selection.
+- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.
 - **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999` with $-1,001,000$ internal buffer limits) and Y (ring width in $\mu\text{m}$) viewing windows.
 - **Offset Slider**: Manually shifts sample dating by $-50$ to $+50$ years relative to the reference chronology.
 - **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, and records the new outermost year in sample metadata.
@@ -461,8 +459,6 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
 - Prevents syntax errors, invalid datatypes, or formatting corruption.
 - Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.
-- **Default Settings Source**: Default values are defined in the Python codebase (`DEFAULT_SETTINGS`). When starting the plugin with an existing `settings.json`, existing user settings are preserved, and only new/missing fields are filled from the defaults.
-- **Reset to Defaults**: The **Reset to defaults** button discards custom user values and overwrites `settings.json` with a clean copy of `DEFAULT_SETTINGS`.
 
 ### Key Settings Categories
 1. **File Extensions**:
@@ -477,25 +473,4 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 4. **Measurement Defaults**:
     - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
 5. **Metadata Schema**:
-    - Default metadata prompts and fields presented during sample preparation (e.g. spatial resolution, measurement geometry, tree-ring complete year).
-
-### Troubleshooting: Settings Not Updating After an App Upgrade
-
-When updating or installing a new version of `napari-roxas-ai` over an older installation, you may occasionally find that updated defaults do not immediately take effect:
-
-**Why this happens**:
-   - The settings manager automatically preserves your existing `settings.json` file on disk so custom configurations are not accidentally lost during everyday use. Because existing values take precedence over new defaults during upgrade merges, previously saved properties are retained.
-   - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
-
-**How to resolve**:
-   - **Step 1 — Reset from the UI**: Open the **ZZ - Settings** widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
-   - **Step 2 — Clean Reinstall**: If the settings still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
-     1. Uninstall the package:
-        ```bash
-        pip uninstall napari-roxas-ai -y
-        ```
-     2. Remove any leftover `_settings` directory or `settings.json` file in your Python environment's `site-packages/napari_roxas_ai/`.
-     3. Reinstall the latest package version:
-        ```bash
-        pip install .
-        ```
+    - Default metadata prompts and fields presented during sample preparation.
