@@ -32,8 +32,8 @@ flowchart TD
 | **3B - Batch detect cells & rings** | Run AI segmentation on multiple samples in the background | Prepared project directory | `.cells.png`, `.rings.tif`, `.metadata.json` |
 | **5 - Edit cells** | Manually refine cell segmentations (raster brush/eraser, vector contours, lasso deletion) | `.cells` layer | Edited `.cells` layer |
 | **6 - Edit rings** | Manually adjust, add, delete, or re-detect tree-ring boundaries | `.rings` layer | Edited `.rings` layer & updated ring years |
-| **7 - Visual cross-dating** | Synchronize ring-width series against master reference chronologies | `.rings` layer & crossdating file | Calibrated ring years & verified sample dating |
-| **8 - Save cells & rings editing** | Persist manual edits from napari viewer back to disk | Active napari layers | Updated `.cells.png`, `.rings.tif`, `.metadata.json` |
+| **7 - Visual cross-dating** | Synchronize ring-width series against reference chronologies | `.rings` layer & crossdating file | Calibrated ring years & verified sample dating |
+| **8 - Save cells & rings editing** | Save manual edits from napari viewer back to disk | Active napari layers | Updated `.cells.png`, `.rings.tif`, `.metadata.json` |
 | **9A - Measure cells & rings (individual image)** | Calculate anatomical variables for active sample in viewer | `.cells` & `.rings` layers | `.cells_table.txt`, `.rings_table.txt` |
 | **9B - Batch measure cells & rings** | Calculate anatomical variables for all samples in directory | Project directory | Measurement tables for all samples |
 | **ZZ - Settings** | Configure global defaults, hardware acceleration, file extensions, and thresholds | User settings | `settings.json` configuration file |
@@ -329,9 +329,9 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 ### How It Works
 - Computes mean ring width (MRW) from the ring boundaries currently in the viewer.
 - Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.
-- Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** (with technical bounds down to `-1,001,000` for buffer padding) up to **`9,999`** (CE).
+- Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** up to **`9,999`** (CE).
 - Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
-- Allows interactive shifting along the time axis (year offset slider) or automated alignment to evaluate dating synchronization.
+- Allows interactive shifting by a maximum of +/- 50 years along the time axis (year offset slider) or automated alignment to evaluate dating synchronization.
 - Calculates statistical synchrony metrics in real time:
   - **Correlation coefficient ($r$)**
   - **Gleichläufigkeit (GLK / % sign agreement)**
@@ -371,8 +371,8 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
 - **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.
-- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999` with $-1,001,000$ internal buffer limits) and Y (ring width in $\mu\text{m}$) viewing windows.
-- **Offset Slider**: Manually shifts sample dating by $-50$ to $+50$ years relative to the reference chronology.
+- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows.
+- **Offset Slider**: Manually shifts sample dating by up to $-50$ to $+50$ years relative to the reference chronology.
 - **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, and records the new outermost year in sample metadata.
 - **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `.jpg` image in the sample directory and records the validated reference series in `<sample_name>.metadata.json`.
 
@@ -479,11 +479,11 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 
 When updating or installing a new version of `napari-roxas-ai` over an older installation, you may occasionally find that updated defaults do not immediately take effect:
 
-1. **Why this happens**:
+**Why this happens**:
    - The settings manager automatically preserves your existing `settings.json` file on disk so custom configurations are not accidentally lost during everyday use. Because existing values take precedence over new defaults during upgrade merges, previously saved properties are retained.
    - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
 
-2. **How to resolve**:
+**How to resolve**:
    - **Step 1 — Reset from the UI**: Open the **ZZ - Settings** widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
    - **Step 2 — Clean Reinstall**: If the settings or precision still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
      1. Uninstall the package:
