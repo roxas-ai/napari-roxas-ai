@@ -474,3 +474,24 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
     - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
 5. **Metadata Schema**:
     - Default metadata prompts and fields presented during sample preparation.
+
+### Troubleshooting: Settings Not Updating After an App Upgrade
+
+When updating or installing a new version of `napari-roxas-ai` over an older installation, you may occasionally find that updated defaults do not immediately take effect:
+
+1. **Why this happens**:
+   - The settings manager automatically preserves your existing `settings.json` file on disk so custom configurations are not accidentally lost during everyday use. Because existing values take precedence over new defaults during upgrade merges, previously saved properties are retained.
+   - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
+
+2. **How to resolve**:
+   - **Step 1 — Reset from the UI**: Open the **ZZ - Settings** widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
+   - **Step 2 — Clean Reinstall**: If the settings or precision still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
+     1. Uninstall the package:
+        ```bash
+        pip uninstall napari-roxas-ai -y
+        ```
+     2. Remove any leftover `_settings` directory or `settings.json` file in your Python environment's `site-packages/napari_roxas_ai/`.
+     3. Reinstall the latest package version:
+        ```bash
+        pip install .
+        ```
