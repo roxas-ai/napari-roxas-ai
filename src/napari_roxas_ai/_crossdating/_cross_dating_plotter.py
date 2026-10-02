@@ -1630,7 +1630,7 @@ class CrossDatingPlotterWidget(Container):
         container.widgets = []
 
     def save_crossdating_plot_image(self, out_dir: Union[str, Path], sample_name: str) -> Optional[Path]:
-        """Save the currently displayed crossdating plot as a JPG."""
+        """Save the crossdating plot as a standardized JPG (height=800px, width scaled by overlap range)."""
         if self.plot_df is None or self.plot_df.empty:
             return None
         if self._crossdating_column_combo.value is None:
@@ -1641,11 +1641,184 @@ class CrossDatingPlotterWidget(Container):
 
         out_path = out_dir / f"{sample_name}_ReferenceSeries.jpg"
 
-        # Save the exact figure that is shown in the UI
-        self.plot_widget.figure.savefig(
+        # Calculate correlation and overlapping period
+        total_offset = self._base_offset + self._offset_slider.value
+        shifted_layer_series = self.plot_df["layer_series"].copy()
+        shifted_layer_series.index = shifted_layer_series.index + total_offset
+
+        corr_df = pd.concat([
+            self.plot_df["reference_series"],
+            shifted_layer_series,
+            self.plot_df["average"]
+        ], axis=1)
+        corr_df.columns = ["reference", "roxas", "average"]
+
+        mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
+        overlap_years_ref = corr_df.index[mask_ref].tolist()
+
+        if overlap_years_ref:
+            overlap_min_ref = min(overlap_years_ref)
+            overlap_max_ref = max(overlap_years_ref)
+            r_ref = corr_df["reference"].corr(corr_df["roxas"])
+            glk_ref = self.calculate_glk(
+                corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
+                corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
+            )
+            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
+        else:
+            # Fallback if no overlap exists
+            valid_ref_years = corr_df.index[corr_df["reference"].notna()].tolist()
+            valid_roxas_years = corr_df.index[corr_df["roxas"].notna()].tolist()
+            all_valid = valid_ref_years + valid_roxas_years
+            if all_valid:
+                overlap_min_ref = min(all_valid)
+                overlap_max_ref = max(all_valid)
+            else:
+                overlap_min_ref = 0
+                overlap_max_ref = 0
+            r_ref = np.nan
+            glk_ref = np.nan
+            period_ref = "no overlap"
+
+        mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
+        overlap_years_avg = corr_df.index[mask_avg].tolist()
+        if overlap_years_avg:
+            r_avg = corr_df["average"].corr(corr_df["roxas"])
+            glk_avg = self.calculate_glk(
+                corr_df.loc[overlap_years_avg, "average"].to_numpy(),
+                corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
+            )
+        else:
+            r_avg = np.nan
+            glk_avg = np.nan
+
+        # Target dimensions in pixels
+        target_height_px = 800
+        target_width_px = 50 + (20 + overlap_max_ref - overlap_min_ref) * 50
+
+        # Build labels
+        layer = self._input_layer if hasattr(self, "_viewer") and self._viewer is not None else None
+        image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else sample_name
+        roxas_label = f"RXS: {image_id} ({period_ref})"
+
+        ref_name = str(self._crossdating_column_combo.value)
+        glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
+        r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
+        ref_label = f"{ref_name}{r_ref_text}"
+
+        glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
+        r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
+        avg_label = f"Average{r_avg_text}"
+
+        # Create offscreen figure with exact pixel size
+        dpi = 100
+        fig = Figure(
+            figsize=(target_width_px / dpi, target_height_px / dpi),
+            dpi=dpi,
+            facecolor="black"
+        )
+        ax = fig.add_subplot(111)
+        ax.set_facecolor("black")
+
+        # Configure margins with fixed pixel padding
+        right_margin_px = 15
+        left_margin_px = 140
+        top_margin_px = 15
+        bottom_margin_px = 50
+
+        fig.subplots_adjust(
+            left=left_margin_px / target_width_px,
+            right=(target_width_px - right_margin_px) / target_width_px,
+            top=(target_height_px - top_margin_px) / target_height_px,
+            bottom=bottom_margin_px / target_height_px,
+        )
+
+        years = self.plot_df.index.to_numpy(dtype=int)
+
+        # Plot the series with 3px line thickness
+        ax.plot(
+            years + total_offset,
+            self.plot_df["layer_series"],
+            color='red',
+            linestyle='-',
+            linewidth=3,
+            label=roxas_label,
+            zorder=3,
+        )
+        ax.plot(
+            years,
+            self.plot_df["reference_series"],
+            color='yellow',
+            linestyle='-',
+            linewidth=3,
+            label=ref_label,
+            zorder=2,
+        )
+        ax.plot(
+            years,
+            self.plot_df["average"],
+            color='white',
+            linestyle='-',
+            linewidth=3,
+            label=avg_label,
+            zorder=1,
+        )
+
+        ax.set_ylabel("Width (\u03BCm)", color='lightgrey', fontsize=20, labelpad=10)
+        legend = ax.legend(loc="best", facecolor='black', edgecolor='lightgrey', fontsize=20)
+        series_colors = ['red', 'yellow', 'white']
+        for text, color in zip(legend.get_texts(), series_colors):
+            text.set_color(color)
+
+        ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+        ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey', linewidth=1.5)
+        ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey', linewidth=1.0)
+        ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey', linewidth=1.5)
+
+        # Set x limits standard to overlap window +- 10 years
+        x_min = overlap_min_ref - 10
+        x_max = overlap_max_ref + 10
+        ax.set_xlim(x_min, x_max)
+
+        major_step = year_grid_step(x_max - x_min)
+        ax.xaxis.set_major_locator(MultipleLocator(major_step))
+        ax.xaxis.set_minor_locator(MultipleLocator(major_step / 2))
+
+        # Determine y limits based on visible data within [x_min, x_max]
+        visible_roxas = self.plot_df["layer_series"].copy()
+        visible_roxas.index = np.array(years) + total_offset
+        visible_roxas = visible_roxas[(visible_roxas.index >= x_min) & (visible_roxas.index <= x_max)].dropna()
+
+        visible_ref = self.plot_df["reference_series"].copy()
+        visible_ref = visible_ref[(visible_ref.index >= x_min) & (visible_ref.index <= x_max)].dropna()
+
+        visible_avg = self.plot_df["average"].copy()
+        visible_avg = visible_avg[(visible_avg.index >= x_min) & (visible_avg.index <= x_max)].dropna()
+
+        all_visible_values = pd.concat([visible_roxas, visible_ref, visible_avg])
+        if not all_visible_values.empty:
+            min_val = float(all_visible_values.min())
+            max_val = float(all_visible_values.max())
+            padding = (max_val - min_val) * 0.1 if max_val > min_val else 10.0
+            y_min = int(np.floor(max(0.0, min_val - padding)))
+            y_max = int(np.ceil(max_val + padding))
+        else:
+            y_min = 0
+            y_max = 100
+
+        if y_min >= y_max:
+            y_max = y_min + 10
+        ax.set_ylim(y_min, y_max)
+
+        ax.tick_params(colors='lightgrey', which='both', labelsize=20)
+        for spine in ax.spines.values():
+            spine.set_color('lightgrey')
+            spine.set_linewidth(2)
+
+        # Save exact standardized figure without changing bounding box sizes
+        fig.savefig(
             out_path,
-            dpi=200,
-            bbox_inches="tight",
+            dpi=dpi,
             facecolor="black",
         )
         return out_path

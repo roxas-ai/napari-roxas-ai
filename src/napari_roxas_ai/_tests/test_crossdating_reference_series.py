@@ -257,3 +257,48 @@ def test_crossdating_plotter_auto_floats_with_margins_and_size_grip(
         assert abs(geom.height() - expected_h) <= 50
         assert abs(geom.x() - expected_x) <= 50
         assert abs(geom.y() - expected_y) <= 50
+
+
+def test_save_crossdating_plot_image_scaling(tmp_path):
+    from PIL import Image
+    import pandas as pd
+    import numpy as np
+    from napari_roxas_ai._crossdating._cross_dating_plotter import CrossDatingPlotterWidget
+
+    # Create dummy plot_df with overlap from 2000 to 2010 (11 years)
+    years = np.arange(1995, 2016)
+    layer_series = pd.Series(np.nan, index=years)
+    layer_series.loc[2000:2010] = 50.0
+
+    ref_series = pd.Series(np.nan, index=years)
+    ref_series.loc[1998:2012] = 60.0
+
+    avg_series = pd.Series(np.nan, index=years)
+    avg_series.loc[1998:2012] = 55.0
+
+    plot_df = pd.DataFrame({
+        "layer_series": layer_series,
+        "reference_series": ref_series,
+        "average": avg_series,
+    }, index=years)
+
+    plotter = CrossDatingPlotterWidget.__new__(CrossDatingPlotterWidget)
+    plotter.plot_df = plot_df
+    plotter._crossdating_column_combo = SimpleNamespace(value="RAL16A")
+    plotter._base_offset = 0
+    plotter._offset_slider = SimpleNamespace(value=0)
+    plotter._input_layer_combo = SimpleNamespace(value=None)
+
+    out_path = plotter.save_crossdating_plot_image(tmp_path, "TEST_SAMPLE")
+    assert out_path is not None
+    assert out_path.exists()
+
+    with Image.open(out_path) as img:
+        w, h = img.size
+        # overlap_min_ref = 2000, overlap_max_ref = 2010
+        # Expected width = 50 + (20 + 2010 - 2000) * 50 = 50 + 30 * 50 = 1550
+        # Expected height = 800
+        expected_w = 50 + (20 + 2010 - 2000) * 50
+        expected_h = 800
+        assert w == expected_w
+        assert h == expected_h
