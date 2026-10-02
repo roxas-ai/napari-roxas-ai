@@ -386,7 +386,7 @@ class SingleSampleSegmentationWidget(Container):
 
         # Cells segmentation checkbox and model selection
         self._segment_cells_checkbox = CheckBox(
-            value=True, label="Segment Cells Using Model:"
+            value=True, label="Cell Segmentation:"
         )
         self._segment_cells_checkbox.changed.connect(
             self._update_cells_model_visibility
@@ -413,7 +413,7 @@ class SingleSampleSegmentationWidget(Container):
 
         # Rings segmentation checkbox and model selection
         self._segment_rings_checkbox = CheckBox(
-            value=True, label="Segment Rings Using Model:"
+            value=True, label="Ring Segmentation:"
         )
         self._segment_rings_checkbox.changed.connect(
             self._update_rings_model_visibility
@@ -451,9 +451,10 @@ class SingleSampleSegmentationWidget(Container):
             ]
         )
 
-        # Initialize visibility of model selection widgets
+        # Initialize visibility of model selection widgets and button state
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
+        self._update_run_button_state()
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the scan file extension."""
@@ -479,11 +480,20 @@ class SingleSampleSegmentationWidget(Container):
         self._cells_model_weights_file.visible = (
             self._segment_cells_checkbox.value
         )
+        self._update_run_button_state()
 
     def _update_rings_model_visibility(self) -> None:
         """Update visibility of rings model selection based on checkbox."""
         self._rings_model_weights_file.visible = (
             self._segment_rings_checkbox.value
+        )
+        self._update_run_button_state()
+
+    def _update_run_button_state(self) -> None:
+        """Update enabled state of run button based on checkboxes."""
+        self._run_segmentation_button.enabled = (
+            self._segment_cells_checkbox.value
+            or self._segment_rings_checkbox.value
         )
 
     def _extract_base_name(self, layer_name: str) -> str:

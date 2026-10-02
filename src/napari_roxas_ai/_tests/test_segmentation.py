@@ -199,6 +199,21 @@ class TestSingleSampleSegmentation:
             assert widget._cells_model_weights_file in widget._cells_row
             assert widget._segment_rings_checkbox in widget._rings_row
             assert widget._rings_model_weights_file in widget._rings_row
+            assert widget._run_segmentation_button.enabled is True
+
+            # Untick both checkboxes -> button disabled
+            widget._segment_cells_checkbox.value = False
+            widget._segment_rings_checkbox.value = False
+            assert widget._run_segmentation_button.enabled is False
+
+            # Tick one checkbox back -> button enabled
+            widget._segment_cells_checkbox.value = True
+            assert widget._run_segmentation_button.enabled is True
+
+            widget._segment_cells_checkbox.value = False
+            widget._segment_rings_checkbox.value = True
+            assert widget._run_segmentation_button.enabled is True
+
             valid = widget._get_valid_layers()
             assert valid == [image_layer]
 
