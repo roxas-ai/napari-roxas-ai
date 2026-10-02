@@ -179,6 +179,9 @@ class TestSingleSampleSegmentation:
         with patch(
             "napari_roxas_ai._segmentation._single_sample_segmentation.check_assets_and_download"
         ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SingleSampleSegmentationWidget._get_model_files",
+            return_value=("dummy_model.pth",),
+        ), patch(
             "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
             return_value=mock_settings,
         ), patch(
