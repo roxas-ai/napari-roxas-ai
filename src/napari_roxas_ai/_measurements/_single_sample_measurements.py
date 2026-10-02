@@ -1,10 +1,10 @@
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from datetime import datetime
 from pathlib import Path
+import napari.layers
 from qtpy.QtCore import QTimer
 from magicgui.widgets import (
     CheckBox,
-    ComboBox,
     Container,
     FloatSpinBox,
     PushButton,
@@ -79,11 +79,6 @@ class SingleSampleMeasurementsWidget(Container):
 
         self._viewer = viewer
 
-        # Create a layer selection widget for label layers
-        self._input_sample_combo = ComboBox(
-            label="Sample", choices=self._get_valid_layers
-        )
-
         # Cells measurement checkbox and settings (currently hidden as we want the user to compute cells first anyway)
         self._measure_cells_checkbox = CheckBox(
             value=True, label="Measure Cells"
@@ -129,7 +124,6 @@ class SingleSampleMeasurementsWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_sample_combo,
                 self._measure_cells_checkbox,
                 self._cells_measurements_settings,
                 self._measure_rings_checkbox,
@@ -137,24 +131,34 @@ class SingleSampleMeasurementsWidget(Container):
             ]
         )
 
+    @property
+    def _cells_layer(self) -> Optional["napari.layers.Labels"]:
+        cells_extension = settings.get("file_extensions.cells_file_extension")[
+            0
+        ]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
+                cells_extension
+            ):
+                return layer
+        return None
+
+    @property
+    def _rings_layer(self) -> Optional["napari.layers.Labels"]:
+        rings_extension = settings.get("file_extensions.rings_file_extension")[
+            0
+        ]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
+                rings_extension
+            ):
+                return layer
+        return None
+
     def _update_spinner(self):
         frame = self._spinner_frames[self._spinner_index]
         self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
         self._run_analysis_button.text = f"{self._current_status} {frame}"
-
-    def _get_valid_layers(self, widget=None) -> list:
-        names = set()
-
-        for layer in self._viewer.layers:
-            meta = getattr(layer, "metadata", None)
-            if not isinstance(meta, dict):
-                continue
-
-            sample_name = meta.get("sample_name")
-            if isinstance(sample_name, str) and sample_name:
-                names.add(sample_name)
-
-        return sorted(names)
 
     def _update_cells_settings_visibility(self):
         self._cells_measurements_settings.visible = (
@@ -167,36 +171,30 @@ class SingleSampleMeasurementsWidget(Container):
         self._spinner_index = 0
         self._spinner_timer.start()
 
-
-        # Get the selected label layer
-        if self._input_sample_combo.value is None:
-            show_info("Input sample is not set.")
+        if (
+            not self._measure_cells_checkbox.value
+            and not self._measure_rings_checkbox.value
+        ):
+            show_info("Please select at least one measurement (cells or rings).")
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Run Analysis"
             self._run_analysis_button.enabled = True
             return
 
-        # Check if the layers exists
-        self._cells_layer_name = (
-            self._input_sample_combo.value
-            + settings.get("file_extensions.cells_file_extension")[0]
-        )
-        if self._cells_layer_name not in self._viewer.layers:
+        cells_layer = self._cells_layer
+        if self._measure_cells_checkbox.value and cells_layer is None:
             show_info(
-                f"Layer {self._cells_layer_name} not found in the viewer. Please load the sample first or disable cells processing."
+                "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Run Analysis"
             self._run_analysis_button.enabled = True
             return
 
-        self._rings_layer_name = (
-            self._input_sample_combo.value
-            + settings.get("file_extensions.rings_file_extension")[0]
-        )
-        if self._rings_layer_name not in self._viewer.layers:
+        rings_layer = self._rings_layer
+        if self._measure_rings_checkbox.value and rings_layer is None:
             show_info(
-                f"Layer {self._rings_layer_name} not found in the viewer. Please load the sample first or disable rings processing."
+                "Rings layer not found in the viewer. Please load the sample first or disable rings processing."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Run Analysis"
@@ -208,12 +206,10 @@ class SingleSampleMeasurementsWidget(Container):
             and self._measure_rings_checkbox.value
         ):
             measurement = "both"
-            self._cells_input_layer = self._viewer.layers[
-                self._cells_layer_name
-            ]
-            self._rings_input_layer = self._viewer.layers[
-                self._rings_layer_name
-            ]
+            self._cells_input_layer = cells_layer
+            self._rings_input_layer = rings_layer
+            self._cells_layer_name = cells_layer.name
+            self._rings_layer_name = rings_layer.name
             scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = self._rings_input_layer.features
@@ -224,9 +220,8 @@ class SingleSampleMeasurementsWidget(Container):
             and not self._measure_rings_checkbox.value
         ):
             measurement = "cells"
-            self._cells_input_layer = self._viewer.layers[
-                self._cells_layer_name
-            ]
+            self._cells_input_layer = cells_layer
+            self._cells_layer_name = cells_layer.name
             scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = pd.DataFrame()
@@ -237,9 +232,8 @@ class SingleSampleMeasurementsWidget(Container):
             and not self._measure_cells_checkbox.value
         ):
             measurement = "rings"
-            self._rings_input_layer = self._viewer.layers[
-                self._rings_layer_name
-            ]
+            self._rings_input_layer = rings_layer
+            self._rings_layer_name = rings_layer.name
             scale = self._rings_input_layer.metadata["spatial_resolution"]
             cells_array = np.zeros_like(self._rings_input_layer.data)
             rings_table = self._rings_input_layer.features
