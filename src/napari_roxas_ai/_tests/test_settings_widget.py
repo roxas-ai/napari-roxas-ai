@@ -1059,3 +1059,35 @@ def test_reload_of_a_deleted_file_does_not_overwrite_it(widget, settings_file):
         widget._reload()
 
     assert not settings_file.exists()
+
+
+def test_focus_section(widget):
+    # measurements is a top-level section
+    assert widget.focus_section("measurements") is True
+
+    # invalid section name returns False
+    assert widget.focus_section("non_existent_section") is False
+
+
+def test_open_floating(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    settings_widget = SettingsWidget.open_floating(viewer, section_name="measurements")
+    assert isinstance(settings_widget, SettingsWidget)
+    assert "ZZ – Settings" in viewer.window._dock_widgets or "ZZ – Settings" in getattr(
+        viewer.window, "dock_widgets", {}
+    )
+
+    # Calling again raises/reuses existing widget
+    reopened = SettingsWidget.open_floating(viewer)
+    assert reopened is settings_widget
+
+
+def test_settings_widget_auto_floats_when_docked(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    # Simulating Napari menu adding dock widget
+    widget = SettingsWidget(viewer)
+    dock = viewer.window.add_dock_widget(widget, name="ZZ – Settings", area="right")
+    # Wait for the singleShot timer
+    qtbot.wait(100)
+    if hasattr(dock, "isFloating"):
+        assert dock.isFloating() is True

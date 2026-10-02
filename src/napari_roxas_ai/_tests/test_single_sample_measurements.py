@@ -21,8 +21,20 @@ def test_single_sample_measurements_widget_structure(make_napari_viewer):
     # Ensure the expected widgets are in the container
     assert widget[0] == widget._measure_cells_checkbox
     assert widget[1] == widget._measure_rings_checkbox
-    assert widget[2] == widget._run_analysis_button
-    assert len(widget) == 3
+    assert widget[2] == widget._check_settings_button
+    assert widget[3] == widget._run_analysis_button
+    assert widget._check_settings_button.text == "Check Settings"
+    assert widget._run_analysis_button.text == "Measure"
+    assert len(widget) == 4
+
+
+def test_single_sample_measurements_open_settings(make_napari_viewer):
+    viewer = make_napari_viewer()
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    # Test the actual _open_settings method adds/shows the dock widget and sets it floating
+    widget._check_settings_button.changed(True)
+    assert "ZZ – Settings" in viewer.window._dock_widgets or "ZZ – Settings" in getattr(viewer.window, "dock_widgets", {})
 
 
 def test_single_sample_measurements_layer_resolution(make_napari_viewer):

@@ -11,6 +11,7 @@ from magicgui.widgets import (
 from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from ._sample_measurer import SampleAnalyzer
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import (
@@ -88,8 +89,12 @@ class SingleSampleMeasurementsWidget(Container):
             value=True, label="Measure Rings"
         )
 
+        # Button to open settings focused on measurements
+        self._check_settings_button = PushButton(text="Check Settings")
+        self._check_settings_button.changed.connect(self._open_settings)
+
         # Create a button to launch the analysis
-        self._run_analysis_button = PushButton(text="Run Analysis")
+        self._run_analysis_button = PushButton(text="Measure")
         self._run_analysis_button.changed.connect(self._run_analysis)
 
         # Append the widgets to the container
@@ -97,9 +102,14 @@ class SingleSampleMeasurementsWidget(Container):
             [
                 self._measure_cells_checkbox,
                 self._measure_rings_checkbox,
+                self._check_settings_button,
                 self._run_analysis_button,
             ]
         )
+
+    def _open_settings(self):
+        """Open SettingsWidget as a floating window centered on the active screen with measurements expanded."""
+        SettingsWidget.open_floating(self._viewer, section_name="measurements")
 
     @property
     def _cells_layer(self) -> Optional["napari.layers.Labels"]:
@@ -152,7 +162,7 @@ class SingleSampleMeasurementsWidget(Container):
         ):
             show_info("Please select at least one measurement (cells or rings).")
             self._spinner_timer.stop()
-            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.text = "Measure"
             self._run_analysis_button.enabled = True
             return
 
@@ -162,7 +172,7 @@ class SingleSampleMeasurementsWidget(Container):
                 "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
             )
             self._spinner_timer.stop()
-            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.text = "Measure"
             self._run_analysis_button.enabled = True
             return
 
@@ -172,7 +182,7 @@ class SingleSampleMeasurementsWidget(Container):
                 "Rings layer not found in the viewer. Please load the sample first or disable rings processing."
             )
             self._spinner_timer.stop()
-            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.text = "Measure"
             self._run_analysis_button.enabled = True
             return
 
