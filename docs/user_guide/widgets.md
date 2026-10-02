@@ -179,6 +179,9 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 
 The **Single Sample Segmentation Widget** performs automated deep-learning inference to identify tracheid cell lumens and annual tree-ring boundaries on the currently displayed image.
 
+!!! warning "First-Time Launch & Model Downloads"
+    Opening this widget for the first time automatically triggers the download of the cell and ring segmentation models (`.pth` weights). This download may take several seconds, during which the application / widget may appear **temporarily frozen or stalled**. Once downloaded, subsequent openings are instantaneous.
+
 ![Screenshot: Single Sample Segmentation Widget](../assets/screenshots/03a_single_segmentation_widget.png)
 
 *Figure 6: Single sample AI segmentation interface.*
@@ -202,6 +205,9 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 ## 3B - Batch Detect Cells & Rings
 
 The **Batch Sample Segmentation Widget** executes AI detection across multiple samples in the background without needing to load each image into the viewer.
+
+!!! warning "First-Time Launch & Model Downloads"
+    If the segmentation models have not been downloaded yet, opening this widget initiates the download for both cell and ring models. This process may take several seconds, during which the interface may appear **temporarily frozen or stalled**.
 
 ![Screenshot: Batch Segmentation Widget](../assets/screenshots/03b_batch_segmentation_widget.png)
 
@@ -271,6 +277,9 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 ## 6 - Edit Rings
 
 The **Rings Layer Editor Widget** enables precise curation of annual tree-ring boundaries, outermost year re-numbering, and targeted model-assisted re-detection.
+
+!!! note "Initial Ring Model Download"
+    Opening this widget checks for and downloads missing ring segmentation model weights if they are not already present (required for the **Re-run Rings Model** feature). This can cause a brief delay when first opening the widget.
 
 ![Screenshot: Rings Layer Editor Widget](../assets/screenshots/06_rings_layer_editor.png)
 

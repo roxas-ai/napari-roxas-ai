@@ -38,8 +38,13 @@ napari
 To check if the plugin is working correctly:
 1.  Launch **napari**.
 2.  Go to `File > Open Sample > ROXAS AI`.
-3.  **Note**: The first time you open a sample, it may take some time as sample data and model weights are being downloaded. Progress will be logged in the terminal.
+3.  **Note**: The first time you open a sample, it may take some time as sample data is being downloaded. Progress will be logged in the terminal.
 4.  After the downloads, you should see three layers (image, rings, and cells) open in the viewer.
+
+!!! warning "First-Time Widget Launch & Model Downloads"
+    The pre-trained segmentation models are downloaded lazily upon first use. Opening the **Single Sample Segmentation**, **Batch Sample Segmentation**, or **Rings Layer Editor** widgets for the first time will automatically download the required model weights (`.pth` files).
+
+    This initial download takes several seconds depending on your internet connection. During this time, the application / widgets may appear **stalled, frozen, or unresponsive**. Please wait for the download to finish; subsequent widget launches will open instantly.
 
 ---
 
