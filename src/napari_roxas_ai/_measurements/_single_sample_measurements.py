@@ -18,6 +18,7 @@ from .._utils._version_utils import (
     get_software_version,
 )
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai._writer._writer import save_annotated_scan_image
 
 
 import numpy as np
@@ -124,6 +125,16 @@ class SingleSampleMeasurementsWidget(Container):
                 return layer
         return None
 
+    @property
+    def _scan_layer(self) -> Optional["napari.layers.Image"]:
+        scan_extension = settings.get("file_extensions.scan_file_extension")[0]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Image) and layer.name.endswith(
+                scan_extension
+            ):
+                return layer
+        return None
+
     def _update_spinner(self):
         frame = self._spinner_frames[self._spinner_index]
         self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
@@ -188,7 +199,14 @@ class SingleSampleMeasurementsWidget(Container):
             self._cells_layer_name = cells_layer.name
             scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
-            rings_table = pd.DataFrame()
+            if rings_layer is not None and hasattr(rings_layer, "features") and not rings_layer.features.empty:
+                self._rings_input_layer = rings_layer
+                self._rings_layer_name = rings_layer.name
+                rings_table = self._rings_input_layer.features
+            else:
+                self._rings_input_layer = None
+                self._rings_layer_name = None
+                rings_table = pd.DataFrame()
             cells_table = pd.DataFrame()
 
         elif (
@@ -362,6 +380,41 @@ class SingleSampleMeasurementsWidget(Container):
                 },
             )
             show_info(f"Rings exported to: {rings_path}")
+
+        # ---------------------------
+        # Export Annotated Scan Image
+        # ---------------------------
+        scan_layer = self._scan_layer
+        rings_layer = getattr(self, "_rings_input_layer", None) or self._rings_layer
+        rings_features = (
+            rings_table
+            if not rings_table.empty
+            else (
+                rings_layer.features
+                if rings_layer is not None and hasattr(rings_layer, "features")
+                else None
+            )
+        )
+
+        if scan_layer is not None and rings_features is not None and not rings_features.empty:
+            scan_path = scan_layer.metadata.get("file_path")
+            sample_name = (
+                scan_layer.metadata.get("sample_name")
+                or (rings_layer.metadata.get("sample_name") if rings_layer and rings_layer.metadata else None)
+                or scan_layer.name.split(".")[0]
+            )
+            annotated_path = str(project_dir / f"{sample_name}_annotated.jpg")
+
+            if scan_path and Path(scan_path).exists():
+                try:
+                    save_annotated_scan_image(
+                        scan_path=scan_path,
+                        annotated_path=annotated_path,
+                        rings_features=rings_features,
+                    )
+                    show_info(f"Annotated image exported to: {annotated_path}")
+                except Exception as e:
+                    print(f"Annotated image export failed: {e}")
 
         show_info("Measurements completed and saved.")
 
