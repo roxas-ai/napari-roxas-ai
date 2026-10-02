@@ -1,18 +1,17 @@
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from datetime import datetime
 from pathlib import Path
+import napari.layers
 from qtpy.QtCore import QTimer
 from magicgui.widgets import (
     CheckBox,
-    ComboBox,
     Container,
-    FloatSpinBox,
     PushButton,
-    SpinBox,
 )
 from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from ._sample_measurer import SampleAnalyzer
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import (
@@ -20,6 +19,7 @@ from .._utils._version_utils import (
     get_software_version,
 )
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai._writer._writer import save_annotated_scan_image
 
 
 import numpy as np
@@ -79,87 +79,76 @@ class SingleSampleMeasurementsWidget(Container):
 
         self._viewer = viewer
 
-        # Create a layer selection widget for label layers
-        self._input_sample_combo = ComboBox(
-            label="Sample", choices=self._get_valid_layers
-        )
-
-        # Cells measurement checkbox and settings (currently hidden as we want the user to compute cells first anyway)
+        # Cells measurement checkbox
         self._measure_cells_checkbox = CheckBox(
             value=True, label="Measure Cells"
         )
-        self._measure_cells_checkbox.changed.connect(
-            self._update_cells_settings_visibility
-        )
-        # self._measure_cells_checkbox.visible = False
 
-        # Create input fields for the config parameters
-        self._cluster_dbl_cwt_threshold = FloatSpinBox(
-            value=settings.get("measurements.cluster_dbl_cwt_threshold"),
-            label="Cluster DBL CWT Threshold (µm)",
-        )
-        self._smoothing_kernel_size = SpinBox(
-            value=settings.get("measurements.cells_smoothing_kernel_size"),
-            label="Smoothing Kernel Size (1 to disable)",
-        )
-        self._relwidth_cwt_integration = FloatSpinBox(
-            value=settings.get("measurements.relwidth_cwt_integration"),
-            label="Wall Fraction for Thickness Measurement",
-        )
-
-        # Create a container for the cells measurements settings
-        self._cells_measurements_settings = Container()
-        self._cells_measurements_settings.extend(
-            [
-                self._cluster_dbl_cwt_threshold,
-                self._smoothing_kernel_size,
-                self._relwidth_cwt_integration,
-            ]
-        )
-
-        # Rings measurement checkbox and settings
+        # Rings measurement checkbox
         self._measure_rings_checkbox = CheckBox(
             value=True, label="Measure Rings"
         )
 
+        # Button to open settings focused on measurements
+        self._check_settings_button = PushButton(text="Check Settings")
+        self._check_settings_button.changed.connect(self._open_settings)
+
         # Create a button to launch the analysis
-        self._run_analysis_button = PushButton(text="Run Analysis")
+        self._run_analysis_button = PushButton(text="Measure")
         self._run_analysis_button.changed.connect(self._run_analysis)
 
         # Append the widgets to the container
         self.extend(
             [
-                self._input_sample_combo,
                 self._measure_cells_checkbox,
-                self._cells_measurements_settings,
                 self._measure_rings_checkbox,
+                self._check_settings_button,
                 self._run_analysis_button,
             ]
         )
+
+    def _open_settings(self):
+        """Open SettingsWidget as a floating window centered on the active screen with measurements expanded."""
+        SettingsWidget.open_floating(self._viewer, section_name="measurements")
+
+    @property
+    def _cells_layer(self) -> Optional["napari.layers.Labels"]:
+        cells_extension = settings.get("file_extensions.cells_file_extension")[
+            0
+        ]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
+                cells_extension
+            ):
+                return layer
+        return None
+
+    @property
+    def _rings_layer(self) -> Optional["napari.layers.Labels"]:
+        rings_extension = settings.get("file_extensions.rings_file_extension")[
+            0
+        ]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
+                rings_extension
+            ):
+                return layer
+        return None
+
+    @property
+    def _scan_layer(self) -> Optional["napari.layers.Image"]:
+        scan_extension = settings.get("file_extensions.scan_file_extension")[0]
+        for layer in self._viewer.layers:
+            if isinstance(layer, napari.layers.Image) and layer.name.endswith(
+                scan_extension
+            ):
+                return layer
+        return None
 
     def _update_spinner(self):
         frame = self._spinner_frames[self._spinner_index]
         self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
         self._run_analysis_button.text = f"{self._current_status} {frame}"
-
-    def _get_valid_layers(self, widget=None) -> list:
-        names = set()
-
-        for layer in self._viewer.layers:
-            meta = getattr(layer, "metadata", None)
-            if not isinstance(meta, dict):
-                continue
-
-            sample_name = meta.get("sample_name")
-            if isinstance(sample_name, str) and sample_name:
-                names.add(sample_name)
-
-        return sorted(names)
-
-    def _update_cells_settings_visibility(self):
-        self._cells_measurements_settings.visible = (
-            self._measure_cells_checkbox.value
-        )
 
     def _run_analysis(self):
         self._run_analysis_button.enabled = False
@@ -167,39 +156,33 @@ class SingleSampleMeasurementsWidget(Container):
         self._spinner_index = 0
         self._spinner_timer.start()
 
-
-        # Get the selected label layer
-        if self._input_sample_combo.value is None:
-            show_info("Input sample is not set.")
+        if (
+            not self._measure_cells_checkbox.value
+            and not self._measure_rings_checkbox.value
+        ):
+            show_info("Please select at least one measurement (cells or rings).")
             self._spinner_timer.stop()
-            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.text = "Measure"
             self._run_analysis_button.enabled = True
             return
 
-        # Check if the layers exists
-        self._cells_layer_name = (
-            self._input_sample_combo.value
-            + settings.get("file_extensions.cells_file_extension")[0]
-        )
-        if self._cells_layer_name not in self._viewer.layers:
+        cells_layer = self._cells_layer
+        if self._measure_cells_checkbox.value and cells_layer is None:
             show_info(
-                f"Layer {self._cells_layer_name} not found in the viewer. Please load the sample first or disable cells processing."
+                "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
             )
             self._spinner_timer.stop()
-            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.text = "Measure"
             self._run_analysis_button.enabled = True
             return
 
-        self._rings_layer_name = (
-            self._input_sample_combo.value
-            + settings.get("file_extensions.rings_file_extension")[0]
-        )
-        if self._rings_layer_name not in self._viewer.layers:
+        rings_layer = self._rings_layer
+        if self._measure_rings_checkbox.value and rings_layer is None:
             show_info(
-                f"Layer {self._rings_layer_name} not found in the viewer. Please load the sample first or disable rings processing."
+                "Rings layer not found in the viewer. Please load the sample first or disable rings processing."
             )
             self._spinner_timer.stop()
-            self._run_analysis_button.text = "Run Analysis"
+            self._run_analysis_button.text = "Measure"
             self._run_analysis_button.enabled = True
             return
 
@@ -208,12 +191,10 @@ class SingleSampleMeasurementsWidget(Container):
             and self._measure_rings_checkbox.value
         ):
             measurement = "both"
-            self._cells_input_layer = self._viewer.layers[
-                self._cells_layer_name
-            ]
-            self._rings_input_layer = self._viewer.layers[
-                self._rings_layer_name
-            ]
+            self._cells_input_layer = cells_layer
+            self._rings_input_layer = rings_layer
+            self._cells_layer_name = cells_layer.name
+            self._rings_layer_name = rings_layer.name
             scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
             rings_table = self._rings_input_layer.features
@@ -224,12 +205,18 @@ class SingleSampleMeasurementsWidget(Container):
             and not self._measure_rings_checkbox.value
         ):
             measurement = "cells"
-            self._cells_input_layer = self._viewer.layers[
-                self._cells_layer_name
-            ]
+            self._cells_input_layer = cells_layer
+            self._cells_layer_name = cells_layer.name
             scale = self._cells_input_layer.metadata["spatial_resolution"]
             cells_array = self._cells_input_layer.data
-            rings_table = pd.DataFrame()
+            if rings_layer is not None and hasattr(rings_layer, "features") and not rings_layer.features.empty:
+                self._rings_input_layer = rings_layer
+                self._rings_layer_name = rings_layer.name
+                rings_table = self._rings_input_layer.features
+            else:
+                self._rings_input_layer = None
+                self._rings_layer_name = None
+                rings_table = pd.DataFrame()
             cells_table = pd.DataFrame()
 
         elif (
@@ -237,9 +224,8 @@ class SingleSampleMeasurementsWidget(Container):
             and not self._measure_cells_checkbox.value
         ):
             measurement = "rings"
-            self._rings_input_layer = self._viewer.layers[
-                self._rings_layer_name
-            ]
+            self._rings_input_layer = rings_layer
+            self._rings_layer_name = rings_layer.name
             scale = self._rings_input_layer.metadata["spatial_resolution"]
             cells_array = np.zeros_like(self._rings_input_layer.data)
             rings_table = self._rings_input_layer.features
@@ -256,15 +242,14 @@ class SingleSampleMeasurementsWidget(Container):
 
         config = {
             "pixels_per_um": scale,
-            # Rounded to drop the float noise that spin box stepping produces
-            # (e.g. 3.5000000000000004), since this value is also recorded in
-            # the sample metadata.
-            "cluster_dbl_cwt_threshold": round(
-                self._cluster_dbl_cwt_threshold.value, 6
+            "cluster_dbl_cwt_threshold": settings.get(
+                "measurements.cluster_dbl_cwt_threshold"
             ),
-            "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "relwidth_cwt_integration": round(
-                self._relwidth_cwt_integration.value, 6
+            "smoothing_kernel_size": settings.get(
+                "measurements.cells_smoothing_kernel_size"
+            ),
+            "relwidth_cwt_integration": settings.get(
+                "measurements.relwidth_cwt_integration"
             ),
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
@@ -405,6 +390,41 @@ class SingleSampleMeasurementsWidget(Container):
                 },
             )
             show_info(f"Rings exported to: {rings_path}")
+
+        # ---------------------------
+        # Export Annotated Scan Image
+        # ---------------------------
+        scan_layer = self._scan_layer
+        rings_layer = getattr(self, "_rings_input_layer", None) or self._rings_layer
+        rings_features = (
+            rings_table
+            if not rings_table.empty
+            else (
+                rings_layer.features
+                if rings_layer is not None and hasattr(rings_layer, "features")
+                else None
+            )
+        )
+
+        if scan_layer is not None and rings_features is not None and not rings_features.empty:
+            scan_path = scan_layer.metadata.get("file_path")
+            sample_name = (
+                scan_layer.metadata.get("sample_name")
+                or (rings_layer.metadata.get("sample_name") if rings_layer and rings_layer.metadata else None)
+                or scan_layer.name.split(".")[0]
+            )
+            annotated_path = str(project_dir / f"{sample_name}_annotated.jpg")
+
+            if scan_path and Path(scan_path).exists():
+                try:
+                    save_annotated_scan_image(
+                        scan_path=scan_path,
+                        annotated_path=annotated_path,
+                        rings_features=rings_features,
+                    )
+                    show_info(f"Annotated image exported to: {annotated_path}")
+                except Exception as e:
+                    print(f"Annotated image export failed: {e}")
 
         show_info("Measurements completed and saved.")
 
