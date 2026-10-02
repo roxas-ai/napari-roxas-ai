@@ -165,6 +165,32 @@ class TestSingleSampleSegmentation:
         )
         assert base_name == "other_name"
 
+    def test_widget_structure_and_valid_layers(self, mock_settings):
+        """Test SingleSampleSegmentationWidget elements and layer detection."""
+        from napari_roxas_ai._segmentation._single_sample_segmentation import (
+            SingleSampleSegmentationWidget,
+        )
+
+        viewer = MagicMock()
+        image_layer = MagicMock()
+        image_layer.name = "sample1.scan"
+        type(image_layer).__name__ = "Image"
+        # Mock isinstance check
+        with patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.check_assets_and_download"
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
+            return_value=mock_settings,
+        ), patch(
+            "napari.layers.Image", (type(image_layer),)
+        ):
+            viewer.layers = [image_layer]
+            widget = SingleSampleSegmentationWidget(viewer)
+            # Check that there is no _input_layer_combo attribute
+            assert not hasattr(widget, "_input_layer_combo")
+            valid = widget._get_valid_layers()
+            assert valid == [image_layer]
+
 
 class TestSingleWorkerFunctionality:
     """Test the SingleWorker class functionality directly."""

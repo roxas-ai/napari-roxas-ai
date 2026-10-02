@@ -384,13 +384,6 @@ class SingleSampleSegmentationWidget(Container):
         check_assets_and_download(str(CELLS_MODELS_PATH), "cells_models.zip")
         check_assets_and_download(str(RINGS_MODELS_PATH), "rings_models.zip")
 
-        # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = ComboBox(
-            label="Thin Section",
-            annotation="napari.layers.Image",
-            choices=self._get_valid_layers,
-        )
-
         # Cells segmentation checkbox and model selection
         self._segment_cells_checkbox = CheckBox(
             value=True, label="Segment Cells"
@@ -426,7 +419,6 @@ class SingleSampleSegmentationWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_layer_combo,
                 self._segment_cells_checkbox,
                 self._cells_model_weights_file,
                 self._segment_rings_checkbox,
@@ -487,12 +479,15 @@ class SingleSampleSegmentationWidget(Container):
         if isinstance(proj, str) and proj:
             fix_sample_stem_paths_in_project(proj)
 
-        # Get the selected input layer
-        if not self._input_layer_combo.value:
-            QMessageBox.warning(None, "Error", "Please select an input layer")
+        # Get the input layer
+        valid_layers = self._get_valid_layers()
+        if not valid_layers:
+            QMessageBox.warning(
+                None, "Error", "Please open a thin section image first"
+            )
             return
 
-        self.input_layer = self._input_layer_combo.value
+        self.input_layer = valid_layers[0]
 
         # Check if at least one segmentation method is selected
         if not (
