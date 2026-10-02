@@ -1364,6 +1364,9 @@ class CrossDatingPlotterWidget(Container):
         # Update the RingsLayerEditorWidget spinbox if it exists
         self._sync_rings_editor_year()
 
+        # Save reference plot upon applying changes
+        self._export_plot()
+
     def _sync_rings_editor_year(self):
         """Find the RingsLayerEditorWidget and update its year spinbox."""
         from napari_roxas_ai._edition._rings_layer_editor import (

@@ -53,7 +53,7 @@ class _Plotter(CrossDatingPlotterWidget):
     def _clear_alignment_buttons(self):
         pass
 
-    def _update_crossdating_plot(self):
+    def _sync_rings_editor_year(self):
         pass
 
 
@@ -87,6 +87,28 @@ def test_exporting_a_plot_records_its_reference_series(sample):
 
     assert _stored(path)["reference_series"] == "RAL16A"
     assert layer.metadata["reference_series"] == "RAL16A"
+
+
+def test_applying_changes_records_reference_series(sample, monkeypatch):
+    layer, path = sample
+    layer.data = SimpleNamespace(shape=(10, 10))
+    layer.features = None
+    layer.metadata["rings_outmost_complete_year"] = 2020
+    plotter = _Plotter(layer, "RAL16A", path)
+    plotter._base_offset = 0
+    plotter._offset_slider = SimpleNamespace(value=2, min=-50, max=50, native=SimpleNamespace(blockSignals=lambda b: None))
+    plotter._x_range_slider = SimpleNamespace(native=SimpleNamespace(blockSignals=lambda b: None), value=(0, 100))
+    monkeypatch.setattr(
+        "napari_roxas_ai._crossdating._cross_dating_plotter.update_rings_geometries",
+        lambda rings_table, last_year, image_shape: (None, "new_raster", "new_cmap"),
+    )
+    monkeypatch.setattr(plotter, "_sync_rings_editor_year", lambda: None)
+
+    plotter._apply_offset_to_layer()
+
+    assert _stored(path)["reference_series"] == "RAL16A"
+    assert layer.metadata["reference_series"] == "RAL16A"
+    assert len(plotter.saved_calls) == 1
 
 
 def test_a_failed_export_records_nothing(sample):
