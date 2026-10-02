@@ -193,3 +193,45 @@ def test_preparation_keeps_a_reference_series_it_is_given(tmp_path):
     )
 
     assert _stored(path)["reference_series"] == "RAL16A"
+
+
+def test_crossdating_plotter_auto_floats_with_margins_and_size_grip(
+    make_napari_viewer, qtbot
+):
+    from qtpy.QtWidgets import QApplication, QSizeGrip
+    from napari_roxas_ai._crossdating._cross_dating_plotter import _ProminentSizeGrip
+
+    viewer = make_napari_viewer()
+    widget = CrossDatingPlotterWidget(viewer)
+    dock = viewer.window.add_dock_widget(
+        widget, name="7 – Visual cross-dating", area="right"
+    )
+
+    qtbot.wait(100)
+
+    # Check floating
+    assert dock.isFloating()
+
+    # Check size grip
+    assert hasattr(dock, "_roxas_size_grip")
+    assert isinstance(dock._roxas_size_grip, (QSizeGrip, _ProminentSizeGrip))
+    assert dock._roxas_size_grip.isVisible() == dock.isFloating()
+
+    # Check geometry calculation on active screen
+    main_window = viewer.window._qt_window
+    target_screen = main_window.screen() if hasattr(main_window, "screen") else None
+    if target_screen is None and hasattr(QApplication, "primaryScreen"):
+        target_screen = QApplication.primaryScreen()
+
+    if target_screen is not None:
+        avail_geom = target_screen.availableGeometry()
+        expected_w = max(400, avail_geom.width() - 200)
+        expected_h = max(300, avail_geom.height() - 200)
+        expected_x = avail_geom.left() + 100
+        expected_y = avail_geom.top() + 100
+        geom = dock.geometry()
+        # Verify geometry matches expected 100px margin dimensions
+        assert abs(geom.width() - expected_w) <= 50
+        assert abs(geom.height() - expected_h) <= 50
+        assert abs(geom.x() - expected_x) <= 50
+        assert abs(geom.y() - expected_y) <= 50
