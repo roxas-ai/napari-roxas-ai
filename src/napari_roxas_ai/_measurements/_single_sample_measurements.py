@@ -6,9 +6,7 @@ from qtpy.QtCore import QTimer
 from magicgui.widgets import (
     CheckBox,
     Container,
-    FloatSpinBox,
     PushButton,
-    SpinBox,
 )
 from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
@@ -79,40 +77,12 @@ class SingleSampleMeasurementsWidget(Container):
 
         self._viewer = viewer
 
-        # Cells measurement checkbox and settings (currently hidden as we want the user to compute cells first anyway)
+        # Cells measurement checkbox
         self._measure_cells_checkbox = CheckBox(
             value=True, label="Measure Cells"
         )
-        self._measure_cells_checkbox.changed.connect(
-            self._update_cells_settings_visibility
-        )
-        # self._measure_cells_checkbox.visible = False
 
-        # Create input fields for the config parameters
-        self._cluster_dbl_cwt_threshold = FloatSpinBox(
-            value=settings.get("measurements.cluster_dbl_cwt_threshold"),
-            label="Cluster DBL CWT Threshold (µm)",
-        )
-        self._smoothing_kernel_size = SpinBox(
-            value=settings.get("measurements.cells_smoothing_kernel_size"),
-            label="Smoothing Kernel Size (1 to disable)",
-        )
-        self._relwidth_cwt_integration = FloatSpinBox(
-            value=settings.get("measurements.relwidth_cwt_integration"),
-            label="Wall Fraction for Thickness Measurement",
-        )
-
-        # Create a container for the cells measurements settings
-        self._cells_measurements_settings = Container()
-        self._cells_measurements_settings.extend(
-            [
-                self._cluster_dbl_cwt_threshold,
-                self._smoothing_kernel_size,
-                self._relwidth_cwt_integration,
-            ]
-        )
-
-        # Rings measurement checkbox and settings
+        # Rings measurement checkbox
         self._measure_rings_checkbox = CheckBox(
             value=True, label="Measure Rings"
         )
@@ -125,7 +95,6 @@ class SingleSampleMeasurementsWidget(Container):
         self.extend(
             [
                 self._measure_cells_checkbox,
-                self._cells_measurements_settings,
                 self._measure_rings_checkbox,
                 self._run_analysis_button,
             ]
@@ -159,11 +128,6 @@ class SingleSampleMeasurementsWidget(Container):
         frame = self._spinner_frames[self._spinner_index]
         self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
         self._run_analysis_button.text = f"{self._current_status} {frame}"
-
-    def _update_cells_settings_visibility(self):
-        self._cells_measurements_settings.visible = (
-            self._measure_cells_checkbox.value
-        )
 
     def _run_analysis(self):
         self._run_analysis_button.enabled = False
@@ -250,15 +214,14 @@ class SingleSampleMeasurementsWidget(Container):
 
         config = {
             "pixels_per_um": scale,
-            # Rounded to drop the float noise that spin box stepping produces
-            # (e.g. 3.5000000000000004), since this value is also recorded in
-            # the sample metadata.
-            "cluster_dbl_cwt_threshold": round(
-                self._cluster_dbl_cwt_threshold.value, 6
+            "cluster_dbl_cwt_threshold": settings.get(
+                "measurements.cluster_dbl_cwt_threshold"
             ),
-            "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "relwidth_cwt_integration": round(
-                self._relwidth_cwt_integration.value, 6
+            "smoothing_kernel_size": settings.get(
+                "measurements.cells_smoothing_kernel_size"
+            ),
+            "relwidth_cwt_integration": settings.get(
+                "measurements.relwidth_cwt_integration"
             ),
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"

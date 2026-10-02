@@ -12,11 +12,17 @@ def test_single_sample_measurements_widget_structure(make_napari_viewer):
     # Ensure no sample dropdown / combo box exists
     assert not hasattr(widget, "_input_sample_combo")
 
+    # Ensure measurement option spinboxes do not exist on the widget
+    assert not hasattr(widget, "_cluster_dbl_cwt_threshold")
+    assert not hasattr(widget, "_smoothing_kernel_size")
+    assert not hasattr(widget, "_relwidth_cwt_integration")
+    assert not hasattr(widget, "_cells_measurements_settings")
+
     # Ensure the expected widgets are in the container
     assert widget[0] == widget._measure_cells_checkbox
-    assert widget[1] == widget._cells_measurements_settings
-    assert widget[2] == widget._measure_rings_checkbox
-    assert widget[3] == widget._run_analysis_button
+    assert widget[1] == widget._measure_rings_checkbox
+    assert widget[2] == widget._run_analysis_button
+    assert len(widget) == 3
 
 
 def test_single_sample_measurements_layer_resolution(make_napari_viewer):
