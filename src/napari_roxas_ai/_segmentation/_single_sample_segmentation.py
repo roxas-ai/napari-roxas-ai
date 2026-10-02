@@ -386,7 +386,7 @@ class SingleSampleSegmentationWidget(Container):
 
         # Cells segmentation checkbox and model selection
         self._segment_cells_checkbox = CheckBox(
-            value=True, label="Segment Cells"
+            value=True, label="Segment Cells Using Model:"
         )
         self._segment_cells_checkbox.changed.connect(
             self._update_cells_model_visibility
@@ -395,12 +395,25 @@ class SingleSampleSegmentationWidget(Container):
         # Cells model selection
         self._cells_model_weights_file = ComboBox(
             choices=self._get_model_files(where=CELLS_MODELS_PATH),
-            label="Cells Model",
+            label="",
         )
+
+        self._cells_row = Container(
+            widgets=[
+                self._segment_cells_checkbox,
+                self._cells_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._cells_row.native, "layout"):
+            layout = self._cells_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
 
         # Rings segmentation checkbox and model selection
         self._segment_rings_checkbox = CheckBox(
-            value=True, label="Segment Rings"
+            value=True, label="Segment Rings Using Model:"
         )
         self._segment_rings_checkbox.changed.connect(
             self._update_rings_model_visibility
@@ -409,8 +422,21 @@ class SingleSampleSegmentationWidget(Container):
         # Rings model selection
         self._rings_model_weights_file = ComboBox(
             choices=self._get_model_files(where=RINGS_MODELS_PATH),
-            label="Rings Model",
+            label="",
         )
+
+        self._rings_row = Container(
+            widgets=[
+                self._segment_rings_checkbox,
+                self._rings_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._rings_row.native, "layout"):
+            layout = self._rings_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
 
         # Create a button to launch the analysis
         self._run_segmentation_button = PushButton(text="Run Segmentation")
@@ -419,10 +445,8 @@ class SingleSampleSegmentationWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._segment_cells_checkbox,
-                self._cells_model_weights_file,
-                self._segment_rings_checkbox,
-                self._rings_model_weights_file,
+                self._cells_row,
+                self._rings_row,
                 self._run_segmentation_button,
             ]
         )

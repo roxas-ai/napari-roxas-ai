@@ -188,6 +188,17 @@ class TestSingleSampleSegmentation:
             widget = SingleSampleSegmentationWidget(viewer)
             # Check that there is no _input_layer_combo attribute
             assert not hasattr(widget, "_input_layer_combo")
+            # Check labels and row containers
+            assert widget._segment_cells_checkbox.label == "Segment Cells Using Model:"
+            assert widget._segment_rings_checkbox.label == "Segment Rings Using Model:"
+            assert widget._cells_model_weights_file.label == ""
+            assert widget._rings_model_weights_file.label == ""
+            assert widget._cells_row.layout == "horizontal"
+            assert widget._rings_row.layout == "horizontal"
+            assert widget._segment_cells_checkbox in widget._cells_row
+            assert widget._cells_model_weights_file in widget._cells_row
+            assert widget._segment_rings_checkbox in widget._rings_row
+            assert widget._rings_model_weights_file in widget._rings_row
             valid = widget._get_valid_layers()
             assert valid == [image_layer]
 
