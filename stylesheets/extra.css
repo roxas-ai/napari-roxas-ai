@@ -1,0 +1,27 @@
+/* Increase site title font size */
+.md-header__title {
+  font-size: 1.8rem;
+  line-height: 2.4rem;
+}
+
+/* Increase logo size and align it */
+.md-logo img {
+  height: 2.4rem !important; /* Adjusted to user preference */
+  width: auto !important;
+  display: block;
+}
+
+.md-logo {
+  height: 2.4rem !important;
+  margin: 0.8rem 0.8rem 0.8rem 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Ensure header has enough height */
+.md-header__inner {
+  height: 4.0rem;
+  display: flex;
+  align-items: center;
+}
