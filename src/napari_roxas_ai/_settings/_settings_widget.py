@@ -26,8 +26,8 @@ from typing import (
 
 from magicgui.widgets import Container, LineEdit, PushButton
 from napari.utils.notifications import show_info
-from qtpy.QtCore import QRect, Qt, QTimer, QUrl
-from qtpy.QtGui import QDesktopServices
+from qtpy.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer, QUrl
+from qtpy.QtGui import QColor, QCursor, QDesktopServices, QPainter, QPalette, QPen
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -39,6 +39,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QScrollArea,
+    QSizeGrip,
     QSizePolicy,
     QSpinBox,
     QToolTip,
@@ -731,6 +732,84 @@ class SettingsForm(Container):
         return depth
 
 
+class _ProminentSizeGrip(QSizeGrip):
+    """A size grip that renders visible diagonal lines and uses a resize cursor."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setCursor(QCursor(Qt.CursorShape.SizeFDiagCursor))
+        self.setFixedSize(18, 18)
+
+    def sizeHint(self) -> QSize:
+        return QSize(18, 18)
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Determine theme-adapted contrast color
+        text_color = self.palette().color(QPalette.ColorRole.WindowText)
+        if not text_color.isValid():
+            text_color = QColor(180, 180, 180)
+
+        # Main grip line color
+        line_color = QColor(text_color)
+        line_color.setAlpha(180 if self.underMouse() else 130)
+
+        # Subtle shadow / bevel line for depth
+        shadow_color = QColor(0, 0, 0, 80)
+
+        w = self.width()
+        h = self.height()
+
+        # Draw 3 diagonal lines with shadow for clear texture
+        for offset in (4, 8, 12):
+            # Shadow line offset by 1px
+            painter.setPen(QPen(shadow_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(w - offset, h - 1, w - 1, h - offset)
+            # Main line
+            painter.setPen(QPen(line_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(w - offset - 1, h - 2, w - 2, h - offset - 1)
+
+
+class _DockSizeGripHandler(QObject):
+    """Positions and controls visibility of a QSizeGrip attached to a QDockWidget."""
+
+    def __init__(self, dock_widget: QWidget, size_grip: QSizeGrip) -> None:
+        super().__init__(dock_widget)
+        self._dock = dock_widget
+        self._grip = size_grip
+        self._dock.installEventFilter(self)
+        if hasattr(self._dock, "topLevelChanged"):
+            self._dock.topLevelChanged.connect(self._on_top_level_changed)
+        self.update_geometry()
+
+    def _on_top_level_changed(self, is_floating: bool) -> None:
+        self._grip.setVisible(is_floating)
+        if is_floating:
+            self.update_geometry()
+            self._grip.raise_()
+
+    def update_geometry(self) -> None:
+        grip_size = self._grip.sizeHint()
+        rect = self._dock.rect()
+        self._grip.move(
+            rect.width() - grip_size.width(),
+            rect.height() - grip_size.height(),
+        )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self._dock and event.type() in (
+            QEvent.Resize,
+            QEvent.Move,
+            QEvent.Show,
+            QEvent.LayoutRequest,
+        ):
+            self.update_geometry()
+            self._grip.raise_()
+        return super().eventFilter(watched, event)
+
+
 class SettingsWidget(Container):
     """Edit the plugin settings and apply them without restarting napari."""
 
@@ -876,6 +955,19 @@ class SettingsWidget(Container):
             dock_widget.raise_()
         if hasattr(dock_widget, "activateWindow"):
             dock_widget.activateWindow()
+
+        # Attach prominent QSizeGrip directly to the QDockWidget if not already attached
+        if hasattr(dock_widget, "findChild") and isinstance(dock_widget, QWidget):
+            size_grip = getattr(dock_widget, "_roxas_size_grip", None)
+            if size_grip is None:
+                size_grip = _ProminentSizeGrip(dock_widget)
+                dock_widget._roxas_size_grip = size_grip
+                dock_widget._roxas_size_grip_handler = _DockSizeGripHandler(
+                    dock_widget, size_grip
+                )
+            if hasattr(dock_widget, "isFloating"):
+                size_grip.setVisible(dock_widget.isFloating())
+            size_grip.raise_()
 
     @classmethod
     def open_floating(

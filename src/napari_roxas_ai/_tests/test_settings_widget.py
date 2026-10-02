@@ -1082,6 +1082,18 @@ def test_open_floating(make_napari_viewer, qtbot):
     assert reopened is settings_widget
 
 
+def test_settings_widget_dock_has_size_grip(make_napari_viewer, qtbot):
+    from qtpy.QtWidgets import QSizeGrip
+    from napari_roxas_ai._settings._settings_widget import _ProminentSizeGrip
+    viewer = make_napari_viewer()
+    widget = SettingsWidget(viewer)
+    dock = viewer.window.add_dock_widget(widget, name="ZZ – Settings", area="right")
+    qtbot.wait(100)
+    assert hasattr(dock, "_roxas_size_grip")
+    assert isinstance(dock._roxas_size_grip, (QSizeGrip, _ProminentSizeGrip))
+    assert dock._roxas_size_grip.isVisible() == dock.isFloating()
+
+
 def test_settings_widget_auto_floats_when_docked(make_napari_viewer, qtbot):
     viewer = make_napari_viewer()
     # Simulating Napari menu adding dock widget
