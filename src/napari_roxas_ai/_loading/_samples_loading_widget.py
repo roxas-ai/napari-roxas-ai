@@ -47,7 +47,7 @@ LABEL_SPACING = 10
 
 # Longest project directory shown on the button, longer paths are elided in the
 # middle (the full path is in the tooltip)
-MAX_PROJECT_DIRECTORY_CHARS = 50
+MAX_PROJECT_DIRECTORY_CHARS = 35
 
 
 def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
@@ -232,7 +232,7 @@ class SamplesLoadingWidget(Container):
         # Both labels left-aligned and equally wide so the button and the list
         # line up, the list label at the top of the list
         labels = (project_directory_label, self._available_images_label)
-        label_width = max(label.native.sizeHint().width() for label in labels)
+        label_width = max(label.native.sizeHint().width() for label in labels) + 20
         for label in labels:
             label.native.setFixedWidth(label_width)
             label.native.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
