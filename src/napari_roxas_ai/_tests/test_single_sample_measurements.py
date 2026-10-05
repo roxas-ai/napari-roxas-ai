@@ -202,3 +202,53 @@ def test_single_sample_measurements_run_analysis_missing_layers(make_napari_view
         mock_show_info.assert_called_with(
             "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
         )
+
+
+def test_single_sample_measurements_asks_for_sample_if_several_loaded(
+    make_napari_viewer,
+):
+    viewer = make_napari_viewer()
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    viewer.add_labels(np.zeros((10, 10), dtype=np.uint8), name="sample_1.cells")
+    viewer.add_labels(np.zeros((10, 10), dtype=np.uint8), name="sample_1.rings")
+    cells_2 = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8), name="sample_2.cells"
+    )
+    rings_2 = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8), name="sample_2.rings"
+    )
+    scan_2 = viewer.add_image(np.zeros((10, 10)), name="sample_2.scan")
+
+    with patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.QInputDialog.getItem",
+        return_value=("sample_2", True),
+    ) as mock_get_item:
+        assert widget._choose_sample()
+
+    assert mock_get_item.call_args[0][3] == ["sample_1", "sample_2"]
+    assert widget._cells_layer is cells_2
+    assert widget._rings_layer is rings_2
+    assert widget._scan_layer is scan_2
+
+
+def test_single_sample_measurements_cancelled_sample_choice_does_nothing(
+    make_napari_viewer,
+):
+    viewer = make_napari_viewer()
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    viewer.add_labels(np.zeros((10, 10), dtype=np.uint8), name="sample_1.cells")
+    viewer.add_labels(np.zeros((10, 10), dtype=np.uint8), name="sample_2.cells")
+
+    with patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.QInputDialog.getItem",
+        return_value=("", False),
+    ), patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.Worker"
+    ) as mock_worker_cls:
+        widget._run_analysis()
+
+    mock_worker_cls.assert_not_called()
+    assert widget._run_analysis_button.enabled
+    assert widget._run_analysis_button.text == "Measure"

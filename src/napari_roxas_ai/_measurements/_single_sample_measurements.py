@@ -10,6 +10,7 @@ from magicgui.widgets import (
 )
 from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtWidgets import QInputDialog
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from ._sample_measurer import SampleAnalyzer
@@ -78,6 +79,7 @@ class SingleSampleMeasurementsWidget(Container):
         self._spinner_timer.timeout.connect(self._update_spinner)
 
         self._viewer = viewer
+        self._selected_sample = None
 
         # Cells measurement checkbox
         self._measure_cells_checkbox = CheckBox(
@@ -111,39 +113,72 @@ class SingleSampleMeasurementsWidget(Container):
         """Open SettingsWidget as a floating window centered on the active screen with measurements expanded."""
         SettingsWidget.open_floating(self._viewer, section_name="measurements")
 
-    @property
-    def _cells_layer(self) -> Optional["napari.layers.Labels"]:
-        cells_extension = settings.get("file_extensions.cells_file_extension")[
-            0
-        ]
+    def _find_layer(
+        self, layer_type: type, extension_key: str
+    ) -> Optional["napari.layers.Layer"]:
+        """Return the layer of the selected sample (or the first match if none is selected)."""
+        extension = settings.get(f"file_extensions.{extension_key}")[0]
+        sample_name = self._selected_sample
         for layer in self._viewer.layers:
-            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
-                cells_extension
-            ):
+            if not isinstance(layer, layer_type):
+                continue
+            if sample_name is not None:
+                if layer.name == f"{sample_name}{extension}":
+                    return layer
+            elif layer.name.endswith(extension):
                 return layer
         return None
+
+    @property
+    def _cells_layer(self) -> Optional["napari.layers.Labels"]:
+        return self._find_layer(napari.layers.Labels, "cells_file_extension")
 
     @property
     def _rings_layer(self) -> Optional["napari.layers.Labels"]:
-        rings_extension = settings.get("file_extensions.rings_file_extension")[
-            0
-        ]
-        for layer in self._viewer.layers:
-            if isinstance(layer, napari.layers.Labels) and layer.name.endswith(
-                rings_extension
-            ):
-                return layer
-        return None
+        return self._find_layer(napari.layers.Labels, "rings_file_extension")
 
     @property
     def _scan_layer(self) -> Optional["napari.layers.Image"]:
-        scan_extension = settings.get("file_extensions.scan_file_extension")[0]
+        return self._find_layer(napari.layers.Image, "scan_file_extension")
+
+    def _loaded_sample_names(self) -> list:
+        """Names of the samples that have a cells or rings layer loaded."""
+        extensions = [
+            settings.get("file_extensions.cells_file_extension")[0],
+            settings.get("file_extensions.rings_file_extension")[0],
+        ]
+        names = set()
         for layer in self._viewer.layers:
-            if isinstance(layer, napari.layers.Image) and layer.name.endswith(
-                scan_extension
-            ):
-                return layer
-        return None
+            if not isinstance(layer, napari.layers.Labels):
+                continue
+            for extension in extensions:
+                if layer.name.endswith(extension):
+                    names.add(layer.name[: -len(extension)])
+        return sorted(names)
+
+    def _choose_sample(self) -> bool:
+        """
+        Select the sample to measure, asking the user if several are loaded.
+
+        Returns False if the user cancelled the choice.
+        """
+        names = self._loaded_sample_names()
+        if len(names) <= 1:
+            self._selected_sample = names[0] if names else None
+            return True
+
+        name, ok = QInputDialog.getItem(
+            self.native,
+            "Select sample",
+            "Several samples are loaded. Which one should be measured?",
+            names,
+            0,
+            False,
+        )
+        if not ok:
+            return False
+        self._selected_sample = name
+        return True
 
     def _update_spinner(self):
         frame = self._spinner_frames[self._spinner_index]
@@ -151,6 +186,9 @@ class SingleSampleMeasurementsWidget(Container):
         self._run_analysis_button.text = f"{self._current_status} {frame}"
 
     def _run_analysis(self):
+        if not self._choose_sample():
+            return
+
         self._run_analysis_button.enabled = False
         self._current_status = "Processing"
         self._spinner_index = 0
@@ -294,7 +332,7 @@ class SingleSampleMeasurementsWidget(Container):
 
         self.worker_thread.finished.connect(self._spinner_timer.stop)
         self.worker_thread.finished.connect(
-            lambda: setattr(self._run_analysis_button, "text", "Run Analysis")
+            lambda: setattr(self._run_analysis_button, "text", "Measure")
         )
         self.worker_thread.finished.connect(
             lambda: setattr(self._run_analysis_button, "enabled", True)
