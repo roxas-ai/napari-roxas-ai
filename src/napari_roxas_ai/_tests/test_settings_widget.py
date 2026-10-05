@@ -1103,3 +1103,22 @@ def test_settings_widget_auto_floats_when_docked(make_napari_viewer, qtbot):
     qtbot.wait(100)
     if hasattr(dock, "isFloating"):
         assert dock.isFloating() is True
+
+
+def test_project_directory_changed_elsewhere_is_shown_and_kept_on_apply(
+    widget, settings_file
+):
+    """
+    A directory chosen in another widget shows up in the form at once, and
+    unapplied edits elsewhere in the form are not thrown away by it.
+    """
+    gpu = _editor_for(widget, "processing", "try_to_use_gpu")
+    gpu.setChecked(not gpu.isChecked())
+
+    SettingsManager().set("project_directory", "C:/Projects/Other")
+
+    assert _editor_for(widget, "project_directory").text() == "C:/Projects/Other"
+    assert gpu.isChecked() is not DEFAULT_SETTINGS["processing"]["try_to_use_gpu"]
+
+    widget._apply()
+    assert SettingsManager().get("project_directory") == "C:/Projects/Other"

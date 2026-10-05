@@ -161,20 +161,30 @@ class TestPreparationWidget:
 
     @patch("napari_roxas_ai._preparation._preparation_widget.QFileDialog")
     def test_project_directory_selection(self, mock_dialog, prep_widget):
-        """Test project directory selection."""
-        # Set up mock directory path
+        """The chosen directory is stored in the settings, not just here."""
         test_dir = str(Path("/test/project/dir").absolute())
         mock_dialog.getExistingDirectory.return_value = test_dir
+        prep_widget.settings_manager = MagicMock()
 
-        # Call the method
         prep_widget._open_project_dialog()
 
-        # Check that the directory was set correctly
+        prep_widget.settings_manager.set.assert_called_once_with(
+            "project_directory", test_dir
+        )
+
+    def test_project_directory_follows_the_settings(self, prep_widget):
+        """A project directory changed elsewhere is shown here as well."""
+        test_dir = str(Path("/test/project/dir").absolute())
+        prep_widget._refresh_file_list = MagicMock()
+
+        prep_widget._on_project_directory_changed(test_dir)
+
         assert prep_widget.project_directory == test_dir
         assert (
             prep_widget._project_dialog_button.text
             == f"Project Directory: {test_dir}"
         )
+        prep_widget._refresh_file_list.assert_called_once_with()
 
     def test_file_selection_toggle(self, prep_widget):
         """Test toggling file selection mode."""

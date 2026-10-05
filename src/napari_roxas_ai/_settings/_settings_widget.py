@@ -680,6 +680,20 @@ class SettingsForm(Container):
         """Read every editor back into a settings dictionary."""
         return self._collect()
 
+    def set_top_level_text(self, key: str, text: str) -> None:
+        """
+        Show `text` in the line editor of the top-level setting `key`.
+
+        Only that one editor is touched, so edits the user has not applied yet
+        elsewhere in the form are kept.
+        """
+        for entry in self._entries:
+            if entry.path == key.lower():
+                editor = entry.widgets[-1]
+                if isinstance(editor, QLineEdit):
+                    editor.setText(text)
+                return
+
     def apply_filter(self, text: str) -> int:
         """
         Show only the settings whose path contains what was typed.
@@ -872,6 +886,16 @@ class SettingsWidget(Container):
 
         self._build_form()
         QTimer.singleShot(0, self._ensure_floating)
+
+        # A project directory chosen in another widget must show up here right
+        # away, otherwise the next "Apply" would write the old one back
+        self._settings_manager.add_listener(
+            "project_directory", self._on_project_directory_changed
+        )
+
+    def _on_project_directory_changed(self, directory: Optional[str]) -> None:
+        """Show a project directory that was changed anywhere in the plugin."""
+        self._form.set_top_level_text("project_directory", directory or "")
 
     def _ensure_floating(self) -> None:
         """Find the hosting dock widget and ensure it floats with standard geometry."""
