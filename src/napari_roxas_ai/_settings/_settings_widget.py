@@ -26,9 +26,10 @@ from typing import (
 
 from magicgui.widgets import Container, LineEdit, PushButton
 from napari.utils.notifications import show_info
-from qtpy.QtCore import Qt, QTimer, QUrl
-from qtpy.QtGui import QDesktopServices
+from qtpy.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer, QUrl
+from qtpy.QtGui import QColor, QCursor, QDesktopServices, QPainter, QPalette, QPen
 from qtpy.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -38,6 +39,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QScrollArea,
+    QSizeGrip,
     QSizePolicy,
     QSpinBox,
     QToolTip,
@@ -626,11 +628,53 @@ class SettingsForm(Container):
         # shrink as far as the scroll bar allows rather than hold a floor
         scroll_area.setMinimumHeight(0)
 
+        self._scroll_area = scroll_area
         super().__init__(widgets=[])
         layout = self.native.layout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(scroll_area)
         self.native.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+    def focus_section(self, section_name: str) -> bool:
+        """
+        Expand the section matching section_name and scroll it to the center.
+        """
+        target_entry = None
+        target_name = section_name.lower()
+        for entry in self._entries:
+            if entry.path == target_name or entry.path.endswith(f".{target_name}"):
+                target_entry = entry
+                break
+
+        if target_entry is None or target_entry.group is None:
+            return False
+
+        group = target_entry.group
+        group.expand(animate=False)
+
+        def _center():
+            try:
+                if self._scroll_area is None:
+                    return
+                widget = self._scroll_area.widget()
+                if widget is None:
+                    return
+                # Calculate vertical position of group within inner scroll widget
+                widget_pos = group.mapTo(widget, group.rect().topLeft())
+                widget_y = widget_pos.y()
+                widget_height = group.height()
+                viewport_height = self._scroll_area.viewport().height()
+
+                target_scroll = max(0, widget_y - (viewport_height - widget_height) // 2)
+                self._scroll_area.verticalScrollBar().setValue(target_scroll)
+                self._scroll_area.ensureWidgetVisible(group)
+            except (RuntimeError, AttributeError, Exception):
+                pass
+
+        QTimer.singleShot(0, _center)
+        QTimer.singleShot(50, _center)
+        QTimer.singleShot(150, _center)
+        return True
 
     def collect(self) -> Dict[str, Any]:
         """Read every editor back into a settings dictionary."""
@@ -686,6 +730,84 @@ class SettingsForm(Container):
             depth += isinstance(parent, QCollapsible)
             parent = parent.parentWidget()
         return depth
+
+
+class _ProminentSizeGrip(QSizeGrip):
+    """A size grip that renders visible diagonal lines and uses a resize cursor."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setCursor(QCursor(Qt.CursorShape.SizeFDiagCursor))
+        self.setFixedSize(18, 18)
+
+    def sizeHint(self) -> QSize:
+        return QSize(18, 18)
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Determine theme-adapted contrast color
+        text_color = self.palette().color(QPalette.ColorRole.WindowText)
+        if not text_color.isValid():
+            text_color = QColor(180, 180, 180)
+
+        # Main grip line color
+        line_color = QColor(text_color)
+        line_color.setAlpha(180 if self.underMouse() else 130)
+
+        # Subtle shadow / bevel line for depth
+        shadow_color = QColor(0, 0, 0, 80)
+
+        w = self.width()
+        h = self.height()
+
+        # Draw 3 diagonal lines with shadow for clear texture
+        for offset in (4, 8, 12):
+            # Shadow line offset by 1px
+            painter.setPen(QPen(shadow_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(w - offset, h - 1, w - 1, h - offset)
+            # Main line
+            painter.setPen(QPen(line_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(w - offset - 1, h - 2, w - 2, h - offset - 1)
+
+
+class _DockSizeGripHandler(QObject):
+    """Positions and controls visibility of a QSizeGrip attached to a QDockWidget."""
+
+    def __init__(self, dock_widget: QWidget, size_grip: QSizeGrip) -> None:
+        super().__init__(dock_widget)
+        self._dock = dock_widget
+        self._grip = size_grip
+        self._dock.installEventFilter(self)
+        if hasattr(self._dock, "topLevelChanged"):
+            self._dock.topLevelChanged.connect(self._on_top_level_changed)
+        self.update_geometry()
+
+    def _on_top_level_changed(self, is_floating: bool) -> None:
+        self._grip.setVisible(is_floating)
+        if is_floating:
+            self.update_geometry()
+            self._grip.raise_()
+
+    def update_geometry(self) -> None:
+        grip_size = self._grip.sizeHint()
+        rect = self._dock.rect()
+        self._grip.move(
+            rect.width() - grip_size.width(),
+            rect.height() - grip_size.height(),
+        )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self._dock and event.type() in (
+            QEvent.Resize,
+            QEvent.Move,
+            QEvent.Show,
+            QEvent.LayoutRequest,
+        ):
+            self.update_geometry()
+            self._grip.raise_()
+        return super().eventFilter(watched, event)
 
 
 class SettingsWidget(Container):
@@ -749,6 +871,164 @@ class SettingsWidget(Container):
         self._reset_button.changed.connect(self._reset)
 
         self._build_form()
+        QTimer.singleShot(0, self._ensure_floating)
+
+    def _ensure_floating(self) -> None:
+        """Find the hosting dock widget and ensure it floats with standard geometry."""
+        dock = self._find_dock_widget()
+        if dock is not None:
+            self._configure_floating_dock(dock, self._viewer)
+
+    def _find_dock_widget(self) -> Optional[Any]:
+        """Find the QDockWidget wrapping this settings widget."""
+        # 1. Walk parent widgets
+        parent = self.native.parentWidget()
+        while parent is not None:
+            if hasattr(parent, "setFloating") and hasattr(parent, "isFloating"):
+                return parent
+            parent = parent.parentWidget()
+
+        # 2. Check viewer window dock widgets
+        if hasattr(self._viewer, "window"):
+            docks = getattr(self._viewer.window, "dock_widgets", None) or getattr(
+                self._viewer.window, "_dock_widgets", {}
+            )
+            for name, dock in docks.items():
+                w = getattr(dock, "widget", lambda: dock)()
+                if w is self or getattr(w, "_magic_widget", None) is self:
+                    return dock
+                if "Settings" in name or "settings" in name.lower():
+                    return dock
+        return None
+
+    @staticmethod
+    def _configure_floating_dock(
+        dock_widget: Any, viewer: Optional["napari.viewer.Viewer"] = None
+    ) -> None:
+        """Set dock widget floating, centered on the active screen and sized comfortably."""
+        if hasattr(dock_widget, "setFloating"):
+            dock_widget.setFloating(True)
+        if hasattr(dock_widget, "show"):
+            dock_widget.show()
+
+        target_screen = None
+        try:
+            main_window = None
+            if viewer is not None and hasattr(viewer, "window") and hasattr(viewer.window, "_qt_window"):
+                main_window = viewer.window._qt_window
+            elif hasattr(dock_widget, "native"):
+                main_window = dock_widget.native.window()
+            elif hasattr(dock_widget, "window"):
+                main_window = dock_widget.window()
+
+            if main_window is not None:
+                if hasattr(main_window, "screen") and main_window.screen() is not None:
+                    target_screen = main_window.screen()
+                elif hasattr(main_window, "windowHandle") and main_window.windowHandle() is not None:
+                    target_screen = main_window.windowHandle().screen()
+
+            if target_screen is None and hasattr(QApplication, "screenAt") and main_window is not None:
+                center_point = main_window.mapToGlobal(main_window.rect().center())
+                target_screen = QApplication.screenAt(center_point)
+
+            if target_screen is None and hasattr(QApplication, "primaryScreen"):
+                target_screen = QApplication.primaryScreen()
+        except Exception:
+            target_screen = None
+
+        if target_screen is not None and hasattr(dock_widget, "setGeometry"):
+            avail_geom = target_screen.availableGeometry()
+            # Maximized vertically with 100 px margin (50 px top, 50 px bottom)
+            target_height = max(200, avail_geom.height() - 100)
+            target_y = avail_geom.top() + (avail_geom.height() - target_height) // 2
+
+            # Width: wide enough to comfortably read all entries (e.g. 600px or sizeHint)
+            target_width = 600
+            if hasattr(dock_widget, "sizeHint"):
+                target_width = max(target_width, dock_widget.sizeHint().width())
+            target_width = min(target_width, avail_geom.width() - 50)
+            target_x = avail_geom.left() + (avail_geom.width() - target_width) // 2
+
+            dock_widget.setGeometry(QRect(target_x, target_y, target_width, target_height))
+
+        if hasattr(dock_widget, "raise_"):
+            dock_widget.raise_()
+        if hasattr(dock_widget, "activateWindow"):
+            dock_widget.activateWindow()
+
+        # Attach prominent QSizeGrip directly to the QDockWidget if not already attached
+        if hasattr(dock_widget, "findChild") and isinstance(dock_widget, QWidget):
+            size_grip = getattr(dock_widget, "_roxas_size_grip", None)
+            if size_grip is None:
+                size_grip = _ProminentSizeGrip(dock_widget)
+                dock_widget._roxas_size_grip = size_grip
+                dock_widget._roxas_size_grip_handler = _DockSizeGripHandler(
+                    dock_widget, size_grip
+                )
+            if hasattr(dock_widget, "isFloating"):
+                size_grip.setVisible(dock_widget.isFloating())
+            size_grip.raise_()
+
+    @classmethod
+    def open_floating(
+        cls,
+        viewer: "napari.viewer.Viewer",
+        section_name: Optional[str] = None,
+    ) -> "SettingsWidget":
+        """
+        Open or raise the SettingsWidget as a floating window.
+
+        The window is sized vertically to the active screen height minus a 100-pixel
+        margin, with comfortable width, and centered on the active screen.
+        Optionally expands and focuses a given section.
+        """
+        settings_widget = None
+        dock_widget = None
+
+        if hasattr(viewer, "window"):
+            if hasattr(viewer.window, "dock_widgets"):
+                for name, dock in viewer.window.dock_widgets.items():
+                    w = getattr(dock, "widget", lambda: dock)()
+                    if isinstance(w, cls):
+                        settings_widget = w
+                        dock_widget = dock
+                        break
+                    if hasattr(w, "_magic_widget") and isinstance(w._magic_widget, cls):
+                        settings_widget = w._magic_widget
+                        dock_widget = dock
+                        break
+            elif hasattr(viewer.window, "_dock_widgets"):
+                for name, dock in viewer.window._dock_widgets.items():
+                    w = getattr(dock, "widget", lambda: dock)()
+                    if isinstance(w, cls):
+                        settings_widget = w
+                        dock_widget = dock
+                        break
+                    if hasattr(w, "_magic_widget") and isinstance(w._magic_widget, cls):
+                        settings_widget = w._magic_widget
+                        dock_widget = dock
+                        break
+
+        if dock_widget is None:
+            settings_widget = cls(viewer)
+            dock_widget = viewer.window.add_dock_widget(
+                settings_widget,
+                name="ZZ – Settings",
+                area="right",
+            )
+        
+        cls._configure_floating_dock(dock_widget, viewer)
+
+        if section_name and settings_widget is not None:
+            settings_widget.focus_section(section_name)
+
+        return settings_widget
+
+    def focus_section(self, section_name: str) -> bool:
+        """Expand the specified section and scroll it into view centered."""
+        if self._form is not None:
+            return self._form.focus_section(section_name)
+        return False
 
     def _build_form(self) -> None:
         """(Re)build the form from the settings currently in memory."""

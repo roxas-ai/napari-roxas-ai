@@ -384,16 +384,9 @@ class SingleSampleSegmentationWidget(Container):
         check_assets_and_download(str(CELLS_MODELS_PATH), "cells_models.zip")
         check_assets_and_download(str(RINGS_MODELS_PATH), "rings_models.zip")
 
-        # Create a layer selection widget filtered by scan extension
-        self._input_layer_combo = ComboBox(
-            label="Thin Section",
-            annotation="napari.layers.Image",
-            choices=self._get_valid_layers,
-        )
-
         # Cells segmentation checkbox and model selection
         self._segment_cells_checkbox = CheckBox(
-            value=True, label="Segment Cells"
+            value=True, label="Cell Segmentation:"
         )
         self._segment_cells_checkbox.changed.connect(
             self._update_cells_model_visibility
@@ -402,12 +395,25 @@ class SingleSampleSegmentationWidget(Container):
         # Cells model selection
         self._cells_model_weights_file = ComboBox(
             choices=self._get_model_files(where=CELLS_MODELS_PATH),
-            label="Cells Model",
+            label="",
         )
+
+        self._cells_row = Container(
+            widgets=[
+                self._segment_cells_checkbox,
+                self._cells_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._cells_row.native, "layout"):
+            layout = self._cells_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
 
         # Rings segmentation checkbox and model selection
         self._segment_rings_checkbox = CheckBox(
-            value=True, label="Segment Rings"
+            value=True, label="Ring Segmentation:"
         )
         self._segment_rings_checkbox.changed.connect(
             self._update_rings_model_visibility
@@ -416,8 +422,21 @@ class SingleSampleSegmentationWidget(Container):
         # Rings model selection
         self._rings_model_weights_file = ComboBox(
             choices=self._get_model_files(where=RINGS_MODELS_PATH),
-            label="Rings Model",
+            label="",
         )
+
+        self._rings_row = Container(
+            widgets=[
+                self._segment_rings_checkbox,
+                self._rings_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._rings_row.native, "layout"):
+            layout = self._rings_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
 
         # Create a button to launch the analysis
         self._run_segmentation_button = PushButton(text="Run Segmentation")
@@ -426,18 +445,16 @@ class SingleSampleSegmentationWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_layer_combo,
-                self._segment_cells_checkbox,
-                self._cells_model_weights_file,
-                self._segment_rings_checkbox,
-                self._rings_model_weights_file,
+                self._cells_row,
+                self._rings_row,
                 self._run_segmentation_button,
             ]
         )
 
-        # Initialize visibility of model selection widgets
+        # Initialize visibility of model selection widgets and button state
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
+        self._update_run_button_state()
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the scan file extension."""
@@ -463,11 +480,20 @@ class SingleSampleSegmentationWidget(Container):
         self._cells_model_weights_file.visible = (
             self._segment_cells_checkbox.value
         )
+        self._update_run_button_state()
 
     def _update_rings_model_visibility(self) -> None:
         """Update visibility of rings model selection based on checkbox."""
         self._rings_model_weights_file.visible = (
             self._segment_rings_checkbox.value
+        )
+        self._update_run_button_state()
+
+    def _update_run_button_state(self) -> None:
+        """Update enabled state of run button based on checkboxes."""
+        self._run_segmentation_button.enabled = (
+            self._segment_cells_checkbox.value
+            or self._segment_rings_checkbox.value
         )
 
     def _extract_base_name(self, layer_name: str) -> str:
@@ -487,12 +513,15 @@ class SingleSampleSegmentationWidget(Container):
         if isinstance(proj, str) and proj:
             fix_sample_stem_paths_in_project(proj)
 
-        # Get the selected input layer
-        if not self._input_layer_combo.value:
-            QMessageBox.warning(None, "Error", "Please select an input layer")
+        # Get the input layer
+        valid_layers = self._get_valid_layers()
+        if not valid_layers:
+            QMessageBox.warning(
+                None, "Error", "Please open a thin section image first"
+            )
             return
 
-        self.input_layer = self._input_layer_combo.value
+        self.input_layer = valid_layers[0]
 
         # Check if at least one segmentation method is selected
         if not (

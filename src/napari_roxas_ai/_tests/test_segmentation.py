@@ -165,6 +165,61 @@ class TestSingleSampleSegmentation:
         )
         assert base_name == "other_name"
 
+    def test_widget_structure_and_valid_layers(self, mock_settings):
+        """Test SingleSampleSegmentationWidget elements and layer detection."""
+        from napari_roxas_ai._segmentation._single_sample_segmentation import (
+            SingleSampleSegmentationWidget,
+        )
+
+        viewer = MagicMock()
+        image_layer = MagicMock()
+        image_layer.name = "sample1.scan"
+        type(image_layer).__name__ = "Image"
+        # Mock isinstance check
+        with patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.check_assets_and_download"
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SingleSampleSegmentationWidget._get_model_files",
+            return_value=("dummy_model.pth",),
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
+            return_value=mock_settings,
+        ), patch(
+            "napari.layers.Image", (type(image_layer),)
+        ):
+            viewer.layers = [image_layer]
+            widget = SingleSampleSegmentationWidget(viewer)
+            # Check that there is no _input_layer_combo attribute
+            assert not hasattr(widget, "_input_layer_combo")
+            # Check labels and row containers
+            assert widget._segment_cells_checkbox.label == "Cell Segmentation:"
+            assert widget._segment_rings_checkbox.label == "Ring Segmentation:"
+            assert widget._cells_model_weights_file.label == ""
+            assert widget._rings_model_weights_file.label == ""
+            assert widget._cells_row.layout == "horizontal"
+            assert widget._rings_row.layout == "horizontal"
+            assert widget._segment_cells_checkbox in widget._cells_row
+            assert widget._cells_model_weights_file in widget._cells_row
+            assert widget._segment_rings_checkbox in widget._rings_row
+            assert widget._rings_model_weights_file in widget._rings_row
+            assert widget._run_segmentation_button.enabled is True
+
+            # Untick both checkboxes -> button disabled
+            widget._segment_cells_checkbox.value = False
+            widget._segment_rings_checkbox.value = False
+            assert widget._run_segmentation_button.enabled is False
+
+            # Tick one checkbox back -> button enabled
+            widget._segment_cells_checkbox.value = True
+            assert widget._run_segmentation_button.enabled is True
+
+            widget._segment_cells_checkbox.value = False
+            widget._segment_rings_checkbox.value = True
+            assert widget._run_segmentation_button.enabled is True
+
+            valid = widget._get_valid_layers()
+            assert valid == [image_layer]
+
 
 class TestSingleWorkerFunctionality:
     """Test the SingleWorker class functionality directly."""
