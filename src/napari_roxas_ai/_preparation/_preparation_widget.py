@@ -106,9 +106,8 @@ class PreparationWidget(Container):
         copied into this widget when it is built, so they are re-read, and the
         checkbox that shows one of them is relabelled.
 
-        self.project_directory is deliberately left alone: _open_project_dialog
-        does not write it back to the settings, so it may hold a directory the
-        user picked for this widget only, which must not be overwritten.
+        The project directory is not handled here: the settings listener
+        registered in _create_ui_components keeps it up to date.
         """
         self._load_settings()
 
@@ -122,10 +121,19 @@ class PreparationWidget(Container):
         """Create and configure UI components."""
         # Project directory selector
         self.project_directory = self.settings_manager.get("project_directory")
-        self._project_dialog_button = PushButton(
-            text=f"Project Directory: {self.project_directory or 'Not set'}"
+        self._project_dialog_button = PushButton()
+        # Set after construction: text passed to the constructor gets its
+        # underscores turned into spaces, which would mangle the path
+        self._project_dialog_button.text = (
+            f"Project Directory: {self.project_directory or 'Not set'}"
         )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
+
+        # Follow the project directory wherever it is changed (other widgets,
+        # the menu, the settings widget)
+        self.settings_manager.add_listener(
+            "project_directory", self._on_project_directory_changed
+        )
 
         # Overwrite files checkbox
         self._overwrite_files_checkbox = CheckBox(
@@ -211,19 +219,28 @@ class PreparationWidget(Container):
         )
         self._refresh_file_list()
 
+    def _on_project_directory_changed(self, directory):
+        """Show a project directory that was changed anywhere in the plugin."""
+        self.project_directory = directory
+        self._project_dialog_button.text = (
+            f"Project Directory: {directory or 'Not set'}"
+        )
+        self._refresh_file_list()
+
     def _open_project_dialog(self):
-        """Open file dialog to select project directory and refresh file list."""
+        """
+        Open file dialog to select the project directory.
+
+        The choice is stored in the settings, whose listener (see
+        _on_project_directory_changed) updates this and every other widget.
+        """
         directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Project Directory",
             directory=self.project_directory,
         )
         if directory:
-            self.project_directory = directory
-            self._project_dialog_button.text = (
-                f"Project Directory: {directory}"
-            )
-            self._refresh_file_list()
+            self.settings_manager.set("project_directory", directory)
 
     def _refresh_file_list(self):
         """Refresh the list of files from the project directory."""
