@@ -403,3 +403,80 @@ def test_crossdating_use_mean_interactive_toggling(make_napari_viewer, qtbot):
     assert widget._current_alignment_data is not None
     assert widget._current_alignment_data["start_year"] == 2005
     assert widget._current_alignment_data["end_year"] == 2014
+
+
+def test_crossdating_offset_slider_continuous_reset_and_apply(make_napari_viewer, qtbot, monkeypatch):
+    import napari.layers
+    import numpy as np
+    import pandas as pd
+
+    viewer = make_napari_viewer()
+    # Mock an input layer with 10 rings ending at 2000
+    data = np.zeros((10, 10), dtype=np.uint32)
+    layer = napari.layers.Labels(data, name="test_rings.rings")
+    layer.metadata["rings_outmost_complete_year"] = 2000
+    features = pd.DataFrame({"YEAR": list(range(1991, 2001)), "width": [10.0] * 10})
+    layer.features = features
+    viewer.add_layer(layer)
+
+    widget = CrossDatingPlotterWidget(viewer)
+    widget._crossdating_column_combo.choices = ["RefCol"]
+    widget._crossdating_column_combo.value = "RefCol"
+
+    years = np.arange(1900, 2100)
+    layer_series = pd.Series(np.nan, index=years)
+    layer_series.loc[1991:2000] = [10.0] * 10
+    ref_series = pd.Series(10.0, index=years)
+    avg_series = pd.Series(10.0, index=years)
+
+    widget.plot_df = pd.DataFrame({
+        "layer_series": layer_series,
+        "reference_series": ref_series,
+        "average": avg_series,
+    }, index=years)
+
+    monkeypatch.setattr(
+        "napari_roxas_ai._crossdating._cross_dating_plotter.update_rings_geometries",
+        lambda rings_table, last_year, image_shape: (rings_table, data, layer.colormap),
+    )
+    monkeypatch.setattr(widget, "_export_plot", lambda: None)
+    monkeypatch.setattr(widget, "_sync_rings_editor_year", lambda: None)
+
+    assert widget._base_offset == 0
+    assert widget._offset_slider.value == 0
+
+    # Intermediate value (not hitting limit)
+    widget._offset_slider.value = 25
+    assert widget._base_offset == 0
+    assert widget._offset_slider.value == 25
+
+    # Hit upper limit +50 -> absorbed into _base_offset and reset to 0
+    widget._offset_slider.value = 50
+    assert widget._base_offset == 50
+    assert widget._offset_slider.value == 0
+
+    # Slide further by +50 again -> _base_offset becomes 100 and reset to 0
+    widget._offset_slider.value = 50
+    assert widget._base_offset == 100
+    assert widget._offset_slider.value == 0
+
+    # Slide further by +15
+    widget._offset_slider.value = 15
+    assert widget._base_offset == 100
+    assert widget._offset_slider.value == 15
+
+    # Hit lower limit -50 -> absorbed (-50 added to 100 = 50) and reset to 0
+    widget._offset_slider.value = -50
+    assert widget._base_offset == 50
+    assert widget._offset_slider.value == 0
+
+    # Slide by +20 (cumulative total offset = 50 + 20 = 70)
+    widget._offset_slider.value = 20
+    assert widget._base_offset == 50
+    assert widget._offset_slider.value == 20
+
+    # Now click "Apply Changes" -> rings_outmost_complete_year should become 2000 + 70 = 2070
+    widget._apply_changes_button.native.click()
+    assert layer.metadata["rings_outmost_complete_year"] == 2070
+    assert widget._base_offset == 0
+    assert widget._offset_slider.value == 0

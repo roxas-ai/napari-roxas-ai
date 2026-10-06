@@ -340,8 +340,8 @@ class CrossDatingPlotterWidget(Container):
             value=0,
         )
         self._offset_slider.changed.connect(
-            lambda: self._plot_crossdating_data()
-        )  # Update only the plot when the offset changes
+            self._on_offset_slider_changed
+        )  # Update plot and handle limit resets when offset changes
         self._apply_changes_button = PushButton(
             text="Apply Changes",
             tooltip="Apply all current changes (offset, alignment) to the rings layer",
@@ -1057,7 +1057,7 @@ class CrossDatingPlotterWidget(Container):
 
         # Build labels
         layer = self._input_layer
-        image_id = layer.metadata.get("sample_name") or layer.name
+        image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else "Sample"
         roxas_label = f"RXS: {image_id} ({period_ref})"
 
         ref_name = str(self._crossdating_column_combo.value)
@@ -1327,6 +1327,21 @@ class CrossDatingPlotterWidget(Container):
         y_min, y_max = self._y_range_slider.value
         self.plot_widget.ax.set_ylim(y_min, y_max)
         self.plot_widget.canvas.draw()
+
+    def _on_offset_slider_changed(self):
+        """Called when the Offset slider is adjusted.
+        
+        When hitting the +/-50 limits, the slider value is absorbed into _base_offset
+        and reset to 0 so the user can continuously slide.
+        """
+        val = int(self._offset_slider.value)
+        if val <= self._offset_slider.min or val >= self._offset_slider.max:
+            self._base_offset += val
+            self._offset_slider.native.blockSignals(True)
+            self._offset_slider.value = 0
+            self._offset_slider.native.blockSignals(False)
+
+        self._plot_crossdating_data()
 
     def _apply_offset_to_layer(self):
         """Apply the offset to the current input layer."""
