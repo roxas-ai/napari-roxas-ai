@@ -1013,8 +1013,17 @@ class CrossDatingPlotterWidget(Container):
         # Update the plot
         self._plot_crossdating_data()
 
-    def _plot_crossdating_data(self, target_range: Optional[tuple[int, int]] = None):
-        """Plot the crossdating data comparison"""
+    def _plot_crossdating_data(
+        self,
+        target_range: Optional[tuple[int, int]] = None,
+        keep_x_range: bool = False,
+    ):
+        """Plot the crossdating data comparison
+
+        With keep_x_range, the Year Range slider values are used as they are
+        (the user just moved them) instead of being re-centered on the ROXAS
+        series when it is no longer visible.
+        """
         if self.plot_df is None or self.plot_df.empty:
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
                 self.plot_widget.clear()
@@ -1179,8 +1188,11 @@ class CrossDatingPlotterWidget(Container):
         self._x_range_slider.max = max_year
         self._x_range_slider.native.blockSignals(False)
 
+        # If the user just set the range, keep it as it is
+        if keep_x_range:
+            pass
         # If the value of the slider has been initialized
-        if self._x_range_slider_was_set:
+        elif self._x_range_slider_was_set:
 
             # Get current x slider values
             current_x_low, current_x_high = self._x_range_slider.value
@@ -1328,7 +1340,8 @@ class CrossDatingPlotterWidget(Container):
         self._x_range_slider_was_set = True
 
         # Refresh the plot (this will handle y-axis auto-scaling if not locked)
-        self._plot_crossdating_data()
+        # without re-centering the range the user is dragging
+        self._plot_crossdating_data(keep_x_range=True)
 
     def _on_y_range_changed(self):
         """Called when the Width Range slider is manually adjusted."""
