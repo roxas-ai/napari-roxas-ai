@@ -164,14 +164,14 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 - Queries the project directory for prepared sample stems.
 - **Real-Time Directory Synchronization**: Changes to the project directory are automatically synchronized and updated across all widgets in real-time.
 - **Single-Image Workflow Enforcement**: Only one sample image can be loaded in the napari viewer at a time. Attempting to load another image prompts the user to first close the currently active image.
-- Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata).
+- Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata) and automatically loads any available associated `.rings` and `.cells` layers.
 - Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).
 - Automatically configures keyboard shortcuts (such as WASD keys for quick viewport panning) to streamline navigation across large high-resolution images.
 
 ### Key Controls
 - **Project Directory Label & Compact Button**: Displays the «Project Directory:» text label side by side in the same row as a compact directory button. The button path text is elided in the middle (showing the start and end of the path up to ~35 characters) to keep the panel tidy, with a tooltip displaying the full absolute path when hovered. Clicking opens a folder browser to update the active directory.
-- **Samples List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately loads that image.
-- **Load Selected Image**: Loads the currently selected sample file into the viewer.
+- **Samples List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately opens that image along with its available associated rings and cells layers.
+- **Load Selected Image**: Loads the currently selected sample file (along with available associated rings and cells layers) into the viewer.
 - **Progress Bar**: Displays sample loading progress.
 
 ---
@@ -413,7 +413,7 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 
 ![Screenshot: Single Sample Measurements Widget](../assets/screenshots/09a_single_measurements_widget.png)
 
-*Figure 12: Single sample measurements interface and parameter configuration.*
+*Figure 12: Single sample measurements interface.*
 
 ### How It Works
 - Combines the `.cells` lumen mask and `.rings` boundary geometry with spatial resolution metadata ($\mu\text{m}/\text{px}$).
@@ -422,14 +422,12 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
   - **Cell Wall Thickness (CWT)**: Radial ($CWTRAD$), Tangential ($CWTTAN$), Pith-side ($CWTPI$), Bark-side ($CWTBA$), Overall ($CWTALL$).
   - **Ring-Level Aggregates**: Mean Ring Width ($MRW$), Cell Density ($CD$), Conductive Area Fraction ($RCTA$), Mork's Index ($RTSR$), Relative Anatomical Density ($RWD$).
 - Outputs tab-delimited tables: `<sample_name>.cells_table.txt` and `<sample_name>.rings_table.txt`.
+- **Always Re-creates Annotated Image**: Re-creates and saves an updated annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years whenever measurements are performed, ensuring the annotated image remains strictly in line with the measurements.
 
-### Key Parameters
-- **Sample Selection**: Dropdown choosing the target sample from loaded layers.
-- **Measure Cells / Measure Rings**: Checkboxes selecting which measurement levels to run.
-- **Cluster DBL CWT Threshold ($\mu\text{m}$)**: Maximum double cell wall distance for identifying clustered cells / pit fields.
-- **Smoothing Kernel Size**: Moving average kernel size for boundary smoothing (set to `1` to disable).
-- **Wall Fraction for Thickness Measurement (`relwidth_cwt_integration`)**: Fraction of cell wall profile used to integrate wall thickness measurements.
-- **Measure Sample Button**: Launches analysis in a background worker and attaches measurements to layer properties for interactive table inspection.
+### Key Controls
+- **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
+- **Check Settings Button**: Launches the Settings window as a floating widget that appears maximized with a comfortable margin on top of napari, automatically scrolling to and focusing on the measurement parameters.
+- **Measure Button**: Launches analysis in a background worker, writes measurement tables and the updated annotated image, and attaches measurements to layer properties for interactive table inspection.
 
 ---
 
