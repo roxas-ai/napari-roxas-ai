@@ -280,13 +280,22 @@ class BatchSampleMeasurementsWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # Get input directory
+        # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
-        self._input_file_dialog_button = PushButton(
-            text=f"Input Directory: {self.input_directory_path}",
+        self._input_file_dialog_button = PushButton()
+        # Set after construction: text passed to the constructor gets its
+        # underscores turned into spaces, which would mangle the path
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {self.input_directory_path or 'Not set'}"
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
+        )
+
+        # Follow the project directory wherever it is changed (other widgets,
+        # the menu, the settings widget)
+        settings.add_listener(
+            "project_directory", self._on_project_directory_changed
         )
 
         # Cells measurement checkbox and settings (currently hidden as we want the user to compute cells first anyway)
@@ -348,18 +357,27 @@ class BatchSampleMeasurementsWidget(Container):
             ]
         )
 
+    def _on_project_directory_changed(self, directory):
+        """Show a project directory that was changed anywhere in the plugin."""
+        self.input_directory_path = directory
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {directory or 'Not set'}"
+        )
+
     def _open_input_file_dialog(self):
-        """Open a file dialog to select the input directory path."""
+        """
+        Open a file dialog to select the project directory.
+
+        The choice is stored in the settings, whose listener (see
+        _on_project_directory_changed) updates this and every other widget.
+        """
         directory = QFileDialog.getExistingDirectory(
             parent=None,
-            caption="Select Input Directory",
+            caption="Select Project Directory",
             directory=self.input_directory_path,
         )
         if directory:
-            self.input_directory_path = directory
-            self._input_file_dialog_button.text = (
-                f"Input Directory: {self.input_directory_path}"
-            )
+            settings.set("project_directory", directory)
 
     def _update_cells_settings_visibility(self):
         self._cells_measurements_settings.visible = (

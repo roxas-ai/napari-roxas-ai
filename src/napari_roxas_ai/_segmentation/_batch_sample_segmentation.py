@@ -314,13 +314,22 @@ class BatchSampleSegmentationWidget(Container):
         check_assets_and_download(str(CELLS_MODELS_PATH), "cells_models.zip")
         check_assets_and_download(str(RINGS_MODELS_PATH), "rings_models.zip")
 
-        # Get input directory
+        # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
-        self._input_file_dialog_button = PushButton(
-            text=f"Input Directory: {self.input_directory_path}",
+        self._input_file_dialog_button = PushButton()
+        # Set after construction: text passed to the constructor gets its
+        # underscores turned into spaces, which would mangle the path
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {self.input_directory_path or 'Not set'}"
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
+        )
+
+        # Follow the project directory wherever it is changed (other widgets,
+        # the menu, the settings widget)
+        settings.add_listener(
+            "project_directory", self._on_project_directory_changed
         )
 
         # Cells segmentation checkbox and model selection
@@ -377,18 +386,27 @@ class BatchSampleSegmentationWidget(Container):
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
 
+    def _on_project_directory_changed(self, directory):
+        """Show a project directory that was changed anywhere in the plugin."""
+        self.input_directory_path = directory
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {directory or 'Not set'}"
+        )
+
     def _open_input_file_dialog(self):
-        """Open a file dialog to select the input directory path."""
+        """
+        Open a file dialog to select the project directory.
+
+        The choice is stored in the settings, whose listener (see
+        _on_project_directory_changed) updates this and every other widget.
+        """
         directory = QFileDialog.getExistingDirectory(
             parent=None,
-            caption="Select Input Directory",
+            caption="Select Project Directory",
             directory=self.input_directory_path,
         )
         if directory:
-            self.input_directory_path = directory
-            self._input_file_dialog_button.text = (
-                f"Input Directory: {self.input_directory_path}"
-            )
+            settings.set("project_directory", directory)
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""

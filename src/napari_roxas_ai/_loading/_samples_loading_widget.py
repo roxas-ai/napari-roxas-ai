@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import napari.layers
-from magicgui.widgets import Container, ProgressBar, PushButton, Select
-from qtpy.QtCore import QObject, QThread, Signal
+from magicgui.widgets import Container, Label, ProgressBar, PushButton, Select
+from qtpy.QtCore import QObject, Qt, QThread, Signal
 from qtpy.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
+    QMessageBox,
 )
 
 from napari_roxas_ai._reader import (
@@ -33,6 +35,34 @@ if TYPE_CHECKING:
     import napari
 
 settings = SettingsManager()
+
+# The image list is at least this many rows high and otherwise grows with
+# its content, one row per image
+MIN_VISIBLE_IMAGE_ROWS = 5
+
+# Gap between a row's label and its box. Set explicitly because the style's
+# default depends on the widget pair (on macOS label-to-button is wider than
+# label-to-list), which would make the button and the list start unevenly.
+LABEL_SPACING = 10
+
+# Longest project directory shown on the button, longer paths are elided in the
+# middle (the full path is in the tooltip)
+MAX_PROJECT_DIRECTORY_CHARS = 35
+
+
+def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
+    """
+    Shorten `path` to at most `max_chars` characters by cutting out its middle.
+
+    The start (drive, user folder) and the end (the project folder itself) are
+    what tells projects apart, so both are kept and the middle gives way.
+    """
+    if len(path) <= max_chars:
+        return path
+    keep = max_chars - 1  # room for the ellipsis
+    head = keep // 2
+    tail = keep - head
+    return f"{path[:head]}…{path[-tail:]}"
 
 
 class Worker(QObject):
@@ -141,7 +171,8 @@ class Worker(QObject):
 
 class SamplesLoadingWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__()
+        # The rows bring their own labels, a label column would only indent them
+        super().__init__(labels=False)
         self._viewer = viewer
         try:
             if not has_shortcuts_applied(viewer):
@@ -158,41 +189,67 @@ class SamplesLoadingWidget(Container):
         if self.project_directory:
             fix_sample_stem_paths_in_project(self.project_directory)
 
-        self._project_dialog_button = PushButton(
-            text=f"Project Directory: {self.project_directory or 'Not set'}"
-        )
+        # "Project Directory:" label next to a button showing the (elided) path
+        self._project_dialog_button = PushButton()
         self._project_dialog_button.changed.connect(self._open_project_dialog)
+        # Without a stylesheet, macOS draws a push button larger than its layout
+        # slot (room for the focus ring), so it would stick out to the left of
+        # the image list below; lay it out by its drawn rect instead
+        self._project_dialog_button.native.setAttribute(
+            Qt.WA_LayoutUsesWidgetRect
+        )
+        project_directory_label = Label(value="Project Directory:")
+        self._project_directory_row = Container(
+            widgets=[project_directory_label, self._project_dialog_button],
+            labels=False,
+            layout="horizontal",
+        )
+        self._project_directory_row.margins = (0, 0, 0, 0)
+        self._update_project_dialog_button()
+
+        # Follow the project directory wherever it is changed (other widgets,
+        # the menu, the settings widget)
+        settings.add_listener(
+            "project_directory", self._on_project_directory_changed
+        )
 
         # sample selection container
         self._samples_selection_container = Container(
             widgets=[], labels=False, layout="vertical", visible=True
         )
-
-        # Reverse selection button (initially hidden)
-        self._reverse_selection_button = PushButton(
-            text="Reverse Selection", visible=True
-        )
-        self._reverse_selection_button.changed.connect(
-            self._reverse_sample_selection
-        )
-
-        # Select all button
-        self._select_all_button = PushButton(text="Select All", visible=True)
-        self._select_all_button.changed.connect(self._select_all_samples)
-
-        # Container for buttons side by side
-        self._buttons_container = Container(
-            widgets=[self._select_all_button, self._reverse_selection_button],
+        self._samples_selection_container.margins = (0, 0, 0, 0)
+        self._available_images_label = Label(value="Available Images:")
+        self._samples_selection_row = Container(
+            widgets=[
+                self._available_images_label,
+                self._samples_selection_container,
+            ],
             labels=False,
             layout="horizontal",
-            visible=True,
+        )
+        self._samples_selection_row.margins = (0, 0, 0, 0)
+
+        # Both labels left-aligned and equally wide so the button and the list
+        # line up, the list label at the top of the list
+        labels = (project_directory_label, self._available_images_label)
+        label_width = max(label.native.sizeHint().width() for label in labels) + 20
+        for label in labels:
+            label.native.setFixedWidth(label_width)
+            label.native.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        for row in (self._project_directory_row, self._samples_selection_row):
+            row.native.layout().setSpacing(LABEL_SPACING)
+        row_layout = self._samples_selection_row.native.layout()
+        row_layout.setAlignment(self._available_images_label.native, Qt.AlignTop)
+        row_layout.setAlignment(
+            self._samples_selection_container.native, Qt.AlignTop
         )
 
-        # Load selected samples button
+        # Load selected sample button
         self._load_samples_button = PushButton(
-            text="Load Selected Samples", visible=True
+            text="Load Selected Image", visible=True
         )
         self._load_samples_button.changed.connect(self._load_selected_samples)
+        self._is_loading = False
 
         # Add a progress bar with a description
         self._progress_bar = ProgressBar(
@@ -202,13 +259,14 @@ class SamplesLoadingWidget(Container):
         # Append all widgets to the container
         self.extend(
             [
-                self._project_dialog_button,
-                self._samples_selection_container,
-                self._buttons_container,
+                self._project_directory_row,
+                self._samples_selection_row,
                 self._load_samples_button,
                 self._progress_bar,
             ]
         )
+        # Spare height goes below the widgets instead of stretching the list
+        self.native.layout().addStretch()
         self._refresh_samples_list()
 
         # --- BACKGROUND MONITORING INITIALIZATION ---
@@ -245,34 +303,35 @@ class SamplesLoadingWidget(Container):
 
         QTimer.singleShot(1000, _init_rings_editor)
 
-    def refresh_from_settings(self):
-        """
-        Pick up settings changed while this widget was open.
+    def _update_project_dialog_button(self):
+        """Show the project directory on the button, elided, full path as tooltip."""
+        if self.project_directory:
+            self._project_dialog_button.text = _elide_path(self.project_directory)
+            self._project_dialog_button.tooltip = self.project_directory
+        else:
+            self._project_dialog_button.text = "Not set"
+            self._project_dialog_button.tooltip = None
 
-        The project directory is copied into this widget when it is built and
-        shown on the button, so both are re-read, and the samples list is
-        rebuilt from the new directory.
-        """
-        self.project_directory = settings.get("project_directory")
-        self._project_dialog_button.text = (
-            f"Project Directory: {self.project_directory or 'Not set'}"
-        )
+    def _on_project_directory_changed(self, directory):
+        """Show a project directory that was changed anywhere in the plugin."""
+        self.project_directory = directory
+        self._update_project_dialog_button()
         self._refresh_samples_list()
 
     def _open_project_dialog(self):
-        """Open sample dialog to select project directory and refresh samples list."""
+        """
+        Open a dialog to select the project directory.
+
+        The choice is stored in the settings, whose listener (see
+        _on_project_directory_changed) updates this and every other widget.
+        """
         directory = QFileDialog.getExistingDirectory(
             parent=None,
             caption="Select Project Directory",
             directory=self.project_directory,
         )
         if directory:
-            self.project_directory = directory
             settings.set("project_directory", directory)
-            self._project_dialog_button.text = (
-                f"Project Directory: {directory}"
-            )
-            self._refresh_samples_list()
 
     def _refresh_samples_list(self):
         """Refresh the list of samples from the project directory."""
@@ -339,56 +398,83 @@ class SamplesLoadingWidget(Container):
                     display_names.append(basename)
                     self._path_mapping[basename] = sample_path
 
-            # Create a select widget with multiple selection
+            # Only one sample is ever loaded at a time
             self._sample_select_widget = Select(
                 choices=display_names,
-                allow_multiple=True,
-                label="Select Files to Process",
+                allow_multiple=False,
+                label="Available Images",
+            )
+            self._sample_select_widget.native.setSelectionMode(
+                QAbstractItemView.SingleSelection
+            )
+            # Double-clicking an image loads it, same as the load button
+            self._sample_select_widget.native.itemDoubleClicked.connect(
+                lambda _item: self._load_selected_samples()
             )
 
             # Add the widget to the container
             self._samples_selection_container.append(
                 self._sample_select_widget
             )
+            self._fit_image_list_height()
 
-            # Make container and buttons visible
-            self._samples_selection_container.visible = True
-            self._buttons_container.visible = True
+            # Make the list and the load button visible
+            self._samples_selection_row.visible = True
             self._load_samples_button.visible = True
         else:
-            # Hide container and buttons if no files
-            self._samples_selection_container.visible = False
-            self._buttons_container.visible = False
+            # Hide the list and the load button if there are no samples
+            self._samples_selection_row.visible = False
             self._load_samples_button.visible = False
 
-    def _reverse_sample_selection(self):
-        """Reverse the current sample selection."""
-        if hasattr(self, "_sample_select_widget"):
-            # Get currently selected files
-            current_selection = set(self._sample_select_widget.value)
+    def _fit_image_list_height(self):
+        """
+        Make the image list as high as its entries need.
 
-            # Create a new selection with all files except the current selection
-            all_display_names = set(self._sample_select_widget.choices)
-            new_selection = list(all_display_names - current_selection)
+        It is never lower than MIN_VISIBLE_IMAGE_ROWS rows. The label next
+        to it gets the height of the first row (frame included) and centres its
+        text in it, so it lines up with the first image name.
+        """
+        list_widget = self._sample_select_widget.native
+        row_height = list_widget.sizeHintForRow(0)
+        frame = list_widget.frameWidth()
+        rows = max(list_widget.count(), MIN_VISIBLE_IMAGE_ROWS)
+        list_widget.setFixedHeight(rows * row_height + 2 * frame)
+        self._available_images_label.native.setFixedHeight(
+            row_height + 2 * frame
+        )
 
-            # Update the widget
-            self._sample_select_widget.value = new_selection
-
-    def _select_all_samples(self):
-        """Select all available samples."""
-        if hasattr(self, "_sample_select_widget"):
-            # Get all available files
-            all_display_names = list(self._sample_select_widget.choices)
-
-            # Update the widget to select all files
-            self._sample_select_widget.value = all_display_names
+    def _loaded_sample(self):
+        """Stem path of the sample that is open in the viewer, if any."""
+        for layer in self._viewer.layers:
+            sample_stem_path = layer.metadata.get("sample_stem_path")
+            if sample_stem_path:
+                return sample_stem_path
+        return None
 
     def _load_selected_samples(self):
-        """Load selected samples and add them to the viewer."""
-        if not self.project_directory or not hasattr(self, "_sample_select_widget"):
+        """Load the selected sample and add its layers to the viewer."""
+        if (
+            self._is_loading
+            or not self.project_directory
+            or not hasattr(self, "_sample_select_widget")
+            or not self._sample_select_widget.value
+        ):
+            return
+
+        # Only one sample may be open at a time
+        loaded_sample = self._loaded_sample()
+        if loaded_sample:
+            QMessageBox.information(
+                None,
+                "Image already loaded",
+                f"The image \u00ab{loaded_sample}\u00bb is still open.\n\n"
+                "Please close it first (remove its layers) before loading "
+                "another image.",
+            )
             return
 
         # Disable the run button while processing
+        self._is_loading = True
         self._load_samples_button.enabled = False
 
         self.worker_thread = QThread()
@@ -411,6 +497,9 @@ class SamplesLoadingWidget(Container):
         self.worker.progress.connect(self._update_progress)
 
         # Reset buttons and progress after processing
+        self.worker_thread.finished.connect(
+            lambda: setattr(self, "_is_loading", False)
+        )
         self.worker_thread.finished.connect(
             lambda: setattr(self._load_samples_button, "enabled", True)
         )

@@ -1,8 +1,9 @@
 import json
 import warnings
+import weakref
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 # Encoding used to read settings.json. "utf-8-sig" is plain UTF-8 except that
 # it also accepts a leading byte order mark, which Windows editors such as
@@ -389,6 +390,9 @@ class SettingsManager:
 
         # Set a setting value (supports dot notation for nested settings)
         settings.set('processing.try_to_use_gpu', True)
+
+        # Be told when a top-level setting changes, wherever it was changed
+        settings.add_listener('project_directory', self._on_directory_changed)
     """
 
     # Class variables for Singleton implementation
@@ -412,6 +416,8 @@ class SettingsManager:
         Called only once when the singleton instance is first created.
         """
         self._settings = {}
+        # Top-level key -> weak references to the callbacks listening to it
+        self._listeners: Dict[str, List[Any]] = {}
         self._load_settings()
 
     @property
@@ -485,6 +491,58 @@ class SettingsManager:
 
         self._settings = deepcopy(DEFAULT_SETTINGS)
 
+    def add_listener(self, key: str, callback: Callable[[Any], None]) -> None:
+        """
+        Call `callback(new_value)` whenever the top-level setting `key` changes.
+
+        Every way of changing the settings notifies the listeners (set, update,
+        replace, reload and reset), so a value shown by several widgets stays
+        the same in all of them, whichever widget or menu changed it.
+
+        The callback is held weakly: a widget that registers one of its methods
+        is not kept alive by the settings, and a callback whose owner is gone
+        is dropped silently.
+
+        Args:
+            key: The top-level setting to watch, e.g. "project_directory"
+            callback: Called with the new value after the change was saved
+        """
+        if hasattr(callback, "__self__"):
+            reference = weakref.WeakMethod(callback)
+        else:
+            reference = weakref.ref(callback)
+        self._listeners.setdefault(key, []).append(reference)
+
+    def _listened_values(self) -> Dict[str, Any]:
+        """Copy of the current values of every setting someone listens to."""
+        return {
+            key: deepcopy(self._settings.get(key)) for key in self._listeners
+        }
+
+    def _notify_listeners(self, previous: Dict[str, Any]) -> None:
+        """
+        Call the listeners of every setting that differs from `previous`.
+
+        A failing listener is reported and skipped, it must not make the
+        change itself fail nor keep the other listeners from being called.
+        """
+        for key, references in self._listeners.items():
+            value = self._settings.get(key)
+            if previous.get(key) == value:
+                continue
+
+            alive = []
+            for reference in references:
+                callback = reference()
+                if callback is None:
+                    continue
+                alive.append(reference)
+                try:
+                    callback(deepcopy(value))
+                except Exception as e:
+                    print(f"[settings] Listener for '{key}' failed: {e}")
+            references[:] = alive
+
     def save_settings(self):
         """
         Save current settings to the JSON file.
@@ -534,9 +592,12 @@ class SettingsManager:
             key: The setting key to set
             value: The value to assign to the setting
         """
+        previous = self._listened_values()
+
         if "." not in key:
             self._settings[key] = value
             self.save_settings()
+            self._notify_listeners(previous)
             return
 
         # Handle nested keys
@@ -552,6 +613,7 @@ class SettingsManager:
         # Set the value
         current[keys[-1]] = value
         self.save_settings()
+        self._notify_listeners(previous)
 
     def update(self, settings_dict: Dict[str, Any]):
         """
@@ -566,8 +628,10 @@ class SettingsManager:
         Args:
             settings_dict: Dictionary of settings to update
         """
+        previous = self._listened_values()
         self._settings.update(settings_dict)
         self.save_settings()
+        self._notify_listeners(previous)
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -595,8 +659,10 @@ class SettingsManager:
         Args:
             new_settings: The complete settings dictionary to store
         """
+        previous = self._listened_values()
         self._settings = upgrade_settings(new_settings)
         self.save_settings()
+        self._notify_listeners(previous)
 
     def reload(self) -> bool:
         """
@@ -622,7 +688,9 @@ class SettingsManager:
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return False
 
+        previous = self._listened_values()
         self._load_settings()
+        self._notify_listeners(previous)
         return True
 
     def reset(self):
@@ -634,5 +702,7 @@ class SettingsManager:
         be reachable only through a deliberate action, such as a "reset to
         defaults" button, never as a fallback when something goes wrong.
         """
+        previous = self._listened_values()
         self._settings = deepcopy(DEFAULT_SETTINGS)
         self.save_settings()
+        self._notify_listeners(previous)
