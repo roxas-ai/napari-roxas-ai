@@ -194,12 +194,9 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 - Post-processes masks to eliminate edge artefacts (e.g., boundary-touching partial cells).
 
 ### Key Controls & Options
-- **Sample Selection**: Dropdown selecting the active `.scan` image layer.
-- **Segment Cells / Segment Rings**: Checkboxes enabling cell detection, ring boundary detection, or both simultaneously.
-- **Cells Model / Rings Model**: Selects the trained model checkpoint (`.pth`) to use from the `_models` directory.
-- **Remove Border Touching Components**: Filters out cells that touch the scan boundary to avoid distorted anatomical metrics.
-- **Overwrite Existing Layers**: Controls whether previous segmentation layers are replaced or updated.
-- **Segment Sample Button**: Initiates the background segmentation process.
+- **Cell Segmentation Checkbox & Model Dropdown**: Checkbox to enable cell lumen detection, alongside a dropdown list to choose the trained cell model checkpoint (`.pth`). Unchecking disables cell detection and hides the model selection dropdown.
+- **Ring Segmentation Checkbox & Model Dropdown**: Checkbox to enable tree-ring boundary detection, alongside a dropdown list to choose the trained ring model checkpoint (`.pth`). Unchecking disables ring detection and hides the model selection dropdown.
+- **Run Segmentation Button**: Initiates the segmentation inference process in a non-blocking background worker thread. The button is automatically disabled if both segmentation options are unchecked.
 
 ---
 
