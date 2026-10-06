@@ -158,19 +158,20 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 
 ![Screenshot: Samples Loading Widget](../assets/screenshots/02_samples_loading_widget.png)
 
-*Figure 5: Samples loading widget with multi-sample selection.*
+*Figure 5: Samples loading widget interface.*
 
 ### How It Works
 - Queries the project directory for prepared sample stems.
+- **Real-Time Directory Synchronization**: Changes to the project directory are automatically synchronized and updated across all widgets in real-time.
+- **Single-Image Workflow Enforcement**: Only one sample image can be loaded in the napari viewer at a time. Attempting to load another image prompts the user to first close the currently active image.
 - Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata).
 - Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).
 - Automatically configures keyboard shortcuts (such as WASD keys for quick viewport panning) to streamline navigation across large high-resolution images.
 
 ### Key Controls
-- **Project Directory**: Displays current project directory path.
-- **Samples List**: Multi-select list showing all discovered samples.
-- **Load Selected Samples**: Loads only highlighted samples into the layer list.
-- **Load All Samples**: Loads all samples found in the project.
+- **Project Directory Label & Compact Button**: Displays the «Project Directory:» text label side by side in the same row as a compact directory button. The button path text is elided in the middle (showing the start and end of the path up to ~35 characters) to keep the panel tidy, with a tooltip displaying the full absolute path when hovered. Clicking opens a folder browser to update the active directory.
+- **Samples List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately loads that image.
+- **Load Selected Image**: Loads the currently selected sample file into the viewer.
 - **Progress Bar**: Displays sample loading progress.
 
 ---
