@@ -480,3 +480,52 @@ def test_crossdating_offset_slider_continuous_reset_and_apply(make_napari_viewer
     assert layer.metadata["rings_outmost_complete_year"] == 2070
     assert widget._base_offset == 0
     assert widget._offset_slider.value == 0
+
+
+def test_crossdating_offset_slider_recenters_only_after_drag(make_napari_viewer, qtbot):
+    """Dragging into the limit must not add the limit on every mouse move."""
+    from qtpy.QtCore import QEvent, QPoint, QPointF, Qt
+    from qtpy.QtGui import QMouseEvent
+    from qtpy.QtWidgets import QApplication
+
+    viewer = make_napari_viewer()
+    widget = CrossDatingPlotterWidget(viewer)
+    widget._plot_crossdating_data = lambda *a, **k: None
+    widget.native.resize(400, 600)
+    widget.native.show()
+    qtbot.wait(50)
+
+    slider = widget._offset_qslider
+
+    def send(event_type, x):
+        pos = QPoint(int(x), slider.height() // 2)
+        buttons = (
+            Qt.MouseButton.NoButton
+            if event_type == QEvent.Type.MouseButtonRelease
+            else Qt.MouseButton.LeftButton
+        )
+        QApplication.sendEvent(
+            slider,
+            QMouseEvent(
+                event_type,
+                QPointF(pos),
+                QPointF(slider.mapToGlobal(pos)),
+                Qt.MouseButton.LeftButton,
+                buttons,
+                Qt.KeyboardModifier.NoModifier,
+            ),
+        )
+
+    x = slider.width() // 2
+    send(QEvent.Type.MouseButtonPress, x)
+    assert slider.isSliderDown()
+    # Drag past the right end and keep moving there
+    while x < slider.width() + 40:
+        x += 4
+        send(QEvent.Type.MouseMove, x)
+    assert widget._base_offset == 0
+    assert widget._offset_slider.value == 50
+
+    send(QEvent.Type.MouseButtonRelease, x)
+    assert widget._base_offset == 50
+    assert widget._offset_slider.value == 0

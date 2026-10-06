@@ -19,7 +19,14 @@ from napari.utils.notifications import show_info
 from PIL import Image
 from qtpy.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from qtpy.QtGui import QColor, QCursor, QPainter, QPalette, QPen
-from qtpy.QtWidgets import QApplication, QSizeGrip, QSizePolicy, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QApplication,
+    QSizeGrip,
+    QSizePolicy,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 from superqt import QRangeSlider
 
 from napari_roxas_ai._edition import update_rings_geometries
@@ -342,6 +349,14 @@ class CrossDatingPlotterWidget(Container):
         self._offset_slider.changed.connect(
             self._on_offset_slider_changed
         )  # Update plot and handle limit resets when offset changes
+        # While the handle is dragged, Qt recomputes the value from the mouse
+        # position, so recentering mid-drag would add the limit on every mouse
+        # move. Recenter on release instead.
+        self._offset_qslider = self._offset_slider.native.findChild(QSlider)
+        if self._offset_qslider is not None:
+            self._offset_qslider.sliderReleased.connect(
+                self._recenter_offset_slider_at_limit
+            )
         self._apply_changes_button = PushButton(
             text="Apply Changes",
             tooltip="Apply all current changes (offset, alignment) to the rings layer",
@@ -1332,16 +1347,25 @@ class CrossDatingPlotterWidget(Container):
         """Called when the Offset slider is adjusted.
         
         When hitting the +/-50 limits, the slider value is absorbed into _base_offset
-        and reset to 0 so the user can continuously slide.
+        and reset to 0 so the user can continuously slide. While the handle is
+        dragged, this happens on release (see _recenter_offset_slider_at_limit).
         """
-        val = int(self._offset_slider.value)
-        if val <= self._offset_slider.min or val >= self._offset_slider.max:
-            self._base_offset += val
-            self._offset_slider.native.blockSignals(True)
-            self._offset_slider.value = 0
-            self._offset_slider.native.blockSignals(False)
+        if self._offset_qslider is None or not self._offset_qslider.isSliderDown():
+            self._recenter_offset_slider_at_limit(redraw=False)
 
         self._plot_crossdating_data()
+
+    def _recenter_offset_slider_at_limit(self, redraw: bool = True):
+        """Absorb the slider value into _base_offset and reset it to 0 if it sits at a limit."""
+        val = int(self._offset_slider.value)
+        if self._offset_slider.min < val < self._offset_slider.max:
+            return
+        self._base_offset += val
+        self._offset_slider.native.blockSignals(True)
+        self._offset_slider.value = 0
+        self._offset_slider.native.blockSignals(False)
+        if redraw:
+            self._plot_crossdating_data()
 
     def _apply_offset_to_layer(self):
         """Apply the offset to the current input layer."""
