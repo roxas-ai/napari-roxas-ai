@@ -247,8 +247,11 @@ def test_crossdating_plotter_auto_floats_with_margins_and_size_grip(
 
     if target_screen is not None:
         avail_geom = target_screen.availableGeometry()
-        expected_w = max(400, avail_geom.width() - 200)
-        expected_h = max(300, avail_geom.height() - 200)
+        # Qt doesn't shrink the dock below its minimum size, which on a small
+        # screen (e.g. on CI) is more than the screen minus the margins
+        min_size = dock.minimumSize().expandedTo(dock.minimumSizeHint())
+        expected_w = max(400, avail_geom.width() - 200, min_size.width())
+        expected_h = max(300, avail_geom.height() - 200, min_size.height())
         expected_x = avail_geom.left() + 100
         expected_y = avail_geom.top() + 100
         geom = dock.geometry()
