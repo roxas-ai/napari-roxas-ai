@@ -302,3 +302,104 @@ def test_save_crossdating_plot_image_scaling(tmp_path):
         expected_h = 800
         assert w == expected_w
         assert h == expected_h
+
+
+def test_crossdating_use_mean_ui_and_candidates(make_napari_viewer, qtbot):
+    import numpy as np
+    import pandas as pd
+
+    viewer = make_napari_viewer()
+    widget = CrossDatingPlotterWidget(viewer)
+
+    # 1. Checkbox exists, unchecked by default, positioned to the left of the button
+    assert hasattr(widget, "_use_mean_checkbox")
+    assert widget._use_mean_checkbox.value is False
+    assert widget._use_mean_checkbox.text == "Use Mean"
+    assert hasattr(widget, "_auto_offset_row")
+    assert widget._auto_offset_row[0] is widget._use_mean_checkbox
+    assert widget._auto_offset_row[1] is widget._auto_offset_button
+    assert widget._auto_offset_button.text == "Find Best Overlap"
+
+    # 2. Test candidate computation for reference_series vs average
+    years = np.arange(2000, 2020)
+    sample_vals = np.array([10.0, 15.0, 12.0, 18.0, 20.0, 25.0, 22.0, 28.0, 30.0, 35.0])
+    layer_series = pd.Series(np.nan, index=years)
+    layer_series.loc[2000:2009] = sample_vals
+
+    ref_series = pd.Series(np.random.RandomState(42).randn(len(years)), index=years)
+    ref_series.loc[2005:2014] = sample_vals * 2 + 5
+
+    avg_series = pd.Series(np.random.RandomState(99).randn(len(years)), index=years)
+    avg_series.loc[2010:2019] = sample_vals * 3 + 10
+
+    plot_df = pd.DataFrame({
+        "layer_series": layer_series,
+        "reference_series": ref_series,
+        "average": avg_series,
+    }, index=years)
+
+    widget.plot_df = plot_df
+
+    # With use_mean=False -> best match at start_year=2005, end_year=2014
+    cand_ref = widget._compute_alignment_candidates(plot_df, top_k=4, use_mean=False)
+    assert len(cand_ref) >= 1
+    assert cand_ref[0]["start_year"] == 2005
+    assert cand_ref[0]["end_year"] == 2014
+    assert pytest.approx(cand_ref[0]["corr"], 1e-4) == 1.0
+
+    # With use_mean=True -> best match at start_year=2010, end_year=2019
+    cand_avg = widget._compute_alignment_candidates(plot_df, top_k=4, use_mean=True)
+    assert len(cand_avg) >= 1
+    assert cand_avg[0]["start_year"] == 2010
+    assert cand_avg[0]["end_year"] == 2019
+    assert pytest.approx(cand_avg[0]["corr"], 1e-4) == 1.0
+
+
+def test_crossdating_use_mean_interactive_toggling(make_napari_viewer, qtbot):
+    import napari.layers
+    import numpy as np
+    import pandas as pd
+
+    viewer = make_napari_viewer()
+    widget = CrossDatingPlotterWidget(viewer)
+
+    # Mock an input layer
+    data = np.zeros((10, 10), dtype=np.uint32)
+    layer = napari.layers.Labels(data, name="test_rings")
+    layer.metadata["rings_outmost_complete_year"] = 2009
+    viewer.add_layer(layer)
+
+    years = np.arange(2000, 2020)
+    sample_vals = np.array([10.0, 15.0, 12.0, 18.0, 20.0, 25.0, 22.0, 28.0, 30.0, 35.0])
+    layer_series = pd.Series(np.nan, index=years)
+    layer_series.loc[2000:2009] = sample_vals
+
+    ref_series = pd.Series(np.random.RandomState(42).randn(len(years)), index=years)
+    ref_series.loc[2005:2014] = sample_vals * 2 + 5
+
+    avg_series = pd.Series(np.random.RandomState(99).randn(len(years)), index=years)
+    avg_series.loc[2010:2019] = sample_vals * 3 + 10
+
+    widget.plot_df = pd.DataFrame({
+        "layer_series": layer_series,
+        "reference_series": ref_series,
+        "average": avg_series,
+    }, index=years)
+
+    # Trigger auto align with use_mean = False (default)
+    widget._auto_offset_button.native.click()
+    assert widget._current_alignment_data is not None
+    assert widget._current_alignment_data["start_year"] == 2005
+    assert widget._current_alignment_data["end_year"] == 2014
+
+    # Now toggle "Use Mean" -> should automatically re-align to average series
+    widget._use_mean_checkbox.value = True
+    assert widget._current_alignment_data is not None
+    assert widget._current_alignment_data["start_year"] == 2010
+    assert widget._current_alignment_data["end_year"] == 2019
+
+    # Toggle back to unchecked -> should re-align to reference series
+    widget._use_mean_checkbox.value = False
+    assert widget._current_alignment_data is not None
+    assert widget._current_alignment_data["start_year"] == 2005
+    assert widget._current_alignment_data["end_year"] == 2014

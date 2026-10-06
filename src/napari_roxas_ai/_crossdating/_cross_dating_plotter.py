@@ -264,11 +264,28 @@ class CrossDatingPlotterWidget(Container):
         self.plot_df = None
         self._layer_callback = None
 
+        self._use_mean_checkbox = CheckBox(
+            text="Use Mean",
+            value=False,
+            tooltip="Calculate best overlap with the overall mean series instead of the selected reference series",
+        )
+        self._use_mean_checkbox.changed.connect(self._on_use_mean_changed)
+
         self._auto_offset_button = PushButton(
-            text="Find best overlap",
+            text="Find Best Overlap",
             tooltip="Automatically align Reference and Sample",
         )
         self._auto_offset_button.changed.connect(self._auto_align_sample)
+        self._auto_offset_button.native.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Fixed,
+        )
+
+        self._auto_offset_row = Container(
+            widgets=[self._use_mean_checkbox, self._auto_offset_button],
+            layout="horizontal",
+            labels=False,
+        )
 
         # Make a combobox to choose the crossdating file path
         self._crossdating_file_combo = ComboBox(
@@ -357,7 +374,7 @@ class CrossDatingPlotterWidget(Container):
                 self._y_range_slider,
                 self._offset_slider,
                 self._apply_changes_button,
-                self._auto_offset_button,
+                self._auto_offset_row,
                 self.plot_widget,
                 self._plot_footer,
             ]
@@ -374,7 +391,7 @@ class CrossDatingPlotterWidget(Container):
         )
 
         self.insert(
-            self.index(self._auto_offset_button) + 1,
+            self.index(self._auto_offset_row) + 1,
             self._alignment_buttons_container
         )
 
@@ -1422,6 +1439,11 @@ class CrossDatingPlotterWidget(Container):
         # Convert to percentage (0-100)
         return glk * 100
 
+    def _on_use_mean_changed(self, value=None):
+        """Called when the 'Use Mean' checkbox is toggled."""
+        if self._current_alignment_data is not None or self._alignment_candidates:
+            self._auto_align_sample()
+
     def _auto_align_sample(self):
         if self.plot_df is None or self.plot_df.empty:
             show_info("Auto-align failed: no data")
@@ -1429,7 +1451,10 @@ class CrossDatingPlotterWidget(Container):
 
         self._clear_alignment_buttons()
 
-        self._alignment_candidates = self._compute_alignment_candidates(top_k=5)
+        use_mean = bool(self._use_mean_checkbox.value)
+        self._alignment_candidates = self._compute_alignment_candidates(
+            top_k=5, use_mean=use_mean
+        )
 
         if not self._alignment_candidates:
             show_info("No valid alignments found")
@@ -1475,7 +1500,9 @@ class CrossDatingPlotterWidget(Container):
         # Explicitly trigger plot update with target_range for correct y-axis auto-scaling
         self._plot_crossdating_data(target_range=target_range)
 
-    def _compute_alignment_candidates(self, plot_df=None, top_k: int = 4):
+    def _compute_alignment_candidates(
+        self, plot_df=None, top_k: int = 4, use_mean: bool = False
+    ):
         if plot_df is None:
             plot_df = self.plot_df
 
@@ -1484,8 +1511,12 @@ class CrossDatingPlotterWidget(Container):
             .dropna()
             .sort_index()
         )
+        series_key = "average" if use_mean else "reference_series"
+        if series_key not in plot_df.columns:
+            return []
+
         reference_series = (
-            plot_df["reference_series"]
+            plot_df[series_key]
             .dropna()
             .sort_index()
         )
