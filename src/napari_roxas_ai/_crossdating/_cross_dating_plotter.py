@@ -1,10 +1,9 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import napari.layers
 import numpy as np
 import pandas as pd
-from qtpy.QtWidgets import QSizePolicy
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -18,7 +17,16 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import MultipleLocator, StrMethodFormatter
 from napari.utils.notifications import show_info
 from PIL import Image
-from qtpy.QtWidgets import QVBoxLayout, QWidget
+from qtpy.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
+from qtpy.QtGui import QColor, QCursor, QPainter, QPalette, QPen
+from qtpy.QtWidgets import (
+    QApplication,
+    QSizeGrip,
+    QSizePolicy,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 from superqt import QRangeSlider
 
 from napari_roxas_ai._edition import update_rings_geometries
@@ -168,6 +176,84 @@ class MatplotlibCanvas(Container):
             self.canvas.draw()
 
 
+class _ProminentSizeGrip(QSizeGrip):
+    """A size grip that renders visible diagonal lines and uses a resize cursor."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setCursor(QCursor(Qt.CursorShape.SizeFDiagCursor))
+        self.setFixedSize(18, 18)
+
+    def sizeHint(self) -> QSize:
+        return QSize(18, 18)
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Determine theme-adapted contrast color
+        text_color = self.palette().color(QPalette.ColorRole.WindowText)
+        if not text_color.isValid():
+            text_color = QColor(180, 180, 180)
+
+        # Main grip line color
+        line_color = QColor(text_color)
+        line_color.setAlpha(180 if self.underMouse() else 130)
+
+        # Subtle shadow / bevel line for depth
+        shadow_color = QColor(0, 0, 0, 80)
+
+        w = self.width()
+        h = self.height()
+
+        # Draw 3 diagonal lines with shadow for clear texture
+        for offset in (4, 8, 12):
+            # Shadow line offset by 1px
+            painter.setPen(QPen(shadow_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(w - offset, h - 1, w - 1, h - offset)
+            # Main line
+            painter.setPen(QPen(line_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(w - offset - 1, h - 2, w - 2, h - offset - 1)
+
+
+class _DockSizeGripHandler(QObject):
+    """Positions and controls visibility of a QSizeGrip attached to a QDockWidget."""
+
+    def __init__(self, dock_widget: QWidget, size_grip: QSizeGrip) -> None:
+        super().__init__(dock_widget)
+        self._dock = dock_widget
+        self._grip = size_grip
+        self._dock.installEventFilter(self)
+        if hasattr(self._dock, "topLevelChanged"):
+            self._dock.topLevelChanged.connect(self._on_top_level_changed)
+        self.update_geometry()
+
+    def _on_top_level_changed(self, is_floating: bool) -> None:
+        self._grip.setVisible(is_floating)
+        if is_floating:
+            self.update_geometry()
+            self._grip.raise_()
+
+    def update_geometry(self) -> None:
+        grip_size = self._grip.sizeHint()
+        rect = self._dock.rect()
+        self._grip.move(
+            rect.width() - grip_size.width(),
+            rect.height() - grip_size.height(),
+        )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self._dock and event.type() in (
+            QEvent.Resize,
+            QEvent.Move,
+            QEvent.Show,
+            QEvent.LayoutRequest,
+        ):
+            self.update_geometry()
+            self._grip.raise_()
+        return super().eventFilter(watched, event)
+
+
 class CrossDatingPlotterWidget(Container):
     @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
@@ -185,11 +271,28 @@ class CrossDatingPlotterWidget(Container):
         self.plot_df = None
         self._layer_callback = None
 
+        self._use_mean_checkbox = CheckBox(
+            text="Use Mean",
+            value=False,
+            tooltip="Calculate best overlap with the overall mean series instead of the selected reference series",
+        )
+        self._use_mean_checkbox.changed.connect(self._on_use_mean_changed)
+
         self._auto_offset_button = PushButton(
-            text="Find best overlap",
+            text="Find Best Overlap",
             tooltip="Automatically align Reference and Sample",
         )
         self._auto_offset_button.changed.connect(self._auto_align_sample)
+        self._auto_offset_button.native.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Fixed,
+        )
+
+        self._auto_offset_row = Container(
+            widgets=[self._use_mean_checkbox, self._auto_offset_button],
+            layout="horizontal",
+            labels=False,
+        )
 
         # Make a combobox to choose the crossdating file path
         self._crossdating_file_combo = ComboBox(
@@ -244,8 +347,16 @@ class CrossDatingPlotterWidget(Container):
             value=0,
         )
         self._offset_slider.changed.connect(
-            lambda: self._plot_crossdating_data()
-        )  # Update only the plot when the offset changes
+            self._on_offset_slider_changed
+        )  # Update plot and handle limit resets when offset changes
+        # While the handle is dragged, Qt recomputes the value from the mouse
+        # position, so recentering mid-drag would add the limit on every mouse
+        # move. Recenter on release instead.
+        self._offset_qslider = self._offset_slider.native.findChild(QSlider)
+        if self._offset_qslider is not None:
+            self._offset_qslider.sliderReleased.connect(
+                self._recenter_offset_slider_at_limit
+            )
         self._apply_changes_button = PushButton(
             text="Apply Changes",
             tooltip="Apply all current changes (offset, alignment) to the rings layer",
@@ -278,7 +389,7 @@ class CrossDatingPlotterWidget(Container):
                 self._y_range_slider,
                 self._offset_slider,
                 self._apply_changes_button,
-                self._auto_offset_button,
+                self._auto_offset_row,
                 self.plot_widget,
                 self._plot_footer,
             ]
@@ -295,7 +406,7 @@ class CrossDatingPlotterWidget(Container):
         )
 
         self.insert(
-            self.index(self._auto_offset_button) + 1,
+            self.index(self._auto_offset_row) + 1,
             self._alignment_buttons_container
         )
 
@@ -305,6 +416,99 @@ class CrossDatingPlotterWidget(Container):
 
         self._on_new_input_layer()
         self._on_new_crossdating_file()
+        QTimer.singleShot(0, self._ensure_floating)
+
+    def _ensure_floating(self) -> None:
+        """Find the hosting dock widget and ensure it floats with standard geometry."""
+        dock = self._find_dock_widget()
+        if dock is not None:
+            self._configure_floating_dock(dock, self._viewer)
+
+    def _find_dock_widget(self) -> Optional[Any]:
+        """Find the QDockWidget wrapping this cross-dating widget."""
+        # 1. Walk parent widgets
+        parent = self.native.parentWidget()
+        while parent is not None:
+            if hasattr(parent, "setFloating") and hasattr(parent, "isFloating"):
+                return parent
+            parent = parent.parentWidget()
+
+        # 2. Check viewer window dock widgets
+        if hasattr(self._viewer, "window"):
+            docks = getattr(self._viewer.window, "dock_widgets", None) or getattr(
+                self._viewer.window, "_dock_widgets", {}
+            )
+            for name, dock in docks.items():
+                w = getattr(dock, "widget", lambda: dock)()
+                if w is self or getattr(w, "_magic_widget", None) is self:
+                    return dock
+                if "cross-dating" in name.lower() or "crossdating" in name.lower():
+                    return dock
+        return None
+
+    @classmethod
+    def _configure_floating_dock(
+        cls, dock_widget: Any, viewer: Optional["napari.viewer.Viewer"] = None
+    ) -> None:
+        """Set dock widget floating, centered on the active screen with a 100px margin on all sides."""
+        if hasattr(dock_widget, "setFloating"):
+            dock_widget.setFloating(True)
+        if hasattr(dock_widget, "show"):
+            dock_widget.show()
+
+        target_screen = None
+        try:
+            main_window = None
+            if viewer is not None and hasattr(viewer, "window") and hasattr(viewer.window, "_qt_window"):
+                main_window = viewer.window._qt_window
+            elif hasattr(dock_widget, "native"):
+                main_window = dock_widget.native.window()
+            elif hasattr(dock_widget, "window"):
+                main_window = dock_widget.window()
+
+            if main_window is not None:
+                if hasattr(main_window, "screen") and main_window.screen() is not None:
+                    target_screen = main_window.screen()
+                elif hasattr(main_window, "windowHandle") and main_window.windowHandle() is not None:
+                    target_screen = main_window.windowHandle().screen()
+
+            if target_screen is None and hasattr(QApplication, "screenAt") and main_window is not None:
+                center_point = main_window.mapToGlobal(main_window.rect().center())
+                target_screen = QApplication.screenAt(center_point)
+
+            if target_screen is None and hasattr(QApplication, "primaryScreen"):
+                target_screen = QApplication.primaryScreen()
+        except Exception:
+            target_screen = None
+
+        if target_screen is not None and hasattr(dock_widget, "setGeometry"):
+            avail_geom = target_screen.availableGeometry()
+            # Maximized view with a margin of 100 pixel on all sides
+            margin = 100
+            target_width = max(400, avail_geom.width() - 2 * margin)
+            target_height = max(300, avail_geom.height() - 2 * margin)
+            target_x = avail_geom.left() + margin
+            target_y = avail_geom.top() + margin
+
+            dock_widget.setGeometry(QRect(target_x, target_y, target_width, target_height))
+
+        if hasattr(dock_widget, "raise_"):
+            dock_widget.raise_()
+        if hasattr(dock_widget, "activateWindow"):
+            dock_widget.activateWindow()
+
+        # Attach prominent QSizeGrip directly to the QDockWidget if not already attached
+        if hasattr(dock_widget, "findChild") and isinstance(dock_widget, QWidget):
+            size_grip = getattr(dock_widget, "_roxas_size_grip", None)
+            if size_grip is None:
+                size_grip = _ProminentSizeGrip(dock_widget)
+                dock_widget._roxas_size_grip = size_grip
+                dock_widget._roxas_size_grip_handler = _DockSizeGripHandler(
+                    dock_widget, size_grip
+                )
+            if hasattr(dock_widget, "isFloating"):
+                size_grip.setVisible(dock_widget.isFloating())
+            size_grip.raise_()
 
     def _export_plot(self):
         layer = self._input_layer
@@ -809,8 +1013,17 @@ class CrossDatingPlotterWidget(Container):
         # Update the plot
         self._plot_crossdating_data()
 
-    def _plot_crossdating_data(self, target_range: Optional[tuple[int, int]] = None):
-        """Plot the crossdating data comparison"""
+    def _plot_crossdating_data(
+        self,
+        target_range: Optional[tuple[int, int]] = None,
+        keep_x_range: bool = False,
+    ):
+        """Plot the crossdating data comparison
+
+        With keep_x_range, the Year Range slider values are used as they are
+        (the user just moved them) instead of being re-centered on the ROXAS
+        series when it is no longer visible.
+        """
         if self.plot_df is None or self.plot_df.empty:
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
                 self.plot_widget.clear()
@@ -868,7 +1081,7 @@ class CrossDatingPlotterWidget(Container):
 
         # Build labels
         layer = self._input_layer
-        image_id = layer.metadata.get("sample_name") or layer.name
+        image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else "Sample"
         roxas_label = f"RXS: {image_id} ({period_ref})"
 
         ref_name = str(self._crossdating_column_combo.value)
@@ -975,8 +1188,11 @@ class CrossDatingPlotterWidget(Container):
         self._x_range_slider.max = max_year
         self._x_range_slider.native.blockSignals(False)
 
+        # If the user just set the range, keep it as it is
+        if keep_x_range:
+            pass
         # If the value of the slider has been initialized
-        if self._x_range_slider_was_set:
+        elif self._x_range_slider_was_set:
 
             # Get current x slider values
             current_x_low, current_x_high = self._x_range_slider.value
@@ -1124,7 +1340,8 @@ class CrossDatingPlotterWidget(Container):
         self._x_range_slider_was_set = True
 
         # Refresh the plot (this will handle y-axis auto-scaling if not locked)
-        self._plot_crossdating_data()
+        # without re-centering the range the user is dragging
+        self._plot_crossdating_data(keep_x_range=True)
 
     def _on_y_range_changed(self):
         """Called when the Width Range slider is manually adjusted."""
@@ -1138,6 +1355,30 @@ class CrossDatingPlotterWidget(Container):
         y_min, y_max = self._y_range_slider.value
         self.plot_widget.ax.set_ylim(y_min, y_max)
         self.plot_widget.canvas.draw()
+
+    def _on_offset_slider_changed(self):
+        """Called when the Offset slider is adjusted.
+        
+        When hitting the +/-50 limits, the slider value is absorbed into _base_offset
+        and reset to 0 so the user can continuously slide. While the handle is
+        dragged, this happens on release (see _recenter_offset_slider_at_limit).
+        """
+        if self._offset_qslider is None or not self._offset_qslider.isSliderDown():
+            self._recenter_offset_slider_at_limit(redraw=False)
+
+        self._plot_crossdating_data()
+
+    def _recenter_offset_slider_at_limit(self, redraw: bool = True):
+        """Absorb the slider value into _base_offset and reset it to 0 if it sits at a limit."""
+        val = int(self._offset_slider.value)
+        if self._offset_slider.min < val < self._offset_slider.max:
+            return
+        self._base_offset += val
+        self._offset_slider.native.blockSignals(True)
+        self._offset_slider.value = 0
+        self._offset_slider.native.blockSignals(False)
+        if redraw:
+            self._plot_crossdating_data()
 
     def _apply_offset_to_layer(self):
         """Apply the offset to the current input layer."""
@@ -1191,6 +1432,9 @@ class CrossDatingPlotterWidget(Container):
 
         # Update the RingsLayerEditorWidget spinbox if it exists
         self._sync_rings_editor_year()
+
+        # Save reference plot upon applying changes
+        self._export_plot()
 
     def _sync_rings_editor_year(self):
         """Find the RingsLayerEditorWidget and update its year spinbox."""
@@ -1247,6 +1491,11 @@ class CrossDatingPlotterWidget(Container):
         # Convert to percentage (0-100)
         return glk * 100
 
+    def _on_use_mean_changed(self, value=None):
+        """Called when the 'Use Mean' checkbox is toggled."""
+        if self._current_alignment_data is not None or self._alignment_candidates:
+            self._auto_align_sample()
+
     def _auto_align_sample(self):
         if self.plot_df is None or self.plot_df.empty:
             show_info("Auto-align failed: no data")
@@ -1254,7 +1503,10 @@ class CrossDatingPlotterWidget(Container):
 
         self._clear_alignment_buttons()
 
-        self._alignment_candidates = self._compute_alignment_candidates(top_k=5)
+        use_mean = bool(self._use_mean_checkbox.value)
+        self._alignment_candidates = self._compute_alignment_candidates(
+            top_k=5, use_mean=use_mean
+        )
 
         if not self._alignment_candidates:
             show_info("No valid alignments found")
@@ -1300,7 +1552,9 @@ class CrossDatingPlotterWidget(Container):
         # Explicitly trigger plot update with target_range for correct y-axis auto-scaling
         self._plot_crossdating_data(target_range=target_range)
 
-    def _compute_alignment_candidates(self, plot_df=None, top_k: int = 4):
+    def _compute_alignment_candidates(
+        self, plot_df=None, top_k: int = 4, use_mean: bool = False
+    ):
         if plot_df is None:
             plot_df = self.plot_df
 
@@ -1309,8 +1563,12 @@ class CrossDatingPlotterWidget(Container):
             .dropna()
             .sort_index()
         )
+        series_key = "average" if use_mean else "reference_series"
+        if series_key not in plot_df.columns:
+            return []
+
         reference_series = (
-            plot_df["reference_series"]
+            plot_df[series_key]
             .dropna()
             .sort_index()
         )
@@ -1455,7 +1713,7 @@ class CrossDatingPlotterWidget(Container):
         container.widgets = []
 
     def save_crossdating_plot_image(self, out_dir: Union[str, Path], sample_name: str) -> Optional[Path]:
-        """Save the currently displayed crossdating plot as a JPG."""
+        """Save the crossdating plot as a standardized JPG (height=800px, width scaled by overlap range)."""
         if self.plot_df is None or self.plot_df.empty:
             return None
         if self._crossdating_column_combo.value is None:
@@ -1466,11 +1724,184 @@ class CrossDatingPlotterWidget(Container):
 
         out_path = out_dir / f"{sample_name}_ReferenceSeries.jpg"
 
-        # Save the exact figure that is shown in the UI
-        self.plot_widget.figure.savefig(
+        # Calculate correlation and overlapping period
+        total_offset = self._base_offset + self._offset_slider.value
+        shifted_layer_series = self.plot_df["layer_series"].copy()
+        shifted_layer_series.index = shifted_layer_series.index + total_offset
+
+        corr_df = pd.concat([
+            self.plot_df["reference_series"],
+            shifted_layer_series,
+            self.plot_df["average"]
+        ], axis=1)
+        corr_df.columns = ["reference", "roxas", "average"]
+
+        mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
+        overlap_years_ref = corr_df.index[mask_ref].tolist()
+
+        if overlap_years_ref:
+            overlap_min_ref = min(overlap_years_ref)
+            overlap_max_ref = max(overlap_years_ref)
+            r_ref = corr_df["reference"].corr(corr_df["roxas"])
+            glk_ref = self.calculate_glk(
+                corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
+                corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
+            )
+            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
+        else:
+            # Fallback if no overlap exists
+            valid_ref_years = corr_df.index[corr_df["reference"].notna()].tolist()
+            valid_roxas_years = corr_df.index[corr_df["roxas"].notna()].tolist()
+            all_valid = valid_ref_years + valid_roxas_years
+            if all_valid:
+                overlap_min_ref = min(all_valid)
+                overlap_max_ref = max(all_valid)
+            else:
+                overlap_min_ref = 0
+                overlap_max_ref = 0
+            r_ref = np.nan
+            glk_ref = np.nan
+            period_ref = "no overlap"
+
+        mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
+        overlap_years_avg = corr_df.index[mask_avg].tolist()
+        if overlap_years_avg:
+            r_avg = corr_df["average"].corr(corr_df["roxas"])
+            glk_avg = self.calculate_glk(
+                corr_df.loc[overlap_years_avg, "average"].to_numpy(),
+                corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
+            )
+        else:
+            r_avg = np.nan
+            glk_avg = np.nan
+
+        # Target dimensions in pixels
+        target_height_px = 800
+        target_width_px = 50 + (20 + overlap_max_ref - overlap_min_ref) * 50
+
+        # Build labels
+        layer = self._input_layer if hasattr(self, "_viewer") and self._viewer is not None else None
+        image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else sample_name
+        roxas_label = f"RXS: {image_id} ({period_ref})"
+
+        ref_name = str(self._crossdating_column_combo.value)
+        glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
+        r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
+        ref_label = f"{ref_name}{r_ref_text}"
+
+        glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
+        r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
+        avg_label = f"Average{r_avg_text}"
+
+        # Create offscreen figure with exact pixel size
+        dpi = 100
+        fig = Figure(
+            figsize=(target_width_px / dpi, target_height_px / dpi),
+            dpi=dpi,
+            facecolor="black"
+        )
+        ax = fig.add_subplot(111)
+        ax.set_facecolor("black")
+
+        # Configure margins with fixed pixel padding
+        right_margin_px = 15
+        left_margin_px = 140
+        top_margin_px = 15
+        bottom_margin_px = 50
+
+        fig.subplots_adjust(
+            left=left_margin_px / target_width_px,
+            right=(target_width_px - right_margin_px) / target_width_px,
+            top=(target_height_px - top_margin_px) / target_height_px,
+            bottom=bottom_margin_px / target_height_px,
+        )
+
+        years = self.plot_df.index.to_numpy(dtype=int)
+
+        # Plot the series with 3px line thickness
+        ax.plot(
+            years + total_offset,
+            self.plot_df["layer_series"],
+            color='red',
+            linestyle='-',
+            linewidth=3,
+            label=roxas_label,
+            zorder=3,
+        )
+        ax.plot(
+            years,
+            self.plot_df["reference_series"],
+            color='yellow',
+            linestyle='-',
+            linewidth=3,
+            label=ref_label,
+            zorder=2,
+        )
+        ax.plot(
+            years,
+            self.plot_df["average"],
+            color='white',
+            linestyle='-',
+            linewidth=3,
+            label=avg_label,
+            zorder=1,
+        )
+
+        ax.set_ylabel("Width (\u03BCm)", color='lightgrey', fontsize=20, labelpad=10)
+        legend = ax.legend(loc="best", facecolor='black', edgecolor='lightgrey', fontsize=20)
+        series_colors = ['red', 'yellow', 'white']
+        for text, color in zip(legend.get_texts(), series_colors):
+            text.set_color(color)
+
+        ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+        ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey', linewidth=1.5)
+        ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey', linewidth=1.0)
+        ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey', linewidth=1.5)
+
+        # Set x limits standard to overlap window +- 10 years
+        x_min = overlap_min_ref - 10
+        x_max = overlap_max_ref + 10
+        ax.set_xlim(x_min, x_max)
+
+        major_step = year_grid_step(x_max - x_min)
+        ax.xaxis.set_major_locator(MultipleLocator(major_step))
+        ax.xaxis.set_minor_locator(MultipleLocator(major_step / 2))
+
+        # Determine y limits based on visible data within [x_min, x_max]
+        visible_roxas = self.plot_df["layer_series"].copy()
+        visible_roxas.index = np.array(years) + total_offset
+        visible_roxas = visible_roxas[(visible_roxas.index >= x_min) & (visible_roxas.index <= x_max)].dropna()
+
+        visible_ref = self.plot_df["reference_series"].copy()
+        visible_ref = visible_ref[(visible_ref.index >= x_min) & (visible_ref.index <= x_max)].dropna()
+
+        visible_avg = self.plot_df["average"].copy()
+        visible_avg = visible_avg[(visible_avg.index >= x_min) & (visible_avg.index <= x_max)].dropna()
+
+        all_visible_values = pd.concat([visible_roxas, visible_ref, visible_avg])
+        if not all_visible_values.empty:
+            min_val = float(all_visible_values.min())
+            max_val = float(all_visible_values.max())
+            padding = (max_val - min_val) * 0.1 if max_val > min_val else 10.0
+            y_min = int(np.floor(max(0.0, min_val - padding)))
+            y_max = int(np.ceil(max_val + padding))
+        else:
+            y_min = 0
+            y_max = 100
+
+        if y_min >= y_max:
+            y_max = y_min + 10
+        ax.set_ylim(y_min, y_max)
+
+        ax.tick_params(colors='lightgrey', which='both', labelsize=20)
+        for spine in ax.spines.values():
+            spine.set_color('lightgrey')
+            spine.set_linewidth(2)
+
+        # Save exact standardized figure without changing bounding box sizes
+        fig.savefig(
             out_path,
-            dpi=200,
-            bbox_inches="tight",
+            dpi=dpi,
             facecolor="black",
         )
         return out_path
