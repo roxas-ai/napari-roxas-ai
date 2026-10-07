@@ -33,6 +33,11 @@ from ._worker import (
 if TYPE_CHECKING:
     import napari
 
+# The file list is at least this many rows high and otherwise grows with
+# its content, one row per file, up to MAX_VISIBLE_IMAGE_ROWS
+MIN_VISIBLE_IMAGE_ROWS = 5
+MAX_VISIBLE_IMAGE_ROWS = 10
+
 # Gap between a row's label and its box. Set explicitly because the style's
 # default depends on the widget pair (on macOS label-to-button is wider than
 # label-to-list), which would make the button and the list start unevenly.
@@ -189,7 +194,7 @@ class PreparationWidget(Container):
 
         # Process already processed files checkbox
         self._process_processed_checkbox = CheckBox(
-            value=False,
+            value=True,
             label=f"Process already processed files (with {self.scan_content_extension} extension)",
         )
         self._process_processed_checkbox.changed.connect(
@@ -198,7 +203,7 @@ class PreparationWidget(Container):
 
         # File selection controls
         self._handpick_files_checkbox = CheckBox(
-            value=False, label="Manually select files to process"
+            value=True, label="Manually select files to process"
         )
         self._handpick_files_checkbox.changed.connect(
             self._toggle_file_selection
@@ -208,6 +213,8 @@ class PreparationWidget(Container):
         self._file_selection_container = Container(
             widgets=[], labels=False, layout="vertical", visible=False
         )
+        self._file_selection_container.margins = (0, 0, 0, 0)
+        self._file_selection_container.native.layout().setAlignment(Qt.AlignTop)
 
         # Reverse selection button (initially hidden)
         self._reverse_selection_button = PushButton(
@@ -254,6 +261,12 @@ class PreparationWidget(Container):
                 self._progress_bar,
             ]
         )
+        self.native.layout().setAlignment(Qt.AlignTop)
+        self.native.layout().setAlignment(
+            self._file_selection_container.native, Qt.AlignTop
+        )
+        # Spare height goes below the widgets instead of stretching the controls
+        self.native.layout().addStretch()
         self._refresh_file_list()
 
     def _update_project_dialog_button(self):
@@ -373,6 +386,7 @@ class PreparationWidget(Container):
 
             # Add the widget to the container
             self._file_selection_container.append(self._file_select_widget)
+            self._fit_file_list_height()
 
             # Make container and reverse button visible
             self._file_selection_container.visible = True
@@ -381,6 +395,20 @@ class PreparationWidget(Container):
             # Hide container and reverse button if no files
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
+
+    def _fit_file_list_height(self):
+        """
+        Make the file list as high as its entries need, bounded between
+        MIN_VISIBLE_IMAGE_ROWS and MAX_VISIBLE_IMAGE_ROWS rows.
+        """
+        list_widget = self._file_select_widget.native
+        row_height = list_widget.sizeHintForRow(0)
+        frame = list_widget.frameWidth()
+        rows = min(
+            max(list_widget.count(), MIN_VISIBLE_IMAGE_ROWS),
+            MAX_VISIBLE_IMAGE_ROWS,
+        )
+        list_widget.setFixedHeight(rows * row_height + 2 * frame)
 
     def _toggle_file_selection(self):
         """Toggle the file selection interface."""

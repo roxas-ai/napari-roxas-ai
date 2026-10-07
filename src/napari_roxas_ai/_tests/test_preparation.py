@@ -17,7 +17,11 @@ from napari_roxas_ai._preparation._crossdating_handler import (
     process_crossdating_files,
 )
 from napari_roxas_ai._preparation._metadata_dialog import MetadataDialog
-from napari_roxas_ai._preparation._preparation_widget import PreparationWidget
+from napari_roxas_ai._preparation._preparation_widget import (
+    MAX_VISIBLE_IMAGE_ROWS,
+    MIN_VISIBLE_IMAGE_ROWS,
+    PreparationWidget,
+)
 from napari_roxas_ai._preparation._worker import Worker
 
 
@@ -159,6 +163,12 @@ def prep_widget(mock_viewer, mock_settings_manager):
 class TestPreparationWidget:
     """Tests for the PreparationWidget class."""
 
+    def test_default_checkbox_states(self, mock_viewer, mock_settings_manager):
+        """Test default states for checkboxes in PreparationWidget."""
+        widget = PreparationWidget(mock_viewer)
+        assert widget._handpick_files_checkbox.value is True
+        assert widget._process_processed_checkbox.value is True
+
     @patch("napari_roxas_ai._preparation._preparation_widget.QFileDialog")
     def test_project_directory_selection(self, mock_dialog, prep_widget):
         """The chosen directory is stored in the settings, not just here."""
@@ -206,6 +216,54 @@ class TestPreparationWidget:
         # Check that the file selection container is hidden
         assert prep_widget._file_selection_container.visible is False
         assert prep_widget._reverse_selection_button.visible is False
+
+    def test_file_list_height_bounds(self, prep_widget, temp_dirs):
+        """Test file list height bounds between MIN_VISIBLE_IMAGE_ROWS and MAX_VISIBLE_IMAGE_ROWS."""
+        project_dir = Path(temp_dirs)
+        for i in range(15):
+            (project_dir / f"image_{i:02d}.jpg").touch()
+
+        prep_widget.project_directory = str(project_dir)
+        prep_widget.image_file_extensions = [".jpg"]
+        prep_widget._handpick_files_checkbox.value = True
+
+        # Test with 3 files: should have height for MIN_VISIBLE_IMAGE_ROWS (5)
+        prep_widget.source_files = [
+            str(project_dir / f"image_{i:02d}.jpg") for i in range(3)
+        ]
+        prep_widget._update_file_selection_widget()
+        list_native = prep_widget._file_select_widget.native
+        assert list_native.count() == 3
+        expected_min_height = (
+            MIN_VISIBLE_IMAGE_ROWS * list_native.sizeHintForRow(0)
+            + 2 * list_native.frameWidth()
+        )
+        assert list_native.height() == expected_min_height
+
+        # Test with 7 files: should have height for 7 rows
+        prep_widget.source_files = [
+            str(project_dir / f"image_{i:02d}.jpg") for i in range(7)
+        ]
+        prep_widget._update_file_selection_widget()
+        list_native = prep_widget._file_select_widget.native
+        assert list_native.count() == 7
+        expected_7_height = (
+            7 * list_native.sizeHintForRow(0) + 2 * list_native.frameWidth()
+        )
+        assert list_native.height() == expected_7_height
+
+        # Test with 15 files: should be capped at MAX_VISIBLE_IMAGE_ROWS (10)
+        prep_widget.source_files = [
+            str(project_dir / f"image_{i:02d}.jpg") for i in range(15)
+        ]
+        prep_widget._update_file_selection_widget()
+        list_native = prep_widget._file_select_widget.native
+        assert list_native.count() == 15
+        expected_max_height = (
+            MAX_VISIBLE_IMAGE_ROWS * list_native.sizeHintForRow(0)
+            + 2 * list_native.frameWidth()
+        )
+        assert list_native.height() == expected_max_height
 
     def test_roxas_output_files_silently_excluded(self, prep_widget, temp_dirs):
         """ROXAS output files must be excluded unconditionally by default."""
