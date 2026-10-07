@@ -630,6 +630,67 @@ class TestCrossdatingHandler:
         # Check that selected files contains only the selected item
         assert dialog.get_selected_files() == [str(test_file1)]
 
+    def test_crossdating_selection_dialog_filters_output_files_and_extensions(
+        self, temp_dirs
+    ):
+        """Test that crossdating selection dialog excludes table outputs and non-target extensions."""
+        project_dir = Path(temp_dirs)
+
+        # Valid crossdating files
+        valid_rwl = project_dir / "sample.rwl"
+        valid_tuc = project_dir / "sample.tuc"
+        valid_txt = project_dir / "sample.txt"
+
+        # Invalid extensions / table output files to be excluded
+        cells_csv = project_dir / "sample.cells_table.csv"
+        rings_csv = project_dir / "sample.rings_table.csv"
+        cells_txt = project_dir / "sample.cells_table.txt"
+        rings_txt = project_dir / "sample.rings_table.txt"
+        general_csv = project_dir / "data.csv"
+        general_tsv = project_dir / "data.tsv"
+        project_crossdating = project_dir / "rings_series.crossdating.txt"
+
+        for p in [
+            valid_rwl,
+            valid_tuc,
+            valid_txt,
+            cells_csv,
+            rings_csv,
+            cells_txt,
+            rings_txt,
+            general_csv,
+            general_tsv,
+            project_crossdating,
+        ]:
+            with open(p, "w") as f:
+                f.write("dummy")
+
+        dialog = CrossdatingSelectionDialog(
+            project_directory=str(project_dir),
+            text_file_extensions=[".rwl", ".tuc", ".txt", ".csv", ".tsv"],
+            project_file_path=str(project_crossdating),
+        )
+
+        # Items in file_list
+        listed_items = [
+            dialog.file_list.item(i).text()
+            for i in range(dialog.file_list.count())
+        ]
+
+        # Valid files must be present
+        assert "sample.rwl" in listed_items
+        assert "sample.tuc" in listed_items
+        assert "sample.txt" in listed_items
+
+        # Table output files and excluded extensions must NOT be present
+        assert "sample.cells_table.csv" not in listed_items
+        assert "sample.rings_table.csv" not in listed_items
+        assert "sample.cells_table.txt" not in listed_items
+        assert "sample.rings_table.txt" not in listed_items
+        assert "data.csv" not in listed_items
+        assert "data.tsv" not in listed_items
+        assert "rings_series.crossdating.txt" not in listed_items
+
     def test_merge_crossdating_files(self, temp_dirs):
         """Test merging crossdating files."""
         # Set up test environment

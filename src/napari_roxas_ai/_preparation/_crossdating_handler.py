@@ -23,6 +23,47 @@ from qtpy.QtWidgets import (
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 
 
+def is_crossdating_file(file_path: str, allowed_extensions: Optional[List[str]] = None) -> bool:
+    """
+    Determine if a file is a valid crossdating candidate file.
+
+    Only files with extensions .rwl, .tuc, or .txt are eligible.
+    Files belonging to ROXAS AI measurement outputs (such as cells_table
+    or rings_table) are excluded.
+
+    Parameters
+    ----------
+    file_path : str
+        Path of the candidate file.
+    allowed_extensions : Optional[List[str]]
+        Allowed extensions for crossdating files (defaults to [".rwl", ".tuc", ".txt"]).
+
+    Returns
+    -------
+    bool
+        True if the file is a valid crossdating input file.
+    """
+    if allowed_extensions is None:
+        allowed_extensions = [".rwl", ".tuc", ".txt"]
+
+    file_path_obj = Path(file_path)
+    file_name = file_path_obj.name.lower()
+    file_suffix = file_path_obj.suffix.lower()
+
+    # Check extension
+    if file_suffix not in [ext.lower() for ext in allowed_extensions]:
+        return False
+
+    # Exclude ROXAS AI table outputs
+    if "cells_table" in file_name or "rings_table" in file_name:
+        return False
+
+    return True
+
+
+DEFAULT_CROSSDATING_TEXT_EXTENSIONS = [".rwl", ".tuc", ".txt"]
+
+
 class CrossdatingSelectionDialog(QDialog):
     """
     Dialog for selecting crossdating files to process and their scaling.
@@ -31,8 +72,8 @@ class CrossdatingSelectionDialog(QDialog):
     def __init__(
         self,
         project_directory: str,
-        text_file_extensions: List[str],
-        project_file_path: str,
+        text_file_extensions: Optional[List[str]] = None,
+        project_file_path: str = "",
         parent=None,
     ):
         """
@@ -42,8 +83,8 @@ class CrossdatingSelectionDialog(QDialog):
         ----------
         project_directory : str
             The project directory containing crossdating files
-        text_file_extensions : List[str]
-            List of file extensions to consider as text files
+        text_file_extensions : List[str], optional
+            List of file extensions to consider as crossdating text files (defaults to .rwl, .tuc, .txt)
         project_file_path : str
             Path to the project crossdating file (to exclude from selection)
         parent : QWidget, optional
@@ -51,7 +92,18 @@ class CrossdatingSelectionDialog(QDialog):
         """
         super().__init__(parent)
         self.project_directory = project_directory
-        self.text_file_extensions = text_file_extensions
+        if text_file_extensions is None:
+            self.text_file_extensions = DEFAULT_CROSSDATING_TEXT_EXTENSIONS
+        else:
+            # Filter allowed extensions to only .rwl, .tuc, .txt
+            allowed_exts = [
+                ext
+                for ext in text_file_extensions
+                if ext.lower() in DEFAULT_CROSSDATING_TEXT_EXTENSIONS
+            ]
+            self.text_file_extensions = (
+                allowed_exts if allowed_exts else DEFAULT_CROSSDATING_TEXT_EXTENSIONS
+            )
         self.project_file_path = project_file_path
         self.selected_files = []
         self.selected_scaling = 10.0  # Default to 1/100 mm (10 um)
@@ -113,7 +165,7 @@ class CrossdatingSelectionDialog(QDialog):
         """Find and populate the list with available text files."""
         text_files = set()
 
-        # Find all text files in the project directory (including subdirectories)
+        # Find all crossdating files in the project directory (including subdirectories)
         for ext in self.text_file_extensions:
             for pattern in [f"*{ext}", f"*{ext.upper()}"]:
                 found_files = glob.glob(
@@ -121,7 +173,8 @@ class CrossdatingSelectionDialog(QDialog):
                     recursive=True,
                 )
                 for f in found_files:
-                    text_files.add(str(Path(f).resolve()))
+                    if is_crossdating_file(f, self.text_file_extensions):
+                        text_files.add(str(Path(f).resolve()))
 
         # Exclude the project crossdating file
         project_file_path = str(Path(self.project_file_path).resolve())
