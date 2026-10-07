@@ -49,7 +49,7 @@ The **Define Project Directory** widget configures the root folder where your sa
 *Figure 1: Project directory selection dialog.*
 
 ### How It Works
-When triggered from the menu, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory.
+When triggered from the menu, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory. Note that the exact same directory selection functionality is also triggered whenever selecting the project directory directly from within widgets **1 - Prepare Project Images**, **2/4 - Load Image(s)**, **3B - Batch Detect Cells & Rings**, and **9B - Batch Measure Cells & Rings**.
 
 ### Key Controls
 - **Select Project Directory**: Prompts the user to pick a folder. Upon confirmation, a notification displays the chosen path.
@@ -142,7 +142,7 @@ The compiled series is saved in the root of the project directory as `rings_seri
 | **2022** | 1250.0 | 1350.0 |
 
 ### Key Controls & Options
-- **Project Directory Button**: Displays and allows switching the active project directory.
+- **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
 - **Process already processed files**: When unchecked (default), skips files that already have the `.scan` extension.
 - **Manually select files to process**: Expands a multi-selection list allowing selective processing of specific samples instead of the entire directory.
 - **Reverse Selection**: Inverts the current file selection in the list.
@@ -169,7 +169,7 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 - Automatically configures keyboard shortcuts (such as WASD keys for quick viewport panning) to streamline navigation across large high-resolution images.
 
 ### Key Controls
-- **Project Directory Label & Compact Button**: Displays the «Project Directory:» text label side by side in the same row as a compact directory button. The button path text is elided in the middle (showing the start and end of the path up to ~35 characters) to keep the panel tidy, with a tooltip displaying the full absolute path when hovered. Clicking opens a folder browser to update the active directory.
+- **Project Directory Label & Compact Button**: Displays the «Project Directory:» text label side by side in the same row as a compact directory button. The button path text is elided in the middle (showing the start and end of the path up to ~35 characters) to keep the panel tidy, with a tooltip displaying the full absolute path when hovered. Clicking opens the file dialog to update the active directory (the same directory selection functionality as in widget **0**).
 - **Samples List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately opens that image along with its available associated rings and cells layers.
 - **Load Selected Image**: Loads the currently selected sample file (along with available associated rings and cells layers) into the viewer.
 - **Progress Bar**: Displays sample loading progress.
@@ -217,7 +217,7 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 - Automatically saves segmentation masks (`.cells.png` and `.rings.tif`) directly to disk alongside updated `.metadata.json` files.
 
 ### Key Controls
-- **Project Directory Selection**: Choose the target folder containing prepared samples.
+- **Project Directory Selection**: Choose the target folder containing prepared samples (triggering the same global project directory selection dialog).
 - **File Selection Mode**: Toggle between batch processing all samples or handpicked subsets.
 - **Segmentation Targets**: Checkboxes for **Segment Cells** and **Segment Rings**.
 - **Model Dropdowns**: Select weights for cell and ring models.
@@ -446,7 +446,7 @@ The **Batch Sample Measurements Widget** runs the anatomical measurement engine 
 - Writes `<sample>.cells_table.txt` and `<sample>.rings_table.txt` directly to each sample folder.
 
 ### Key Controls
-- **Input Directory**: Path to project directory containing segmented samples.
+- **Input Directory**: Path to project directory containing segmented samples (selecting or changing the directory here triggers the same global project directory selection dialog).
 - **Measure Cells / Measure Rings**: Checkboxes for target measurement outputs.
 - **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings.
 - **Start Batch Measurements Button**: Runs batch extraction with real-time progress updates.
