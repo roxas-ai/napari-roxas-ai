@@ -203,12 +203,6 @@ class PreparationWidget(Container):
         self._handpick_files_checkbox.changed.connect(
             self._toggle_file_selection
         )
-        self._ignore_roxas_output_checkbox = CheckBox(
-            value=True, label="Ignore ROXAS Output files"
-        )
-        self._ignore_roxas_output_checkbox.changed.connect(
-            self._refresh_file_list
-        )
 
         # File selection container (initially hidden)
         self._file_selection_container = Container(
@@ -320,9 +314,13 @@ class PreparationWidget(Container):
                     )
                 )
 
-            # ROXAS AI outputs (.cells/.rings rasters, annotated image) are never inputs
+            # ROXAS AI outputs (.cells/.rings rasters, annotated image) and
+            # ROXAS classic outputs are never inputs
             self.source_files = [
-                f for f in self.source_files if not is_roxas_ai_output_file(f)
+                f
+                for f in self.source_files
+                if not is_roxas_ai_output_file(f)
+                and not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
             ]
 
             # Filter based on whether to include already processed files
@@ -335,16 +333,8 @@ class PreparationWidget(Container):
                         filtered_files.append(file_path)
                 self.source_files = filtered_files
 
-        # Sort files for consistent display
-        self.source_files = sorted(self.source_files)
-
-        # Filter out roxas output files if the checkbox is checked
-        if self._ignore_roxas_output_checkbox.value:
-            self.source_files = [
-                f
-                for f in self.source_files
-                if not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
-            ]
+        # Sort files for consistent display and remove duplicates (e.g. on case-insensitive filesystems)
+        self.source_files = sorted(list(set(self.source_files)))
 
         # Update the file selection widget if it's visible
         if self._handpick_files_checkbox.value:
@@ -383,14 +373,10 @@ class PreparationWidget(Container):
 
             # Add the widget to the container
             self._file_selection_container.append(self._file_select_widget)
-            self._file_selection_container.append(
-                self._ignore_roxas_output_checkbox
-            )
 
             # Make container and reverse button visible
             self._file_selection_container.visible = True
             self._reverse_selection_button.visible = True
-            self._ignore_roxas_output_checkbox.visible = True
         else:
             # Hide container and reverse button if no files
             self._file_selection_container.visible = False
@@ -405,7 +391,6 @@ class PreparationWidget(Container):
             # Turn off file selection mode
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
-            self._ignore_roxas_output_checkbox.visible = False
             # Reset file selection
             self.selected_files = []
 

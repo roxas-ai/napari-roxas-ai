@@ -207,6 +207,26 @@ class TestPreparationWidget:
         assert prep_widget._file_selection_container.visible is False
         assert prep_widget._reverse_selection_button.visible is False
 
+    def test_roxas_output_files_silently_excluded(self, prep_widget, temp_dirs):
+        """ROXAS output files must be excluded unconditionally by default."""
+        project_dir = Path(temp_dirs)
+        (project_dir / "sample1.jpg").touch()
+        (project_dir / "sample1_annotated.jpg").touch()
+        (project_dir / "sample1_Preview.jpg").touch()
+        (project_dir / "sample1.cells.png").touch()
+        (project_dir / "sample1.rings.tif").touch()
+        (project_dir / "sample2.png").touch()
+
+        prep_widget.project_directory = str(project_dir)
+        prep_widget.image_file_extensions = [".jpg", ".png", ".tif"]
+        prep_widget._refresh_file_list()
+
+        expected = [
+            str((project_dir / "sample1.jpg").resolve()),
+            str((project_dir / "sample2.png").resolve()),
+        ]
+        assert [str(Path(f).resolve()) for f in prep_widget.source_files] == expected
+
     def test_reverse_file_selection(self, prep_widget):
         """Test reversing file selection."""
         # Create a mock file selection widget
