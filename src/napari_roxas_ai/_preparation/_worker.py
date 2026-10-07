@@ -500,12 +500,32 @@ class Worker(QObject):
             # Rename or copy file if needed AFTER metadata and data extraction
             if not original_has_scan_ext and file_path != str(new_image_path):
                 try:
-                    # Always avoid duplicates: rename if possible, else copy+delete
-                    moved_path = self._safe_rename_or_copy_delete(
-                        Path(file_path), Path(new_image_path)
+                    is_roxas_import = bool(
+                        self.default_loading_params
+                        and (
+                            self.default_loading_params.get(
+                                "load_cells_from_roxas", False
+                            )
+                            or self.default_loading_params.get(
+                                "load_rings_from_roxas", False
+                            )
+                        )
                     )
-                    print(f"Renamed file: {file_path} -> {moved_path}")
-                    file_path = str(moved_path)
+                    if is_roxas_import:
+                        # Keep original ROXAS Classic file set unchanged
+                        Path(new_image_path).parent.mkdir(
+                            parents=True, exist_ok=True
+                        )
+                        shutil.copy2(file_path, new_image_path)
+                        print(f"Copied file: {file_path} -> {new_image_path}")
+                        file_path = str(new_image_path)
+                    else:
+                        # Always avoid duplicates: rename if possible, else copy+delete
+                        moved_path = self._safe_rename_or_copy_delete(
+                            Path(file_path), Path(new_image_path)
+                        )
+                        print(f"Renamed file: {file_path} -> {moved_path}")
+                        file_path = str(moved_path)
                     # Update the path in the list so that subsequent calls to self.all_files use the new path
                     self.all_files[self.current_file_index] = file_path
                 except OSError as e:
@@ -582,12 +602,28 @@ class Worker(QObject):
 
         if not original_has_scan_ext and file_path != str(new_image_path):
             try:
-                # Always avoid duplicates: rename if possible, else copy+delete
-                moved_path = self._safe_rename_or_copy_delete(
-                    Path(file_path), Path(new_image_path)
+                is_roxas_import = bool(
+                    loading_params
+                    and (
+                        loading_params.get("load_cells_from_roxas", False)
+                        or loading_params.get("load_rings_from_roxas", False)
+                    )
                 )
-                print(f"Renamed file: {file_path} -> {moved_path}")
-                file_path = str(moved_path)
+                if is_roxas_import:
+                    # Keep original ROXAS Classic file set unchanged
+                    Path(new_image_path).parent.mkdir(
+                        parents=True, exist_ok=True
+                    )
+                    shutil.copy2(file_path, new_image_path)
+                    print(f"Copied file: {file_path} -> {new_image_path}")
+                    file_path = str(new_image_path)
+                else:
+                    # Always avoid duplicates: rename if possible, else copy+delete
+                    moved_path = self._safe_rename_or_copy_delete(
+                        Path(file_path), Path(new_image_path)
+                    )
+                    print(f"Renamed file: {file_path} -> {moved_path}")
+                    file_path = str(moved_path)
                 # Update the path in the list so that subsequent calls to self.all_files use the new path
                 self.all_files[self.current_file_index] = file_path
             except OSError as e:

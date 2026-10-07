@@ -424,6 +424,89 @@ class TestWorker:
         # Check that signals were emitted correctly
         worker.metadata_request.emit.assert_called_once_with("test")
 
+    def test_roxas_classic_import_copies_image_file(self, temp_dirs):
+        """When importing from ROXAS Classic, original image file must not be overwritten or deleted."""
+        project_dir = Path(temp_dirs)
+        test_file = project_dir / "sample_classic.jpg"
+        create_test_image(test_file)
+
+        worker = Worker(
+            project_directory=str(project_dir),
+            scan_content_extension=".scan",
+            metadata_file_extension=".metadata.json",
+            image_file_extensions=[".jpg"],
+            selected_files=None,
+            process_processed=False,
+            overwrite_files=True,
+        )
+
+        metadata = {
+            "sample_name": "sample_classic",
+            "spatial_resolution": 1.0,
+            "sample_scale": 1.0,
+        }
+        loading_params = {
+            "load_cells_from_roxas": True,
+            "load_rings_from_roxas": False,
+        }
+
+        worker.all_files = [str(test_file)]
+        worker.current_file_index = 0
+        worker._current_img_metadata = {"sample_stem_path": "sample_classic"}
+
+        with patch.object(worker, "load_cells_from_roxas_scl"):
+            with patch.object(worker, "_process_next_file"):
+                worker.set_metadata(
+                    metadata, apply_to_all=False, loading_params=loading_params
+                )
+
+        scan_file = project_dir / "sample_classic.scan.jpg"
+        # Original file must still exist
+        assert test_file.exists()
+        # Copied scan file must exist
+        assert scan_file.exists()
+
+    def test_standard_preparation_renames_image_file(self, temp_dirs):
+        """Standard preparation without ROXAS Classic import moves/renames the image file."""
+        project_dir = Path(temp_dirs)
+        test_file = project_dir / "sample_standard.jpg"
+        create_test_image(test_file)
+
+        worker = Worker(
+            project_directory=str(project_dir),
+            scan_content_extension=".scan",
+            metadata_file_extension=".metadata.json",
+            image_file_extensions=[".jpg"],
+            selected_files=None,
+            process_processed=False,
+            overwrite_files=True,
+        )
+
+        metadata = {
+            "sample_name": "sample_standard",
+            "spatial_resolution": 1.0,
+            "sample_scale": 1.0,
+        }
+        loading_params = {
+            "load_cells_from_roxas": False,
+            "load_rings_from_roxas": False,
+        }
+
+        worker.all_files = [str(test_file)]
+        worker.current_file_index = 0
+        worker._current_img_metadata = {"sample_stem_path": "sample_standard"}
+
+        with patch.object(worker, "_process_next_file"):
+            worker.set_metadata(
+                metadata, apply_to_all=False, loading_params=loading_params
+            )
+
+        scan_file = project_dir / "sample_standard.scan.jpg"
+        # Original file must not exist (it was renamed)
+        assert not test_file.exists()
+        # Renamed scan file must exist
+        assert scan_file.exists()
+
 
 class TestMetadataDialog:
     """Tests for the MetadataDialog."""
