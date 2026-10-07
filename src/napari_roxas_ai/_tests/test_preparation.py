@@ -182,8 +182,9 @@ class TestPreparationWidget:
         assert prep_widget.project_directory == test_dir
         assert (
             prep_widget._project_dialog_button.text
-            == f"Project Directory: {test_dir}"
+            == test_dir
         )
+        assert prep_widget._project_dialog_button.tooltip == test_dir
         prep_widget._refresh_file_list.assert_called_once_with()
 
     def test_file_selection_toggle(self, prep_widget):

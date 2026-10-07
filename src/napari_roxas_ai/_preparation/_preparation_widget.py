@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING, List, Optional
 from magicgui.widgets import (
     CheckBox,
     Container,
+    Label,
     ProgressBar,
     PushButton,
     Select,
 )
-from qtpy.QtCore import QThread
+from qtpy.QtCore import Qt, QThread
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -32,6 +33,30 @@ from ._worker import (
 if TYPE_CHECKING:
     import napari
 
+# Gap between a row's label and its box. Set explicitly because the style's
+# default depends on the widget pair (on macOS label-to-button is wider than
+# label-to-list), which would make the button and the list start unevenly.
+LABEL_SPACING = 10
+
+# Longest project directory shown on the button, longer paths are elided in the
+# middle (the full path is in the tooltip)
+MAX_PROJECT_DIRECTORY_CHARS = 35
+
+
+def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
+    """
+    Shorten `path` to at most `max_chars` characters by cutting out its middle.
+
+    The start (drive, user folder) and the end (the project folder itself) are
+    what tells projects apart, so both are kept and the middle gives way.
+    """
+    if len(path) <= max_chars:
+        return path
+    keep = max_chars - 1  # room for the ellipsis
+    head = keep // 2
+    tail = keep - head
+    return f"{path[:head]}…{path[-tail:]}"
+
 
 class PreparationWidget(Container):
     """
@@ -48,7 +73,8 @@ class PreparationWidget(Container):
         Args:
             viewer: The napari viewer instance
         """
-        super().__init__()
+        # The rows bring their own labels, a label column would only indent them
+        super().__init__(labels=False)
         self._viewer = viewer
 
         # Initialize state variables
@@ -121,13 +147,30 @@ class PreparationWidget(Container):
         """Create and configure UI components."""
         # Project directory selector
         self.project_directory = self.settings_manager.get("project_directory")
+
+        # "Project Directory:" label next to a button showing the (elided) path
         self._project_dialog_button = PushButton()
-        # Set after construction: text passed to the constructor gets its
-        # underscores turned into spaces, which would mangle the path
-        self._project_dialog_button.text = (
-            f"Project Directory: {self.project_directory or 'Not set'}"
-        )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
+        # Without a stylesheet, macOS draws a push button larger than its layout
+        # slot (room for the focus ring), so it would stick out to the left of
+        # the image list below; lay it out by its drawn rect instead
+        self._project_dialog_button.native.setAttribute(
+            Qt.WA_LayoutUsesWidgetRect
+        )
+        self._project_directory_label = Label(value="Project Directory:")
+        self._project_directory_row = Container(
+            widgets=[self._project_directory_label, self._project_dialog_button],
+            labels=False,
+            layout="horizontal",
+        )
+        self._project_directory_row.margins = (0, 0, 0, 0)
+        label_width = self._project_directory_label.native.sizeHint().width() + 20
+        self._project_directory_label.native.setFixedWidth(label_width)
+        self._project_directory_label.native.setAlignment(
+            Qt.AlignLeft | Qt.AlignVCenter
+        )
+        self._project_directory_row.native.layout().setSpacing(LABEL_SPACING)
+        self._update_project_dialog_button()
 
         # Follow the project directory wherever it is changed (other widgets,
         # the menu, the settings widget)
@@ -206,7 +249,7 @@ class PreparationWidget(Container):
         # Append all widgets to the container
         self.extend(
             [
-                self._project_dialog_button,
+                self._project_directory_row,
                 self._overwrite_files_checkbox,
                 self._process_processed_checkbox,
                 self._handpick_files_checkbox,
@@ -219,12 +262,19 @@ class PreparationWidget(Container):
         )
         self._refresh_file_list()
 
+    def _update_project_dialog_button(self):
+        """Show the project directory on the button, elided, full path as tooltip."""
+        if self.project_directory:
+            self._project_dialog_button.text = _elide_path(self.project_directory)
+            self._project_dialog_button.tooltip = self.project_directory
+        else:
+            self._project_dialog_button.text = "Not set"
+            self._project_dialog_button.tooltip = None
+
     def _on_project_directory_changed(self, directory):
         """Show a project directory that was changed anywhere in the plugin."""
         self.project_directory = directory
-        self._project_dialog_button.text = (
-            f"Project Directory: {directory or 'Not set'}"
-        )
+        self._update_project_dialog_button()
         self._refresh_file_list()
 
     def _open_project_dialog(self):
