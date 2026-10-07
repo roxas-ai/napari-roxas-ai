@@ -8,6 +8,8 @@ from qtpy.QtWidgets import QAbstractItemView
 from napari_roxas_ai._loading import _samples_loading_widget
 from napari_roxas_ai._loading._samples_loading_widget import (
     MAX_PROJECT_DIRECTORY_CHARS,
+    MAX_VISIBLE_IMAGE_ROWS,
+    MIN_VISIBLE_IMAGE_ROWS,
     SamplesLoadingWidget,
     _elide_path,
 )
@@ -237,6 +239,20 @@ def test_image_list_grows_with_more_than_five_images(widget, settings, project):
     assert (
         list_widget.height()
         == 7 * list_widget.sizeHintForRow(0) + 2 * list_widget.frameWidth()
+    )
+
+
+def test_image_list_caps_at_max_visible_rows(widget, settings, project):
+    for i in range(3, 16):
+        (project / f"sample_{i}.metadata.json").write_text("{}")
+    widget._refresh_samples_list()
+    list_widget = widget._sample_select_widget.native
+
+    assert list_widget.count() == 15
+    assert (
+        list_widget.height()
+        == MAX_VISIBLE_IMAGE_ROWS * list_widget.sizeHintForRow(0)
+        + 2 * list_widget.frameWidth()
     )
 
 
