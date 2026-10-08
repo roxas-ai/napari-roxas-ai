@@ -271,11 +271,6 @@ def process_crossdating_files(
         Path(project_directory) / f"rings_series{crossdating_file_extension}"
     )
 
-    # Create the file if it doesn't exist
-    if not crossdating_file_path.exists():
-        # Create an empty dataframe and save it with tab separator
-        pd.DataFrame().to_csv(str(crossdating_file_path), sep="\t", index=True)
-
     # Show dialog to select crossdating files
     dialog = CrossdatingSelectionDialog(
         project_directory=project_directory,

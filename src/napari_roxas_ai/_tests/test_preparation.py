@@ -562,17 +562,31 @@ class TestCrossdatingHandler:
         mock_dialog_instance = MagicMock()
         mock_dialog.return_value = mock_dialog_instance
 
-        # Set up mock dialog behavior
-        mock_dialog_instance.exec_.return_value = 1  # User accepted
+        # Case 1: User canceled - no file should be created
+        mock_dialog_instance.exec_.return_value = 0
+        with patch(
+            "napari_roxas_ai._preparation._crossdating_handler.pd.DataFrame.to_csv"
+        ) as mock_to_csv:
+            result = process_crossdating_files(
+                project_directory=str(project_dir),
+                crossdating_file_extension=".crossdating.txt",
+                text_file_extensions=[".rwl", ".txt"],
+            )
+            assert result is None
+            mock_to_csv.assert_not_called()
+
+        # Case 2: User accepted and selected files - file saved with merged data
+        mock_dialog_instance.exec_.return_value = 1
         mock_dialog_instance.get_selected_files.return_value = [
             str(project_dir / "test1.rwl"),
             str(project_dir / "test2.txt"),
         ]
+        non_empty_df = pd.DataFrame({"SERIES1": [100, 200]}, index=[2000, 2001])
 
         # Mock file reading and merging
         with patch(
             "napari_roxas_ai._preparation._crossdating_handler.merge_crossdating_files",
-            return_value=pd.DataFrame(),
+            return_value=non_empty_df,
         ), patch(
             "napari_roxas_ai._preparation._crossdating_handler.pd.DataFrame.to_csv"
         ) as mock_to_csv:
@@ -588,6 +602,7 @@ class TestCrossdatingHandler:
 
             # Check result
             assert result is not None
+            assert not result.empty
 
     def test_crossdating_selection_dialog(self, temp_dirs):
         """Test the crossdating selection dialog."""
