@@ -166,7 +166,7 @@ class CrossdatingSelectionDialog(QDialog):
         scaling_layout = QHBoxLayout()
         scaling_label = QLabel("Units for Selected Cross-Dating File(s):")
         self.scaling_combo = QComboBox()
-        self.scaling_combo.addItems(["1 / 10 mm", "1 / 100 mm", "1 / 1000 mm", "divide values by 10"])
+        self.scaling_combo.addItems(["1 / 1 mm", "1 / 10 mm", "1 / 100 mm", "1 / 1000 mm", "divide values by 10"])
         self.scaling_combo.setCurrentText("1 / 100 mm")
         scaling_layout.addWidget(scaling_label)
         scaling_layout.addWidget(self.scaling_combo)
@@ -258,7 +258,9 @@ class CrossdatingSelectionDialog(QDialog):
 
         # Get scaling factor (target is micrometers)
         scaling_text = self.scaling_combo.currentText()
-        if scaling_text == "1 / 10 mm":
+        if scaling_text == "1 / 1 mm":
+            self.selected_scaling = 1000.0  # 1.0 mm = 1000 um
+        elif scaling_text == "1 / 10 mm":
             self.selected_scaling = 100.0  # 0.1 mm = 100 um
         elif scaling_text == "1 / 100 mm":
             self.selected_scaling = 10.0   # 0.01 mm = 10 um

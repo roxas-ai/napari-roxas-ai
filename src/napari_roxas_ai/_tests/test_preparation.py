@@ -654,6 +654,12 @@ class TestCrossdatingHandler:
         assert dialog.get_selected_files() == [str(test_file1)]
         assert dialog.get_selected_prefix() == "rings_series"
         assert dialog.get_output_filename() == "rings_series.crossdating.txt"
+        assert dialog.get_selected_scaling() == 10.0
+
+        # Verify 1 / 1 mm scaling option
+        dialog.scaling_combo.setCurrentText("1 / 1 mm")
+        dialog._ok_clicked()
+        assert dialog.get_selected_scaling() == 1000.0
 
     def test_crossdating_selection_dialog_custom_prefix(self, temp_dirs):
         """Test custom prefix, fallback, and suffix stripping in CrossdatingSelectionDialog."""
