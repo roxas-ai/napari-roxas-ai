@@ -345,8 +345,13 @@ class Worker(QObject):
                 )
             )
 
-        # ROXAS AI outputs are never inputs, also when all files are processed
-        all_files = [f for f in all_files if not is_roxas_ai_output_file(f)]
+        # ROXAS AI outputs and ROXAS Classic outputs are never inputs
+        all_files = [
+            f
+            for f in all_files
+            if not is_roxas_ai_output_file(f)
+            and not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
+        ]
 
         # Filter based on selected files if provided
         if self.selected_files and len(self.selected_files) > 0:
@@ -357,12 +362,6 @@ class Worker(QObject):
                 f for f in all_files if Path(f).absolute() in selected_paths
             ]
             all_files = filtered_files
-        else:
-            # All files are processed: skip ROXAS Classic outputs as well, as
-            # the file list does with "Ignore ROXAS Output files" checked
-            all_files = [
-                f for f in all_files if not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
-            ]
 
         # Filter out already processed files if needed
         if not self.process_processed:
@@ -501,12 +500,32 @@ class Worker(QObject):
             # Rename or copy file if needed AFTER metadata and data extraction
             if not original_has_scan_ext and file_path != str(new_image_path):
                 try:
-                    # Always avoid duplicates: rename if possible, else copy+delete
-                    moved_path = self._safe_rename_or_copy_delete(
-                        Path(file_path), Path(new_image_path)
+                    is_roxas_import = bool(
+                        self.default_loading_params
+                        and (
+                            self.default_loading_params.get(
+                                "load_cells_from_roxas", False
+                            )
+                            or self.default_loading_params.get(
+                                "load_rings_from_roxas", False
+                            )
+                        )
                     )
-                    print(f"Renamed file: {file_path} -> {moved_path}")
-                    file_path = str(moved_path)
+                    if is_roxas_import:
+                        # Keep original ROXAS Classic file set unchanged
+                        Path(new_image_path).parent.mkdir(
+                            parents=True, exist_ok=True
+                        )
+                        shutil.copy2(file_path, new_image_path)
+                        print(f"Copied file: {file_path} -> {new_image_path}")
+                        file_path = str(new_image_path)
+                    else:
+                        # Always avoid duplicates: rename if possible, else copy+delete
+                        moved_path = self._safe_rename_or_copy_delete(
+                            Path(file_path), Path(new_image_path)
+                        )
+                        print(f"Renamed file: {file_path} -> {moved_path}")
+                        file_path = str(moved_path)
                     # Update the path in the list so that subsequent calls to self.all_files use the new path
                     self.all_files[self.current_file_index] = file_path
                 except OSError as e:
@@ -583,12 +602,28 @@ class Worker(QObject):
 
         if not original_has_scan_ext and file_path != str(new_image_path):
             try:
-                # Always avoid duplicates: rename if possible, else copy+delete
-                moved_path = self._safe_rename_or_copy_delete(
-                    Path(file_path), Path(new_image_path)
+                is_roxas_import = bool(
+                    loading_params
+                    and (
+                        loading_params.get("load_cells_from_roxas", False)
+                        or loading_params.get("load_rings_from_roxas", False)
+                    )
                 )
-                print(f"Renamed file: {file_path} -> {moved_path}")
-                file_path = str(moved_path)
+                if is_roxas_import:
+                    # Keep original ROXAS Classic file set unchanged
+                    Path(new_image_path).parent.mkdir(
+                        parents=True, exist_ok=True
+                    )
+                    shutil.copy2(file_path, new_image_path)
+                    print(f"Copied file: {file_path} -> {new_image_path}")
+                    file_path = str(new_image_path)
+                else:
+                    # Always avoid duplicates: rename if possible, else copy+delete
+                    moved_path = self._safe_rename_or_copy_delete(
+                        Path(file_path), Path(new_image_path)
+                    )
+                    print(f"Renamed file: {file_path} -> {moved_path}")
+                    file_path = str(moved_path)
                 # Update the path in the list so that subsequent calls to self.all_files use the new path
                 self.all_files[self.current_file_index] = file_path
             except OSError as e:
@@ -698,7 +733,7 @@ class Worker(QObject):
         """
         try:
             # A sample has no reference series until one is picked in the
-            # crossdating widget, but the key is written from the start so that
+            # cross-dating widget, but the key is written from the start so that
             # every prepared sample carries it
             metadata.setdefault("reference_series", NO_REFERENCE_SERIES)
 

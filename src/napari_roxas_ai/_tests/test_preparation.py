@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from PIL import Image
+from qtpy.QtCore import Qt
 
 from napari_roxas_ai._preparation._crossdating_handler import (
     CrossdatingSelectionDialog,
@@ -17,7 +18,11 @@ from napari_roxas_ai._preparation._crossdating_handler import (
     process_crossdating_files,
 )
 from napari_roxas_ai._preparation._metadata_dialog import MetadataDialog
-from napari_roxas_ai._preparation._preparation_widget import PreparationWidget
+from napari_roxas_ai._preparation._preparation_widget import (
+    MAX_VISIBLE_IMAGE_ROWS,
+    MIN_VISIBLE_IMAGE_ROWS,
+    PreparationWidget,
+)
 from napari_roxas_ai._preparation._worker import Worker
 
 
@@ -31,7 +36,7 @@ def create_test_image(path, size=(100, 100), color=(73, 109, 137)):
 
 # Helper function to create test crossdating file
 def create_test_crossdating_file(path, series_count=2, year_count=10):
-    """Create a simple crossdating file in tab-delimited format."""
+    """Create a simple cross-dating file in tab-delimited format."""
     # Create a pandas DataFrame with series as columns and years as rows
     years = list(range(2000, 2000 + year_count))
     data = {}
@@ -57,7 +62,7 @@ def temp_dirs():
 # Fixture for creating test images
 @pytest.fixture
 def project_with_images(temp_dirs):
-    """Create a project directory with test images and crossdating files."""
+    """Create a project directory with test images and cross-dating files."""
     project_dir = temp_dirs
 
     # Create test images with different extensions
@@ -74,7 +79,7 @@ def project_with_images(temp_dirs):
     # Create a "processed" file with a ROXAS extension
     create_test_image(Path(project_dir) / "processed.scan.jpg")
 
-    # Create crossdating subdirectory
+    # Create cross-dating subdirectory
     crossdating_dir = Path(project_dir) / "crossdating"
     crossdating_dir.mkdir(exist_ok=True)
 
@@ -159,6 +164,12 @@ def prep_widget(mock_viewer, mock_settings_manager):
 class TestPreparationWidget:
     """Tests for the PreparationWidget class."""
 
+    def test_default_checkbox_states(self, mock_viewer, mock_settings_manager):
+        """Test default states for checkboxes in PreparationWidget."""
+        widget = PreparationWidget(mock_viewer)
+        assert widget._handpick_files_checkbox.value is True
+        assert widget._process_processed_checkbox.value is True
+
     @patch("napari_roxas_ai._preparation._preparation_widget.QFileDialog")
     def test_project_directory_selection(self, mock_dialog, prep_widget):
         """The chosen directory is stored in the settings, not just here."""
@@ -182,8 +193,9 @@ class TestPreparationWidget:
         assert prep_widget.project_directory == test_dir
         assert (
             prep_widget._project_dialog_button.text
-            == f"Project Directory: {test_dir}"
+            == test_dir
         )
+        assert prep_widget._project_dialog_button.tooltip == test_dir
         prep_widget._refresh_file_list.assert_called_once_with()
 
     def test_file_selection_toggle(self, prep_widget):
@@ -205,6 +217,74 @@ class TestPreparationWidget:
         # Check that the file selection container is hidden
         assert prep_widget._file_selection_container.visible is False
         assert prep_widget._reverse_selection_button.visible is False
+
+    def test_file_list_height_bounds(self, prep_widget, temp_dirs):
+        """Test file list height bounds between MIN_VISIBLE_IMAGE_ROWS and MAX_VISIBLE_IMAGE_ROWS."""
+        project_dir = Path(temp_dirs)
+        for i in range(15):
+            (project_dir / f"image_{i:02d}.jpg").touch()
+
+        prep_widget.project_directory = str(project_dir)
+        prep_widget.image_file_extensions = [".jpg"]
+        prep_widget._handpick_files_checkbox.value = True
+
+        # Test with 3 files: should have height for MIN_VISIBLE_IMAGE_ROWS (5)
+        prep_widget.source_files = [
+            str(project_dir / f"image_{i:02d}.jpg") for i in range(3)
+        ]
+        prep_widget._update_file_selection_widget()
+        list_native = prep_widget._file_select_widget.native
+        assert list_native.count() == 3
+        expected_min_height = (
+            MIN_VISIBLE_IMAGE_ROWS * list_native.sizeHintForRow(0)
+            + 2 * list_native.frameWidth()
+        )
+        assert list_native.height() == expected_min_height
+
+        # Test with 7 files: should have height for 7 rows
+        prep_widget.source_files = [
+            str(project_dir / f"image_{i:02d}.jpg") for i in range(7)
+        ]
+        prep_widget._update_file_selection_widget()
+        list_native = prep_widget._file_select_widget.native
+        assert list_native.count() == 7
+        expected_7_height = (
+            7 * list_native.sizeHintForRow(0) + 2 * list_native.frameWidth()
+        )
+        assert list_native.height() == expected_7_height
+
+        # Test with 15 files: should be capped at MAX_VISIBLE_IMAGE_ROWS (10)
+        prep_widget.source_files = [
+            str(project_dir / f"image_{i:02d}.jpg") for i in range(15)
+        ]
+        prep_widget._update_file_selection_widget()
+        list_native = prep_widget._file_select_widget.native
+        assert list_native.count() == 15
+        expected_max_height = (
+            MAX_VISIBLE_IMAGE_ROWS * list_native.sizeHintForRow(0)
+            + 2 * list_native.frameWidth()
+        )
+        assert list_native.height() == expected_max_height
+
+    def test_roxas_output_files_silently_excluded(self, prep_widget, temp_dirs):
+        """ROXAS output files must be excluded unconditionally by default."""
+        project_dir = Path(temp_dirs)
+        (project_dir / "sample1.jpg").touch()
+        (project_dir / "sample1_annotated.jpg").touch()
+        (project_dir / "sample1_Preview.jpg").touch()
+        (project_dir / "sample1.cells.png").touch()
+        (project_dir / "sample1.rings.tif").touch()
+        (project_dir / "sample2.png").touch()
+
+        prep_widget.project_directory = str(project_dir)
+        prep_widget.image_file_extensions = [".jpg", ".png", ".tif"]
+        prep_widget._refresh_file_list()
+
+        expected = [
+            str((project_dir / "sample1.jpg").resolve()),
+            str((project_dir / "sample2.png").resolve()),
+        ]
+        assert [str(Path(f).resolve()) for f in prep_widget.source_files] == expected
 
     def test_reverse_file_selection(self, prep_widget):
         """Test reversing file selection."""
@@ -254,9 +334,8 @@ class TestPreparationWidget:
     @patch(
         "napari_roxas_ai._preparation._preparation_widget.process_crossdating_files"
     )
-    @patch("napari_roxas_ai._preparation._preparation_widget.QMessageBox")
     def test_process_crossdating_files(
-        self, mock_msgbox, mock_process, prep_widget
+        self, mock_process, prep_widget
     ):
         """Test crossdating files processing."""
         # Set up test data
@@ -276,9 +355,6 @@ class TestPreparationWidget:
             crossdating_file_extension=".crossdating.txt",
             text_file_extensions=[".rwl", ".txt"],
         )
-
-        # Verify that a success message was shown
-        mock_msgbox.information.assert_called_once()
 
     def test_ui_state_during_processing(self, prep_widget):
         """Test UI state updates during processing."""
@@ -345,6 +421,89 @@ class TestWorker:
         # Check that signals were emitted correctly
         worker.metadata_request.emit.assert_called_once_with("test")
 
+    def test_roxas_classic_import_copies_image_file(self, temp_dirs):
+        """When importing from ROXAS Classic, original image file must not be overwritten or deleted."""
+        project_dir = Path(temp_dirs)
+        test_file = project_dir / "sample_classic.jpg"
+        create_test_image(test_file)
+
+        worker = Worker(
+            project_directory=str(project_dir),
+            scan_content_extension=".scan",
+            metadata_file_extension=".metadata.json",
+            image_file_extensions=[".jpg"],
+            selected_files=None,
+            process_processed=False,
+            overwrite_files=True,
+        )
+
+        metadata = {
+            "sample_name": "sample_classic",
+            "spatial_resolution": 1.0,
+            "sample_scale": 1.0,
+        }
+        loading_params = {
+            "load_cells_from_roxas": True,
+            "load_rings_from_roxas": False,
+        }
+
+        worker.all_files = [str(test_file)]
+        worker.current_file_index = 0
+        worker._current_img_metadata = {"sample_stem_path": "sample_classic"}
+
+        with patch.object(worker, "load_cells_from_roxas_scl"):
+            with patch.object(worker, "_process_next_file"):
+                worker.set_metadata(
+                    metadata, apply_to_all=False, loading_params=loading_params
+                )
+
+        scan_file = project_dir / "sample_classic.scan.jpg"
+        # Original file must still exist
+        assert test_file.exists()
+        # Copied scan file must exist
+        assert scan_file.exists()
+
+    def test_standard_preparation_renames_image_file(self, temp_dirs):
+        """Standard preparation without ROXAS Classic import moves/renames the image file."""
+        project_dir = Path(temp_dirs)
+        test_file = project_dir / "sample_standard.jpg"
+        create_test_image(test_file)
+
+        worker = Worker(
+            project_directory=str(project_dir),
+            scan_content_extension=".scan",
+            metadata_file_extension=".metadata.json",
+            image_file_extensions=[".jpg"],
+            selected_files=None,
+            process_processed=False,
+            overwrite_files=True,
+        )
+
+        metadata = {
+            "sample_name": "sample_standard",
+            "spatial_resolution": 1.0,
+            "sample_scale": 1.0,
+        }
+        loading_params = {
+            "load_cells_from_roxas": False,
+            "load_rings_from_roxas": False,
+        }
+
+        worker.all_files = [str(test_file)]
+        worker.current_file_index = 0
+        worker._current_img_metadata = {"sample_stem_path": "sample_standard"}
+
+        with patch.object(worker, "_process_next_file"):
+            worker.set_metadata(
+                metadata, apply_to_all=False, loading_params=loading_params
+            )
+
+        scan_file = project_dir / "sample_standard.scan.jpg"
+        # Original file must not exist (it was renamed)
+        assert not test_file.exists()
+        # Renamed scan file must exist
+        assert scan_file.exists()
+
 
 class TestMetadataDialog:
     """Tests for the MetadataDialog."""
@@ -389,9 +548,12 @@ class TestCrossdatingHandler:
     """Tests for the crossdating handling functionality."""
 
     @patch(
+        "napari_roxas_ai._preparation._crossdating_handler.QMessageBox"
+    )
+    @patch(
         "napari_roxas_ai._preparation._crossdating_handler.CrossdatingSelectionDialog"
     )
-    def test_process_crossdating_files(self, mock_dialog, temp_dirs):
+    def test_process_crossdating_files(self, mock_dialog, mock_msgbox, temp_dirs):
         """Test processing crossdating files."""
         # Set up test data
         project_dir = Path(temp_dirs)
@@ -399,18 +561,33 @@ class TestCrossdatingHandler:
         # Create mock dialog instance
         mock_dialog_instance = MagicMock()
         mock_dialog.return_value = mock_dialog_instance
+        mock_dialog_instance.get_output_filename.return_value = "rings_series.crossdating.txt"
 
-        # Set up mock dialog behavior
-        mock_dialog_instance.exec_.return_value = 1  # User accepted
+        # Case 1: User canceled - no file should be created
+        mock_dialog_instance.exec_.return_value = 0
+        with patch(
+            "napari_roxas_ai._preparation._crossdating_handler.pd.DataFrame.to_csv"
+        ) as mock_to_csv:
+            result = process_crossdating_files(
+                project_directory=str(project_dir),
+                crossdating_file_extension=".crossdating.txt",
+                text_file_extensions=[".rwl", ".txt"],
+            )
+            assert result is None
+            mock_to_csv.assert_not_called()
+
+        # Case 2: User accepted and selected files - file saved with merged data
+        mock_dialog_instance.exec_.return_value = 1
         mock_dialog_instance.get_selected_files.return_value = [
             str(project_dir / "test1.rwl"),
             str(project_dir / "test2.txt"),
         ]
+        non_empty_df = pd.DataFrame({"SERIES1": [100, 200]}, index=[2000, 2001])
 
         # Mock file reading and merging
         with patch(
             "napari_roxas_ai._preparation._crossdating_handler.merge_crossdating_files",
-            return_value=pd.DataFrame(),
+            return_value=non_empty_df,
         ), patch(
             "napari_roxas_ai._preparation._crossdating_handler.pd.DataFrame.to_csv"
         ) as mock_to_csv:
@@ -426,9 +603,10 @@ class TestCrossdatingHandler:
 
             # Check result
             assert result is not None
+            assert not result.empty
 
     def test_crossdating_selection_dialog(self, temp_dirs):
-        """Test the crossdating selection dialog."""
+        """Test the crossdating selection dialog UI, prefix input, and file selection."""
         # Set up test environment
         project_dir = Path(temp_dirs)
 
@@ -447,7 +625,14 @@ class TestCrossdatingHandler:
             project_directory=str(project_dir),
             text_file_extensions=[".rwl", ".txt"],
             project_file_path=str(project_dir / "project.crossdating.txt"),
+            crossdating_file_extension=".crossdating.txt",
         )
+
+        # Verify UI components for prefix and preview
+        assert dialog.prefix_input.text() == "rings_series"
+        assert dialog.extension_label.text() == ".crossdating.txt"
+        assert "rings_series" in dialog.prefix_input.toolTip()
+        assert dialog.prefix_input.alignment() & Qt.AlignRight
 
         # Mock the file_list widget
         dialog.file_list = MagicMock()
@@ -467,6 +652,102 @@ class TestCrossdatingHandler:
 
         # Check that selected files contains only the selected item
         assert dialog.get_selected_files() == [str(test_file1)]
+        assert dialog.get_selected_prefix() == "rings_series"
+        assert dialog.get_output_filename() == "rings_series.crossdating.txt"
+        assert dialog.get_selected_scaling() == 10.0
+
+        # Verify 1 / 1 mm scaling option
+        dialog.scaling_combo.setCurrentText("1 / 1 mm")
+        dialog._ok_clicked()
+        assert dialog.get_selected_scaling() == 1000.0
+
+    def test_crossdating_selection_dialog_custom_prefix(self, temp_dirs):
+        """Test custom prefix, fallback, and suffix stripping in CrossdatingSelectionDialog."""
+        project_dir = Path(temp_dirs)
+
+        dialog = CrossdatingSelectionDialog(
+            project_directory=str(project_dir),
+            crossdating_file_extension=".crossdating.txt",
+        )
+
+        # Custom prefix
+        dialog.prefix_input.setText("PIEN")
+        dialog._ok_clicked()
+        assert dialog.get_selected_prefix() == "PIEN"
+        assert dialog.get_output_filename() == "PIEN.crossdating.txt"
+
+        # Redundant extension entered by user
+        dialog.prefix_input.setText("PIEN.crossdating.txt")
+        dialog._ok_clicked()
+        assert dialog.get_selected_prefix() == "PIEN"
+        assert dialog.get_output_filename() == "PIEN.crossdating.txt"
+
+        # Empty prefix fallback to rings_series
+        dialog.prefix_input.setText("   ")
+        dialog._ok_clicked()
+        assert dialog.get_selected_prefix() == "rings_series"
+        assert dialog.get_output_filename() == "rings_series.crossdating.txt"
+
+    def test_crossdating_selection_dialog_filters_output_files_and_extensions(
+        self, temp_dirs
+    ):
+        """Test that cross-dating selection dialog excludes table outputs and non-target extensions."""
+        project_dir = Path(temp_dirs)
+
+        # Valid crossdating files
+        valid_rwl = project_dir / "sample.rwl"
+        valid_tuc = project_dir / "sample.tuc"
+        valid_txt = project_dir / "sample.txt"
+
+        # Invalid extensions / table output files to be excluded
+        cells_csv = project_dir / "sample.cells_table.csv"
+        rings_csv = project_dir / "sample.rings_table.csv"
+        cells_txt = project_dir / "sample.cells_table.txt"
+        rings_txt = project_dir / "sample.rings_table.txt"
+        general_csv = project_dir / "data.csv"
+        general_tsv = project_dir / "data.tsv"
+        project_crossdating = project_dir / "rings_series.crossdating.txt"
+
+        for p in [
+            valid_rwl,
+            valid_tuc,
+            valid_txt,
+            cells_csv,
+            rings_csv,
+            cells_txt,
+            rings_txt,
+            general_csv,
+            general_tsv,
+            project_crossdating,
+        ]:
+            with open(p, "w") as f:
+                f.write("dummy")
+
+        dialog = CrossdatingSelectionDialog(
+            project_directory=str(project_dir),
+            text_file_extensions=[".rwl", ".tuc", ".txt", ".csv", ".tsv"],
+            project_file_path=str(project_crossdating),
+        )
+
+        # Items in file_list
+        listed_items = [
+            dialog.file_list.item(i).text()
+            for i in range(dialog.file_list.count())
+        ]
+
+        # Valid files must be present (including existing crossdating output files)
+        assert "sample.rwl" in listed_items
+        assert "sample.tuc" in listed_items
+        assert "sample.txt" in listed_items
+        assert "rings_series.crossdating.txt" in listed_items
+
+        # Table output files and excluded extensions must NOT be present
+        assert "sample.cells_table.csv" not in listed_items
+        assert "sample.rings_table.csv" not in listed_items
+        assert "sample.cells_table.txt" not in listed_items
+        assert "sample.rings_table.txt" not in listed_items
+        assert "data.csv" not in listed_items
+        assert "data.tsv" not in listed_items
 
     def test_merge_crossdating_files(self, temp_dirs):
         """Test merging crossdating files."""
@@ -540,6 +821,81 @@ class TestCrossdatingHandler:
                 assert series in result.columns
             for series in df2.columns:
                 assert series in result.columns
+
+    def test_merge_crossdating_files_with_base_output_and_raw_priority(
+        self, temp_dirs
+    ):
+        """Test that merging an existing cross-dating file with a raw file preserves 1.0x scaling for output, scales raw file, and prioritizes raw file on conflict."""
+        project_dir = Path(temp_dirs)
+
+        base_output_file = project_dir / "rings_series.crossdating.txt"
+        raw_input_file = project_dir / "update_series.rwl"
+
+        # Base output file already in micrometers (1.0x)
+        # Contains Series1 (years 2000-2002) with old value 1000 at 2000, and SeriesOld
+        base_df = pd.DataFrame(
+            {
+                "Series1": [1000.0, 2000.0, 3000.0],
+                "SeriesOld": [500.0, 600.0, 700.0],
+            },
+            index=["2000", "2001", "2002"],
+        )
+
+        # Raw file in 1/100 mm (scaling factor = 10.0)
+        # Updates Series1 year 2000 to raw 120 (-> 1200 um), year 2001 to raw 200 (-> 2000 um), adds year 2003 with raw 400 (-> 4000 um)
+        # Adds new SeriesNew with raw 50 (-> 500 um)
+        raw_df = pd.DataFrame(
+            {
+                "Series1": [120, 200, 400],
+                "SeriesNew": [50, 60, 70],
+            },
+            index=["2000", "2001", "2003"],
+        )
+
+        base_df.to_csv(base_output_file, sep="\t")
+        raw_df.to_csv(raw_input_file, sep="\t")
+
+        with patch(
+            "napari_roxas_ai._preparation._crossdating_handler._try_read_dataframe"
+        ) as mock_read:
+            def side_effect(filepath):
+                if filepath == str(base_output_file):
+                    return True, base_df.copy()
+                elif filepath == str(raw_input_file):
+                    return True, raw_df.copy()
+                return False, None
+
+            mock_read.side_effect = side_effect
+
+            # Merge with scaling_factor=10.0 for raw files
+            result = merge_crossdating_files(
+                source_files=[str(raw_input_file), str(base_output_file)],  # order passed in source_files doesn't matter
+                target_file=str(base_output_file),
+                scaling_factor=10.0,
+            )
+
+            assert result is not None
+            assert set(result.columns) == {"Series1", "SeriesOld", "SeriesNew"}
+            assert sorted(list(result.index)) == [2000, 2001, 2002, 2003]
+
+            # SeriesOld from base output file remains unscaled (500, 600, 700)
+            assert result.at[2000, "SeriesOld"] == 500.0
+            assert result.at[2001, "SeriesOld"] == 600.0
+            assert result.at[2002, "SeriesOld"] == 700.0
+
+            # SeriesNew from raw file is scaled by 10.0 (50*10 = 500)
+            assert result.at[2000, "SeriesNew"] == 500.0
+            assert result.at[2001, "SeriesNew"] == 600.0
+            assert result.at[2003, "SeriesNew"] == 700.0
+
+            # Series1: Year 2000 gets updated from raw file (120*10 = 1200 instead of old 1000)
+            assert result.at[2000, "Series1"] == 1200.0
+            # Year 2001: raw file value 200*10 = 2000
+            assert result.at[2001, "Series1"] == 2000.0
+            # Year 2002: preserved from base output file (3000.0)
+            assert result.at[2002, "Series1"] == 3000.0
+            # Year 2003: added from raw file (400*10 = 4000)
+            assert result.at[2003, "Series1"] == 4000.0
 
 
 if __name__ == "__main__":

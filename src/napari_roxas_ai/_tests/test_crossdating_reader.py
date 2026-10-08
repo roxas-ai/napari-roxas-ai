@@ -1,5 +1,5 @@
 """
-Tests for the crossdating reader module functionality.
+Tests for the cross-dating reader module functionality.
 """
 
 import tempfile
@@ -59,7 +59,7 @@ def temp_dir():
 # Fixture for creating test files
 @pytest.fixture
 def test_files(temp_dir):
-    """Create test files for crossdating reader tests."""
+    """Create test files for cross-dating reader tests."""
     # Create test files
     tabular_file = create_test_tabular_file(temp_dir / "series.txt")
     raw_tucson_file = create_test_tucson_file(temp_dir / "series.rwl", "raw")
@@ -76,7 +76,7 @@ def test_files(temp_dir):
 
 
 class TestCrossdatingReader:
-    """Tests for the crossdating reader module."""
+    """Tests for the cross-dating reader module."""
 
     def test_read_tabular_file(self, test_files):
         """Test read_tabular_file function."""
@@ -151,31 +151,31 @@ class TestCrossdatingReader:
             assert mock_read_csv.called
 
     def test_read_raw_tucson_file(self, test_files):
-        """Test read_raw_tucson_file function."""
-        # Create a real test DataFrame with mock data
-        test_df = pd.DataFrame(
-            {
-                "SERIES1": [100, 150, 200, 250, 300],
-                "SERIES2": [110, 160, 210, 260, 310],
-            },
-            index=[2000, 2001, 2002, 2003, 2004],
-        )
+        """Test read_raw_tucson_file function with space-separated and 8-char collapsed series IDs."""
+        # Test standard space-separated raw file created by fixture
+        result = read_raw_tucson_file(str(test_files["raw_tucson_file"]))
+        assert isinstance(result, pd.DataFrame)
+        assert "SERIES1" in result.columns
+        assert "SERIES2" in result.columns
+        assert list(result.index) == [2000, 2001, 2002, 2003, 2004]
+        assert list(result["SERIES1"]) == [100, 150, 200, 250, 300]
 
-        # Mock the entire function to avoid file IO and return our test df
-        with patch(
-            "napari_roxas_ai._reader._crossdating_reader.read_raw_tucson_file",
-            return_value=test_df,
-        ):
+        # Test with 8-character collapsed series ID (no space between series name and year)
+        collapsed_file = test_files["temp_dir"] / "collapsed_series.rwl"
+        with open(collapsed_file, "w") as f:
+            f.write("SERIES011980  100  150  200  250  300 -9999\n")
+            f.write("SERIES021980  110  160  210  260  310 -9999\n")
 
-            result = read_raw_tucson_file(str(test_files["raw_tucson_file"]))
-
-            # Verify results
-            assert isinstance(result, pd.DataFrame)
-            assert "SERIES1" in result.columns
-            assert "SERIES2" in result.columns
+        collapsed_result = read_raw_tucson_file(str(collapsed_file))
+        assert isinstance(collapsed_result, pd.DataFrame)
+        assert "SERIES01" in collapsed_result.columns
+        assert "SERIES02" in collapsed_result.columns
+        assert list(collapsed_result.index) == [1980, 1981, 1982, 1983, 1984]
+        assert list(collapsed_result["SERIES01"]) == [100, 150, 200, 250, 300]
+        assert list(collapsed_result["SERIES02"]) == [110, 160, 210, 260, 310]
 
     def test_read_crossdating_file(self, test_files):
-        """Test read_crossdating_file function."""
+        """Test read_cross-dating_file function."""
         # Test with a tabular file
         with patch(
             "napari_roxas_ai._reader._crossdating_reader.read_tabular_file"

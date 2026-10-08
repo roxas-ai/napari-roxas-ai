@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING, List, Optional
 from magicgui.widgets import (
     CheckBox,
     Container,
+    Label,
     ProgressBar,
     PushButton,
     Select,
 )
-from qtpy.QtCore import QThread
+from qtpy.QtCore import Qt, QThread
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -32,6 +33,35 @@ from ._worker import (
 if TYPE_CHECKING:
     import napari
 
+# The file list is at least this many rows high and otherwise grows with
+# its content, one row per file, up to MAX_VISIBLE_IMAGE_ROWS
+MIN_VISIBLE_IMAGE_ROWS = 5
+MAX_VISIBLE_IMAGE_ROWS = 10
+
+# Gap between a row's label and its box. Set explicitly because the style's
+# default depends on the widget pair (on macOS label-to-button is wider than
+# label-to-list), which would make the button and the list start unevenly.
+LABEL_SPACING = 10
+
+# Longest project directory shown on the button, longer paths are elided in the
+# middle (the full path is in the tooltip)
+MAX_PROJECT_DIRECTORY_CHARS = 35
+
+
+def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
+    """
+    Shorten `path` to at most `max_chars` characters by cutting out its middle.
+
+    The start (drive, user folder) and the end (the project folder itself) are
+    what tells projects apart, so both are kept and the middle gives way.
+    """
+    if len(path) <= max_chars:
+        return path
+    keep = max_chars - 1  # room for the ellipsis
+    head = keep // 2
+    tail = keep - head
+    return f"{path[:head]}…{path[-tail:]}"
+
 
 class PreparationWidget(Container):
     """
@@ -48,7 +78,8 @@ class PreparationWidget(Container):
         Args:
             viewer: The napari viewer instance
         """
-        super().__init__()
+        # The rows bring their own labels, a label column would only indent them
+        super().__init__(labels=False)
         self._viewer = viewer
 
         # Initialize state variables
@@ -82,7 +113,7 @@ class PreparationWidget(Container):
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
-        # Get crossdating file extension
+        # Get cross-dating file extension
         crossdating_file_extension = self.settings_manager.get(
             "file_extensions.crossdating_file_extension"
         )
@@ -93,7 +124,7 @@ class PreparationWidget(Container):
             "file_extensions.image_file_extensions"
         )
 
-        # Get supported text file extensions for crossdating
+        # Get supported text file extensions for cross-dating
         self.text_file_extensions = self.settings_manager.get(
             "file_extensions.text_file_extensions"
         )
@@ -121,13 +152,30 @@ class PreparationWidget(Container):
         """Create and configure UI components."""
         # Project directory selector
         self.project_directory = self.settings_manager.get("project_directory")
+
+        # "Project Directory:" label next to a button showing the (elided) path
         self._project_dialog_button = PushButton()
-        # Set after construction: text passed to the constructor gets its
-        # underscores turned into spaces, which would mangle the path
-        self._project_dialog_button.text = (
-            f"Project Directory: {self.project_directory or 'Not set'}"
-        )
         self._project_dialog_button.changed.connect(self._open_project_dialog)
+        # Without a stylesheet, macOS draws a push button larger than its layout
+        # slot (room for the focus ring), so it would stick out to the left of
+        # the image list below; lay it out by its drawn rect instead
+        self._project_dialog_button.native.setAttribute(
+            Qt.WA_LayoutUsesWidgetRect
+        )
+        self._project_directory_label = Label(value="Project Directory:")
+        self._project_directory_row = Container(
+            widgets=[self._project_directory_label, self._project_dialog_button],
+            labels=False,
+            layout="horizontal",
+        )
+        self._project_directory_row.margins = (0, 0, 0, 0)
+        label_width = self._project_directory_label.native.sizeHint().width() + 20
+        self._project_directory_label.native.setFixedWidth(label_width)
+        self._project_directory_label.native.setAlignment(
+            Qt.AlignLeft | Qt.AlignVCenter
+        )
+        self._project_directory_row.native.layout().setSpacing(LABEL_SPACING)
+        self._update_project_dialog_button()
 
         # Follow the project directory wherever it is changed (other widgets,
         # the menu, the settings widget)
@@ -146,7 +194,7 @@ class PreparationWidget(Container):
 
         # Process already processed files checkbox
         self._process_processed_checkbox = CheckBox(
-            value=False,
+            value=True,
             label=f"Process already processed files (with {self.scan_content_extension} extension)",
         )
         self._process_processed_checkbox.changed.connect(
@@ -155,22 +203,18 @@ class PreparationWidget(Container):
 
         # File selection controls
         self._handpick_files_checkbox = CheckBox(
-            value=False, label="Manually select files to process"
+            value=True, label="Manually select files to process"
         )
         self._handpick_files_checkbox.changed.connect(
             self._toggle_file_selection
-        )
-        self._ignore_roxas_output_checkbox = CheckBox(
-            value=True, label="Ignore ROXAS Output files"
-        )
-        self._ignore_roxas_output_checkbox.changed.connect(
-            self._refresh_file_list
         )
 
         # File selection container (initially hidden)
         self._file_selection_container = Container(
             widgets=[], labels=False, layout="vertical", visible=False
         )
+        self._file_selection_container.margins = (0, 0, 0, 0)
+        self._file_selection_container.native.layout().setAlignment(Qt.AlignTop)
 
         # Reverse selection button (initially hidden)
         self._reverse_selection_button = PushButton(
@@ -193,9 +237,9 @@ class PreparationWidget(Container):
             self._toggle_image_processing
         )
 
-        # Crossdating processing button
+        # Cross-dating processing button
         self._crossdating_action_button = PushButton(
-            text="Start Processing Crossdating Files"
+            text="Start Processing Cross-Dating Files"
         )
         self._crossdating_action_button.changed.connect(
             self._process_crossdating_files
@@ -206,7 +250,7 @@ class PreparationWidget(Container):
         # Append all widgets to the container
         self.extend(
             [
-                self._project_dialog_button,
+                self._project_directory_row,
                 self._overwrite_files_checkbox,
                 self._process_processed_checkbox,
                 self._handpick_files_checkbox,
@@ -217,14 +261,27 @@ class PreparationWidget(Container):
                 self._progress_bar,
             ]
         )
+        self.native.layout().setAlignment(Qt.AlignTop)
+        self.native.layout().setAlignment(
+            self._file_selection_container.native, Qt.AlignTop
+        )
+        # Spare height goes below the widgets instead of stretching the controls
+        self.native.layout().addStretch()
         self._refresh_file_list()
+
+    def _update_project_dialog_button(self):
+        """Show the project directory on the button, elided, full path as tooltip."""
+        if self.project_directory:
+            self._project_dialog_button.text = _elide_path(self.project_directory)
+            self._project_dialog_button.tooltip = self.project_directory
+        else:
+            self._project_dialog_button.text = "Not set"
+            self._project_dialog_button.tooltip = None
 
     def _on_project_directory_changed(self, directory):
         """Show a project directory that was changed anywhere in the plugin."""
         self.project_directory = directory
-        self._project_dialog_button.text = (
-            f"Project Directory: {directory or 'Not set'}"
-        )
+        self._update_project_dialog_button()
         self._refresh_file_list()
 
     def _open_project_dialog(self):
@@ -270,9 +327,13 @@ class PreparationWidget(Container):
                     )
                 )
 
-            # ROXAS AI outputs (.cells/.rings rasters, annotated image) are never inputs
+            # ROXAS AI outputs (.cells/.rings rasters, annotated image) and
+            # ROXAS classic outputs are never inputs
             self.source_files = [
-                f for f in self.source_files if not is_roxas_ai_output_file(f)
+                f
+                for f in self.source_files
+                if not is_roxas_ai_output_file(f)
+                and not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
             ]
 
             # Filter based on whether to include already processed files
@@ -285,16 +346,8 @@ class PreparationWidget(Container):
                         filtered_files.append(file_path)
                 self.source_files = filtered_files
 
-        # Sort files for consistent display
-        self.source_files = sorted(self.source_files)
-
-        # Filter out roxas output files if the checkbox is checked
-        if self._ignore_roxas_output_checkbox.value:
-            self.source_files = [
-                f
-                for f in self.source_files
-                if not f.endswith(ROXAS_CLASSIC_OUTPUT_SUFFIXES)
-            ]
+        # Sort files for consistent display and remove duplicates (e.g. on case-insensitive filesystems)
+        self.source_files = sorted(list(set(self.source_files)))
 
         # Update the file selection widget if it's visible
         if self._handpick_files_checkbox.value:
@@ -333,18 +386,29 @@ class PreparationWidget(Container):
 
             # Add the widget to the container
             self._file_selection_container.append(self._file_select_widget)
-            self._file_selection_container.append(
-                self._ignore_roxas_output_checkbox
-            )
+            self._fit_file_list_height()
 
             # Make container and reverse button visible
             self._file_selection_container.visible = True
             self._reverse_selection_button.visible = True
-            self._ignore_roxas_output_checkbox.visible = True
         else:
             # Hide container and reverse button if no files
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
+
+    def _fit_file_list_height(self):
+        """
+        Make the file list as high as its entries need, bounded between
+        MIN_VISIBLE_IMAGE_ROWS and MAX_VISIBLE_IMAGE_ROWS rows.
+        """
+        list_widget = self._file_select_widget.native
+        row_height = list_widget.sizeHintForRow(0)
+        frame = list_widget.frameWidth()
+        rows = min(
+            max(list_widget.count(), MIN_VISIBLE_IMAGE_ROWS),
+            MAX_VISIBLE_IMAGE_ROWS,
+        )
+        list_widget.setFixedHeight(rows * row_height + 2 * frame)
 
     def _toggle_file_selection(self):
         """Toggle the file selection interface."""
@@ -355,7 +419,6 @@ class PreparationWidget(Container):
             # Turn off file selection mode
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
-            self._ignore_roxas_output_checkbox.visible = False
             # Reset file selection
             self.selected_files = []
 
@@ -425,7 +488,7 @@ class PreparationWidget(Container):
         )
 
     def _process_crossdating_files(self):
-        """Handle the selection and processing of crossdating files."""
+        """Handle the selection and processing of cross-dating files."""
         if not self.project_directory:
             QMessageBox.warning(
                 None, "Warning", "Please select a project directory."
@@ -433,23 +496,11 @@ class PreparationWidget(Container):
             return
 
         # Process crossdating files
-        result_df = process_crossdating_files(
+        process_crossdating_files(
             project_directory=self.project_directory,
             crossdating_file_extension=self.crossdating_file_extension,
             text_file_extensions=self.text_file_extensions,
         )
-
-        # Result_df will be None if user canceled or if there was an error
-        if result_df is not None:
-            crossdating_file_path = (
-                Path(self.project_directory)
-                / f"rings_series{self.crossdating_file_extension}"
-            )
-            QMessageBox.information(
-                None,
-                "Crossdating Files Processed",
-                f"Crossdating data has been processed and saved to:\n{crossdating_file_path}",
-            )
 
     def _validate_inputs(self) -> bool:
         """Validate user inputs before processing."""
