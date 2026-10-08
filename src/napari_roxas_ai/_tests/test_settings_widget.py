@@ -694,7 +694,7 @@ def test_every_list_editor_is_marked_as_an_input(widget):
 def test_a_list_editor_does_not_wrap_its_entries(widget):
     """
     One line is one entry, so a wrapped entry would read as two: in a narrow
-    dock ".crossdating" would show up as ".crossdatin" and "g".
+    dock ".cross-dating" would show up as ".crossdatin" and "g".
     """
     from qtpy.QtWidgets import QPlainTextEdit
 

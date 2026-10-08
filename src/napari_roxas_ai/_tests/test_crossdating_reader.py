@@ -1,5 +1,5 @@
 """
-Tests for the crossdating reader module functionality.
+Tests for the cross-dating reader module functionality.
 """
 
 import tempfile
@@ -59,7 +59,7 @@ def temp_dir():
 # Fixture for creating test files
 @pytest.fixture
 def test_files(temp_dir):
-    """Create test files for crossdating reader tests."""
+    """Create test files for cross-dating reader tests."""
     # Create test files
     tabular_file = create_test_tabular_file(temp_dir / "series.txt")
     raw_tucson_file = create_test_tucson_file(temp_dir / "series.rwl", "raw")
@@ -76,7 +76,7 @@ def test_files(temp_dir):
 
 
 class TestCrossdatingReader:
-    """Tests for the crossdating reader module."""
+    """Tests for the cross-dating reader module."""
 
     def test_read_tabular_file(self, test_files):
         """Test read_tabular_file function."""
@@ -175,7 +175,7 @@ class TestCrossdatingReader:
         assert list(collapsed_result["SERIES02"]) == [110, 160, 210, 260, 310]
 
     def test_read_crossdating_file(self, test_files):
-        """Test read_crossdating_file function."""
+        """Test read_cross-dating_file function."""
         # Test with a tabular file
         with patch(
             "napari_roxas_ai._reader._crossdating_reader.read_tabular_file"

@@ -113,7 +113,7 @@ class PreparationWidget(Container):
         )
         self.metadata_file_extension = "".join(metadata_file_extension_parts)
 
-        # Get crossdating file extension
+        # Get cross-dating file extension
         crossdating_file_extension = self.settings_manager.get(
             "file_extensions.crossdating_file_extension"
         )
@@ -124,7 +124,7 @@ class PreparationWidget(Container):
             "file_extensions.image_file_extensions"
         )
 
-        # Get supported text file extensions for crossdating
+        # Get supported text file extensions for cross-dating
         self.text_file_extensions = self.settings_manager.get(
             "file_extensions.text_file_extensions"
         )
@@ -237,9 +237,9 @@ class PreparationWidget(Container):
             self._toggle_image_processing
         )
 
-        # Crossdating processing button
+        # Cross-dating processing button
         self._crossdating_action_button = PushButton(
-            text="Start Processing Crossdating Files"
+            text="Start Processing Cross-Dating Files"
         )
         self._crossdating_action_button.changed.connect(
             self._process_crossdating_files
@@ -488,7 +488,7 @@ class PreparationWidget(Container):
         )
 
     def _process_crossdating_files(self):
-        """Handle the selection and processing of crossdating files."""
+        """Handle the selection and processing of cross-dating files."""
         if not self.project_directory:
             QMessageBox.warning(
                 None, "Warning", "Please select a project directory."

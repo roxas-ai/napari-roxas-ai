@@ -191,9 +191,9 @@ class CrossDatingPlotterWidget(Container):
         )
         self._auto_offset_button.changed.connect(self._auto_align_sample)
 
-        # Make a combobox to choose the crossdating file path
+        # Make a combobox to choose the cross-dating file path
         self._crossdating_file_combo = ComboBox(
-            label="Crossdating File",
+            label="Cross-Dating File",
             choices=lambda widget: self.crossdating_files,
         )
         self._crossdating_file_combo.changed.connect(
@@ -258,7 +258,7 @@ class CrossDatingPlotterWidget(Container):
         # Export plot button at bottom-right
         self._export_plot_button = PushButton(
             text="Export plot",
-            tooltip="Save current crossdating plot as an image in the project directory",
+            tooltip="Save current cross-dating plot as an image in the project directory",
         )
         self._export_plot_button.changed.connect(self._export_plot)
         self._plot_footer = Container(layout="horizontal")
@@ -459,7 +459,7 @@ class CrossDatingPlotterWidget(Container):
             # Stop if we reach the root directory
             if current_path == current_path.parent:
                 show_info(
-                    f"No crossdating file found in the directory tree for layer {self._input_layer}."
+                    f"No cross-dating file found in the directory tree for layer {self._input_layer}."
                 )
                 break
 
@@ -615,7 +615,7 @@ class CrossDatingPlotterWidget(Container):
 
         if not self.crossdating_columns:
             show_info(
-                f"No data found in the crossdating file {self._crossdating_file_combo.value} for layer {self._input_layer}."
+                f"No data found in the cross-dating file {self._crossdating_file_combo.value} for layer {self._input_layer}."
             )
 
         self._update_crossdating_plot()
@@ -810,7 +810,7 @@ class CrossDatingPlotterWidget(Container):
         self._plot_crossdating_data()
 
     def _plot_crossdating_data(self, target_range: Optional[tuple[int, int]] = None):
-        """Plot the crossdating data comparison"""
+        """Plot the cross-dating data comparison"""
         if self.plot_df is None or self.plot_df.empty:
             if hasattr(self, "plot_widget") and self.plot_widget is not None:
                 self.plot_widget.clear()
@@ -1455,7 +1455,7 @@ class CrossDatingPlotterWidget(Container):
         container.widgets = []
 
     def save_crossdating_plot_image(self, out_dir: Union[str, Path], sample_name: str) -> Optional[Path]:
-        """Save the currently displayed crossdating plot as a JPG."""
+        """Save the currently displayed cross-dating plot as a JPG."""
         if self.plot_df is None or self.plot_df.empty:
             return None
         if self._crossdating_column_combo.value is None:

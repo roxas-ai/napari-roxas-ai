@@ -733,7 +733,7 @@ class Worker(QObject):
         """
         try:
             # A sample has no reference series until one is picked in the
-            # crossdating widget, but the key is written from the start so that
+            # cross-dating widget, but the key is written from the start so that
             # every prepared sample carries it
             metadata.setdefault("reference_series", NO_REFERENCE_SERIES)
 

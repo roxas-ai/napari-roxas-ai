@@ -36,7 +36,7 @@ def create_test_image(path, size=(100, 100), color=(73, 109, 137)):
 
 # Helper function to create test crossdating file
 def create_test_crossdating_file(path, series_count=2, year_count=10):
-    """Create a simple crossdating file in tab-delimited format."""
+    """Create a simple cross-dating file in tab-delimited format."""
     # Create a pandas DataFrame with series as columns and years as rows
     years = list(range(2000, 2000 + year_count))
     data = {}
@@ -62,7 +62,7 @@ def temp_dirs():
 # Fixture for creating test images
 @pytest.fixture
 def project_with_images(temp_dirs):
-    """Create a project directory with test images and crossdating files."""
+    """Create a project directory with test images and cross-dating files."""
     project_dir = temp_dirs
 
     # Create test images with different extensions
@@ -79,7 +79,7 @@ def project_with_images(temp_dirs):
     # Create a "processed" file with a ROXAS extension
     create_test_image(Path(project_dir) / "processed.scan.jpg")
 
-    # Create crossdating subdirectory
+    # Create cross-dating subdirectory
     crossdating_dir = Path(project_dir) / "crossdating"
     crossdating_dir.mkdir(exist_ok=True)
 
@@ -685,7 +685,7 @@ class TestCrossdatingHandler:
     def test_crossdating_selection_dialog_filters_output_files_and_extensions(
         self, temp_dirs
     ):
-        """Test that crossdating selection dialog excludes table outputs and non-target extensions."""
+        """Test that cross-dating selection dialog excludes table outputs and non-target extensions."""
         project_dir = Path(temp_dirs)
 
         # Valid crossdating files
@@ -819,7 +819,7 @@ class TestCrossdatingHandler:
     def test_merge_crossdating_files_with_base_output_and_raw_priority(
         self, temp_dirs
     ):
-        """Test that merging an existing crossdating file with a raw file preserves 1.0x scaling for output, scales raw file, and prioritizes raw file on conflict."""
+        """Test that merging an existing cross-dating file with a raw file preserves 1.0x scaling for output, scales raw file, and prioritizes raw file on conflict."""
         project_dir = Path(temp_dirs)
 
         base_output_file = project_dir / "rings_series.crossdating.txt"

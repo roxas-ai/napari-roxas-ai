@@ -1,8 +1,8 @@
 """
 Tests for what "reference_series" in a sample's metadata stands for.
 
-The entry records the reference series of an exported crossdating plot, which
-is what makes it a statement about a crossdating somebody checked. Opening a
+The entry records the reference series of an exported cross-dating plot, which
+is what makes it a statement about a cross-dating somebody checked. Opening a
 sample preselects a series by name, and persisting that would turn the entry
 into "whatever the widget happened to pick", i.e. it would look crossdated
 without anyone having looked at it. A sample without an exported plot keeps the
@@ -26,7 +26,7 @@ class _Plotter(CrossDatingPlotterWidget):
     The plotter reduced to what these tests touch.
 
     Built without its __init__, which would need a viewer, a rings layer, a
-    crossdating file and a matplotlib canvas to say anything about the two
+    cross-dating file and a matplotlib canvas to say anything about the two
     methods under test.
     """
 
@@ -90,7 +90,7 @@ def test_exporting_a_plot_records_its_reference_series(sample):
 
 
 def test_a_failed_export_records_nothing(sample):
-    """No plot, no statement about the crossdating."""
+    """No plot, no statement about the cross-dating."""
     layer, path = sample
     plotter = _Plotter(layer, "RAL16A", path, exported=False)
 
@@ -103,7 +103,7 @@ def test_a_failed_export_records_nothing(sample):
 def test_selecting_a_series_records_nothing(sample):
     """
     Opening a sample preselects a series and a user can try a few. None of
-    that is a crossdating anybody vouched for, so none of it is written.
+    that is a cross-dating anybody vouched for, so none of it is written.
     """
     layer, path = sample
     plotter = _Plotter(layer, "RAL16A", path)
