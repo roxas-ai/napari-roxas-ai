@@ -496,23 +496,11 @@ class PreparationWidget(Container):
             return
 
         # Process crossdating files
-        result_df = process_crossdating_files(
+        process_crossdating_files(
             project_directory=self.project_directory,
             crossdating_file_extension=self.crossdating_file_extension,
             text_file_extensions=self.text_file_extensions,
         )
-
-        # Result_df will be None if user canceled or if there was an error
-        if result_df is not None:
-            crossdating_file_path = (
-                Path(self.project_directory)
-                / f"rings_series{self.crossdating_file_extension}"
-            )
-            QMessageBox.information(
-                None,
-                "Crossdating Files Processed",
-                f"Crossdating data has been processed and saved to:\n{crossdating_file_path}",
-            )
 
     def _validate_inputs(self) -> bool:
         """Validate user inputs before processing."""

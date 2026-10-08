@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from PIL import Image
+from qtpy.QtCore import Qt
 
 from napari_roxas_ai._preparation._crossdating_handler import (
     CrossdatingSelectionDialog,
@@ -333,9 +334,8 @@ class TestPreparationWidget:
     @patch(
         "napari_roxas_ai._preparation._preparation_widget.process_crossdating_files"
     )
-    @patch("napari_roxas_ai._preparation._preparation_widget.QMessageBox")
     def test_process_crossdating_files(
-        self, mock_msgbox, mock_process, prep_widget
+        self, mock_process, prep_widget
     ):
         """Test crossdating files processing."""
         # Set up test data
@@ -355,9 +355,6 @@ class TestPreparationWidget:
             crossdating_file_extension=".crossdating.txt",
             text_file_extensions=[".rwl", ".txt"],
         )
-
-        # Verify that a success message was shown
-        mock_msgbox.information.assert_called_once()
 
     def test_ui_state_during_processing(self, prep_widget):
         """Test UI state updates during processing."""
@@ -551,9 +548,12 @@ class TestCrossdatingHandler:
     """Tests for the crossdating handling functionality."""
 
     @patch(
+        "napari_roxas_ai._preparation._crossdating_handler.QMessageBox"
+    )
+    @patch(
         "napari_roxas_ai._preparation._crossdating_handler.CrossdatingSelectionDialog"
     )
-    def test_process_crossdating_files(self, mock_dialog, temp_dirs):
+    def test_process_crossdating_files(self, mock_dialog, mock_msgbox, temp_dirs):
         """Test processing crossdating files."""
         # Set up test data
         project_dir = Path(temp_dirs)
@@ -561,6 +561,7 @@ class TestCrossdatingHandler:
         # Create mock dialog instance
         mock_dialog_instance = MagicMock()
         mock_dialog.return_value = mock_dialog_instance
+        mock_dialog_instance.get_output_filename.return_value = "rings_series.crossdating.txt"
 
         # Case 1: User canceled - no file should be created
         mock_dialog_instance.exec_.return_value = 0
@@ -605,7 +606,7 @@ class TestCrossdatingHandler:
             assert not result.empty
 
     def test_crossdating_selection_dialog(self, temp_dirs):
-        """Test the crossdating selection dialog."""
+        """Test the crossdating selection dialog UI, prefix input, and file selection."""
         # Set up test environment
         project_dir = Path(temp_dirs)
 
@@ -624,7 +625,14 @@ class TestCrossdatingHandler:
             project_directory=str(project_dir),
             text_file_extensions=[".rwl", ".txt"],
             project_file_path=str(project_dir / "project.crossdating.txt"),
+            crossdating_file_extension=".crossdating.txt",
         )
+
+        # Verify UI components for prefix and preview
+        assert dialog.prefix_input.text() == "rings_series"
+        assert dialog.extension_label.text() == ".crossdating.txt"
+        assert "rings_series" in dialog.prefix_input.toolTip()
+        assert dialog.prefix_input.alignment() & Qt.AlignRight
 
         # Mock the file_list widget
         dialog.file_list = MagicMock()
@@ -644,6 +652,35 @@ class TestCrossdatingHandler:
 
         # Check that selected files contains only the selected item
         assert dialog.get_selected_files() == [str(test_file1)]
+        assert dialog.get_selected_prefix() == "rings_series"
+        assert dialog.get_output_filename() == "rings_series.crossdating.txt"
+
+    def test_crossdating_selection_dialog_custom_prefix(self, temp_dirs):
+        """Test custom prefix, fallback, and suffix stripping in CrossdatingSelectionDialog."""
+        project_dir = Path(temp_dirs)
+
+        dialog = CrossdatingSelectionDialog(
+            project_directory=str(project_dir),
+            crossdating_file_extension=".crossdating.txt",
+        )
+
+        # Custom prefix
+        dialog.prefix_input.setText("PIEN")
+        dialog._ok_clicked()
+        assert dialog.get_selected_prefix() == "PIEN"
+        assert dialog.get_output_filename() == "PIEN.crossdating.txt"
+
+        # Redundant extension entered by user
+        dialog.prefix_input.setText("PIEN.crossdating.txt")
+        dialog._ok_clicked()
+        assert dialog.get_selected_prefix() == "PIEN"
+        assert dialog.get_output_filename() == "PIEN.crossdating.txt"
+
+        # Empty prefix fallback to rings_series
+        dialog.prefix_input.setText("   ")
+        dialog._ok_clicked()
+        assert dialog.get_selected_prefix() == "rings_series"
+        assert dialog.get_output_filename() == "rings_series.crossdating.txt"
 
     def test_crossdating_selection_dialog_filters_output_files_and_extensions(
         self, temp_dirs

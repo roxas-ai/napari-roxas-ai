@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -15,7 +16,9 @@ from qtpy.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
@@ -92,6 +95,7 @@ class CrossdatingSelectionDialog(QDialog):
         project_directory: str,
         text_file_extensions: Optional[List[str]] = None,
         project_file_path: str = "",
+        crossdating_file_extension: str = ".crossdating.txt",
         parent=None,
     ):
         """
@@ -105,11 +109,14 @@ class CrossdatingSelectionDialog(QDialog):
             List of file extensions to consider as crossdating text files (defaults to .rwl, .tuc, .txt)
         project_file_path : str
             Path to the project crossdating file (to exclude from selection)
+        crossdating_file_extension : str
+            The file extension for crossdating files (defaults to .crossdating.txt)
         parent : QWidget, optional
             Parent widget
         """
         super().__init__(parent)
         self.project_directory = project_directory
+        self.crossdating_file_extension = crossdating_file_extension
         if text_file_extensions is None:
             self.text_file_extensions = DEFAULT_CROSSDATING_TEXT_EXTENSIONS
         else:
@@ -125,6 +132,7 @@ class CrossdatingSelectionDialog(QDialog):
         self.project_file_path = project_file_path
         self.selected_files = []
         self.selected_scaling = 10.0  # Default to 1/100 mm (10 um)
+        self.selected_prefix = "rings_series"
 
         self.setWindowTitle("Prepare Crossdating Files")
         self.setMinimumWidth(500)
@@ -164,6 +172,20 @@ class CrossdatingSelectionDialog(QDialog):
         scaling_layout.addWidget(scaling_label)
         scaling_layout.addWidget(self.scaling_combo)
         layout.addLayout(scaling_layout)
+
+        # Output filename selection
+        prefix_layout = QHBoxLayout()
+        prefix_label = QLabel("Output file name:")
+        self.prefix_input = QLineEdit("rings_series")
+        self.prefix_input.setAlignment(Qt.AlignRight)
+        self.prefix_input.setToolTip(
+            'Add a project-specific prefix, otherwise "rings_series" will be used'
+        )
+        self.extension_label = QLabel(self.crossdating_file_extension)
+        prefix_layout.addWidget(prefix_label)
+        prefix_layout.addWidget(self.prefix_input)
+        prefix_layout.addWidget(self.extension_label)
+        layout.addLayout(prefix_layout)
 
         # Buttons
         self.ok_button = QPushButton("OK")
@@ -226,7 +248,7 @@ class CrossdatingSelectionDialog(QDialog):
             item.setSelected(state == 2)  # Qt.Checked is 2
 
     def _ok_clicked(self):
-        """Handle OK button click - collect selected files."""
+        """Handle OK button click - collect selected files and settings."""
         self.selected_files = []
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
@@ -246,6 +268,18 @@ class CrossdatingSelectionDialog(QDialog):
         else:  # 1 / 1000 mm
             self.selected_scaling = 1.0    # 0.001 mm = 1 um
 
+        # Get prefix
+        raw_prefix = self.prefix_input.text().strip()
+        if not raw_prefix:
+            raw_prefix = "rings_series"
+        # If user accidentally included extension in the prefix input, strip it
+        if raw_prefix.endswith(self.crossdating_file_extension):
+            raw_prefix = raw_prefix[:-len(self.crossdating_file_extension)]
+        elif raw_prefix.endswith(".txt") or raw_prefix.endswith(".rwl") or raw_prefix.endswith(".tuc"):
+            raw_prefix = Path(raw_prefix).stem
+
+        self.selected_prefix = raw_prefix if raw_prefix else "rings_series"
+
         self.accept()
 
     def get_selected_files(self) -> List[str]:
@@ -255,6 +289,14 @@ class CrossdatingSelectionDialog(QDialog):
     def get_selected_scaling(self) -> float:
         """Return the selected scaling factor to micrometers."""
         return self.selected_scaling
+
+    def get_selected_prefix(self) -> str:
+        """Return the selected output file prefix."""
+        return self.selected_prefix
+
+    def get_output_filename(self) -> str:
+        """Return the full output filename with extension."""
+        return f"{self.selected_prefix}{self.crossdating_file_extension}"
 
 
 def process_crossdating_files(
@@ -279,16 +321,11 @@ def process_crossdating_files(
     Optional[pd.DataFrame]
         The merged DataFrame if successful, None otherwise
     """
-    # Determine the path for the project crossdating file (always in root directory)
-    crossdating_file_path = (
-        Path(project_directory) / f"rings_series{crossdating_file_extension}"
-    )
-
     # Show dialog to select crossdating files
     dialog = CrossdatingSelectionDialog(
         project_directory=project_directory,
         text_file_extensions=text_file_extensions,
-        project_file_path=str(crossdating_file_path),
+        crossdating_file_extension=crossdating_file_extension,
     )
 
     result = dialog.exec_()
@@ -302,6 +339,8 @@ def process_crossdating_files(
         return None
 
     scaling_factor = dialog.get_selected_scaling()
+    output_filename = dialog.get_output_filename()
+    crossdating_file_path = Path(project_directory) / output_filename
 
     # Process selected files and merge with project file
     merged_df = merge_crossdating_files(
@@ -312,6 +351,11 @@ def process_crossdating_files(
     if merged_df is not None and not merged_df.empty:
         # Use tab separator for saving the file
         merged_df.to_csv(str(crossdating_file_path), sep="\t", index=True)
+        QMessageBox.information(
+            None,
+            "Crossdating Files Processed",
+            f"Crossdating data has been processed and saved to:\n{crossdating_file_path}",
+        )
 
     return merged_df
 
