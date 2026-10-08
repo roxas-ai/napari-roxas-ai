@@ -61,6 +61,24 @@ def is_crossdating_file(file_path: str, allowed_extensions: Optional[List[str]] 
     return True
 
 
+def is_crossdating_output_file(file_path: str) -> bool:
+    """
+    Determine if a file is an existing crossdating output file (already scaled in micrometers).
+
+    Parameters
+    ----------
+    file_path : str
+        Path of the file.
+
+    Returns
+    -------
+    bool
+        True if the file is a crossdating output file.
+    """
+    file_name = Path(file_path).name.lower()
+    return "crossdating" in file_name
+
+
 DEFAULT_CROSSDATING_TEXT_EXTENSIONS = [".rwl", ".tuc", ".txt"]
 
 
@@ -175,11 +193,6 @@ class CrossdatingSelectionDialog(QDialog):
                 for f in found_files:
                     if is_crossdating_file(f, self.text_file_extensions):
                         text_files.add(str(Path(f).resolve()))
-
-        # Exclude the project crossdating file
-        project_file_path = str(Path(self.project_file_path).resolve())
-        if project_file_path in text_files:
-            text_files.remove(project_file_path)
 
         # Sort files for consistent display
         sorted_text_files = sorted(list(text_files))
@@ -335,7 +348,15 @@ def merge_crossdating_files(
     source_files: List[str], target_file: str, scaling_factor: float = 1.0
 ) -> Optional[pd.DataFrame]:
     """
-    Read and merge multiple crossdating files to replace the existing target.
+    Read and merge multiple crossdating files to replace or update the existing target.
+
+    Existing crossdating output files (e.g., *.crossdating.txt) are assumed to be
+    already scaled in micrometers (scaling factor 1.0). Raw input files (.rwl, .tuc,
+    standard .txt) are scaled using the provided `scaling_factor`.
+
+    When merging, base output files are processed first and raw input files second,
+    ensuring that raw input files gain priority in case of duplicate (series, year)
+    entries.
 
     Parameters
     ----------
@@ -344,7 +365,7 @@ def merge_crossdating_files(
     target_file : str
         Target crossdating file (will be replaced by new data)
     scaling_factor : float
-        Scaling factor to apply to source files to convert them to micrometers.
+        Scaling factor to apply to raw source files to convert them to micrometers.
         Defaults to 1.0 (no scaling).
 
     Returns
@@ -352,57 +373,68 @@ def merge_crossdating_files(
     Optional[pd.DataFrame]
         The merged DataFrame if successful, None otherwise
     """
+    # Partition files into existing crossdating output files (base) and raw input files
+    base_files = [f for f in source_files if is_crossdating_output_file(f)]
+    raw_files = [f for f in source_files if not is_crossdating_output_file(f)]
+
     dfs_to_scale = []
     error_files = []
 
-    # Read and scale source files
-    for file_path in source_files:
+    # Helper function to read and conditionally scale a file
+    def _read_and_scale(file_path: str, scale: float):
         success, source_df = _try_read_dataframe(file_path)
         if success and source_df is not None:
-            # Apply scaling to numeric columns (excluding year-like columns)
-            if scaling_factor != 1.0:
-                # Ensure it's numeric
+            if scale != 1.0:
                 for col in source_df.columns:
-                    source_df[col] = pd.to_numeric(source_df[col], errors='coerce')
-                
+                    source_df[col] = pd.to_numeric(source_df[col], errors="coerce")
+
                 numeric_cols = source_df.select_dtypes(include=[np.number]).columns
                 series_cols = [
                     col
                     for col in numeric_cols
                     if "year" not in str(col).lower() and "index" not in str(col).lower()
                 ]
-                source_df[series_cols] = source_df[series_cols] * scaling_factor
-            
+                source_df[series_cols] = source_df[series_cols] * scale
+
             dfs_to_scale.append(source_df)
         else:
             error_files.append(Path(file_path).name)
             print(f"Error reading file {file_path}")
 
+    # Process base output files first with scale 1.0 (already in micrometers)
+    for file_path in base_files:
+        _read_and_scale(file_path, scale=1.0)
+
+    # Process raw input files second with scaling_factor (gain priority on merge)
+    for file_path in raw_files:
+        _read_and_scale(file_path, scale=scaling_factor)
+
     if not dfs_to_scale:
         return None
 
-    # Merge everything into a fresh DataFrame
-    # All DataFrames to combine (only from source files)
     all_dfs = dfs_to_scale
 
     # Collect all years and series names from selected files
     all_years_raw = set().union(*[df.index for df in all_dfs])
     all_years = []
     for y in all_years_raw:
-        if pd.isna(y): continue
+        if pd.isna(y):
+            continue
         try:
             all_years.append(int(float(y)))
         except (ValueError, TypeError):
             all_years.append(str(y))
     all_years = list(set(all_years))
+
     # Sort all_years to ensure numeric sorting if possible
     def try_int(val):
         try:
             return (0, int(float(val)))
         except (ValueError, TypeError):
             return (1, str(val))
+
     all_years = sorted(all_years, key=try_int)
-        
+
     all_series = []
     for df in all_dfs:
         for col in df.columns:

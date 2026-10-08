@@ -692,10 +692,11 @@ class TestCrossdatingHandler:
             for i in range(dialog.file_list.count())
         ]
 
-        # Valid files must be present
+        # Valid files must be present (including existing crossdating output files)
         assert "sample.rwl" in listed_items
         assert "sample.tuc" in listed_items
         assert "sample.txt" in listed_items
+        assert "rings_series.crossdating.txt" in listed_items
 
         # Table output files and excluded extensions must NOT be present
         assert "sample.cells_table.csv" not in listed_items
@@ -704,7 +705,6 @@ class TestCrossdatingHandler:
         assert "sample.rings_table.txt" not in listed_items
         assert "data.csv" not in listed_items
         assert "data.tsv" not in listed_items
-        assert "rings_series.crossdating.txt" not in listed_items
 
     def test_merge_crossdating_files(self, temp_dirs):
         """Test merging crossdating files."""
@@ -778,6 +778,81 @@ class TestCrossdatingHandler:
                 assert series in result.columns
             for series in df2.columns:
                 assert series in result.columns
+
+    def test_merge_crossdating_files_with_base_output_and_raw_priority(
+        self, temp_dirs
+    ):
+        """Test that merging an existing crossdating file with a raw file preserves 1.0x scaling for output, scales raw file, and prioritizes raw file on conflict."""
+        project_dir = Path(temp_dirs)
+
+        base_output_file = project_dir / "rings_series.crossdating.txt"
+        raw_input_file = project_dir / "update_series.rwl"
+
+        # Base output file already in micrometers (1.0x)
+        # Contains Series1 (years 2000-2002) with old value 1000 at 2000, and SeriesOld
+        base_df = pd.DataFrame(
+            {
+                "Series1": [1000.0, 2000.0, 3000.0],
+                "SeriesOld": [500.0, 600.0, 700.0],
+            },
+            index=["2000", "2001", "2002"],
+        )
+
+        # Raw file in 1/100 mm (scaling factor = 10.0)
+        # Updates Series1 year 2000 to raw 120 (-> 1200 um), year 2001 to raw 200 (-> 2000 um), adds year 2003 with raw 400 (-> 4000 um)
+        # Adds new SeriesNew with raw 50 (-> 500 um)
+        raw_df = pd.DataFrame(
+            {
+                "Series1": [120, 200, 400],
+                "SeriesNew": [50, 60, 70],
+            },
+            index=["2000", "2001", "2003"],
+        )
+
+        base_df.to_csv(base_output_file, sep="\t")
+        raw_df.to_csv(raw_input_file, sep="\t")
+
+        with patch(
+            "napari_roxas_ai._preparation._crossdating_handler._try_read_dataframe"
+        ) as mock_read:
+            def side_effect(filepath):
+                if filepath == str(base_output_file):
+                    return True, base_df.copy()
+                elif filepath == str(raw_input_file):
+                    return True, raw_df.copy()
+                return False, None
+
+            mock_read.side_effect = side_effect
+
+            # Merge with scaling_factor=10.0 for raw files
+            result = merge_crossdating_files(
+                source_files=[str(raw_input_file), str(base_output_file)],  # order passed in source_files doesn't matter
+                target_file=str(base_output_file),
+                scaling_factor=10.0,
+            )
+
+            assert result is not None
+            assert set(result.columns) == {"Series1", "SeriesOld", "SeriesNew"}
+            assert sorted(list(result.index)) == [2000, 2001, 2002, 2003]
+
+            # SeriesOld from base output file remains unscaled (500, 600, 700)
+            assert result.at[2000, "SeriesOld"] == 500.0
+            assert result.at[2001, "SeriesOld"] == 600.0
+            assert result.at[2002, "SeriesOld"] == 700.0
+
+            # SeriesNew from raw file is scaled by 10.0 (50*10 = 500)
+            assert result.at[2000, "SeriesNew"] == 500.0
+            assert result.at[2001, "SeriesNew"] == 600.0
+            assert result.at[2003, "SeriesNew"] == 700.0
+
+            # Series1: Year 2000 gets updated from raw file (120*10 = 1200 instead of old 1000)
+            assert result.at[2000, "Series1"] == 1200.0
+            # Year 2001: raw file value 200*10 = 2000
+            assert result.at[2001, "Series1"] == 2000.0
+            # Year 2002: preserved from base output file (3000.0)
+            assert result.at[2002, "Series1"] == 3000.0
+            # Year 2003: added from raw file (400*10 = 4000)
+            assert result.at[2003, "Series1"] == 4000.0
 
 
 if __name__ == "__main__":
