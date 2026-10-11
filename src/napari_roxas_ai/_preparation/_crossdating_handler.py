@@ -1,5 +1,5 @@
 """
-Handles the selection and processing of cross-dating files.
+Handles the selection and processing of crossdating files.
 """
 
 import glob
@@ -28,7 +28,7 @@ from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 
 def is_crossdating_file(file_path: str, allowed_extensions: Optional[List[str]] = None) -> bool:
     """
-    Determine if a file is a valid cross-dating candidate file.
+    Determine if a file is a valid crossdating candidate file.
 
     Only files with extensions .rwl, .tuc, or .txt are eligible.
     Files belonging to ROXAS AI measurement outputs (such as cells_table
@@ -39,12 +39,12 @@ def is_crossdating_file(file_path: str, allowed_extensions: Optional[List[str]] 
     file_path : str
         Path of the candidate file.
     allowed_extensions : Optional[List[str]]
-        Allowed extensions for cross-dating files (defaults to [".rwl", ".tuc", ".txt"]).
+        Allowed extensions for crossdating files (defaults to [".rwl", ".tuc", ".txt"]).
 
     Returns
     -------
     bool
-        True if the file is a valid cross-dating input file.
+        True if the file is a valid crossdating input file.
     """
     if allowed_extensions is None:
         allowed_extensions = [".rwl", ".tuc", ".txt"]
@@ -66,7 +66,7 @@ def is_crossdating_file(file_path: str, allowed_extensions: Optional[List[str]] 
 
 def is_crossdating_output_file(file_path: str) -> bool:
     """
-    Determine if a file is an existing cross-dating output file (already scaled in micrometers).
+    Determine if a file is an existing crossdating output file (already scaled in micrometers).
 
     Parameters
     ----------
@@ -76,7 +76,7 @@ def is_crossdating_output_file(file_path: str) -> bool:
     Returns
     -------
     bool
-        True if the file is a cross-dating output file.
+        True if the file is a crossdating output file.
     """
     file_name = Path(file_path).name.lower()
     return "crossdating" in file_name
@@ -87,7 +87,7 @@ DEFAULT_CROSSDATING_TEXT_EXTENSIONS = [".rwl", ".tuc", ".txt"]
 
 class CrossdatingSelectionDialog(QDialog):
     """
-    Dialog for selecting cross-dating files to process and their scaling.
+    Dialog for selecting crossdating files to process and their scaling.
     """
 
     def __init__(
@@ -99,18 +99,18 @@ class CrossdatingSelectionDialog(QDialog):
         parent=None,
     ):
         """
-        Initialize the cross-dating selection dialog.
+        Initialize the crossdating selection dialog.
 
         Parameters
         ----------
         project_directory : str
-            The project directory containing cross-dating files
+            The project directory containing crossdating files
         text_file_extensions : List[str], optional
-            List of file extensions to consider as cross-dating text files (defaults to .rwl, .tuc, .txt)
+            List of file extensions to consider as crossdating text files (defaults to .rwl, .tuc, .txt)
         project_file_path : str
-            Path to the project cross-dating file (to exclude from selection)
+            Path to the project crossdating file (to exclude from selection)
         crossdating_file_extension : str
-            The file extension for cross-dating files (defaults to .crossdating.txt)
+            The file extension for crossdating files (defaults to .crossdating.txt)
         parent : QWidget, optional
             Parent widget
         """
@@ -134,7 +134,7 @@ class CrossdatingSelectionDialog(QDialog):
         self.selected_scaling = 10.0  # Default to 1/100 mm (10 um)
         self.selected_prefix = "rings_series"
 
-        self.setWindowTitle("Prepare Project Cross-Dating File")
+        self.setWindowTitle("Prepare Project Crossdating File")
         self.setMinimumWidth(550)
         self.setMinimumHeight(450)
 
@@ -147,7 +147,7 @@ class CrossdatingSelectionDialog(QDialog):
 
         # Instruction label
         info_label = QLabel(
-            "Select one to several cross-dating file(s) to merge into the project's cross-dating file."
+            "Select one to several crossdating file(s) to merge into the project's crossdating file."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -164,7 +164,7 @@ class CrossdatingSelectionDialog(QDialog):
 
         # Scaling selection
         scaling_layout = QHBoxLayout()
-        scaling_label = QLabel("Units for Selected Cross-Dating File(s):")
+        scaling_label = QLabel("Units for Selected Crossdating File(s):")
         self.scaling_combo = QComboBox()
         self.scaling_combo.addItems(["1 / 1 mm", "1 / 10 mm", "1 / 100 mm", "1 / 1000 mm", "divide values by 10"])
         self.scaling_combo.setCurrentText("1 / 100 mm")
@@ -174,7 +174,7 @@ class CrossdatingSelectionDialog(QDialog):
 
         # Output filename selection
         prefix_layout = QHBoxLayout()
-        prefix_label = QLabel("Project Cross-Dating Filename:")
+        prefix_label = QLabel("Project Crossdating Filename:")
         self.prefix_input = QLineEdit("rings_series")
         self.prefix_input.setAlignment(Qt.AlignRight)
         self.prefix_input.setToolTip(
@@ -204,7 +204,7 @@ class CrossdatingSelectionDialog(QDialog):
         """Find and populate the list with available text files."""
         text_files = set()
 
-        # Find all cross-dating files in the project directory (including subdirectories)
+        # Find all crossdating files in the project directory (including subdirectories)
         for ext in self.text_file_extensions:
             for pattern in [f"*{ext}", f"*{ext.upper()}"]:
                 found_files = glob.glob(
@@ -306,14 +306,14 @@ def process_crossdating_files(
     text_file_extensions: List[str],
 ) -> Optional[pd.DataFrame]:
     """
-    Process cross-dating files by creating or updating a project cross-dating file.
+    Process crossdating files by creating or updating a project crossdating file.
 
     Parameters
     ----------
     project_directory : str
         The project directory
     crossdating_file_extension : str
-        The file extension for cross-dating files
+        The file extension for crossdating files
     text_file_extensions : List[str]
         List of file extensions to consider as text files
 
@@ -322,7 +322,7 @@ def process_crossdating_files(
     Optional[pd.DataFrame]
         The merged DataFrame if successful, None otherwise
     """
-    # Show dialog to select cross-dating files
+    # Show dialog to select crossdating files
     dialog = CrossdatingSelectionDialog(
         project_directory=project_directory,
         text_file_extensions=text_file_extensions,
@@ -354,8 +354,8 @@ def process_crossdating_files(
         merged_df.to_csv(str(crossdating_file_path), sep="\t", index=True)
         QMessageBox.information(
             None,
-            "Cross-Dating Files Processed",
-            f"Cross-dating data has been processed and saved to:\n{crossdating_file_path}",
+            "Crossdating Files Processed",
+            f"Crossdating data has been processed and saved to:\n{crossdating_file_path}",
         )
 
     return merged_df
@@ -393,9 +393,9 @@ def merge_crossdating_files(
     source_files: List[str], target_file: str, scaling_factor: float = 1.0
 ) -> Optional[pd.DataFrame]:
     """
-    Read and merge multiple cross-dating files to replace or update the existing target.
+    Read and merge multiple crossdating files to replace or update the existing target.
 
-    Existing cross-dating output files (e.g., *.crossdating.txt) are assumed to be
+    Existing crossdating output files (e.g., *.crossdating.txt) are assumed to be
     already scaled in micrometers (scaling factor 1.0). Raw input files (.rwl, .tuc,
     standard .txt) are scaled using the provided `scaling_factor`.
 
@@ -406,9 +406,9 @@ def merge_crossdating_files(
     Parameters
     ----------
     source_files : List[str]
-        List of source cross-dating files to process and merge
+        List of source crossdating files to process and merge
     target_file : str
-        Target cross-dating file (will be replaced by new data)
+        Target crossdating file (will be replaced by new data)
     scaling_factor : float
         Scaling factor to apply to raw source files to convert them to micrometers.
         Defaults to 1.0 (no scaling).
@@ -418,7 +418,7 @@ def merge_crossdating_files(
     Optional[pd.DataFrame]
         The merged DataFrame if successful, None otherwise
     """
-    # Partition files into existing cross-dating output files (base) and raw input files
+    # Partition files into existing crossdating output files (base) and raw input files
     base_files = [f for f in source_files if is_crossdating_output_file(f)]
     raw_files = [f for f in source_files if not is_crossdating_output_file(f)]
 

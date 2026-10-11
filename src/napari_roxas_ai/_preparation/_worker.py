@@ -45,7 +45,7 @@ ROXAS_CLASSIC_OUTPUT_SUFFIXES = (
 def is_roxas_ai_output_file(file_path: str) -> bool:
     """
     Tell whether a file is an output of ROXAS AI (cells/rings rasters, the
-    annotated rings image or the exported cross-dating plot) rather than an
+    annotated rings image or the exported crossdating plot) rather than an
     input image to prepare.
 
     Parameters
@@ -733,7 +733,7 @@ class Worker(QObject):
         """
         try:
             # A sample has no reference series until one is picked in the
-            # cross-dating widget, but the key is written from the start so that
+            # crossdating widget, but the key is written from the start so that
             # every prepared sample carries it
             metadata.setdefault("reference_series", NO_REFERENCE_SERIES)
 
