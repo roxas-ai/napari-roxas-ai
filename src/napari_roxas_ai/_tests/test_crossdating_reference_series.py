@@ -13,6 +13,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from magicgui.widgets import Slider
 
 from napari_roxas_ai._crossdating._cross_dating_plotter import (
     CrossDatingPlotterWidget,
@@ -96,7 +97,7 @@ def test_applying_changes_records_reference_series(sample, monkeypatch):
     layer.metadata["rings_outmost_complete_year"] = 2020
     plotter = _Plotter(layer, "RAL16A", path)
     plotter._base_offset = 0
-    plotter._offset_slider = SimpleNamespace(value=2, min=-50, max=50, native=SimpleNamespace(blockSignals=lambda b: None))
+    plotter._offset_slider = Slider(value=2, min=-50, max=50)
     plotter._x_range_slider = SimpleNamespace(native=SimpleNamespace(blockSignals=lambda b: None), value=(0, 100))
     monkeypatch.setattr(
         "napari_roxas_ai._crossdating._cross_dating_plotter.update_rings_geometries",
@@ -408,18 +409,17 @@ def test_crossdating_use_mean_interactive_toggling(make_napari_viewer, qtbot):
     assert widget._current_alignment_data["end_year"] == 2014
 
 
-def test_crossdating_offset_slider_continuous_reset_and_apply(make_napari_viewer, qtbot, monkeypatch):
+def _offset_widget(make_napari_viewer, monkeypatch):
+    """Plotter with a 10-ring ROXAS series (1991-2000) and a 1900-2099 reference."""
     import napari.layers
     import numpy as np
     import pandas as pd
 
     viewer = make_napari_viewer()
-    # Mock an input layer with 10 rings ending at 2000
     data = np.zeros((10, 10), dtype=np.uint32)
     layer = napari.layers.Labels(data, name="test_rings.rings")
     layer.metadata["rings_outmost_complete_year"] = 2000
-    features = pd.DataFrame({"YEAR": list(range(1991, 2001)), "width": [10.0] * 10})
-    layer.features = features
+    layer.features = pd.DataFrame({"YEAR": list(range(1991, 2001)), "width": [10.0] * 10})
     viewer.add_layer(layer)
 
     widget = CrossDatingPlotterWidget(viewer)
@@ -429,13 +429,10 @@ def test_crossdating_offset_slider_continuous_reset_and_apply(make_napari_viewer
     years = np.arange(1900, 2100)
     layer_series = pd.Series(np.nan, index=years)
     layer_series.loc[1991:2000] = [10.0] * 10
-    ref_series = pd.Series(10.0, index=years)
-    avg_series = pd.Series(10.0, index=years)
-
     widget.plot_df = pd.DataFrame({
         "layer_series": layer_series,
-        "reference_series": ref_series,
-        "average": avg_series,
+        "reference_series": pd.Series(10.0, index=years),
+        "average": pd.Series(10.0, index=years),
     }, index=years)
 
     monkeypatch.setattr(
@@ -445,90 +442,51 @@ def test_crossdating_offset_slider_continuous_reset_and_apply(make_napari_viewer
     monkeypatch.setattr(widget, "_export_plot", lambda: None)
     monkeypatch.setattr(widget, "_sync_rings_editor_year", lambda: None)
 
-    assert widget._base_offset == 0
-    assert widget._offset_slider.value == 0
+    widget._plot_crossdating_data()
+    return widget, layer
 
-    # Intermediate value (not hitting limit)
-    widget._offset_slider.value = 25
-    assert widget._base_offset == 0
-    assert widget._offset_slider.value == 25
 
-    # Hit upper limit +50 -> absorbed into _base_offset and reset to 0
-    widget._offset_slider.value = 50
-    assert widget._base_offset == 50
-    assert widget._offset_slider.value == 0
+def test_crossdating_offset_slider_follows_year_range(make_napari_viewer, qtbot, monkeypatch):
+    widget, layer = _offset_widget(make_napari_viewer, monkeypatch)
 
-    # Slide further by +50 again -> _base_offset becomes 100 and reset to 0
-    widget._offset_slider.value = 50
-    assert widget._base_offset == 100
-    assert widget._offset_slider.value == 0
+    # Initial view: series 1991-2000 with 10 years on each side
+    assert tuple(widget._x_range_slider.value) == (1981, 2010)
+    assert widget._offset_slider.range == (-10, 10)
 
-    # Slide further by +15
-    widget._offset_slider.value = 15
-    assert widget._base_offset == 100
-    assert widget._offset_slider.value == 15
+    # Widening the Year Range widens the Offset slider
+    widget._x_range_slider.value = (1950, 2050)
+    assert widget._offset_slider.range == (-41, 50)
 
-    # Hit lower limit -50 -> absorbed (-50 added to 100 = 50) and reset to 0
-    widget._offset_slider.value = -50
-    assert widget._base_offset == 50
-    assert widget._offset_slider.value == 0
+    widget._offset_slider.value = 40  # series at 2031-2040
+    assert tuple(widget._x_range_slider.value) == (1950, 2050)
 
-    # Slide by +20 (cumulative total offset = 50 + 20 = 70)
-    widget._offset_slider.value = 20
-    assert widget._base_offset == 50
+    # Narrowing the Year Range pulls the series back inside it
+    widget._x_range_slider.value = (1990, 2020)
+    assert widget._offset_slider.range == (-1, 20)
     assert widget._offset_slider.value == 20
 
-    # Now click "Apply Changes" -> rings_outmost_complete_year should become 2000 + 70 = 2070
+    # Apply Changes -> rings_outmost_complete_year becomes 2000 + 20 = 2020
     widget._apply_changes_button.native.click()
-    assert layer.metadata["rings_outmost_complete_year"] == 2070
+    assert layer.metadata["rings_outmost_complete_year"] == 2020
     assert widget._base_offset == 0
     assert widget._offset_slider.value == 0
 
 
-def test_crossdating_offset_slider_recenters_only_after_drag(make_napari_viewer, qtbot):
-    """Dragging into the limit must not add the limit on every mouse move."""
-    from qtpy.QtCore import QEvent, QPoint, QPointF, Qt
-    from qtpy.QtGui import QMouseEvent
-    from qtpy.QtWidgets import QApplication
+def test_crossdating_offset_slider_series_longer_than_year_range(make_napari_viewer, qtbot, monkeypatch):
+    """A series longer than the Year Range can only be shifted while it covers the whole range."""
+    widget, _ = _offset_widget(make_napari_viewer, monkeypatch)
 
-    viewer = make_napari_viewer()
-    widget = CrossDatingPlotterWidget(viewer)
-    widget._plot_crossdating_data = lambda *a, **k: None
-    widget.native.resize(400, 600)
-    widget.native.show()
-    qtbot.wait(50)
-
-    slider = widget._offset_qslider
-
-    def send(event_type, x):
-        pos = QPoint(int(x), slider.height() // 2)
-        buttons = (
-            Qt.MouseButton.NoButton
-            if event_type == QEvent.Type.MouseButtonRelease
-            else Qt.MouseButton.LeftButton
-        )
-        QApplication.sendEvent(
-            slider,
-            QMouseEvent(
-                event_type,
-                QPointF(pos),
-                QPointF(slider.mapToGlobal(pos)),
-                Qt.MouseButton.LeftButton,
-                buttons,
-                Qt.KeyboardModifier.NoModifier,
-            ),
-        )
-
-    x = slider.width() // 2
-    send(QEvent.Type.MouseButtonPress, x)
-    assert slider.isSliderDown()
-    # Drag past the right end and keep moving there
-    while x < slider.width() + 40:
-        x += 4
-        send(QEvent.Type.MouseMove, x)
-    assert widget._base_offset == 0
-    assert widget._offset_slider.value == 50
-
-    send(QEvent.Type.MouseButtonRelease, x)
-    assert widget._base_offset == 50
+    widget._x_range_slider.value = (1993, 1997)
+    assert widget._offset_slider.range == (-3, 2)
     assert widget._offset_slider.value == 0
+
+
+def test_crossdating_offset_slider_bounds_include_base_offset(make_napari_viewer, qtbot, monkeypatch):
+    """After an alignment the slider shifts around the aligned position."""
+    widget, _ = _offset_widget(make_napari_viewer, monkeypatch)
+
+    widget._apply_alignment({"start_year": 2051, "end_year": 2060})
+    assert widget._base_offset == 60
+    assert widget._offset_slider.value == 0
+    assert tuple(widget._x_range_slider.value) == (2041, 2070)
+    assert widget._offset_slider.range == (-10, 10)

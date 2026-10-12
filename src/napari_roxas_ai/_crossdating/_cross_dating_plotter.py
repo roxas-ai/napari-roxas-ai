@@ -23,7 +23,6 @@ from qtpy.QtWidgets import (
     QApplication,
     QSizeGrip,
     QSizePolicy,
-    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -346,17 +345,8 @@ class CrossDatingPlotterWidget(Container):
             step=1,
             value=0,
         )
-        self._offset_slider.changed.connect(
-            self._on_offset_slider_changed
-        )  # Update plot and handle limit resets when offset changes
-        # While the handle is dragged, Qt recomputes the value from the mouse
-        # position, so recentering mid-drag would add the limit on every mouse
-        # move. Recenter on release instead.
-        self._offset_qslider = self._offset_slider.native.findChild(QSlider)
-        if self._offset_qslider is not None:
-            self._offset_qslider.sliderReleased.connect(
-                self._recenter_offset_slider_at_limit
-            )
+        # Its bounds follow the Year Range, see _fit_offset_slider_to_year_range
+        self._offset_slider.changed.connect(self._on_offset_slider_changed)
         self._apply_changes_button = PushButton(
             text="Apply Changes",
             tooltip="Apply all current changes (offset, alignment) to the rings layer",
@@ -625,9 +615,7 @@ class CrossDatingPlotterWidget(Container):
         self._x_range_slider_was_set = False
         self._y_range_slider_was_set = False
         self._base_offset = 0
-        self._offset_slider.native.blockSignals(True)
-        self._offset_slider.value = 0
-        self._offset_slider.native.blockSignals(False)
+        self._reset_offset_slider()
 
         pattern = f"*{''.join(settings.get('file_extensions.crossdating_file_extension'))}"
 
@@ -745,9 +733,7 @@ class CrossDatingPlotterWidget(Container):
                 # A new outmost year set by the user replaces any alignment that
                 # was not applied yet: its offset was relative to the old year
                 self._base_offset = 0
-                self._offset_slider.native.blockSignals(True)
-                self._offset_slider.value = 0
-                self._offset_slider.native.blockSignals(False)
+                self._reset_offset_slider()
                 self._clear_alignment_buttons()
                 self._alignment_candidates = []
                 self._current_alignment_data = None
@@ -764,9 +750,7 @@ class CrossDatingPlotterWidget(Container):
         self._x_range_slider_was_set = False
         self._y_range_slider_was_set = False
         self._base_offset = 0
-        self._offset_slider.native.blockSignals(True)
-        self._offset_slider.value = 0
-        self._offset_slider.native.blockSignals(False)
+        self._reset_offset_slider()
 
         # Read the crossdating file
         self.crossdating_dataframe = read_crossdating_file(
@@ -1029,135 +1013,11 @@ class CrossDatingPlotterWidget(Container):
                 self.plot_widget.clear()
             return
 
-        # Calculate correlation and overlapping period
-        # The ROXAS series is shifted by the total offset
-        total_offset = self._base_offset + self._offset_slider.value
-
-        # Create a shifted version of layer_series for correlation calculation and scaling
-        # This aligns the ROXAS data with the reference data at the new (offset) position
-        shifted_layer_series = self.plot_df["layer_series"].copy()
-        shifted_layer_series.index = shifted_layer_series.index + total_offset
-
-        # Calculate correlation and overlapping period for labels
-        corr_df = pd.concat([
-            self.plot_df["reference_series"],
-            shifted_layer_series,
-            self.plot_df["average"]
-        ], axis=1)
-        corr_df.columns = ["reference", "roxas", "average"]
-
-        mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
-        overlap_years_ref = corr_df.index[mask_ref].tolist()
-
-        if overlap_years_ref:
-            overlap_min_ref = min(overlap_years_ref)
-            overlap_max_ref = max(overlap_years_ref)
-            r_ref = corr_df["reference"].corr(corr_df["roxas"])
-            glk_ref = self.calculate_glk(
-                corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
-                corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
-            )
-            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
-        else:
-            r_ref = np.nan
-            glk_ref = np.nan
-            period_ref = "no overlap"
-
-        # Calculate for Average
-        mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
-        overlap_years_avg = corr_df.index[mask_avg].tolist()
-        if overlap_years_avg:
-            r_avg = corr_df["average"].corr(corr_df["roxas"])
-            glk_avg = self.calculate_glk(
-                corr_df.loc[overlap_years_avg, "average"].to_numpy(),
-                corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
-            )
-        else:
-            r_avg = np.nan
-            glk_avg = np.nan
-
-        # Clear the previous plot (no redraw yet)
-        self.plot_widget.clear(redraw=False)
-
-        # Build labels
-        layer = self._input_layer
-        image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else "Sample"
-        roxas_label = f"RXS: {image_id} ({period_ref})"
-
-        ref_name = str(self._crossdating_column_combo.value)
-        glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
-        r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
-        ref_label = f"{ref_name}{r_ref_text}"
-        
-        glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
-        r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
-        avg_label = f"Average{r_avg_text}"
-
-        # Plot both series using original values (no scaling applied)
         years = self.plot_df.index.to_numpy(dtype=int)
-
-        # Plot the ROXAS series first (top layer in legend)
-        self.plot_widget.ax.plot(
-            years + total_offset,
-            self.plot_df["layer_series"],
-            color='red',
-            linestyle='-',
-            label=roxas_label,
-            zorder=3,
-        )
-
-        # Plot the reference second (middle layer in legend)
-        self.plot_widget.ax.plot(
-            years,
-            self.plot_df["reference_series"],
-            color='yellow',
-            linestyle='-',
-            label=ref_label,
-            zorder=2,
-        )
-
-        # Plot the average last (bottom layer in legend)
-        self.plot_widget.ax.plot(
-            years,
-            self.plot_df["average"],
-            color='white',
-            linestyle='-',
-            label=avg_label,
-            zorder=1,
-        )
-
-        # Set labels and title
-        #self.plot_widget.ax.set_xlabel("Year")
-        self.plot_widget.ax.set_ylabel("Width (\u03BCm)", color='lightgrey')
-
-        legend = self.plot_widget.ax.legend(
-            loc="best",
-            facecolor='black',
-            edgecolor='lightgrey'
-        )
-        
-        # Color each legend text according to its series
-        # We assume the order: ROXAS, Reference, Average
-        series_colors = ['red', 'yellow', 'white']
-        for text, color in zip(legend.get_texts(), series_colors):
-            text.set_color(color)
-
-        # Configure grid: solid major lines with year labels, dashed minor lines
-        # in between (the spacing follows the visible range, see below)
-        # Plain year labels: the default formatter switches to an offset
-        # (e.g. "-40 ... 10" with "-1e5") for large years in a narrow view
-        self.plot_widget.ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
-        
-        # Major vertical grid lines (every 10 years) - solid
-        self.plot_widget.ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey')
-        # Minor vertical grid lines (every 5 years) - dashed
-        self.plot_widget.ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey')
-        # Horizontal main grid lines - solid
-        self.plot_widget.ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey')
+        total_offset = self._base_offset + self._offset_slider.value
 
         # Get the min and max years for x-axis
         # We need to account for both the reference series and the shifted ROXAS series
-        total_offset = self._base_offset + self._offset_slider.value
         roxas_years_raw = self.plot_df["layer_series"].dropna().index.to_numpy()
         roxas_years = roxas_years_raw + total_offset
 
@@ -1255,6 +1115,135 @@ class CrossDatingPlotterWidget(Container):
                 self._x_range_slider.native.blockSignals(False)
                 # We don't mark it as set yet, because roxas_years were empty.
                 # It should try again once data is available.
+
+        # The Offset slider may only shift the ROXAS series within the
+        # Year Range that was just settled
+        self._fit_offset_slider_to_year_range()
+
+        # Calculate correlation and overlapping period
+        # The ROXAS series is shifted by the total offset (read again, the
+        # fit above may have clamped the slider)
+        total_offset = self._base_offset + self._offset_slider.value
+
+        # Create a shifted version of layer_series for correlation calculation and scaling
+        # This aligns the ROXAS data with the reference data at the new (offset) position
+        shifted_layer_series = self.plot_df["layer_series"].copy()
+        shifted_layer_series.index = shifted_layer_series.index + total_offset
+
+        # Calculate correlation and overlapping period for labels
+        corr_df = pd.concat([
+            self.plot_df["reference_series"],
+            shifted_layer_series,
+            self.plot_df["average"]
+        ], axis=1)
+        corr_df.columns = ["reference", "roxas", "average"]
+
+        mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
+        overlap_years_ref = corr_df.index[mask_ref].tolist()
+
+        if overlap_years_ref:
+            overlap_min_ref = min(overlap_years_ref)
+            overlap_max_ref = max(overlap_years_ref)
+            r_ref = corr_df["reference"].corr(corr_df["roxas"])
+            glk_ref = self.calculate_glk(
+                corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
+                corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
+            )
+            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
+        else:
+            r_ref = np.nan
+            glk_ref = np.nan
+            period_ref = "no overlap"
+
+        # Calculate for Average
+        mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
+        overlap_years_avg = corr_df.index[mask_avg].tolist()
+        if overlap_years_avg:
+            r_avg = corr_df["average"].corr(corr_df["roxas"])
+            glk_avg = self.calculate_glk(
+                corr_df.loc[overlap_years_avg, "average"].to_numpy(),
+                corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
+            )
+        else:
+            r_avg = np.nan
+            glk_avg = np.nan
+
+        # Clear the previous plot (no redraw yet)
+        self.plot_widget.clear(redraw=False)
+
+        # Build labels
+        layer = self._input_layer
+        image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else "Sample"
+        roxas_label = f"RXS: {image_id} ({period_ref})"
+
+        ref_name = str(self._crossdating_column_combo.value)
+        glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
+        r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
+        ref_label = f"{ref_name}{r_ref_text}"
+        
+        glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
+        r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
+        avg_label = f"Average{r_avg_text}"
+
+        # Plot both series using original values (no scaling applied)
+        # Plot the ROXAS series first (top layer in legend)
+        self.plot_widget.ax.plot(
+            years + total_offset,
+            self.plot_df["layer_series"],
+            color='red',
+            linestyle='-',
+            label=roxas_label,
+            zorder=3,
+        )
+
+        # Plot the reference second (middle layer in legend)
+        self.plot_widget.ax.plot(
+            years,
+            self.plot_df["reference_series"],
+            color='yellow',
+            linestyle='-',
+            label=ref_label,
+            zorder=2,
+        )
+
+        # Plot the average last (bottom layer in legend)
+        self.plot_widget.ax.plot(
+            years,
+            self.plot_df["average"],
+            color='white',
+            linestyle='-',
+            label=avg_label,
+            zorder=1,
+        )
+
+        # Set labels and title
+        #self.plot_widget.ax.set_xlabel("Year")
+        self.plot_widget.ax.set_ylabel("Width (\u03BCm)", color='lightgrey')
+
+        legend = self.plot_widget.ax.legend(
+            loc="best",
+            facecolor='black',
+            edgecolor='lightgrey'
+        )
+        
+        # Color each legend text according to its series
+        # We assume the order: ROXAS, Reference, Average
+        series_colors = ['red', 'yellow', 'white']
+        for text, color in zip(legend.get_texts(), series_colors):
+            text.set_color(color)
+
+        # Configure grid: solid major lines with year labels, dashed minor lines
+        # in between (the spacing follows the visible range, see below)
+        # Plain year labels: the default formatter switches to an offset
+        # (e.g. "-40 ... 10" with "-1e5") for large years in a narrow view
+        self.plot_widget.ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+        
+        # Major vertical grid lines (every 10 years) - solid
+        self.plot_widget.ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey')
+        # Minor vertical grid lines (every 5 years) - dashed
+        self.plot_widget.ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey')
+        # Horizontal main grid lines - solid
+        self.plot_widget.ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey')
 
         # Set the x axis limits before calculating y limits
         self.plot_widget.ax.set_xlim(self._x_range_slider.value)
@@ -1357,28 +1346,38 @@ class CrossDatingPlotterWidget(Container):
         self.plot_widget.canvas.draw()
 
     def _on_offset_slider_changed(self):
-        """Called when the Offset slider is adjusted.
-        
-        When hitting the +/-50 limits, the slider value is absorbed into _base_offset
-        and reset to 0 so the user can continuously slide. While the handle is
-        dragged, this happens on release (see _recenter_offset_slider_at_limit).
-        """
-        if self._offset_qslider is None or not self._offset_qslider.isSliderDown():
-            self._recenter_offset_slider_at_limit(redraw=False)
-
+        """Called when the Offset slider is adjusted."""
         self._plot_crossdating_data()
 
-    def _recenter_offset_slider_at_limit(self, redraw: bool = True):
-        """Absorb the slider value into _base_offset and reset it to 0 if it sits at a limit."""
-        val = int(self._offset_slider.value)
-        if self._offset_slider.min < val < self._offset_slider.max:
+    def _reset_offset_slider(self):
+        """Set the Offset slider back to 0 without redrawing the plot."""
+        with self._offset_slider.changed.blocked():
+            # 0 can lie outside bounds fitted to a far away Year Range. The
+            # bounds are fitted again on the next draw.
+            low, high = self._offset_slider.range
+            self._offset_slider.range = (min(low, 0), max(high, 0))
+            self._offset_slider.value = 0
+
+    def _fit_offset_slider_to_year_range(self):
+        """
+        Limit the Offset slider to shifts that keep the ROXAS series inside
+        the Year Range.
+
+        A series longer than the Year Range can be shifted as long as it still
+        covers the whole range. If the current offset lies outside the new
+        bounds, it is clamped, which moves the series back into the range.
+        """
+        roxas_years = self.plot_df["layer_series"].dropna().index
+        if len(roxas_years) == 0:
             return
-        self._base_offset += val
-        self._offset_slider.native.blockSignals(True)
-        self._offset_slider.value = 0
-        self._offset_slider.native.blockSignals(False)
-        if redraw:
-            self._plot_crossdating_data()
+
+        x_low, x_high = (int(v) for v in self._x_range_slider.value)
+        first_year = int(roxas_years.min()) + self._base_offset
+        last_year = int(roxas_years.max()) + self._base_offset
+        bounds = (x_low - first_year, x_high - last_year)
+
+        with self._offset_slider.changed.blocked():
+            self._offset_slider.range = (min(bounds), max(bounds))
 
     def _apply_offset_to_layer(self):
         """Apply the offset to the current input layer."""
@@ -1419,13 +1418,9 @@ class CrossDatingPlotterWidget(Container):
             self._x_range_slider.value = (start - 10, int(new_last_year) + 10)
             self._x_range_slider.native.blockSignals(False)
 
-        # Reset the base offset and the offset slider to 0 and center its range to -50, 50 (triggers _plot_crossdating_data)
+        # Reset the base offset and the offset slider to 0
         self._base_offset = 0
-        self._offset_slider.min = -50
-        self._offset_slider.max = 50
-        self._offset_slider.native.blockSignals(True)
-        self._offset_slider.value = 0
-        self._offset_slider.native.blockSignals(False)
+        self._reset_offset_slider()
 
         # Ensure plot data is updated (re-calculates width_series and triggers _plot_crossdating_data)
         self._update_crossdating_plot()
@@ -1535,11 +1530,7 @@ class CrossDatingPlotterWidget(Container):
 
         # Store the found offset as base_offset and reset the slider to 0
         self._base_offset = offset
-        self._offset_slider.min = -50
-        self._offset_slider.max = 50
-        self._offset_slider.native.blockSignals(True)
-        self._offset_slider.value = 0
-        self._offset_slider.native.blockSignals(False)
+        self._reset_offset_slider()
 
         # Updating the sliders will trigger plot updates via their connected callbacks.
         # This is instantaneous as it avoids redundant layer rasterization and table updates.
