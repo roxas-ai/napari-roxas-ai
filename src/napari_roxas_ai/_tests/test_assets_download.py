@@ -2,7 +2,7 @@
 Tests for the lazy download of asset files (e.g. model weights).
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -159,3 +159,78 @@ def test_rings_editor_model_files_survives_failed_download(tmp_path):
 
     assert choices == ()
     mock_warning.assert_called_once()
+
+
+def _zip_bytes(tmp_path, root, files):
+    """Build a zip archive with a root folder, as published in the releases."""
+    import zipfile
+
+    archive = tmp_path / "archive.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for name, content in files.items():
+            zf.writestr(f"{root}/{name}", content)
+    return archive.read_bytes()
+
+
+def _fake_response(content):
+    response = MagicMock()
+    response.content = content
+    return response
+
+
+def test_download_replaces_files_already_present(tmp_path):
+    # Existing installation: the old model is present, the new one is missing
+    dest = tmp_path / "_rings"
+    dest.mkdir()
+    (dest / "old_model.pth").write_bytes(b"old weights")
+
+    content = _zip_bytes(
+        tmp_path,
+        "rings_models",
+        {"old_model.pth": b"release weights", "new_model.pt": b"new weights"},
+    )
+    with patch.object(
+        _assets_dowloader.requests, "get", return_value=_fake_response(content)
+    ):
+        _assets_dowloader.download_and_decompress_file(
+            "https://example.org/rings_models.zip", str(dest)
+        )
+
+    assert sorted(p.name for p in dest.iterdir()) == [
+        "new_model.pt",
+        "old_model.pth",
+    ]
+    assert (dest / "old_model.pth").read_bytes() == b"release weights"
+    assert (dest / "new_model.pt").read_bytes() == b"new weights"
+
+
+def test_check_assets_completes_existing_installation(tmp_path):
+    dest = tmp_path / "_rings"
+    dest.mkdir()
+    (dest / "old_model.pth").write_bytes(b"weights")
+    # Archive left behind by a failed download of version 0.2.0
+    (dest / "rings_models.zip").write_bytes(b"stale archive")
+
+    content = _zip_bytes(
+        tmp_path,
+        "rings_models",
+        {"old_model.pth": b"weights", "new_model.pt": b"new weights"},
+    )
+    asset = {
+        "id": 42,
+        "browser_download_url": "https://example.org/rings_models.zip",
+    }
+    with patch.object(
+        _assets_dowloader, "get_asset", return_value=asset
+    ), patch.object(
+        _assets_dowloader.requests, "get", return_value=_fake_response(content)
+    ):
+        check_assets_and_download(
+            str(dest), "rings_models.zip", required_files=("new_model.pt",)
+        )
+
+    assert sorted(p.name for p in dest.iterdir()) == [
+        _assets_dowloader.ASSET_ID_FILE,
+        "new_model.pt",
+        "old_model.pth",
+    ]
