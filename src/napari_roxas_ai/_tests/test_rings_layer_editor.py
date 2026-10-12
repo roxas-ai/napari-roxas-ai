@@ -315,3 +315,106 @@ def test_save_all_layers_shows_hint_when_completed(
 
     assert len(written) == 1
     assert messages == ["1 layer(s) saved successfully"]
+
+
+@pytest.fixture
+def missing_models(tmp_path, monkeypatch):
+    """Rings models folder of an older installation (default model missing)."""
+    path = tmp_path / "_rings_missing"
+    path.mkdir()
+    (path / "linear_rings_model.pth").write_bytes(b"weights")
+    monkeypatch.setattr(_rings_layer_editor, "RINGS_MODELS_PATH", path)
+    messages = []
+    monkeypatch.setattr(
+        _rings_layer_editor, "show_info", lambda m: messages.append(("info", m))
+    )
+    monkeypatch.setattr(
+        _rings_layer_editor,
+        "show_warning",
+        lambda m: messages.append(("warning", m)),
+    )
+    return path, messages
+
+
+def _wait_for_download_thread(qtbot):
+    qtbot.wait_until(
+        lambda: _rings_layer_editor._models_download["thread"] is None,
+        timeout=5000,
+    )
+
+
+def test_missing_model_downloaded_in_background(
+    make_napari_viewer, qtbot, missing_models, monkeypatch
+):
+    import threading
+
+    path, messages = missing_models
+    release_download = threading.Event()
+    download_threads = []
+
+    def fake_download(directory, asset_name, required_files=()):
+        download_threads.append(threading.current_thread())
+        release_download.wait(5)
+        (path / DEFAULT_RINGS_MODEL).write_bytes(b"weights")
+
+    monkeypatch.setattr(
+        _rings_layer_editor, "check_assets_and_download", fake_download
+    )
+
+    viewer = make_napari_viewer()
+    # E.g. the hidden editor of the loading widget and the one opened by the user
+    widget = RingsLayerEditorWidget(viewer)
+    second_widget = RingsLayerEditorWidget(viewer)
+
+    # The editors are created while the download is still running
+    assert _rings_layer_editor.is_rings_models_download_running()
+    assert widget._rings_model_weights_file.choices == ("linear_rings_model.pth",)
+    assert messages == [
+        (
+            "info",
+            f"The rings model '{DEFAULT_RINGS_MODEL}' is not available yet "
+            "and is being downloaded in the background...",
+        )
+    ]
+
+    # A rerun is refused while the model is being downloaded
+    widget._rerun_model_from_year()
+    assert "still being downloaded" in messages[-1][1]
+
+    release_download.set()
+    _wait_for_download_thread(qtbot)
+
+    # Downloaded once, outside the main thread
+    assert not _rings_layer_editor.is_rings_models_download_running()
+    assert len(download_threads) == 1
+    assert download_threads[0] is not threading.main_thread()
+    assert messages[-1] == (
+        "info",
+        f"The rings model '{DEFAULT_RINGS_MODEL}' has been downloaded "
+        "and is now available",
+    )
+    for editor in (widget, second_widget):
+        assert editor._rings_model_weights_file.value == DEFAULT_RINGS_MODEL
+
+
+def test_failed_background_download_shows_warning(
+    make_napari_viewer, qtbot, missing_models, monkeypatch
+):
+    path, messages = missing_models
+
+    def failing_download(directory, asset_name, required_files=()):
+        raise ConnectionError("offline")
+
+    monkeypatch.setattr(
+        _rings_layer_editor, "check_assets_and_download", failing_download
+    )
+
+    viewer = make_napari_viewer()
+    widget = RingsLayerEditorWidget(viewer)
+    _wait_for_download_thread(qtbot)
+
+    assert not _rings_layer_editor.is_rings_models_download_running()
+    assert messages[-1][0] == "warning"
+    assert "offline" in messages[-1][1]
+    # The editor keeps working with the models present locally
+    assert widget._rings_model_weights_file.choices == ("linear_rings_model.pth",)
