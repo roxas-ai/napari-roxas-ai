@@ -15,6 +15,7 @@ from PIL import Image
 from napari_roxas_ai._segmentation._batch_sample_segmentation import (
     Worker as BatchWorker,
 )
+from qtpy.QtWidgets import QSizePolicy
 from napari_roxas_ai._segmentation._single_sample_segmentation import (
     Worker as SingleWorker,
 )
@@ -244,6 +245,14 @@ class TestSingleSampleSegmentation:
             assert widget._cells_model_weights_file in widget._cells_row
             assert widget._segment_rings_checkbox in widget._rings_row
             assert widget._rings_model_weights_file in widget._rings_row
+            assert (
+                widget._segment_cells_checkbox.native.width()
+                == widget._segment_rings_checkbox.native.width()
+            )
+            assert (
+                widget._cells_model_weights_file.native.width()
+                == widget._rings_model_weights_file.native.width()
+            )
             assert widget._run_segmentation_button.enabled is True
 
             # Untick both checkboxes -> button disabled
@@ -409,6 +418,64 @@ class TestBatchSampleSegmentation:
                 dummy_self, "dummy/path"
             )
             assert result == ("model1.pth", "model2.pth")
+
+    def test_batch_segmentation_widget_layout_and_visibility(self):
+        """Test BatchSampleSegmentationWidget row layout and visibility toggles."""
+        from napari_roxas_ai._segmentation._batch_sample_segmentation import (
+            BatchSampleSegmentationWidget,
+        )
+
+        with patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.check_assets_and_download"
+        ), patch.object(
+            BatchSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("model1.pth", "model2.pth"),
+        ):
+            widget = BatchSampleSegmentationWidget(MagicMock())
+
+            # Check row containers and labels
+            assert widget._segment_cells_checkbox.label == "Cell Segmentation:"
+            assert widget._segment_rings_checkbox.label == "Ring Segmentation:"
+            assert widget._cells_model_weights_file.label == ""
+            assert widget._rings_model_weights_file.label == ""
+
+            # Check rows in widget layout
+            assert widget[1] is widget._cells_row
+            assert widget[2] is widget._rings_row
+            assert widget[3] is widget._run_segmentation_button
+
+            # Check that checkbox widths are equalized
+            assert (
+                widget._segment_cells_checkbox.native.width()
+                == widget._segment_rings_checkbox.native.width()
+            )
+            assert (
+                widget._cells_model_weights_file.native.width()
+                == widget._rings_model_weights_file.native.width()
+            )
+
+            # Initial state
+            assert widget._segment_cells_checkbox.value is True
+            assert not widget._cells_model_weights_file.native.isHidden()
+            assert widget._segment_rings_checkbox.value is True
+            assert not widget._rings_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is True
+
+            # Toggle cells checkbox -> hide combo
+            widget._segment_cells_checkbox.value = False
+            assert widget._cells_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is True
+
+            # Toggle rings checkbox -> hide combo & disable run button
+            widget._segment_rings_checkbox.value = False
+            assert widget._rings_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is False
+
+            # Toggle cells checkbox back -> show combo & enable run button
+            widget._segment_cells_checkbox.value = True
+            assert not widget._cells_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is True
 
 
 class TestBatchWorkerFunctionality:

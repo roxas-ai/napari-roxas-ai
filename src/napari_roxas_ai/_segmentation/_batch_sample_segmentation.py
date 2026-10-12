@@ -382,7 +382,7 @@ class BatchSampleSegmentationWidget(Container):
 
         # Cells segmentation checkbox and model selection
         self._segment_cells_checkbox = CheckBox(
-            value=True, label="Segment Cells"
+            value=True, label="Cell Segmentation:"
         )
         self._segment_cells_checkbox.changed.connect(
             self._update_cells_model_visibility
@@ -391,12 +391,25 @@ class BatchSampleSegmentationWidget(Container):
         # Cells model selection
         self._cells_model_weights_file = ComboBox(
             choices=self._get_model_files(where=CELLS_MODELS_PATH),
-            label="Cells Model",
+            label="",
         )
+
+        self._cells_row = Container(
+            widgets=[
+                self._segment_cells_checkbox,
+                self._cells_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._cells_row.native, "layout"):
+            layout = self._cells_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
 
         # Rings segmentation checkbox and model selection
         self._segment_rings_checkbox = CheckBox(
-            value=True, label="Segment Rings"
+            value=True, label="Ring Segmentation:"
         )
         self._segment_rings_checkbox.changed.connect(
             self._update_rings_model_visibility
@@ -405,12 +418,60 @@ class BatchSampleSegmentationWidget(Container):
         # Rings model selection
         self._rings_model_weights_file = ComboBox(
             choices=self._get_model_files(where=RINGS_MODELS_PATH),
-            label="Rings Model",
+            label="",
         )
         # The rings folder also holds the model for rerunning the editor's
         # segmentation from a given year; keep the standard model preselected
         if DEFAULT_RINGS_MODEL in self._rings_model_weights_file.choices:
             self._rings_model_weights_file.value = DEFAULT_RINGS_MODEL
+
+        self._rings_row = Container(
+            widgets=[
+                self._segment_rings_checkbox,
+                self._rings_model_weights_file,
+            ],
+            layout="horizontal",
+            labels=True,
+        )
+        if hasattr(self._rings_row.native, "layout"):
+            layout = self._rings_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+
+        # Equalize checkbox widths so the model selection dropdowns align
+        # and take equal width, with sufficient padding to prevent truncation
+        checkbox_width = max(
+            self._segment_cells_checkbox.native.sizeHint().width(),
+            self._segment_rings_checkbox.native.sizeHint().width(),
+        ) + 25
+        self._segment_cells_checkbox.native.setFixedWidth(checkbox_width)
+        self._segment_rings_checkbox.native.setFixedWidth(checkbox_width)
+
+        # Equalize model selection dropdown widths based on all available choices
+        # across cell and ring models
+        all_model_choices = list(self._cells_model_weights_file.choices) + list(
+            self._rings_model_weights_file.choices
+        )
+        font_metrics = self._cells_model_weights_file.native.fontMetrics()
+        max_text_width = max(
+            (
+                font_metrics.horizontalAdvance(str(choice))
+                for choice in all_model_choices
+            ),
+            default=0,
+        )
+        model_dropdown_width = max_text_width + 70
+        self._cells_model_weights_file.native.setFixedWidth(model_dropdown_width)
+        self._rings_model_weights_file.native.setFixedWidth(model_dropdown_width)
+
+        if hasattr(self._cells_row.native, "layout") and self._cells_row.native.layout() is not None:
+            cells_layout = self._cells_row.native.layout()
+            cells_layout.setSpacing(LABEL_SPACING)
+            cells_layout.addStretch()
+        if hasattr(self._rings_row.native, "layout") and self._rings_row.native.layout() is not None:
+            rings_layout = self._rings_row.native.layout()
+            rings_layout.setSpacing(LABEL_SPACING)
+            rings_layout.addStretch()
 
         # Create a button to launch the analysis
         self._run_segmentation_button = PushButton(text="Run Segmentation")
@@ -425,18 +486,17 @@ class BatchSampleSegmentationWidget(Container):
         self.extend(
             [
                 self._project_directory_row,
-                self._segment_cells_checkbox,
-                self._cells_model_weights_file,
-                self._segment_rings_checkbox,
-                self._rings_model_weights_file,
+                self._cells_row,
+                self._rings_row,
                 self._run_segmentation_button,
                 self.progress_bar,
             ]
         )
 
-        # Initialize visibility of model selection widgets
+        # Initialize visibility of model selection widgets and button state
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
+        self._update_run_button_state()
 
     def _update_project_dialog_button(self):
         """Show the project directory on the button, elided, full path as tooltip."""
@@ -482,11 +542,20 @@ class BatchSampleSegmentationWidget(Container):
         self._cells_model_weights_file.visible = (
             self._segment_cells_checkbox.value
         )
+        self._update_run_button_state()
 
     def _update_rings_model_visibility(self) -> None:
         """Update visibility of rings model selection based on checkbox."""
         self._rings_model_weights_file.visible = (
             self._segment_rings_checkbox.value
+        )
+        self._update_run_button_state()
+
+    def _update_run_button_state(self) -> None:
+        """Update enabled state of run button based on checkboxes."""
+        self._run_segmentation_button.enabled = (
+            self._segment_cells_checkbox.value
+            or self._segment_rings_checkbox.value
         )
 
     def _update_progress(self, current, total):
