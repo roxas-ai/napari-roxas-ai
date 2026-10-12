@@ -793,6 +793,10 @@ class RingsLayerEditorWidget(Container):
         # Imported here to avoid a circular import (the crossdating plotter imports this module)
         from napari_roxas_ai._crossdating import CrossDatingPlotterWidget
 
+        already_open = any(
+            name.startswith(CROSSDATING_WIDGET_NAME)
+            for name in self._viewer.window.dock_widgets
+        )
         try:
             dock_widget, _ = self._viewer.window.add_plugin_dock_widget(
                 "napari-roxas-ai", CROSSDATING_WIDGET_NAME
@@ -801,11 +805,13 @@ class RingsLayerEditorWidget(Container):
             show_warning(f"Could not open the visual crossdating widget: {e}")
             return
 
-        # The widget floats itself on creation; when it was already open
-        # (e.g. docked by the user), bring it back to the floating layout.
-        CrossDatingPlotterWidget._configure_floating_dock(
-            dock_widget, self._viewer
-        )
+        # A newly created widget floats itself; positioning it here as well would
+        # move it twice and make it flicker. Only an already open widget (e.g.
+        # docked by the user) needs to be brought back to the floating layout.
+        if already_open:
+            CrossDatingPlotterWidget._configure_floating_dock(
+                dock_widget, self._viewer
+            )
 
     # --- UNDO ---
 

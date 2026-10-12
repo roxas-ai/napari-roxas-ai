@@ -20,7 +20,9 @@ def models_path(tmp_path, monkeypatch):
     (path / "manifest.json").write_text("{}")
     monkeypatch.setattr(_rings_layer_editor, "RINGS_MODELS_PATH", path)
     monkeypatch.setattr(
-        _rings_layer_editor, "check_assets_and_download", lambda *a: None
+        _rings_layer_editor,
+        "check_assets_and_download",
+        lambda *args, **kwargs: None,
     )
     return path
 
@@ -160,32 +162,33 @@ def test_undo_restores_user_edits_in_reverse_order(
     assert widget._undo_current is None
 
 
-def test_open_visual_crossdating_floats_widget(
+def test_open_visual_crossdating_positions_widget_only_once(
     make_napari_viewer, models_path, monkeypatch
 ):
+    from napari_roxas_ai._crossdating import CrossDatingPlotterWidget
+
     viewer = make_napari_viewer()
     widget = RingsLayerEditorWidget(viewer)
-
-    calls = []
-    dock = object()
-    monkeypatch.setattr(
-        viewer.window,
-        "add_plugin_dock_widget",
-        lambda plugin, name: calls.append((plugin, name)) or (dock, None),
-    )
-    from napari_roxas_ai._crossdating import CrossDatingPlotterWidget
 
     configured = []
     monkeypatch.setattr(
         CrossDatingPlotterWidget,
         "_configure_floating_dock",
-        lambda d, v: configured.append(d),
+        staticmethod(lambda d, v: configured.append(d)),
     )
 
+    # First opening: the new widget positions itself (deferred), so the
+    # editor must not position it as well
     widget._visual_crossdating_button.clicked.emit()
+    assert any(
+        name.startswith("7 - Visual crossdating")
+        for name in viewer.window.dock_widgets
+    )
+    assert configured == []
 
-    assert calls == [("napari-roxas-ai", "7 - Visual crossdating")]
-    assert configured == [dock]
+    # Already open: the editor brings the existing widget back to the floating layout
+    widget._visual_crossdating_button.clicked.emit()
+    assert len(configured) == 1
 
 
 def test_save_all_layers_without_layers_reenables_buttons(
