@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, ContextManager
 from contextlib import contextmanager
@@ -10,15 +11,17 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
-    Label,
     PushButton,
+    ProgressBar,
     SpinBox,
 )
+from napari.layers.base._base_constants import ActionType
 from napari.utils.notifications import show_info, show_warning
-from qtpy.QtCore import QTimer
+from qtpy.QtCore import QObject, QThread, QTimer, Signal
 from qtpy.QtWidgets import QMessageBox
 
 from napari_roxas_ai._assets_files import check_assets_and_download
+from napari_roxas_ai._saving import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
 from napari_roxas_ai._utils._callback_manager import (
@@ -35,6 +38,10 @@ SEGMENTATION_MODULE_PATH = (
     Path(__file__).parent.parent.absolute() / "_segmentation"
 )
 RINGS_MODELS_PATH = SEGMENTATION_MODULE_PATH / "_models" / "_rings"
+RERUN_BUTTON_TEXT = "Rerun Ring Segmentation"
+DEFAULT_RINGS_MODEL = "LinearRingModel_v3_iterative.pt"
+MODEL_FILE_SUFFIXES = (".pt", ".pth")
+CROSSDATING_WIDGET_NAME = "7 - Visual crossdating"
 
 
 def rearrange_coordinates(coords: list) -> list:
@@ -311,6 +318,127 @@ def interpolate_row_at_col(coords_rc: list, col_query: float) -> float:
     return float(r0 + t * (r1 - r0))
 
 
+class RerunWorker(QObject):
+    """Runs the rings model from a given start boundary in a separate thread."""
+
+    finished = Signal()
+    result_ready = Signal(dict)  # Dictionary with results
+
+    def __init__(
+        self,
+        input_array: np.ndarray,
+        start_boundary: np.ndarray,
+        rings_model_weights_file: str,
+        settings: SettingsManager = None,
+    ):
+        super().__init__()
+        self.input_array = input_array
+        self.start_boundary = start_boundary
+        self.rings_model_weights_file = (
+            RINGS_MODELS_PATH / rings_model_weights_file
+        )
+        self.settings = settings
+
+    def run(self):
+        # Heavy ML imports are deferred to run time: importing torch at module
+        # level would drag the whole ML stack into every widget that imports
+        # this module (e.g. update_rings_geometries is used by the segmentation
+        # widgets), slowing widget opening. Import only when actually running.
+        import inspect
+
+        import torch
+        from torch.package import PackageImporter
+
+        # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
+        torch.set_num_threads(1)
+
+        # The packaged model calls hydra without version_base, which emits a
+        # harmless UserWarning that napari would show as a notification
+        warnings.filterwarnings(
+            "ignore",
+            message=r"\s*The version_base parameter is not specified",
+            category=UserWarning,
+        )
+
+        # Set up rings model
+        rings_model = PackageImporter(
+            self.rings_model_weights_file
+        ).load_pickle("LinearRingModel", "model.pkl")
+        rings_model.available_device = (
+            "cuda"
+            if torch.cuda.is_available()
+            and self.settings.get("processing.try_to_use_gpu")
+            else (
+                "mps"
+                if torch.mps.is_available()
+                and self.settings.get("processing.try_to_use_gpu")
+                else "cpu"
+            )
+        )
+        rings_model.to(device=rings_model.available_device)
+        # Synchronize internal device attribute for packaged models
+        try:
+            rings_model.device = rings_model.available_device
+        except Exception:
+            try:
+                setattr(rings_model, "device", rings_model.available_device)
+            except Exception:
+                if hasattr(rings_model, "__dict__"):
+                    rings_model.__dict__["device"] = rings_model.available_device
+        # Use local device variable for autocast checks
+        device_obj = torch.device(rings_model.available_device)
+        rings_model.use_autocast = bool(
+            torch.amp.autocast_mode.is_autocast_available(device_obj.type)
+            and self.settings.get("processing.try_to_use_gpu")
+            and (rings_model.available_device == "cuda" or rings_model.available_device == "mps")
+        )
+
+        # Perform inference, starting from the given boundary if the model supports it
+        used_start_boundary = (
+            "start_boundary" in inspect.signature(rings_model.infer).parameters
+        )
+        if used_start_boundary:
+            _, rings_boundaries = rings_model.infer(
+                self.input_array, start_boundary=self.start_boundary
+            )
+        else:
+            _, rings_boundaries = rings_model.infer(self.input_array)
+
+        # approximate the boundary to reduce number of vertices
+        boundary_approx = []
+        for _i, boundary in enumerate(rings_boundaries):
+            # Convert to numpy or list, whichever is more appropriate
+            if isinstance(boundary, torch.Tensor):
+                coords = boundary.cpu().numpy().tolist()
+            else:
+                coords = boundary
+
+            # simplify the new boundaries using cv2.approxPolyDP
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                continue
+
+            approx = cv2.approxPolyDP(
+                np.array(coords, dtype=np.float32),
+                epsilon=self.settings.get("vectorization.rings_tolerance"),
+                closed=False,
+            )
+
+            approx = np.squeeze(approx)
+            if approx.ndim != 2 or approx.shape[0] < 2:
+                continue
+
+            boundary_approx.append(approx)
+
+        # Emit results
+        self.result_ready.emit(
+            {
+                "boundaries": boundary_approx,
+                "used_start_boundary": used_start_boundary,
+            }
+        )
+        self.finished.emit()
+
+
 class RingsLayerEditorWidget(Container):
     @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
@@ -369,9 +497,13 @@ class RingsLayerEditorWidget(Container):
         self._is_editing = editing
         self._edit_rings_geometries_button.visible = not editing
         self._last_year_row.visible = not editing
-        
+        self._save_all_layers_button.visible = not editing
+        self._visual_crossdating_button.visible = not editing
+
         self._cancel_rings_geometries_button.visible = editing
         self._apply_rings_geometries_button.visible = editing
+        self._undo_button.visible = editing
+        self._update_undo_button_state()
         
         # Explicitly toggle visibility of lasso and rerun model rows
         self._lasso_container.visible = editing
@@ -422,11 +554,23 @@ class RingsLayerEditorWidget(Container):
         # Stores visibility of .cells and .rings layers before editing to restore them later
         self._layer_visibility_states = {}
 
-        # --- UI WIDGETS ---
-        # Explicit label for Rerun Model section to ensure consistent appearance
-        self._rerun_model_header = Label(value="Rerun Model from year:", visible=False)
-        self._rerun_model_header.native.setFixedWidth(140)  # Ensure consistent width for alignment
+        # --- RERUN SPINNER ---
+        self._spinner_frames = ["|", "/", "-", "\\"]
+        self._spinner_index = 0
 
+        self._spinner_timer = QTimer()
+        self._spinner_timer.setInterval(150)  # update speed in ms
+        self._spinner_timer.timeout.connect(self._update_spinner)
+
+        # --- UNDO STATE ---
+        # Snapshots of the "Rings Modification" layer taken before each completed edit
+        self._undo_stack = []
+        # Snapshot of the current (last committed) state of the edit layer
+        self._undo_current = None
+        # Suppresses snapshot recording during programmatic modifications
+        self._undo_recording_paused = False
+
+        # --- UI WIDGETS ---
         # Create spinbox for the user-facing "Last Complete Ring Year".
         # We enforce a limit of -100,000 as requested, while internal buffers go further.
         year_value = 9999
@@ -435,7 +579,7 @@ class RingsLayerEditorWidget(Container):
 
         self._last_year_spinbox = SpinBox(
             value=max(-100000, min(9999, int(year_value))),
-            label="Last Complete Ring Year",
+            label="Last Complete Ring Year:",
             min=-100000,
             max=9999,
             step=1,
@@ -471,27 +615,53 @@ class RingsLayerEditorWidget(Container):
             self._apply_rings_geometries
         )
 
+        # Create a button to undo the last change of the edit session
+        self._undo_button = PushButton(
+            text="Undo Last Change", visible=False
+        )
+        self._undo_button.changed.connect(self._undo_last_change)
+
+        # Create a button to save all layers
+        self._saving_widget = SamplesSavingWidget(self._viewer)
+        self._save_all_layers_button = PushButton(text="Save All Layers")
+        self._save_all_layers_button.changed.connect(self._save_all_layers)
+
+        # Add a progress bar with a description
+        self._progress_bar = ProgressBar(
+            value=0, min=0, max=100, visible=False, label="Progress"
+        )
+
+        # Create a button to open the visual crossdating widget
+        self._visual_crossdating_button = PushButton(
+            text="Perform Visual Crossdating"
+        )
+        self._visual_crossdating_button.changed.connect(
+            self._open_visual_crossdating
+        )
+
         # --- RERUN MODEL UI ---
-        # Line 1: Rerun Model from year: --- spinbox --- Rings Model --- combo
+        # Line 1: Rerun From Year: --- spinbox --- Model: --- combo
         # The minimum value is set to -1,001,000 to provide a 1,000-year internal buffer
         # relative to the user limit (-100,000), supporting long series and padding.
         self._rerun_model_year_spinbox = SpinBox(
             value=9999,
-            label="Rerun from Year",  # Use a simple label
+            label="Rerun From Year:",
             min=-1001000,
             max=9999,
             step=1,
         )
 
+        rings_model_files = self._get_rings_model_files()
         self._rings_model_weights_file = ComboBox(
-            choices=self._get_rings_model_files(),
-            label="Model",
+            choices=rings_model_files,
+            label="Model:",
         )
+        if DEFAULT_RINGS_MODEL in rings_model_files:
+            self._rings_model_weights_file.value = DEFAULT_RINGS_MODEL
 
         # Horizontal row for the rerun model parameters
         self._rerun_params_row = Container(
             widgets=[
-                self._rerun_model_header,
                 self._rerun_model_year_spinbox,
                 self._rings_model_weights_file,
             ],
@@ -499,19 +669,16 @@ class RingsLayerEditorWidget(Container):
             labels=True,  # Enable labels for Year and Model
             visible=False,
         )
-        # Ensure the header doesn't have a double label effect
-        self._rerun_model_header.label = ""
-
         # Line 2: Run
         self._rerun_model_button = PushButton(
-            text="Run",
+            text=RERUN_BUTTON_TEXT,
             visible=False,
         )
         self._rerun_model_button.changed.connect(self._rerun_model_from_year)
 
         # --- LASSO SELECTION UI ---
         self._lasso_selection_checkbox = CheckBox(
-            label="Lasso Selection Mode",
+            label="Lasso Select",
             value=False,
             visible=False,
         )
@@ -520,7 +687,7 @@ class RingsLayerEditorWidget(Container):
         )
 
         self._delete_lasso_vertices_button = PushButton(
-            text="Delete Vertices in Lasso",
+            text="Delete Selected Ring Vertices",
             visible=False,
         )
         self._delete_lasso_vertices_button.changed.connect(
@@ -558,12 +725,16 @@ class RingsLayerEditorWidget(Container):
         self.extend(
             [
                 self._edit_rings_geometries_button,
+                self._last_year_row,
+                self._save_all_layers_button,
+                self._progress_bar,
+                self._visual_crossdating_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
+                self._undo_button,
                 self._lasso_container,
                 self._rerun_params_row,
                 self._rerun_model_button,
-                self._last_year_row,
             ]
         )
 
@@ -578,6 +749,177 @@ class RingsLayerEditorWidget(Container):
         self._years_update_timer.start(500)
         QTimer.singleShot(1000, lambda: self._years_update_timer.start(10))
 
+    def _save_all_layers(self) -> None:
+        """Save all layers using the saving widget logic with progress bar."""
+        self._save_all_layers_button.enabled = False
+        self._edit_rings_geometries_button.enabled = False
+        # Drop references to a previous (already finished) save run
+        self._saving_widget.worker = None
+        self._saving_widget.worker_thread = None
+        self._saving_widget._save_layers(how="all")
+        worker = getattr(self._saving_widget, "worker", None)
+        worker_thread = getattr(self._saving_widget, "worker_thread", None)
+        if worker is None or worker_thread is None:
+            # Nothing to save: the saving widget did not start a worker
+            self._save_all_layers_button.enabled = True
+            self._edit_rings_geometries_button.enabled = True
+            show_info("No rings or cells layers to save")
+            return
+
+        n_layers = len(worker.layers)
+
+        worker.progress.connect(self._update_progress)
+        worker_thread.finished.connect(
+            lambda: setattr(self._save_all_layers_button, "enabled", True)
+        )
+        worker_thread.finished.connect(
+            lambda: setattr(self._edit_rings_geometries_button, "enabled", True)
+        )
+        worker_thread.finished.connect(
+            lambda: setattr(self._progress_bar, "visible", False)
+        )
+        worker_thread.finished.connect(
+            lambda: show_info(f"{n_layers} layer(s) saved successfully")
+        )
+
+    def _update_progress(self, current: int, total: int) -> None:
+        """Update the progress bar."""
+        if total > 0:
+            self._progress_bar.value = int(100 * current / total)
+            self._progress_bar.visible = True
+
+    def _open_visual_crossdating(self) -> None:
+        """Open the visual crossdating widget as a floating, maximized dock widget."""
+        # Imported here to avoid a circular import (the crossdating plotter imports this module)
+        from napari_roxas_ai._crossdating import CrossDatingPlotterWidget
+
+        already_open = any(
+            name.startswith(CROSSDATING_WIDGET_NAME)
+            for name in self._viewer.window.dock_widgets
+        )
+        try:
+            dock_widget, _ = self._viewer.window.add_plugin_dock_widget(
+                "napari-roxas-ai", CROSSDATING_WIDGET_NAME
+            )
+        except Exception as e:  # noqa: BLE001
+            show_warning(f"Could not open the visual crossdating widget: {e}")
+            return
+
+        # A newly created widget floats itself; positioning it here as well would
+        # move it twice and make it flicker. Only an already open widget (e.g.
+        # docked by the user) needs to be brought back to the floating layout.
+        if already_open:
+            CrossDatingPlotterWidget._configure_floating_dock(
+                dock_widget, self._viewer
+            )
+
+    # --- UNDO ---
+
+    def _get_edit_layer(self) -> Optional["napari.layers.Shapes"]:
+        """Get the 'Rings Modification' layer of the current edit session."""
+        if "Rings Modification" in self._viewer.layers:
+            return self._viewer.layers["Rings Modification"]
+        return None
+
+    def _snapshot_edit_layer(self, layer: "napari.layers.Shapes") -> dict:
+        """Capture everything needed to restore the edit layer to its current state."""
+        return {
+            "data": [np.array(d, copy=True) for d in layer.data],
+            "shape_type": list(layer.shape_type),
+            "edge_color": np.array(layer.edge_color, copy=True),
+            "edge_width": list(layer.edge_width),
+            "features": layer.features.copy(),
+            "deleted_points": list(self._all_deleted_points),
+        }
+
+    @staticmethod
+    def _snapshots_equal(a: dict, b: dict) -> bool:
+        """Compare the geometries and features of two snapshots."""
+        if len(a["data"]) != len(b["data"]):
+            return False
+        if not all(
+            np.array_equal(da, db) for da, db in zip(a["data"], b["data"])
+        ):
+            return False
+        return a["features"].equals(b["features"])
+
+    def _reset_undo_history(
+        self, layer: Optional["napari.layers.Shapes"] = None
+    ) -> None:
+        """Clear the undo history and use the given layer state as starting point."""
+        self._undo_stack = []
+        self._undo_current = (
+            self._snapshot_edit_layer(layer) if layer is not None else None
+        )
+        self._update_undo_button_state()
+
+    def _record_undo_step(self) -> None:
+        """Store the last committed state if the edit layer has changed since."""
+        layer = self._get_edit_layer()
+        if layer is None or self._undo_current is None:
+            return
+        new_snapshot = self._snapshot_edit_layer(layer)
+        if not self._snapshots_equal(new_snapshot, self._undo_current):
+            self._undo_stack.append(self._undo_current)
+        self._undo_current = new_snapshot
+        self._update_undo_button_state()
+
+    @contextmanager
+    def _undoable_operation(self) -> ContextManager[None]:
+        """Group several programmatic modifications into a single undo step."""
+        self._undo_recording_paused = True
+        try:
+            yield
+        finally:
+            self._undo_recording_paused = False
+            self._record_undo_step()
+
+    def _on_edit_layer_data_change(self, event=None) -> None:
+        """Record an undo step once a user edit of the edit layer is completed."""
+        if self._undo_recording_paused:
+            return
+        # Only completed actions are recorded: the "-ing" events are not emitted
+        # for every edit (e.g. not for vertex moves in direct mode).
+        if getattr(event, "action", None) not in (
+            ActionType.CHANGED,
+            ActionType.ADDED,
+            ActionType.REMOVED,
+        ):
+            return
+        self._record_undo_step()
+
+    def _update_undo_button_state(self) -> None:
+        """Enable the undo button only if there is something to undo."""
+        self._undo_button.enabled = self._is_editing and bool(self._undo_stack)
+
+    def _undo_last_change(self) -> None:
+        """Restore the edit layer to the state before the last change."""
+        layer = self._get_edit_layer()
+        if not self._is_editing or layer is None or not self._undo_stack:
+            show_info("Nothing to undo")
+            return
+
+        snapshot = self._undo_stack.pop()
+        self._undo_recording_paused = True
+        try:
+            layer.selected_data = set()
+            layer.data = list(zip(snapshot["data"], snapshot["shape_type"]))
+            if snapshot["data"]:
+                layer.edge_color = snapshot["edge_color"]
+                layer.edge_width = snapshot["edge_width"]
+            layer.features = snapshot["features"].copy()
+            layer.refresh()
+        finally:
+            self._undo_recording_paused = False
+
+        self._undo_current = snapshot
+        self._update_undo_button_state()
+
+        # Restore the markers of vertices deleted before the undone change
+        self._all_deleted_points = list(snapshot["deleted_points"])
+        self._highlight_selected_vertices()
+        self._years_update_timer.start(100)
+
     def _get_rings_model_files(self) -> tuple:
         """
         Get the available rings model weight files, downloading them first if
@@ -588,7 +930,9 @@ class RingsLayerEditorWidget(Container):
         """
         try:
             check_assets_and_download(
-                str(RINGS_MODELS_PATH), "rings_models.zip"
+                str(RINGS_MODELS_PATH),
+                "rings_models.zip",
+                required_files=(DEFAULT_RINGS_MODEL,),
             )
         except Exception as e:  # noqa: BLE001
             show_warning(
@@ -598,7 +942,14 @@ class RingsLayerEditorWidget(Container):
 
         if not RINGS_MODELS_PATH.is_dir():
             return ()
-        return tuple(path.name for path in RINGS_MODELS_PATH.iterdir())
+        # Only list model files (the folder may also contain e.g. a manifest)
+        return tuple(
+            sorted(
+                path.name
+                for path in RINGS_MODELS_PATH.iterdir()
+                if path.suffix in MODEL_FILE_SUFFIXES
+            )
+        )
 
     @contextmanager
     def _pause_rendering(self) -> ContextManager[None]:
@@ -892,6 +1243,13 @@ class RingsLayerEditorWidget(Container):
         self._selected_vertices = {}
         self._all_deleted_points = []
 
+        # Track the edit session history for undo (button and Ctrl/Cmd+Z)
+        self._reset_undo_history(shapes_layer)
+        shapes_layer.events.data.connect(self._on_edit_layer_data_change)
+        shapes_layer.bind_key(
+            "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
+        )
+
         self._update_year_spinbox()
 
     def _restore_original_visibility(self) -> None:
@@ -953,6 +1311,7 @@ class RingsLayerEditorWidget(Container):
                     self._viewer.layers.remove("Selected Vertices")
                 self._selected_vertices = {}
                 self._all_deleted_points = []
+                self._reset_undo_history()
 
             # Reset UI widgets visibility and state (outside pause)
             self._set_ui_editing_mode(False)
@@ -1000,6 +1359,7 @@ class RingsLayerEditorWidget(Container):
                     self._viewer.layers.remove("Selected Vertices")
                 self._selected_vertices = {}
                 self._all_deleted_points = []
+                self._reset_undo_history()
 
                 input_layer = self._input_layer
                 if input_layer is None:
@@ -1117,7 +1477,7 @@ class RingsLayerEditorWidget(Container):
                 lasso_layer.mode = "add_polygon_lasso"
                 
             self._delete_lasso_vertices_button.visible = True
-            show_info("Lasso Mode: Draw polygons and click 'Delete Vertices in Lasso' (or press 'Delete')")
+            show_info("Lasso Mode: Draw polygons and click 'Delete Selected Ring Vertices' (or press 'Delete')")
         else:
             # Revert to standard direct selection mode on the rings modification layer.
             # We defer the lasso layer removal to ensure the viewer state is stable.
@@ -1160,7 +1520,9 @@ class RingsLayerEditorWidget(Container):
             self._select_vertices_in_lasso()
             
             if self._selected_vertices:
-                self._delete_selected_vertices()
+                # The deletion of all lasso-selected vertices is a single undo step
+                with self._undoable_operation():
+                    self._delete_selected_vertices()
             else:
                 # Clear the lasso polygons even if no vertices were found to maintain UI flow
                 if "Lasso Selection" in self._viewer.layers:
@@ -1635,52 +1997,7 @@ class RingsLayerEditorWidget(Container):
             [interpolated_rows, all_cols // downsample_factor]
         )
 
-        show_info(
-            f"Rerunning model from year {selected_year} "
-            f"(boundary with {len(start_boundary)} vertices)"
-        )
-
-        # Heavy ML imports are deferred to run time: importing torch at module
-        # level would drag the whole ML stack into every widget that imports
-        # this module (e.g. update_rings_geometries is used by the segmentation
-        # widgets), slowing widget opening. Import only when actually running.
-        import torch
-        from torch.package import PackageImporter
-
-        # Set up rings model
-        rings_model = PackageImporter(
-            f"{RINGS_MODELS_PATH}/{self._rings_model_weights_file.value}"
-        ).load_pickle("LinearRingModel", "model.pkl")
-        rings_model.available_device = (
-            "cuda"
-            if torch.cuda.is_available()
-            and self.settings.get("processing.try_to_use_gpu")
-            else (
-                "mps"
-                if torch.mps.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else "cpu"
-            )
-        )
-        rings_model.to(device=rings_model.available_device)
-        # Synchronize internal device attribute for packaged models
-        try:
-            rings_model.device = rings_model.available_device
-        except Exception:
-            try:
-                setattr(rings_model, "device", rings_model.available_device)
-            except Exception:
-                if hasattr(rings_model, "__dict__"):
-                    rings_model.__dict__["device"] = rings_model.available_device
-        # Use local device variable for autocast checks
-        device_obj = torch.device(rings_model.available_device)
-        rings_model.use_autocast = bool(
-            torch.amp.autocast_mode.is_autocast_available(device_obj.type)
-            and self.settings.get("processing.try_to_use_gpu")
-            and (rings_model.available_device == "cuda" or rings_model.available_device == "mps")
-        )
-
-        # Perform inference
+        # The image lookup needs the viewer and therefore stays in the main thread
         scan_extension = self.settings.get(
             "file_extensions.scan_file_extension"
         )[0]
@@ -1701,110 +2018,144 @@ class RingsLayerEditorWidget(Container):
                 f"Corresponding image layer '{image_layer_name}' not found for rings layer '{self._input_layer.name}'"
             )
             return
-        import inspect
 
-        # Check if the model's infer method accepts start_boundary
-        if "start_boundary" in inspect.signature(rings_model.infer).parameters:
-            _, rings_boundaries = rings_model.infer(
-                image, start_boundary=start_boundary
-            )
+        self._rerun_selected_year = selected_year
+
+        # Prepare worker to run the model in a separate thread
+        self.worker_thread = QThread()
+        self.worker = RerunWorker(
+            image,
+            start_boundary,
+            self._rings_model_weights_file.value,
+            self.settings,
+        )
+        self.worker.moveToThread(self.worker_thread)
+
+        # Connect signals
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.result_ready.connect(self._apply_rerun_results)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+
+        # Disable the rerun button while processing; Apply/Cancel too, since
+        # the results are written into the current edit session
+        self._set_rerun_running(True)
+
+        # Restore the buttons when finished
+        self.worker_thread.finished.connect(
+            lambda: self._set_rerun_running(False)
+        )
+
+        show_info(
+            f"Rerunning model from year {selected_year} "
+            f"(boundary with {len(start_boundary)} vertices)..."
+        )
+        # Run the model in a separate thread
+        self.worker_thread.start()
+
+    def _update_spinner(self):
+        frame = self._spinner_frames[self._spinner_index]
+        self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
+        self._rerun_model_button.text = f"Rerunning Ring Segmentation {frame}"
+
+    def _set_rerun_running(self, running: bool) -> None:
+        """Lock the edit session controls and show a spinner while the rerun worker is running."""
+        self._rerun_model_button.enabled = not running
+        self._apply_rings_geometries_button.enabled = not running
+        self._cancel_rings_geometries_button.enabled = not running
+
+        if running:
+            self._spinner_index = 0
+            self._update_spinner()
+            self._spinner_timer.start()
         else:
+            self._spinner_timer.stop()
+            self._rerun_model_button.text = RERUN_BUTTON_TEXT
+
+    def _apply_rerun_results(self, results: dict) -> None:
+        """Replace the boundaries after the selected year with the model output."""
+        if not results.get("used_start_boundary", True):
             show_info(
                 "Model does not support starting boundary selection; running model on the whole image"
             )
-            _, rings_boundaries = rings_model.infer(image)
 
-        # approximate the boundary to reduce number of vertices
-        boundary_approx = []
-        for _i, boundary in enumerate(rings_boundaries):
-            # Convert to numpy or list, whichever is more appropriate
-            if isinstance(boundary, torch.Tensor):
-                coords = boundary.cpu().numpy().tolist()
-            else:
-                coords = boundary
+        if "Rings Modification" not in self._viewer.layers or not self._input_layer:
+            show_info("Editing session closed, rerun results discarded")
+            return
 
-            # simplify the new boundaries using cv2.approxPolyDP
-            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
-                continue
+        selected_year = self._rerun_selected_year
+        boundary_approx = results["boundaries"]
 
-            approx = cv2.approxPolyDP(
-                np.array(coords, dtype=np.float32),
-                epsilon=settings.get("vectorization.rings_tolerance"),
-                closed=False,
+        # Replacing the boundaries with the model output is a single undo step
+        with self._undoable_operation():
+            layer = self._viewer.layers["Rings Modification"]
+            years = layer.features["YEAR"].astype(int)
+
+            # Find indices of shapes with YEAR > selected_year
+            indices_to_remove = set(years[years > selected_year].index.tolist())
+
+            # Select and remove them
+            layer.selected_data = indices_to_remove
+            layer.remove_selected()
+
+            # Set all boundaries to the standard edge color
+            layer.edge_color = [
+                settings.get("vectorization.rings_edge_color")
+            ] * len(layer.data)
+
+            # Add the new boundaries as new shapes
+            layer.add(
+                boundary_approx,
+                shape_type="path",
+                edge_color=settings.get(
+                    "vectorization.rerun_interactive_edge_color"
+                ),
+                edge_width=settings.get("vectorization.rings_edge_width"),
             )
 
-            approx = np.squeeze(approx)
-            if approx.ndim != 2 or approx.shape[0] < 2:
-                continue
+            # Reassign YEAR values for all shapes based on spatial ordering
+            # Keep the same approach as update_rings_geometries: sort by cells_above
+            # area, then assign years as (last_year - n + 1) .. last_year
+            last_year = self._input_layer.metadata["rings_outmost_complete_year"]
+            all_coords = [
+                coords.tolist() if hasattr(coords, "tolist") else coords
+                for coords in layer.data
+            ]
+            n_shapes = len(all_coords)
 
-            boundary_approx.append(approx)
+            # Compute cells_above for spatial ordering
+            image_shape = self._input_layer.data.shape
+            areas = [calculate_polygon_area(c, image_shape[1]) for c in all_coords]
+            order = np.argsort(areas)
 
-        layer = self._viewer.layers["Rings Modification"]
-        years = layer.features["YEAR"].astype(int)
+            # Assign years: range is (last_year - n_shapes + 1) .. last_year
+            # rank 0 = smallest area = topmost boundary = oldest year
+            assigned_years = np.zeros(n_shapes, dtype=int)
+            for rank, idx in enumerate(order):
+                assigned_years[idx] = (last_year - n_shapes) + rank + 1
 
-        # Find indices of shapes with YEAR > selected_year
-        indices_to_remove = set(years[years > selected_year].index.tolist())
+            # Preserve enabled flags for kept shapes, mark new ones as enabled
+            n_kept = n_shapes - len(boundary_approx)
+            existing_features = layer.features.copy()
+            enabled = []
+            for i in range(n_shapes):
+                if i < n_kept and "enabled" in existing_features.columns:
+                    enabled.append(existing_features["enabled"].iloc[i])
+                else:
+                    enabled.append(True)
 
-        # Select and remove them
-        layer.selected_data = indices_to_remove
-        layer.remove_selected()
-
-        # Set all boundaries to the standard edge color
-        layer.edge_color = [
-            settings.get("vectorization.rings_edge_color")
-        ] * len(layer.data)
-
-        # Add the new boundaries as new shapes
-        layer.add(
-            boundary_approx,
-            shape_type="path",
-            edge_color=settings.get(
-                "vectorization.rerun_interactive_edge_color"
-            ),
-            edge_width=settings.get("vectorization.rings_edge_width"),
-        )
-
-        # Reassign YEAR values for all shapes based on spatial ordering
-        # Keep the same approach as update_rings_geometries: sort by cells_above
-        # area, then assign years as (last_year - n + 1) .. last_year
-        last_year = self._input_layer.metadata["rings_outmost_complete_year"]
-        all_coords = [
-            coords.tolist() if hasattr(coords, "tolist") else coords
-            for coords in layer.data
-        ]
-        n_shapes = len(all_coords)
-
-        # Compute cells_above for spatial ordering
-        image_shape = self._input_layer.data.shape
-        areas = [calculate_polygon_area(c, image_shape[1]) for c in all_coords]
-        order = np.argsort(areas)
-
-        # Assign years: range is (last_year - n_shapes + 1) .. last_year
-        # rank 0 = smallest area = topmost boundary = oldest year
-        assigned_years = np.zeros(n_shapes, dtype=int)
-        for rank, idx in enumerate(order):
-            assigned_years[idx] = (last_year - n_shapes) + rank + 1
-
-        # Preserve enabled flags for kept shapes, mark new ones as enabled
-        n_kept = n_shapes - len(boundary_approx)
-        existing_features = layer.features.copy()
-        enabled = []
-        for i in range(n_shapes):
-            if i < n_kept and "enabled" in existing_features.columns:
-                enabled.append(existing_features["enabled"].iloc[i])
-            else:
-                enabled.append(True)
-
-        layer.features = pd.DataFrame(
-            {
-                "YEAR": assigned_years.tolist(),
-                "enabled": enabled,
-            }
-        )
+            layer.features = pd.DataFrame(
+                {
+                    "YEAR": assigned_years.tolist(),
+                    "enabled": enabled,
+                }
+            )
 
         # --- Redraw the "Rings Years" label layer ---
         self._years_update_timer.start(100)
 
         show_info(
-            f"Model rerun complete: {len(boundary_approx)} new boundaries added"
+            f"Ring segmentation rerun completed successfully: "
+            f"{len(boundary_approx)} new boundaries added"
         )

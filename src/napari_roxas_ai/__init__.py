@@ -40,7 +40,7 @@ try:
 except ImportError:
     pass
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 # Public attribute name -> submodule that defines it.
 # Mirrors the ``python_name`` references in napari.yaml and the previous

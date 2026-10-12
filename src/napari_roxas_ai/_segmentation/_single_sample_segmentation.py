@@ -42,6 +42,7 @@ Image.MAX_IMAGE_PIXELS = None
 MODULE_PATH = Path(__file__).parent.absolute()
 CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
 RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
+DEFAULT_RINGS_MODEL = "linear_rings_model.pth"
 
 def apply_segmentation_results_to_viewer(
     viewer,
@@ -424,6 +425,10 @@ class SingleSampleSegmentationWidget(Container):
             choices=self._get_model_files(where=RINGS_MODELS_PATH),
             label="",
         )
+        # The rings folder also holds the model for rerunning the editor's
+        # segmentation from a given year; keep the standard model preselected
+        if DEFAULT_RINGS_MODEL in self._rings_model_weights_file.choices:
+            self._rings_model_weights_file.value = DEFAULT_RINGS_MODEL
 
         self._rings_row = Container(
             widgets=[
@@ -473,7 +478,11 @@ class SingleSampleSegmentationWidget(Container):
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""
-        return tuple(path.name for path in Path(where).iterdir())
+        return tuple(
+            path.name
+            for path in Path(where).iterdir()
+            if not path.name.startswith(".")
+        )
 
     def _update_cells_model_visibility(self) -> None:
         """Update visibility of cells model selection based on checkbox."""
