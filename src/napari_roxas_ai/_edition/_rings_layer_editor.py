@@ -924,7 +924,9 @@ class RingsLayerEditorWidget(Container):
         """
         try:
             check_assets_and_download(
-                str(RINGS_MODELS_PATH), "rings_models.zip"
+                str(RINGS_MODELS_PATH),
+                "rings_models.zip",
+                required_files=(DEFAULT_RINGS_MODEL,),
             )
         except Exception as e:  # noqa: BLE001
             show_warning(

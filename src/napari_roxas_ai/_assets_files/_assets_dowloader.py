@@ -3,19 +3,23 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 import requests
 
 REPO = "roxas-ai/napari-roxas-ai"
 
+# Stores the GitHub id of the release asset a directory was last filled from
+ASSET_ID_FILE = ".asset_id"
 
-def get_asset_file_url(asset_name: str) -> str:
+
+def get_asset(asset_name: str) -> dict:
     """
-    Get the URL of the latest asset file from the GitHub repository.
+    Get the latest asset file from the GitHub repository.
     Args:
         asset_name (str): The name of the asset file to download.
     Returns:
-        str: The URL of the asset file.
+        dict: The GitHub asset (with "id" and "browser_download_url").
     Raises:
         ValueError: If the asset file is not found in the latest release.
     """
@@ -61,8 +65,19 @@ def get_asset_file_url(asset_name: str) -> str:
 
     for asset in latest.get("assets", []):
         if asset["name"] == asset_name:
-            return asset["browser_download_url"]
+            return asset
     raise ValueError(f"Asset '{asset_name}' not found in the latest release.")
+
+
+def get_asset_file_url(asset_name: str) -> str:
+    """
+    Get the URL of the latest asset file from the GitHub repository.
+    Args:
+        asset_name (str): The name of the asset file to download.
+    Returns:
+        str: The URL of the asset file.
+    """
+    return get_asset(asset_name)["browser_download_url"]
 
 
 def download_and_decompress_file(url: str, dest: str) -> None:
@@ -115,24 +130,64 @@ def download_and_decompress_file(url: str, dest: str) -> None:
         file_path.unlink()
 
 
-def check_assets_and_download(directory: str, asset_name: str) -> None:
+def _read_asset_id(directory_path: Path) -> Optional[str]:
+    """Read the id of the release asset the directory was last filled from."""
+    try:
+        return (directory_path / ASSET_ID_FILE).read_text().strip() or None
+    except OSError:
+        return None
+
+
+def check_assets_and_download(
+    directory: str, asset_name: str, required_files: tuple = ()
+) -> None:
     """
-    Check if the directory exists and contains files.
-    If not, download and decompress assets in their directory.
-    An empty directory is treated as missing, since it is left behind when a
-    previous download was interrupted.
+    Check if the directory contains the assets, and download them if not.
+
+    The assets are downloaded if the directory does not exist, is empty (left
+    behind by an interrupted download), or lacks one of the required files
+    (e.g. a model added in a newer release). In the latter case nothing is
+    downloaded again if the latest release asset was already downloaded, so a
+    release that lacks the file does not trigger a download on every call.
+    If the download fails while assets are already present, they are kept
+    and used (e.g. when working offline).
 
     Args:
         directory (str): The directory where the assets are stored.
         asset_name (str): The name of the asset file to download.
+        required_files (tuple): File names that must be present in the directory.
     """
 
     directory_path = Path(directory)
-    if not directory_path.exists() or not any(directory_path.iterdir()):
+    has_files = directory_path.exists() and any(directory_path.iterdir())
+    missing_files = [
+        name for name in required_files if not (directory_path / name).exists()
+    ]
+    if has_files and not missing_files:
+        return
 
+    try:
+        asset = get_asset(asset_name)
+    except (ConnectionError, ValueError) as e:
+        if not has_files:
+            raise
         print(
-            f"Directory {directory} does not exist or is empty. Downloading assets in {asset_name}..."
+            f"WARNING: Could not check for missing assets {missing_files} "
+            f"in {asset_name} ({e}). Using the assets present in {directory}."
         )
-        url = get_asset_file_url(asset_name)
-        download_and_decompress_file(url, directory)
-        print(f"Assets from {asset_name} have been downloaded in {directory}")
+        return
+
+    asset_id = str(asset["id"])
+    if has_files and _read_asset_id(directory_path) == asset_id:
+        print(
+            f"WARNING: The latest {asset_name} does not contain {missing_files}."
+        )
+        return
+
+    print(
+        f"Directory {directory} is missing assets. Downloading assets in {asset_name}..."
+    )
+    download_and_decompress_file(asset["browser_download_url"], directory)
+    directory_path.mkdir(parents=True, exist_ok=True)
+    (directory_path / ASSET_ID_FILE).write_text(asset_id)
+    print(f"Assets from {asset_name} have been downloaded in {directory}")

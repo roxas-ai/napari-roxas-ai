@@ -140,6 +140,48 @@ class TestSingleSampleSegmentation:
             )
             assert result == ("model1.pth", "model2.pth")
 
+    def test_get_model_files_skips_hidden_files(self):
+        """The download bookkeeping file (.asset_id) is not a model."""
+        with patch(
+            "pathlib.Path.iterdir",
+            return_value=[
+                Path("dummy/path/.asset_id"),
+                Path("dummy/path/model1.pth"),
+            ],
+        ):
+            from napari_roxas_ai._segmentation._single_sample_segmentation import (
+                SingleSampleSegmentationWidget,
+            )
+
+            result = SingleSampleSegmentationWidget._get_model_files(
+                MagicMock(), "dummy/path"
+            )
+            assert result == ("model1.pth",)
+
+    def test_standard_rings_model_preselected(self, mock_settings):
+        """The rerun model of the rings editor must not become the default."""
+        from napari_roxas_ai._segmentation._single_sample_segmentation import (
+            SingleSampleSegmentationWidget,
+        )
+
+        with patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.check_assets_and_download"
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SingleSampleSegmentationWidget._get_model_files",
+            return_value=(
+                "LinearRingModel_v3_iterative.pt",
+                "linear_rings_model.pth",
+            ),
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
+            return_value=mock_settings,
+        ):
+            viewer = MagicMock()
+            viewer.layers = []
+            widget = SingleSampleSegmentationWidget(viewer)
+
+        assert widget._rings_model_weights_file.value == "linear_rings_model.pth"
+
     def test_extract_base_name(self, mock_settings):
         """Test extracting base name from layer name."""
         from napari_roxas_ai._segmentation._single_sample_segmentation import (
