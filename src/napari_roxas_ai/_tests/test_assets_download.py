@@ -2,7 +2,7 @@
 Tests for the lazy download of asset files (e.g. model weights).
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,12 +10,8 @@ from napari_roxas_ai._assets_files import _assets_dowloader
 from napari_roxas_ai._assets_files._assets_dowloader import (
     check_assets_and_download,
 )
-from napari_roxas_ai._edition import _rings_layer_editor
 
 ASSET = {"id": 42, "browser_download_url": "url"}
-from napari_roxas_ai._edition._rings_layer_editor import (
-    RingsLayerEditorWidget,
-)
 
 
 def test_check_assets_skips_download_when_directory_has_files(tmp_path):
@@ -124,38 +120,76 @@ def test_check_assets_raises_when_offline_and_nothing_present(tmp_path):
         check_assets_and_download(str(tmp_path / "_rings"), "rings_models.zip")
 
 
-def test_rings_editor_model_files_downloads_missing_models(tmp_path):
-    models_path = tmp_path / "_rings"
+def _zip_bytes(tmp_path, root, files):
+    """Build a zip archive with a root folder, as published in the releases."""
+    import zipfile
 
-    def fake_download(directory, asset_name, **kwargs):
-        models_path.mkdir()
-        (models_path / "rings_model.pt").write_bytes(b"weights")
+    archive = tmp_path / "archive.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for name, content in files.items():
+            zf.writestr(f"{root}/{name}", content)
+    return archive.read_bytes()
 
+
+def _fake_response(content):
+    response = MagicMock()
+    response.content = content
+    return response
+
+
+def test_download_replaces_files_already_present(tmp_path):
+    # Existing installation: the old model is present, the new one is missing
+    dest = tmp_path / "_rings"
+    dest.mkdir()
+    (dest / "old_model.pth").write_bytes(b"old weights")
+
+    content = _zip_bytes(
+        tmp_path,
+        "rings_models",
+        {"old_model.pth": b"release weights", "new_model.pt": b"new weights"},
+    )
     with patch.object(
-        _rings_layer_editor, "RINGS_MODELS_PATH", models_path
-    ), patch.object(
-        _rings_layer_editor,
-        "check_assets_and_download",
-        side_effect=fake_download,
+        _assets_dowloader.requests, "get", return_value=_fake_response(content)
     ):
-        choices = RingsLayerEditorWidget._get_rings_model_files(None)
+        _assets_dowloader.download_and_decompress_file(
+            "https://example.org/rings_models.zip", str(dest)
+        )
 
-    assert choices == ("rings_model.pt",)
+    assert sorted(p.name for p in dest.iterdir()) == [
+        "new_model.pt",
+        "old_model.pth",
+    ]
+    assert (dest / "old_model.pth").read_bytes() == b"release weights"
+    assert (dest / "new_model.pt").read_bytes() == b"new weights"
 
 
-def test_rings_editor_model_files_survives_failed_download(tmp_path):
-    models_path = tmp_path / "_rings"
+def test_check_assets_completes_existing_installation(tmp_path):
+    dest = tmp_path / "_rings"
+    dest.mkdir()
+    (dest / "old_model.pth").write_bytes(b"weights")
+    # Archive left behind by a failed download of version 0.2.0
+    (dest / "rings_models.zip").write_bytes(b"stale archive")
 
+    content = _zip_bytes(
+        tmp_path,
+        "rings_models",
+        {"old_model.pth": b"weights", "new_model.pt": b"new weights"},
+    )
+    asset = {
+        "id": 42,
+        "browser_download_url": "https://example.org/rings_models.zip",
+    }
     with patch.object(
-        _rings_layer_editor, "RINGS_MODELS_PATH", models_path
+        _assets_dowloader, "get_asset", return_value=asset
     ), patch.object(
-        _rings_layer_editor,
-        "check_assets_and_download",
-        side_effect=ConnectionError("offline"),
-    ), patch.object(
-        _rings_layer_editor, "show_warning"
-    ) as mock_warning:
-        choices = RingsLayerEditorWidget._get_rings_model_files(None)
+        _assets_dowloader.requests, "get", return_value=_fake_response(content)
+    ):
+        check_assets_and_download(
+            str(dest), "rings_models.zip", required_files=("new_model.pt",)
+        )
 
-    assert choices == ()
-    mock_warning.assert_called_once()
+    assert sorted(p.name for p in dest.iterdir()) == [
+        _assets_dowloader.ASSET_ID_FILE,
+        "new_model.pt",
+        "old_model.pth",
+    ]

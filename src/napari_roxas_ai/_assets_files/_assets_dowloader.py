@@ -103,31 +103,37 @@ def download_and_decompress_file(url: str, dest: str) -> None:
     response = requests.get(url, headers=headers)
     response.raise_for_status()
 
-    # Save the file to the destination directory
     file_name = url.split("/")[-1]
-    file_path = dest_path / file_name
 
-    with open(file_path, "wb") as f:
-        f.write(response.content)
+    # Work in a temporary directory, so that a failed download or extraction
+    # leaves neither the archive nor partial content in the destination
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / file_name
 
-    # Decompress the file
-    if file_name.endswith(".zip"):
+        with open(file_path, "wb") as f:
+            f.write(response.content)
 
-        # Create a temporary directory for initial extraction
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Extract to temp directory
+        if file_name.endswith(".zip"):
+            extract_path = temp_path / "extracted"
             with zipfile.ZipFile(file_path, "r") as zip_ref:
-                zip_ref.extractall(Path(temp_dir))
+                zip_ref.extractall(extract_path)
 
-            # Get the first directory in temp_dir (our root folder)
-            root_dir = next(Path(temp_dir).iterdir())
+            # Get the first directory in the archive (our root folder)
+            root_dir = next(extract_path.iterdir())
+            items = list(root_dir.iterdir())
+        else:
+            items = [file_path]
 
-            # Move contents from temp/root_dir to destination
-            for item in root_dir.iterdir():
-                shutil.move(str(item), str(dest_path))
-
-        # Remove the zip file
-        file_path.unlink()
+        # Move the content to the destination, replacing files that already
+        # exist there (e.g. models kept from a previous release)
+        for item in items:
+            target = dest_path / item.name
+            if target.is_dir():
+                shutil.rmtree(target)
+            elif target.exists():
+                target.unlink()
+            shutil.move(str(item), str(target))
 
 
 def _read_asset_id(directory_path: Path) -> Optional[str]:
@@ -159,6 +165,12 @@ def check_assets_and_download(
     """
 
     directory_path = Path(directory)
+
+    # Remove an archive left behind by a failed download of version 0.2.0
+    stale_archive = directory_path / asset_name
+    if stale_archive.is_file():
+        stale_archive.unlink()
+
     has_files = directory_path.exists() and any(directory_path.iterdir())
     missing_files = [
         name for name in required_files if not (directory_path / name).exists()
