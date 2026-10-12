@@ -37,8 +37,9 @@ if TYPE_CHECKING:
 settings = SettingsManager()
 
 # The image list is at least this many rows high and otherwise grows with
-# its content, one row per image
+# its content, one row per image, up to MAX_VISIBLE_IMAGE_ROWS
 MIN_VISIBLE_IMAGE_ROWS = 5
+MAX_VISIBLE_IMAGE_ROWS = 10
 
 # Gap between a row's label and its box. Set explicitly because the style's
 # default depends on the widget pair (on macOS label-to-button is wider than
@@ -428,7 +429,8 @@ class SamplesLoadingWidget(Container):
 
     def _fit_image_list_height(self):
         """
-        Make the image list as high as its entries need.
+        Make the image list as high as its entries need, bounded between
+        MIN_VISIBLE_IMAGE_ROWS and MAX_VISIBLE_IMAGE_ROWS rows.
 
         It is never lower than MIN_VISIBLE_IMAGE_ROWS rows. The label next
         to it gets the height of the first row (frame included) and centres its
@@ -437,7 +439,10 @@ class SamplesLoadingWidget(Container):
         list_widget = self._sample_select_widget.native
         row_height = list_widget.sizeHintForRow(0)
         frame = list_widget.frameWidth()
-        rows = max(list_widget.count(), MIN_VISIBLE_IMAGE_ROWS)
+        rows = min(
+            max(list_widget.count(), MIN_VISIBLE_IMAGE_ROWS),
+            MAX_VISIBLE_IMAGE_ROWS,
+        )
         list_widget.setFixedHeight(rows * row_height + 2 * frame)
         self._available_images_label.native.setFixedHeight(
             row_height + 2 * frame
