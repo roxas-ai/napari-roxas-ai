@@ -211,30 +211,47 @@ def read_raw_tucson_file(
             for line_num, line in enumerate(file, 1):
                 try:
                     line_parts = line.strip().split()
-
-                    if len(line_parts) <= 2:
+                    if not line_parts:
                         continue
 
-                    series_id = line_parts[0]
-                    try:
-                        from_year = int(line_parts[1])
-                    except ValueError as e:
-                        raise ValueError(
-                            f"Invalid year value at line {line_num}: {line_parts[1]}"
-                        ) from e
+                    # Case A: 8-character ID collapsed with 4-digit year (e.g., 'SERIES011980')
+                    if len(line_parts[0]) > 8:
+                        series_id = line_parts[0][:8]
+                        try:
+                            from_year = int(line_parts[0][8:])
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid year value at line {line_num}: {line_parts[0][8:]}"
+                            ) from e
+                        values_start_idx = 1
+                    # Case B: Standard / space-separated (e.g., 'SERIES01 1980' or 'S1 1980')
+                    else:
+                        if len(line_parts) < 2:
+                            continue
+                        series_id = line_parts[0]
+                        try:
+                            from_year = int(line_parts[1])
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid year value at line {line_num}: {line_parts[1]}"
+                            ) from e
+                        values_start_idx = 2
+
+                    if len(line_parts) <= values_start_idx:
+                        continue
 
                     # Check for end of line marker
                     if int(line_parts[-1]) == end_of_line_value:
                         line_parts.pop(-1)
 
-                    to_year = from_year + len(line_parts) - 2
-
                     try:
-                        values = [int(val) for val in line_parts[2:]]
+                        values = [int(val) for val in line_parts[values_start_idx:]]
                     except ValueError as e:
                         raise ValueError(
                             f"Invalid ring width value at line {line_num}"
                         ) from e
+
+                    to_year = from_year + len(values)
 
                     # Create a Series for the current line's data
                     current_line_series = pd.Series(

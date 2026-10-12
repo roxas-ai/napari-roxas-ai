@@ -123,7 +123,7 @@ contributions:
       display_name: 6 - Edit rings
 
     - command: napari-roxas-ai.make_cross_dating_plotter_widget
-      display_name: 7 - Visual cross-dating
+      display_name: 7 - Visual crossdating
 
     - command: napari-roxas-ai.make_samples_saving_widget
       display_name: 8 - Save cells & rings editing
