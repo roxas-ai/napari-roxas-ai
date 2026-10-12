@@ -1,4 +1,5 @@
 import glob
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict
 
@@ -20,6 +21,11 @@ from napari_roxas_ai._reader import read_cells_file, read_rings_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
+from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
+from .._utils._version_utils import (
+    get_measurement_operator,
+    get_software_version,
+)
 from ._sample_measurer import SampleAnalyzer
 
 if TYPE_CHECKING:
@@ -130,6 +136,10 @@ class Worker(QObject):
         )
         i = 0
 
+        # Constant for the whole batch run
+        sw_version = get_software_version()
+        meas_by = get_measurement_operator()
+
         if self.measurement == "both":
             for cells_file_path, rings_file_path in zip(
                 self.cells_file_paths, self.rings_file_paths
@@ -146,8 +156,14 @@ class Worker(QObject):
                 )
 
                 self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
-                    "sample_scale"
+                    "spatial_resolution"
                 ]
+                self.config["sample_type"] = (
+                        (cells_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or (rings_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or "conifer"
+                )
+
                 analyzer = SampleAnalyzer(
                     self.config,
                     cells_data.astype("uint8") * 255,
@@ -157,6 +173,17 @@ class Worker(QObject):
 
                 cells_add_kwargs["features"] = cells_table
                 rings_add_kwargs["features"] = rings_table
+
+                # One timestamp per sample, shared by its cells and rings output
+                meas_created_at = datetime.now().isoformat()
+                for add_kwargs in (cells_add_kwargs, rings_add_kwargs):
+                    add_kwargs["metadata"]["meas_created_at"] = meas_created_at
+                    add_kwargs["metadata"]["sw_version"] = sw_version
+                    add_kwargs["metadata"]["meas_by"] = meas_by
+                # Cells-only parameters, recorded so the run can be reproduced
+                for key in MEASUREMENT_PARAMETER_KEYS:
+                    cells_add_kwargs["metadata"][key] = self.config[key]
+
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=cells_file_path,
@@ -179,8 +206,12 @@ class Worker(QObject):
                     cells_file_path
                 )
                 self.config["pixels_per_um"] = cells_add_kwargs["metadata"][
-                    "sample_scale"
+                    "spatial_resolution"
                 ]
+                self.config["sample_type"] = (
+                        (cells_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or "conifer"
+                )
                 analyzer = SampleAnalyzer(
                     self.config,
                     cells_data.astype("uint8") * 255,
@@ -189,6 +220,14 @@ class Worker(QObject):
                 cells_table = analyzer.analyze_cells()
 
                 cells_add_kwargs["features"] = cells_table
+                cells_add_kwargs["metadata"][
+                    "meas_created_at"
+                ] = datetime.now().isoformat()
+                cells_add_kwargs["metadata"]["sw_version"] = sw_version
+                cells_add_kwargs["metadata"]["meas_by"] = meas_by
+                # Cells-only parameters, recorded so the run can be reproduced
+                for key in MEASUREMENT_PARAMETER_KEYS:
+                    cells_add_kwargs["metadata"][key] = self.config[key]
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=cells_file_path,
@@ -206,8 +245,12 @@ class Worker(QObject):
                     rings_file_path
                 )
                 self.config["pixels_per_um"] = rings_add_kwargs["metadata"][
-                    "sample_scale"
+                    "spatial_resolution"
                 ]
+                self.config["sample_type"] = (
+                        (rings_add_kwargs.get("metadata") or {}).get("sample_type")
+                        or "conifer"
+                )
                 analyzer = SampleAnalyzer(
                     self.config,
                     np.zeros_like(rings_data),
@@ -216,6 +259,11 @@ class Worker(QObject):
                 rings_table = analyzer.analyze_rings()
 
                 rings_add_kwargs["features"] = rings_table
+                rings_add_kwargs["metadata"][
+                    "meas_created_at"
+                ] = datetime.now().isoformat()
+                rings_add_kwargs["metadata"]["sw_version"] = sw_version
+                rings_add_kwargs["metadata"]["meas_by"] = meas_by
                 # Save to file (the file extension in the path argument is ignored)
                 write_single_layer(
                     path=rings_file_path,
@@ -232,13 +280,22 @@ class BatchSampleMeasurementsWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # Get input directory
+        # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
-        self._input_file_dialog_button = PushButton(
-            text=f"Input Directory: {self.input_directory_path}",
+        self._input_file_dialog_button = PushButton()
+        # Set after construction: text passed to the constructor gets its
+        # underscores turned into spaces, which would mangle the path
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {self.input_directory_path or 'Not set'}"
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
+        )
+
+        # Follow the project directory wherever it is changed (other widgets,
+        # the menu, the settings widget)
+        settings.add_listener(
+            "project_directory", self._on_project_directory_changed
         )
 
         # Cells measurement checkbox and settings (currently hidden as we want the user to compute cells first anyway)
@@ -251,18 +308,16 @@ class BatchSampleMeasurementsWidget(Container):
         # self._measure_cells_checkbox.visible = False
 
         # Create input fields for the config parameters
-        self._cluster_separation_threshold = FloatSpinBox(
-            value=settings.get(
-                "measurements.cells_cluster_separation_threshold"
-            ),
-            label="Cluster Separation Threshold (µm)",
+        self._cluster_dbl_cwt_threshold = FloatSpinBox(
+            value=settings.get("measurements.cluster_dbl_cwt_threshold"),
+            label="Cluster DBL CWT Threshold (µm)",
         )
         self._smoothing_kernel_size = SpinBox(
             value=settings.get("measurements.cells_smoothing_kernel_size"),
             label="Smoothing Kernel Size (1 to disable)",
         )
-        self._integration_interval = FloatSpinBox(
-            value=settings.get("measurements.cells_integration_interval"),
+        self._relwidth_cwt_integration = FloatSpinBox(
+            value=settings.get("measurements.relwidth_cwt_integration"),
             label="Wall Fraction for Thickness Measurement",
         )
 
@@ -270,9 +325,9 @@ class BatchSampleMeasurementsWidget(Container):
         self._cells_measurements_settings = Container()
         self._cells_measurements_settings.extend(
             [
-                self._cluster_separation_threshold,
+                self._cluster_dbl_cwt_threshold,
                 self._smoothing_kernel_size,
-                self._integration_interval,
+                self._relwidth_cwt_integration,
             ]
         )
 
@@ -302,18 +357,27 @@ class BatchSampleMeasurementsWidget(Container):
             ]
         )
 
+    def _on_project_directory_changed(self, directory):
+        """Show a project directory that was changed anywhere in the plugin."""
+        self.input_directory_path = directory
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {directory or 'Not set'}"
+        )
+
     def _open_input_file_dialog(self):
-        """Open a file dialog to select the input directory path."""
+        """
+        Open a file dialog to select the project directory.
+
+        The choice is stored in the settings, whose listener (see
+        _on_project_directory_changed) updates this and every other widget.
+        """
         directory = QFileDialog.getExistingDirectory(
             parent=None,
-            caption="Select Input Directory",
+            caption="Select Project Directory",
             directory=self.input_directory_path,
         )
         if directory:
-            self.input_directory_path = directory
-            self._input_file_dialog_button.text = (
-                f"Input Directory: {self.input_directory_path}"
-            )
+            settings.set("project_directory", directory)
 
     def _update_cells_settings_visibility(self):
         self._cells_measurements_settings.visible = (
@@ -348,11 +412,30 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Get other parameters
         config = {
-            "cluster_separation_threshold": self._cluster_separation_threshold.value,
+            # Rounded to drop the float noise that spin box stepping produces
+            # (e.g. 3.5000000000000004), since this value is also recorded in
+            # the sample metadata.
+            "cluster_dbl_cwt_threshold": round(
+                self._cluster_dbl_cwt_threshold.value, 6
+            ),
             "smoothing_kernel_size": self._smoothing_kernel_size.value,
-            "integration_interval": self._integration_interval.value,
+            "relwidth_cwt_integration": round(
+                self._relwidth_cwt_integration.value, 6
+            ),
             "tangential_angle": settings.get(
                 "measurements.cells_tangential_angle"
+            ),
+            "lower_limit_cwt_iqr_multiplier": settings.get(
+                "measurements.lower_limit_cwt_iqr_multiplier"
+            ),
+            "upper_limit_cwt_iqr_multiplier": settings.get(
+                "measurements.upper_limit_cwt_iqr_multiplier"
+            ),
+            "opposite_cwt_ratio_limit": settings.get(
+                "measurements.opposite_cwt_ratio_limit"
+            ),
+            "adjacent_cwt_ratio_limit": settings.get(
+                "measurements.adjacent_cwt_ratio_limit"
             ),
         }
 

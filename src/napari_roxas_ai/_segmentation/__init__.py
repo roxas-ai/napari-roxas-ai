@@ -1,7 +1,3 @@
-from pathlib import Path
-
-from napari_roxas_ai._assets_files import check_assets_and_download
-
 from ._batch_sample_segmentation import BatchSampleSegmentationWidget
 from ._single_sample_segmentation import SingleSampleSegmentationWidget
 
@@ -10,11 +6,6 @@ __all__ = [
     "BatchSampleSegmentationWidget",
 ]
 
-
-BASE_DIR = Path(__file__).parent.absolute()
-check_assets_and_download(
-    str(BASE_DIR / "_models" / "_cells"), "cells_models.zip"
-)
-check_assets_and_download(
-    str(BASE_DIR / "_models" / "_rings"), "rings_models.zip"
-)
+# NOTE: model weights are downloaded lazily by each segmentation widget's
+# __init__ (see check_assets_and_download calls there) instead of at import
+# time, so importing this package never triggers network/filesystem I/O.

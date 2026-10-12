@@ -7,7 +7,9 @@
 [![codecov](https://codecov.io/gh/roxas-ai/napari-roxas-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/roxas-ai/napari-roxas-ai)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-roxas-ai)](https://napari-hub.org/plugins/napari-roxas-ai)
 
-A plugin that integrates the ROXAS AI analysis methods for quantitative wood anatomy in the napari platform
+A plugin that integrates the ROXAS AI analysis methods for quantitative wood anatomy in the napari platform.
+
+Note: This plugin is currently under development and not yet stable nor officially released.
 
 ----------------------------------
 
@@ -26,7 +28,9 @@ https://napari.org/stable/plugins/index.html
 ### Environment setup
 It's recommended to create a dedicated Python environment for napari-roxas-ai:
 
-1. Install Miniconda if you don't have it already: [Miniconda Installation Guide](https://docs.conda.io/en/latest/miniconda.html)
+1. Install Miniconda or Miniforge if you don't have it already:
+   - [Miniconda Installation Guide](https://docs.conda.io/en/latest/miniconda.html)
+   - [Miniforge Installer Repo](https://github.com/conda-forge/miniforge)
 
 2. Create a new environment:
 ```bash
@@ -42,7 +46,7 @@ pip install napari-roxas-ai
 ```
 
 ### Launching the plugin
-Once installed, you can launch napari with the roxas-ai plugin:
+Once installed, you can launch napari with the roxas-ai plugin (from within the activated environment):
 
 ```bash
 napari
@@ -55,16 +59,21 @@ To check if the plugin is working correctly:
 3. After the downloads, a sample made of three layers should open in the viewer
 
 ### GPU Support
-If you want to use GPU acceleration for model inference:
+Model inference runs on the CPU by default. CPU inference works everywhere but is slow on large images; enabling GPU acceleration is strongly recommended if you have a compatible GPU.
 
-1. Ensure you have the proper GPU drivers and CUDA installed for your system:
-   - [NVIDIA CUDA Installation Guide Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)
-   - [NVIDIA CUDA Installation Guide Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)
+**On Linux and Windows systems (NVIDIA GPUs):**
+The default installation ships a CPU-only build of PyTorch. To enable your NVIDIA GPU, reinstall PyTorch from the CUDA wheel index:
 
-2. Enable GPU support in the napari-roxas-ai settings within the napari interface.
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
 
-3. You may need to reinstall PyTorch with CUDA support for your specific hardware:
-   Visit the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) to find the appropriate installation command for your setup.
+This single command covers all recent NVIDIA GPUs (RTX 20-series and newer, including the RTX 50-series); the CUDA runtime is bundled with the wheels, so no separate CUDA toolkit installation is required. You only need an up-to-date NVIDIA driver ([Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/), [Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)). For older GPUs or drivers, pick the matching command from the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) instead.
+
+**On macOS:**
+CUDA is not available for macOS, however, PyTorch is supporting GPU acceleration for Apple Silicon devices (M1 and newer) via MPS. There is no need to install drivers or CUDA. Note that the MPS acceleration can currently only be leveraged for the cell segmentation model.
+
+Finally, enable GPU support in the napari-roxas-ai settings within the napari interface. Go to `Plugins > ROXAS AI > ZZ - Settings`, open the `processing` section, tick `try_to_use_gpu` and `try_to_use_autocast`, and press `Apply`. The settings take effect immediately and no restart is needed, but a segmentation or measurement run that is already in progress keeps the settings it started with.
 
 ## Contributing
 

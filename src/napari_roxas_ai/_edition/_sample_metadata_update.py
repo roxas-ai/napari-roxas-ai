@@ -1,5 +1,7 @@
 import napari
 
+from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
+
 
 def update_sample_metadata(
     viewer: napari.Viewer,
@@ -13,7 +15,7 @@ def update_sample_metadata(
     sample_fields = [
         field
         for field in up_to_date_layer.metadata
-        if field.startswith("sample_")
+        if field.startswith(SAMPLE_METADATA_PREFIXES)
     ]
     new_sample_metadata = {
         field: up_to_date_layer.metadata[field]

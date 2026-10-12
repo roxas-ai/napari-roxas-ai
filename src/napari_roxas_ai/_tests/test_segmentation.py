@@ -18,6 +18,7 @@ from napari_roxas_ai._segmentation._batch_sample_segmentation import (
 from napari_roxas_ai._segmentation._single_sample_segmentation import (
     Worker as SingleWorker,
 )
+from napari_roxas_ai._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 
 
 # Helper function to create a test image
@@ -139,6 +140,48 @@ class TestSingleSampleSegmentation:
             )
             assert result == ("model1.pth", "model2.pth")
 
+    def test_get_model_files_skips_hidden_files(self):
+        """The download bookkeeping file (.asset_id) is not a model."""
+        with patch(
+            "pathlib.Path.iterdir",
+            return_value=[
+                Path("dummy/path/.asset_id"),
+                Path("dummy/path/model1.pth"),
+            ],
+        ):
+            from napari_roxas_ai._segmentation._single_sample_segmentation import (
+                SingleSampleSegmentationWidget,
+            )
+
+            result = SingleSampleSegmentationWidget._get_model_files(
+                MagicMock(), "dummy/path"
+            )
+            assert result == ("model1.pth",)
+
+    def test_standard_rings_model_preselected(self, mock_settings):
+        """The rerun model of the rings editor must not become the default."""
+        from napari_roxas_ai._segmentation._single_sample_segmentation import (
+            SingleSampleSegmentationWidget,
+        )
+
+        with patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.check_assets_and_download"
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SingleSampleSegmentationWidget._get_model_files",
+            return_value=(
+                "LinearRingModel_v3_iterative.pt",
+                "linear_rings_model.pth",
+            ),
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
+            return_value=mock_settings,
+        ):
+            viewer = MagicMock()
+            viewer.layers = []
+            widget = SingleSampleSegmentationWidget(viewer)
+
+        assert widget._rings_model_weights_file.value == "linear_rings_model.pth"
+
     def test_extract_base_name(self, mock_settings):
         """Test extracting base name from layer name."""
         from napari_roxas_ai._segmentation._single_sample_segmentation import (
@@ -163,6 +206,61 @@ class TestSingleSampleSegmentation:
             mock_self, "other_name"
         )
         assert base_name == "other_name"
+
+    def test_widget_structure_and_valid_layers(self, mock_settings):
+        """Test SingleSampleSegmentationWidget elements and layer detection."""
+        from napari_roxas_ai._segmentation._single_sample_segmentation import (
+            SingleSampleSegmentationWidget,
+        )
+
+        viewer = MagicMock()
+        image_layer = MagicMock()
+        image_layer.name = "sample1.scan"
+        type(image_layer).__name__ = "Image"
+        # Mock isinstance check
+        with patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.check_assets_and_download"
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SingleSampleSegmentationWidget._get_model_files",
+            return_value=("dummy_model.pth",),
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
+            return_value=mock_settings,
+        ), patch(
+            "napari.layers.Image", (type(image_layer),)
+        ):
+            viewer.layers = [image_layer]
+            widget = SingleSampleSegmentationWidget(viewer)
+            # Check that there is no _input_layer_combo attribute
+            assert not hasattr(widget, "_input_layer_combo")
+            # Check labels and row containers
+            assert widget._segment_cells_checkbox.label == "Cell Segmentation:"
+            assert widget._segment_rings_checkbox.label == "Ring Segmentation:"
+            assert widget._cells_model_weights_file.label == ""
+            assert widget._rings_model_weights_file.label == ""
+            assert widget._cells_row.layout == "horizontal"
+            assert widget._rings_row.layout == "horizontal"
+            assert widget._segment_cells_checkbox in widget._cells_row
+            assert widget._cells_model_weights_file in widget._cells_row
+            assert widget._segment_rings_checkbox in widget._rings_row
+            assert widget._rings_model_weights_file in widget._rings_row
+            assert widget._run_segmentation_button.enabled is True
+
+            # Untick both checkboxes -> button disabled
+            widget._segment_cells_checkbox.value = False
+            widget._segment_rings_checkbox.value = False
+            assert widget._run_segmentation_button.enabled is False
+
+            # Tick one checkbox back -> button enabled
+            widget._segment_cells_checkbox.value = True
+            assert widget._run_segmentation_button.enabled is True
+
+            widget._segment_cells_checkbox.value = False
+            widget._segment_rings_checkbox.value = True
+            assert widget._run_segmentation_button.enabled is True
+
+            valid = widget._get_valid_layers()
+            assert valid == [image_layer]
 
 
 class TestSingleWorkerFunctionality:
@@ -262,7 +360,7 @@ class TestSingleWorkerFunctionality:
                 boundary_data = []
                 for _i, _boundary in enumerate(rings_boundaries):
                     # Since we're using mock data, simplify this part
-                    boundary_data.append({"boundary_coordinates": []})
+                    boundary_data.append({"RBXY": []})
 
                 boundaries_df = pd.DataFrame(boundary_data)
 
@@ -406,7 +504,8 @@ class TestBatchWorkerFunctionality:
                 sample_metadata = {
                     k: v
                     for k, v in scan_add_kwargs["metadata"].items()
-                    if isinstance(k, str) and k.startswith("sample_")
+                    if isinstance(k, str)
+                    and k.startswith(SAMPLE_METADATA_PREFIXES)
                 }
 
                 # Process cells and verify

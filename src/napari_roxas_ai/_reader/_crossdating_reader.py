@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+from napari.utils.notifications import show_info
 
 
 def read_crossdating_file(path: str) -> pd.DataFrame:
@@ -68,28 +69,35 @@ def read_tabular_file(
 ) -> pd.DataFrame:
     """
     Read a tabular file and return it as a pandas DataFrame.
-    Parameters
-    ----------
-    path : str
-        Path to the tabular file
-    separators : Optional[List[str]]
-        List of separators to try when reading the file
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing the tabular data
-    Raises
-    -------
-    ValueError
-        If the file cannot be read with any of the provided separators
     """
     if separators is None:
         separators = ["\t", ",", ";"]
 
     for sep in separators:
-        df = pd.read_csv(path, sep=sep, index_col=0)
-        if len(df.columns) > 0:
-            return df
+        # Try reading with headers
+        try:
+            df = pd.read_csv(path, sep=sep, index_col=0)
+            
+            # If the index name or first column name looks like a year, it likely has headers
+            index_name = str(df.index.name).lower() if df.index.name else ""
+            first_col = str(df.columns[0]).lower() if len(df.columns) > 0 else ""
+            
+            # If the index is numeric and first column is also numeric, maybe it has NO headers
+            # OR if the index name itself is a number
+            try:
+                float(index_name)
+                has_no_headers = True
+            except ValueError:
+                has_no_headers = False
+                
+            if has_no_headers:
+                # Re-read without headers
+                df = pd.read_csv(path, sep=sep, header=None, index_col=0)
+            
+            if len(df.columns) > 0:
+                return df
+        except Exception:
+            continue
 
     raise ValueError(
         f"Could not read the file with any of the provided separators: {separators}"
@@ -112,6 +120,7 @@ def read_doctored_tucson_file(
     pd.DataFrame
         DataFrame containing the doctored Tucson data
     """
+
     if end_of_line_values is None:
         end_of_line_values = [-9999, -999, 9999, 999]
 
@@ -141,7 +150,10 @@ def read_doctored_tucson_file(
             values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         )
         # Assign year values as columns
-        df.columns = [sum(a) for a in df.columns.to_list()]
+        try:
+            df.columns = [sum(a) for a in df.columns.to_list()]
+        except:
+            raise ValueError("There is a Problem with the tucson file format")
         # Merge duplicate columns
         df = df.T.groupby(level=0).apply(
             lambda group: group.bfill(axis=0).iloc[0, :]
@@ -199,30 +211,47 @@ def read_raw_tucson_file(
             for line_num, line in enumerate(file, 1):
                 try:
                     line_parts = line.strip().split()
-
-                    if len(line_parts) <= 2:
+                    if not line_parts:
                         continue
 
-                    series_id = line_parts[0]
-                    try:
-                        from_year = int(line_parts[1])
-                    except ValueError as e:
-                        raise ValueError(
-                            f"Invalid year value at line {line_num}: {line_parts[1]}"
-                        ) from e
+                    # Case A: 8-character ID collapsed with 4-digit year (e.g., 'SERIES011980')
+                    if len(line_parts[0]) > 8:
+                        series_id = line_parts[0][:8]
+                        try:
+                            from_year = int(line_parts[0][8:])
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid year value at line {line_num}: {line_parts[0][8:]}"
+                            ) from e
+                        values_start_idx = 1
+                    # Case B: Standard / space-separated (e.g., 'SERIES01 1980' or 'S1 1980')
+                    else:
+                        if len(line_parts) < 2:
+                            continue
+                        series_id = line_parts[0]
+                        try:
+                            from_year = int(line_parts[1])
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid year value at line {line_num}: {line_parts[1]}"
+                            ) from e
+                        values_start_idx = 2
+
+                    if len(line_parts) <= values_start_idx:
+                        continue
 
                     # Check for end of line marker
                     if int(line_parts[-1]) == end_of_line_value:
                         line_parts.pop(-1)
 
-                    to_year = from_year + len(line_parts) - 2
-
                     try:
-                        values = [int(val) for val in line_parts[2:]]
+                        values = [int(val) for val in line_parts[values_start_idx:]]
                     except ValueError as e:
                         raise ValueError(
                             f"Invalid ring width value at line {line_num}"
                         ) from e
+
+                    to_year = from_year + len(values)
 
                     # Create a Series for the current line's data
                     current_line_series = pd.Series(
@@ -266,5 +295,6 @@ def read_raw_tucson_file(
 
         return df
 
-    except (OSError, UnicodeDecodeError) as e:
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        show_info("Error reading file. Please check file")
         raise ValueError(f"Error reading file: {str(e)}") from e

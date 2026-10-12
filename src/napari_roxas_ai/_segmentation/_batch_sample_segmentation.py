@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
-import torch
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
@@ -15,14 +14,23 @@ from magicgui.widgets import (
 from PIL import Image
 from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QFileDialog, QMessageBox
-from torch.package import PackageImporter
 
+from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file, read_scan_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
 
-from ._cells_model import CellsSegmentationModel
+from ._single_sample_segmentation import apply_segmentation_results_to_viewer
+from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
+from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
+from .._utils._segmentation_postprocess import remove_border_touching_components
+
+# NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
+# are intentionally imported lazily inside Worker.__init__ / Worker.run() instead of
+# at module level. They pull in the heavy ML stack (torch / pytorch-lightning /
+# segmentation-models-pytorch) which is the dominant import cost, so deferring it
+# keeps opening this widget fast; the cost is paid only when segmentation runs.
 
 if TYPE_CHECKING:
     import napari
@@ -33,6 +41,7 @@ Image.MAX_IMAGE_PIXELS = None
 MODULE_PATH = Path(__file__).parent.absolute()
 CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
 RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
+DEFAULT_RINGS_MODEL = "linear_rings_model.pth"
 
 settings = SettingsManager()
 
@@ -40,6 +49,7 @@ settings = SettingsManager()
 class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
+    result_ready = Signal(object)
 
     def __init__(
         self,
@@ -50,6 +60,13 @@ class Worker(QObject):
         rings_model_weights_file: Optional[str] = None,
     ):
         super().__init__()
+
+        # Heavy ML imports are deferred to worker construction (see module note).
+        import torch
+        from torch.package import PackageImporter
+
+        from ._cells_model import CellsSegmentationModel
+
         self.input_directory_path = input_directory_path
         self.segment_cells = segment_cells
         self.segment_rings = segment_rings
@@ -96,14 +113,25 @@ class Worker(QObject):
                 )
             )
             self.cells_model.to(device=self.cells_model.available_device)
+            # Synchronize internal device attribute for models that use it in infer()
+            try:
+                self.cells_model.device = self.cells_model.available_device
+            except Exception:
+                try:
+                    setattr(self.cells_model, "device", self.cells_model.available_device)
+                except Exception:
+                    if hasattr(self.cells_model, "__dict__"):
+                        self.cells_model.__dict__["device"] = self.cells_model.available_device
+            # Use local device variable for autocast checks to avoid restricted attribute assignment
+            device_obj = torch.device(self.cells_model.available_device)
             self.cells_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.cells_model.device.type
+                    device_obj.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.cells_model.device == "cuda"
-                    or self.cells_model.device == "mps"
+                    self.cells_model.available_device == "cuda"
+                    or self.cells_model.available_device == "mps"
                 )
             )
 
@@ -129,16 +157,26 @@ class Worker(QObject):
                 )
             )
             self.rings_model.to(device=self.rings_model.available_device)
+            # Synchronize internal device attribute for packaged models
+            try:
+                self.rings_model.device = self.rings_model.available_device
+            except Exception:
+                try:
+                    setattr(self.rings_model, "device", self.rings_model.available_device)
+                except Exception:
+                    if hasattr(self.rings_model, "__dict__"):
+                        self.rings_model.__dict__["device"] = self.rings_model.available_device
+            # Use local device variable for autocast checks
+            device_obj = torch.device(self.rings_model.available_device)
             # Fix for problem with model object; device attribute is not updated with to()
-            self.rings_model.device = self.rings_model.available_device
             self.rings_model.use_autocast = bool(
                 torch.amp.autocast_mode.is_autocast_available(
-                    self.rings_model.device
+                    device_obj.type
                 )
                 and settings.get("processing.try_to_use_gpu")
                 and (
-                    self.rings_model.device == "cuda"
-                    or self.rings_model.device == "mps"
+                    self.rings_model.available_device == "cuda"
+                    or self.rings_model.available_device == "mps"
                 )
             )
 
@@ -146,20 +184,35 @@ class Worker(QObject):
                 "file_extensions.rings_file_extension"
             )[0]
 
+            # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
+            if self.input_directory_path:
+                fix_sample_stem_paths_in_project(self.input_directory_path)
+
     def run(self):
+        # Heavy ML imports are deferred to run time (see module note).
+        import torch
+
+        # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
+        torch.set_num_threads(1)
 
         factor = int(self.segment_cells) + int(self.segment_rings)
         total = len(self.scan_file_paths) * factor
         i = 0
 
-        for scan_file_path in self.scan_file_paths:
+        default_rings_year_value = [
+            field["default"]
+            for field in settings.get("samples_metadata.fields")
+            if field["id"] == "rings_outmost_complete_year"
+        ][0]
 
+        for scan_file_path in self.scan_file_paths:
             scan_data, scan_add_kwargs, _ = read_scan_file(scan_file_path)
 
             sample_metadata = {
                 k: v
                 for k, v in scan_add_kwargs["metadata"].items()
-                if isinstance(k, str) and k.startswith("sample_")
+                if isinstance(k, str)
+                and k.startswith(SAMPLE_METADATA_PREFIXES)
             }
 
             # Process cells if requested
@@ -171,109 +224,82 @@ class Worker(QObject):
 
                 # Perform inference
                 cells_labels = self.cells_model.infer(scan_data)
+                cells_binary = (cells_labels > 0).astype("uint8")
+                cells_binary = remove_border_touching_components(cells_binary)
+                cells_data = (cells_binary * 255).astype("uint8")
 
-                # Create outputs
-                cells_layer_name = (
-                    f"{sample_metadata['sample_name']}{self.cells_content_ext}"
-                )
-                cells_data = (cells_labels / 255).astype("uint8")
+                cells_layer_name = f"{sample_metadata['sample_name']}{self.cells_content_ext}"
                 cells_add_kwargs = {
                     "name": cells_layer_name,
-                    "scale": scan_add_kwargs["scale"],
+                    "scale": scan_add_kwargs.get("scale"),
                     "features": pd.DataFrame(),
-                    "metadata": {},
-                }
-                cells_add_kwargs["metadata"].update(sample_metadata)
-                cells_add_kwargs["metadata"].update(
-                    {
-                        "cells_segmentation_model": Path(
-                            self.cells_model_weights_file
-                        ).name,
+                    "metadata": {
+                        **sample_metadata,
+                        "cells_segmentation_model": Path(self.cells_model_weights_file).name,
                         "cells_segmentation_datetime": datetime.now().isoformat(),
-                    }
-                )
+                    },
+                }
 
-                # Save to file (the file extension in the path argument is ignored)
-                write_single_layer(
-                    path=scan_file_path, data=cells_data, meta=cells_add_kwargs
-                )
+                write_single_layer(path=scan_file_path, data=cells_data, meta=cells_add_kwargs)
 
             # Process rings if requested
             if self.segment_rings:
-
-                # Emit progress signal
                 self.progress.emit(i, total)
                 i += 1
 
-                # Perform inference
-                rings_labels, rings_boundaries = self.rings_model.infer(
-                    scan_data
+                rings_labels, rings_boundaries = self.rings_model.infer(scan_data)
+
+                boundary_data = []
+
+                # Always prepend a dummy boundary at the top (row 0) to mark the uncomplete ring area
+                boundary_data.append(
+                    {"RBXY": [[0, 0], [0, scan_data.shape[1] - 1]]}
                 )
 
-                # Create a DataFrame from boundaries
-                boundary_data = []
-                for _i, boundary in enumerate(rings_boundaries):
-                    # Convert to numpy or list, whichever is more appropriate
+                for boundary in rings_boundaries:
                     if isinstance(boundary, torch.Tensor):
                         coords = boundary.cpu().numpy().tolist()
                     else:
                         coords = boundary
-                    boundary_data.append({"boundary_coordinates": coords})
+                    boundary_data.append({"RBXY": coords})
 
                 boundaries_df = pd.DataFrame(boundary_data)
 
-                # Create outputs
-                rings_layer_name = (
-                    f"{sample_metadata['sample_name']}{self.rings_content_ext}"
-                )
-                rings_data = rings_labels.astype("int32")
-                rings_add_kwargs = {
-                    "name": rings_layer_name,
-                    "scale": scan_add_kwargs["scale"],
-                    "features": boundaries_df,
-                    "metadata": {},
-                }
-                rings_add_kwargs["metadata"].update(sample_metadata)
+                rings_layer_name = f"{sample_metadata.get('sample_name', Path(scan_file_path).stem)}{self.rings_content_ext}"
+
+                sample_stem_path = sample_metadata.get("sample_stem_path")
+                if not sample_stem_path:
+                    # Fallback to file path without extensions if not in metadata
+                    sample_stem_path = str(Path(scan_file_path).parent / Path(scan_file_path).stem)
 
                 metadata_file_contents = get_metadata_from_file(
-                    path=sample_metadata["sample_stem_path"], path_is_stem=True
+                    path=sample_stem_path, path_is_stem=True
                 )
-                default_rings_year_value = [
-                    field["default"]
-                    for field in settings.get("samples_metadata.fields")
-                    if field["id"] == "rings_outmost_complete_year"
-                ][0]
+                last_year = (
+                    metadata_file_contents.get("rings_outmost_complete_year", default_rings_year_value)
+                    if metadata_file_contents
+                    else default_rings_year_value
+                )
 
-                rings_add_kwargs["metadata"].update(
-                    {
-                        "rings_outmost_complete_year": (
-                            metadata_file_contents[
-                                "rings_outmost_complete_year"
-                            ]
-                            if metadata_file_contents
-                            else default_rings_year_value
-                        ),
-                        "rings_segmentation_model": Path(
-                            self.rings_model_weights_file
-                        ).name,
+                new_rings_table, rings_raster, _cmap_tmp = update_rings_geometries(
+                    rings_table=boundaries_df,
+                    last_year=int(last_year),
+                    image_shape=rings_labels.shape,
+                )
+
+                rings_add_kwargs = {
+                    "name": rings_layer_name,
+                    "scale": scan_add_kwargs.get("scale"),
+                    "features": new_rings_table,
+                    "metadata": {
+                        **sample_metadata,
+                        "rings_outmost_complete_year": int(last_year),
+                        "rings_segmentation_model": Path(self.rings_model_weights_file).name,
                         "rings_segmentation_datetime": datetime.now().isoformat(),
-                    }
-                )
+                    },
+                }
 
-                rings_add_kwargs["features"], rings_data, _ = (
-                    update_rings_geometries(
-                        rings_table=rings_add_kwargs["features"],
-                        last_year=rings_add_kwargs["metadata"][
-                            "rings_outmost_complete_year"
-                        ],
-                        image_shape=rings_data.shape,
-                    )
-                )
-
-                # Save to file (the file extension in the path argument is ignored)
-                write_single_layer(
-                    path=scan_file_path, data=rings_data, meta=rings_add_kwargs
-                )
+                write_single_layer(path=scan_file_path, data=rings_raster, meta=rings_add_kwargs)
 
         self.progress.emit(total, total)
         self.finished.emit()
@@ -284,13 +310,27 @@ class BatchSampleSegmentationWidget(Container):
         super().__init__()
         self._viewer = viewer
 
-        # Get input directory
+        # Ensure model weights are present before listing them below.
+        # (Moved out of import time; only downloads if the dirs are missing.)
+        check_assets_and_download(str(CELLS_MODELS_PATH), "cells_models.zip")
+        check_assets_and_download(str(RINGS_MODELS_PATH), "rings_models.zip")
+
+        # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
-        self._input_file_dialog_button = PushButton(
-            text=f"Input Directory: {self.input_directory_path}",
+        self._input_file_dialog_button = PushButton()
+        # Set after construction: text passed to the constructor gets its
+        # underscores turned into spaces, which would mangle the path
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {self.input_directory_path or 'Not set'}"
         )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
+        )
+
+        # Follow the project directory wherever it is changed (other widgets,
+        # the menu, the settings widget)
+        settings.add_listener(
+            "project_directory", self._on_project_directory_changed
         )
 
         # Cells segmentation checkbox and model selection
@@ -320,6 +360,10 @@ class BatchSampleSegmentationWidget(Container):
             choices=self._get_model_files(where=RINGS_MODELS_PATH),
             label="Rings Model",
         )
+        # The rings folder also holds the model for rerunning the editor's
+        # segmentation from a given year; keep the standard model preselected
+        if DEFAULT_RINGS_MODEL in self._rings_model_weights_file.choices:
+            self._rings_model_weights_file.value = DEFAULT_RINGS_MODEL
 
         # Create a button to launch the analysis
         self._run_segmentation_button = PushButton(text="Run Segmentation")
@@ -347,22 +391,35 @@ class BatchSampleSegmentationWidget(Container):
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
 
+    def _on_project_directory_changed(self, directory):
+        """Show a project directory that was changed anywhere in the plugin."""
+        self.input_directory_path = directory
+        self._input_file_dialog_button.text = (
+            f"Project Directory: {directory or 'Not set'}"
+        )
+
     def _open_input_file_dialog(self):
-        """Open a file dialog to select the input directory path."""
+        """
+        Open a file dialog to select the project directory.
+
+        The choice is stored in the settings, whose listener (see
+        _on_project_directory_changed) updates this and every other widget.
+        """
         directory = QFileDialog.getExistingDirectory(
             parent=None,
-            caption="Select Input Directory",
+            caption="Select Project Directory",
             directory=self.input_directory_path,
         )
         if directory:
-            self.input_directory_path = directory
-            self._input_file_dialog_button.text = (
-                f"Input Directory: {self.input_directory_path}"
-            )
+            settings.set("project_directory", directory)
 
     def _get_model_files(self, where: str) -> tuple:
         """Get available model weight files from the weights directory."""
-        return tuple(path.name for path in Path(where).iterdir())
+        return tuple(
+            path.name
+            for path in Path(where).iterdir()
+            if not path.name.startswith(".")
+        )
 
     def _update_cells_model_visibility(self) -> None:
         """Update visibility of cells model selection based on checkbox."""
@@ -450,3 +507,4 @@ class BatchSampleSegmentationWidget(Container):
 
         # Run the analysis in a separate thread
         self.worker_thread.start()
+

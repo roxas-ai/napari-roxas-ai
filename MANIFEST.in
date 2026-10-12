@@ -1,5 +1,6 @@
 include LICENSE
 include README.md
+recursive-include src/napari_roxas_ai *.yaml *.json *.tif *.png *.pth *.jpg
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

@@ -13,17 +13,22 @@ import torchvision.transforms as transforms
 class CellsSegmentationModel(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Use available_device as the source of truth for location
         self.available_device = (
             "cuda"
             if torch.cuda.is_available()
             else "mps" if torch.mps.is_available() else "cpu"
         )
-        self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
-            self.available_device
-        )
+        # Call to() to move net, but avoid setting self.device directly if read-only
         self.net = smp.Unet(
             encoder_weights=None, classes=2, encoder_name="resnet50"
         ).to(device=self.available_device)
+        
+        # Determine autocast availability using a temporary device object
+        _dev = torch.device(self.available_device)
+        self.use_autocast = torch.amp.autocast_mode.is_autocast_available(
+            _dev.type
+        )
         self.preprocessing_fn = smp.encoders.get_preprocessing_fn("resnet50")
         self.eval()
 

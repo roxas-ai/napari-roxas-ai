@@ -2,6 +2,7 @@
 Tests for the writer module functionality.
 """
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,8 @@ import pandas as pd
 import pytest
 
 from napari_roxas_ai._writer._writer import (
+    round_column,
+    round_column_sci,
     save_image,
     update_metadata_file,
     write_cells_file,
@@ -27,7 +30,7 @@ def create_test_metadata(metadata=None):
     if metadata is None:
         metadata = {
             "sample_name": "test_sample",
-            "sample_scale": 2.5,
+            "spatial_resolution": 2.5,
             "sample_type": "conifer",
             "scan_date": "2023-01-01",
             "cells_count": 100,
@@ -68,6 +71,7 @@ def mock_settings():
             "file_extensions.metadata_file_extension": [".metadata", ".json"],
             "file_extensions.cells_table_file_extension": [".cells", ".csv"],
             "file_extensions.rings_table_file_extension": [".rings", ".csv"],
+            "file_extensions.image_file_extensions": [".jpg", ".jpeg", ".png"],
             "tables.separator": "\t",
             "tables.index_column": "index",
         }.get(key, default)
@@ -103,27 +107,32 @@ class TestWriterModule:
         metadata_path = temp_dir / "test_sample.metadata.json"
         original_metadata = {
             "sample_name": "original_name",
-            "sample_scale": 1.0,
+            "spatial_resolution": 1.0,
         }
 
-        # Mock file operations
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "builtins.open", create=True
-        ), patch("json.load", return_value=original_metadata), patch(
-            "json.dump"
-        ) as mock_dump:
+        # Write an actual existing metadata file
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(original_metadata, f)
 
-            # New metadata to add
-            new_metadata = {"scan_date": "2023-01-01", "sample_scale": 2.5}
+        # New metadata to add
+        new_metadata = {"scan_date": "2023-01-01", "spatial_resolution": 2.5}
 
-            # Test updating an existing metadata file
-            result = update_metadata_file(
-                str(metadata_path), new_metadata, "scan_"
-            )
+        # Test updating an existing metadata file
+        result = update_metadata_file(
+            str(metadata_path), new_metadata, "scan_"
+        )
 
-            # Verify results
-            assert result == str(metadata_path)
-            assert mock_dump.called
+        # Verify results
+        assert result == str(metadata_path)
+
+        # Read back and verify the file was updated
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            saved_metadata = json.load(f)
+        # spatial_resolution is not updated because it doesn't match prefix "scan_"
+        assert saved_metadata["spatial_resolution"] == 1.0
+        assert saved_metadata["scan_date"] == "2023-01-01"
+        # sample_name is derived from filename when not in new_metadata
+        assert saved_metadata["sample_name"] == "test_sample"
 
     def test_save_image_without_rescale(self, temp_dir):
         """Test save_image function without rescaling."""
@@ -141,7 +150,9 @@ class TestWriterModule:
             # Verify PIL.Image.fromarray was called with the correct array
             mock_fromarray.assert_called_once()
             # Verify save was called on the PIL Image
-            mock_image.save.assert_called_once_with(str(image_path))
+            mock_image.save.assert_called_once_with(
+                str(image_path), compression="tiff_deflate"
+            )
 
             assert result == str(image_path)
 
@@ -164,7 +175,9 @@ class TestWriterModule:
             # Verify PIL.Image.fromarray was called
             mock_fromarray.assert_called_once()
             # Verify save was called on the PIL Image
-            mock_image.save.assert_called_once_with(str(image_path))
+            mock_image.save.assert_called_once_with(
+                str(image_path), compression="tiff_deflate"
+            )
 
             assert result == str(image_path)
 
@@ -177,7 +190,7 @@ class TestWriterModule:
             "name": "test_scan",
             "metadata": {
                 "sample_name": "test_sample",
-                "sample_scale": 2.5,
+                "spatial_resolution": 2.5,
                 "scan_date": "2023-01-01",
             },
         }
@@ -197,12 +210,10 @@ class TestWriterModule:
             # Test writing scan file
             result = write_scan_file(str(path), data, meta)
 
-            # Verify results
-            assert (
-                len(result) == 2
-            )  # Should return paths to metadata and image files
+            # Only the metadata is written, the scan image stays untouched
+            assert len(result) == 1
             assert mock_update_metadata.called
-            assert mock_save_image.called
+            assert not mock_save_image.called
 
     def test_write_cells_file(self, temp_dir, mock_settings):
         """Test write_cells_file function."""
@@ -421,6 +432,22 @@ class TestWriterModule:
             # Verify results are unique and contain all paths
             assert len(result) > 0  # At least one path should be returned
             assert mock_write_single.call_count == 2
+
+    def test_round_column_sci(self):
+        """Test round_column_sci formatting and handling of values."""
+        df = pd.DataFrame({
+            "col_sci": [0.0001234567, 123456.789, 0.000000005079, np.nan, "invalid"],
+            "col_other": [1, 2, 3, 4, 5]
+        })
+        result = round_column_sci(df.copy(), "col_sci", 3)
+        assert result.loc[0, "col_sci"] == "1.235E-04"
+        assert result.loc[1, "col_sci"] == "1.235E+05"
+        assert result.loc[2, "col_sci"] == "5.079E-09"
+        assert np.isnan(result.loc[3, "col_sci"]) or pd.isna(result.loc[3, "col_sci"])
+        assert np.isnan(result.loc[4, "col_sci"]) or pd.isna(result.loc[4, "col_sci"])
+        # Column that doesn't exist should be ignored without error
+        result_no_change = round_column_sci(df.copy(), "non_existent", 3)
+        assert "non_existent" not in result_no_change.columns
 
 
 if __name__ == "__main__":
