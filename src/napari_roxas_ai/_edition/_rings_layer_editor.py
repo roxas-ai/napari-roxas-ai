@@ -742,7 +742,7 @@ class RingsLayerEditorWidget(Container):
 
             # ATOMIC-LIKE UPDATE WITH EVENT BLOCKER:
             # We block events during the update to prevent feedback loops with other widgets
-            # (like the cross-dating plotter) while the data is in an intermediate state.
+            # (like the crossdating plotter) while the data is in an intermediate state.
             with layer.events.blocker():
                 layer.metadata["rings_outmost_complete_year"] = new_outmost_year
                 new_rings_table, new_rings_raster, new_colormap = (
