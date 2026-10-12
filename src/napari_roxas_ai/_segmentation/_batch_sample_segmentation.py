@@ -8,11 +8,12 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
+    Label,
     ProgressBar,
     PushButton,
 )
 from PIL import Image
-from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtCore import QObject, Qt, QThread, Signal
 from qtpy.QtWidgets import QFileDialog, QMessageBox
 
 from napari_roxas_ai._assets_files import check_assets_and_download
@@ -42,6 +43,31 @@ MODULE_PATH = Path(__file__).parent.absolute()
 CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
 RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
 DEFAULT_RINGS_MODEL = "linear_rings_model.pth"
+
+# Gap between a row's label and its box. Set explicitly because the style's
+# default depends on the widget pair (on macOS label-to-button is wider than
+# label-to-list), which would make the button and the list start unevenly.
+LABEL_SPACING = 10
+
+# Longest project directory shown on the button, longer paths are elided in the
+# middle (the full path is in the tooltip)
+MAX_PROJECT_DIRECTORY_CHARS = 35
+
+
+def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
+    """
+    Shorten `path` to at most `max_chars` characters by cutting out its middle.
+
+    The start (drive, user folder) and the end (the project folder itself) are
+    what tells projects apart, so both are kept and the middle gives way.
+    """
+    if len(path) <= max_chars:
+        return path
+    keep = max_chars - 1  # room for the ellipsis
+    head = keep // 2
+    tail = keep - head
+    return f"{path[:head]}…{path[-tail:]}"
+
 
 settings = SettingsManager()
 
@@ -307,7 +333,8 @@ class Worker(QObject):
 
 class BatchSampleSegmentationWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__()
+        # The rows bring their own labels, a label column would only indent them
+        super().__init__(labels=False)
         self._viewer = viewer
 
         # Ensure model weights are present before listing them below.
@@ -317,15 +344,35 @@ class BatchSampleSegmentationWidget(Container):
 
         # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
+
+        # "Project Directory:" label next to a button showing the (elided) path
         self._input_file_dialog_button = PushButton()
-        # Set after construction: text passed to the constructor gets its
-        # underscores turned into spaces, which would mangle the path
-        self._input_file_dialog_button.text = (
-            f"Project Directory: {self.input_directory_path or 'Not set'}"
-        )
         self._input_file_dialog_button.changed.connect(
             self._open_input_file_dialog
         )
+        # Without a stylesheet, macOS draws a push button larger than its layout
+        # slot (room for the focus ring), so it would stick out to the left of
+        # the list below; lay it out by its drawn rect instead
+        self._input_file_dialog_button.native.setAttribute(
+            Qt.WA_LayoutUsesWidgetRect
+        )
+        self._project_directory_label = Label(value="Project Directory:")
+        self._project_directory_row = Container(
+            widgets=[
+                self._project_directory_label,
+                self._input_file_dialog_button,
+            ],
+            labels=False,
+            layout="horizontal",
+        )
+        self._project_directory_row.margins = (0, 0, 0, 0)
+        label_width = self._project_directory_label.native.sizeHint().width() + 20
+        self._project_directory_label.native.setFixedWidth(label_width)
+        self._project_directory_label.native.setAlignment(
+            Qt.AlignLeft | Qt.AlignVCenter
+        )
+        self._project_directory_row.native.layout().setSpacing(LABEL_SPACING)
+        self._update_project_dialog_button()
 
         # Follow the project directory wherever it is changed (other widgets,
         # the menu, the settings widget)
@@ -377,7 +424,7 @@ class BatchSampleSegmentationWidget(Container):
         # Append the widgets to the container
         self.extend(
             [
-                self._input_file_dialog_button,
+                self._project_directory_row,
                 self._segment_cells_checkbox,
                 self._cells_model_weights_file,
                 self._segment_rings_checkbox,
@@ -391,12 +438,21 @@ class BatchSampleSegmentationWidget(Container):
         self._update_cells_model_visibility()
         self._update_rings_model_visibility()
 
+    def _update_project_dialog_button(self):
+        """Show the project directory on the button, elided, full path as tooltip."""
+        if self.input_directory_path:
+            self._input_file_dialog_button.text = _elide_path(
+                self.input_directory_path
+            )
+            self._input_file_dialog_button.tooltip = self.input_directory_path
+        else:
+            self._input_file_dialog_button.text = "Not set"
+            self._input_file_dialog_button.tooltip = None
+
     def _on_project_directory_changed(self, directory):
         """Show a project directory that was changed anywhere in the plugin."""
         self.input_directory_path = directory
-        self._input_file_dialog_button.text = (
-            f"Project Directory: {directory or 'Not set'}"
-        )
+        self._update_project_dialog_button()
 
     def _open_input_file_dialog(self):
         """
