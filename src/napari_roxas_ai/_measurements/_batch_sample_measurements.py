@@ -1,3 +1,4 @@
+import gc
 import glob
 from datetime import datetime
 from pathlib import Path
@@ -61,7 +62,7 @@ LABEL_SPACING = 10
 
 # Longest project directory shown on the button, longer paths are elided in the
 # middle (the full path is in the tooltip)
-MAX_PROJECT_DIRECTORY_CHARS = 50
+MAX_PROJECT_DIRECTORY_CHARS = 35
 
 # Label of the manual selection checkbox, which ends in a colon while the file
 # list below it is shown
@@ -148,53 +149,65 @@ class Worker(QObject):
         self._sw_version = get_software_version()
         self._meas_by = get_measurement_operator()
 
-        for i, (stem, files) in enumerate(self.samples.items()):
-            self.progress.emit(i, total)
+        processed = 0
+        for file_idx, (stem, files) in enumerate(self.samples.items(), 1):
+            self.progress.emit(file_idx - 1, total)
             name = Path(stem).name
             try:
                 # The rings as read or measured, shared by the later steps
                 rings = None
                 rings_written = False
+                tasks = []
 
                 if self.measure_cells or self.measure_rings:
-                    rings, rings_written = self._measure(name, files)
+                    rings, rings_written, task = self._measure(files)
+                    tasks.append(task)
 
-                # Writing a rings file already updates the annotated image
-                if self.update_annotated_images and not rings_written:
-                    rings = rings or self._read_rings(files)
-                    self._update_annotated_image(stem, rings)
+                if self.update_annotated_images:
+                    if rings_written:
+                        # Writing a rings file already updates the annotated image
+                        tasks.append("Annotated image")
+                    else:
+                        rings = rings or self._read_rings(files)
+                        tasks.append(self._update_annotated_image(stem, rings))
 
                 if self.update_reference_plots:
                     rings = rings or self._read_rings(files)
-                    self._update_reference_plot(stem, rings)
+                    tasks.append(self._update_reference_plot(stem, rings))
 
-                print(f"[Batch Measurements] [{i + 1}/{total}] {name}: done")
+                print(
+                    f"[Batch Measurements] [{file_idx}/{total}] {name}: {', '.join(tasks)}"
+                )
+                processed += 1
             except Exception as e:
                 print(
-                    f"[Batch Measurements] [{i + 1}/{total}] Error processing {name}: {e}"
+                    f"[Batch Measurements] [{file_idx}/{total}] Error processing {name}: {e}"
                 )
+
+        if total > 0:
+            print(
+                f"[Batch Measurements] Completed {processed} of {total} file(s) successfully."
+            )
 
         self.progress.emit(total, total)
         self.finished.emit()
 
     def _measure(
-        self, name: str, files: Dict[str, Optional[str]]
-    ) -> Tuple[Optional[Tuple[np.ndarray, dict]], bool]:
+        self, files: Dict[str, Optional[str]]
+    ) -> Tuple[Optional[Tuple[np.ndarray, dict]], bool, str]:
         """
         Measure one sample and save the results.
 
         Returns the rings (data, add_kwargs) of the sample if they were read,
-        and whether the rings file was written.
+        whether the rings file was written, and what was done (for the log).
         """
         cells_file_path = files["cells"]
         rings_file_path = files["rings"]
 
         if self.measure_cells and cells_file_path is None:
-            print(f"[Batch Measurements] {name}: no cells file, measurement skipped")
-            return None, False
+            return None, False, "Measurement skipped (no cells file)"
         if self.measure_rings and rings_file_path is None:
-            print(f"[Batch Measurements] {name}: no rings file, measurement skipped")
-            return None, False
+            return None, False, "Measurement skipped (no rings file)"
 
         if self.measure_cells and self.measure_rings:
             # Read the files
@@ -241,7 +254,7 @@ class Worker(QObject):
                 data=rings_data,
                 meta=rings_add_kwargs,
             )
-            return (rings_data, rings_add_kwargs), True
+            return (rings_data, rings_add_kwargs), True, "Cells, Rings"
 
         if self.measure_cells:
             # Read the files
@@ -275,7 +288,7 @@ class Worker(QObject):
                 data=cells_data,
                 meta=cells_add_kwargs,
             )
-            return None, False
+            return None, False, "Cells"
 
         # Rings only
         rings_data, rings_add_kwargs, _ = read_rings_file(rings_file_path)
@@ -305,7 +318,7 @@ class Worker(QObject):
             data=rings_data,
             meta=rings_add_kwargs,
         )
-        return (rings_data, rings_add_kwargs), True
+        return (rings_data, rings_add_kwargs), True, "Rings"
 
     @staticmethod
     def _read_rings(
@@ -331,15 +344,18 @@ class Worker(QObject):
 
     def _update_annotated_image(
         self, stem: str, rings: Optional[Tuple[np.ndarray, dict]]
-    ) -> None:
-        """Redraw the annotated image of a sample from its rings table."""
+    ) -> str:
+        """
+        Redraw the annotated image of a sample from its rings table.
+
+        Returns what was done (for the log).
+        """
         features = self._rings_features(rings)
         if features is None:
-            print(
-                f"[Batch Measurements] {Path(stem).name}: no rings table, annotated image skipped"
-            )
-            return
-        save_sample_annotated_image(stem, features)
+            return "Annotated image skipped (no rings table)"
+        if save_sample_annotated_image(stem, features) is None:
+            return "Annotated image skipped (no scan file)"
+        return "Annotated image"
 
     def _crossdating_dataframe(self, path: Path) -> pd.DataFrame:
         """Read a crossdating file and add its average series (cached)."""
@@ -351,7 +367,7 @@ class Worker(QObject):
 
     def _update_reference_plot(
         self, stem: str, rings: Optional[Tuple[np.ndarray, dict]]
-    ) -> None:
+    ) -> str:
         """
         Redraw the crossdating reference plot of a sample.
 
@@ -360,6 +376,8 @@ class Worker(QObject):
         ("NA") is plotted against the series that matches it best, as found by
         the automatic alignment of the visual crossdating. Samples without a
         crossdating file are skipped.
+
+        Returns what was done (for the log).
         """
         name = Path(stem).name
         features = self._rings_features(rings)
@@ -368,23 +386,16 @@ class Worker(QObject):
             or "YEAR" not in features.columns
             or "cells_above" not in features.columns
         ):
-            print(f"[Batch Measurements] {name}: no rings table, reference plot skipped")
-            return
+            return "Reference plot skipped (no rings table)"
 
         rings_data, rings_add_kwargs = rings
         metadata = rings_add_kwargs.get("metadata") or {}
         if "spatial_resolution" not in metadata:
-            print(
-                f"[Batch Measurements] {name}: no spatial resolution, reference plot skipped"
-            )
-            return
+            return "Reference plot skipped (no spatial resolution)"
 
         crossdating_files = find_crossdating_files(Path(stem).parent)
         if not crossdating_files:
-            print(
-                f"[Batch Measurements] {name}: no crossdating file, reference plot skipped"
-            )
-            return
+            return "Reference plot skipped (no crossdating file)"
 
         width_series = ring_width_series(
             features,
@@ -395,12 +406,12 @@ class Worker(QObject):
 
         plot = self._stored_reference_plot_df(
             metadata.get("reference_series"), crossdating_files, width_series
-        ) or self._best_matching_plot_df(crossdating_files, width_series)
+        )
+        best_match = plot is None
+        if best_match:
+            plot = self._best_matching_plot_df(crossdating_files, width_series)
         if plot is None:
-            print(
-                f"[Batch Measurements] {name}: no matching reference series, reference plot skipped"
-            )
-            return
+            return "Reference plot skipped (no matching reference series)"
 
         reference_name, plot_df = plot
         sample_name = metadata.get("sample_name") or name
@@ -410,6 +421,9 @@ class Worker(QObject):
             sample_name,
             reference_plot_path(Path(stem).parent, sample_name),
         )
+        if best_match:
+            return f"Reference plot ({reference_name}, best match)"
+        return f"Reference plot ({reference_name})"
 
     def _stored_reference_plot_df(
         self,
@@ -543,9 +557,20 @@ class BatchSampleMeasurementsWidget(Container):
             self._toggle_file_selection
         )
 
-        # File selection container (initially hidden)
+        # File selection list, built once and only refilled afterwards: a list
+        # replaced on every refresh would be left to Python's garbage collector,
+        # which may destroy it in the worker thread while its Qt timers are still
+        # registered with the main thread, crashing napari
+        self._file_select_widget = Select(
+            choices=[],
+            allow_multiple=True,
+            label="Select Files to Process",
+        )
         self._file_selection_container = Container(
-            widgets=[], labels=False, layout="vertical", visible=False
+            widgets=[self._file_select_widget],
+            labels=False,
+            layout="vertical",
+            visible=False,
         )
         self._file_selection_container.margins = (0, 0, 0, 0)
 
@@ -576,13 +601,13 @@ class BatchSampleMeasurementsWidget(Container):
         self.extend(
             [
                 self._project_directory_row,
+                self._handpick_files_checkbox,
+                self._file_selection_container,
+                self._reverse_selection_button,
                 self._measure_cells_checkbox,
                 self._measure_rings_checkbox,
                 self._update_annotated_checkbox,
                 self._update_reference_checkbox,
-                self._handpick_files_checkbox,
-                self._file_selection_container,
-                self._reverse_selection_button,
                 self._check_settings_button,
                 self._run_analysis_button,
                 self.progress_bar,
@@ -670,10 +695,10 @@ class BatchSampleMeasurementsWidget(Container):
 
     def _update_file_selection_widget(self):
         """Update the file selection widget with the current samples."""
-        self._file_selection_container.clear()
         self._path_mapping = {}
 
         if not self.samples:
+            self._file_select_widget.choices = []
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
             return
@@ -689,12 +714,7 @@ class BatchSampleMeasurementsWidget(Container):
             display_names.append(display_name)
             self._path_mapping[display_name] = stem
 
-        self._file_select_widget = Select(
-            choices=display_names,
-            allow_multiple=True,
-            label="Select Files to Process",
-        )
-        self._file_selection_container.append(self._file_select_widget)
+        self._file_select_widget.choices = display_names
         self._fit_file_list_height()
 
         self._file_selection_container.visible = True
@@ -728,19 +748,16 @@ class BatchSampleMeasurementsWidget(Container):
 
     def _reverse_file_selection(self):
         """Reverse the current file selection."""
-        if hasattr(self, "_file_select_widget"):
-            current_selection = set(self._file_select_widget.value)
-            self._file_select_widget.value = [
-                name
-                for name in self._file_select_widget.choices
-                if name not in current_selection
-            ]
+        current_selection = set(self._file_select_widget.value)
+        self._file_select_widget.value = [
+            name
+            for name in self._file_select_widget.choices
+            if name not in current_selection
+        ]
 
     def _get_selected_samples(self) -> Dict[str, Dict[str, Optional[str]]]:
         """The samples to process: the selected ones, or all of them."""
-        if self._handpick_files_checkbox.value and hasattr(
-            self, "_file_select_widget"
-        ):
+        if self._handpick_files_checkbox.value:
             selected = {
                 self._path_mapping[name]
                 for name in self._file_select_widget.value
@@ -836,5 +853,12 @@ class BatchSampleMeasurementsWidget(Container):
         self.worker_thread.finished.connect(on_finished)
 
         show_info("Batch measure & update in progress...")
+
+        # Destroy unreferenced Qt objects here in the main thread. Left to the
+        # garbage collector, they could be destroyed in the worker thread while
+        # their timers are still registered with the main thread, which crashes
+        # napari.
+        gc.collect()
+
         # Run the analysis in a separate thread
         self.worker_thread.start()

@@ -53,10 +53,10 @@ def widget(settings, tmp_path, qtbot):
 # --- Widget -----------------------------------------------------------------
 
 
-def test_long_project_directory_is_elided_to_50_characters():
+def test_long_project_directory_is_elided_to_35_characters():
     path = "C:/Users/vonarx/Desktop/" + "x" * 60 + "/ROXAS AI"
     elided = module._elide_path(path)
-    assert len(elided) == 50
+    assert len(elided) == 35
     assert elided.startswith("C:/Users/vonarx/")
     assert elided.endswith("/ROXAS AI")
     assert "…" in elided
@@ -64,6 +64,22 @@ def test_long_project_directory_is_elided_to_50_characters():
 
 def test_layout_follows_the_mockup(widget):
     assert widget._project_directory_label.value == "Project Directory:"
+    # File selection first, then what to do, then the buttons
+    rows = list(widget)
+    order = [
+        widget._project_directory_row,
+        widget._handpick_files_checkbox,
+        widget._file_selection_container,
+        widget._reverse_selection_button,
+        widget._measure_cells_checkbox,
+        widget._measure_rings_checkbox,
+        widget._update_annotated_checkbox,
+        widget._update_reference_checkbox,
+        widget._check_settings_button,
+        widget._run_analysis_button,
+    ]
+    assert [rows.index(w) for w in order] == sorted(rows.index(w) for w in order)
+
     texts = [
         widget._measure_cells_checkbox.text,
         widget._measure_rings_checkbox.text,
@@ -153,6 +169,24 @@ def test_manual_selection_and_reverse_selection(widget, tmp_path):
     assert len(widget._get_selected_samples()) == 3
 
 
+def test_file_list_is_refilled_not_replaced(widget, settings, tmp_path):
+    """
+    A replaced list would be left to the garbage collector, which may destroy
+    it in the worker thread and crash napari (Qt timers of the main thread).
+    """
+    widget._handpick_files_checkbox.value = True
+    file_list = widget._file_select_widget
+
+    _touch_sample(tmp_path, "D")
+    widget._refresh_file_list()
+    widget._handpick_files_checkbox.value = False
+    widget._handpick_files_checkbox.value = True
+
+    assert widget._file_select_widget is file_list
+    assert "D" in file_list.choices
+    assert list(widget._file_selection_container) == [file_list]
+
+
 def test_check_settings_opens_the_measurement_settings(widget):
     with patch.object(module.SettingsWidget, "open_floating") as open_floating:
         widget._open_settings()
@@ -238,8 +272,9 @@ def test_reference_plot_without_stored_series_uses_the_best_match(
     project, sample_widths
 ):
     with patch.object(module, "save_crossdating_plot") as save:
-        _worker()._update_reference_plot(project, _rings(sample_widths))
+        task = _worker()._update_reference_plot(project, _rings(sample_widths))
     assert save.call_args.args[1] == "MATCH"
+    assert task == "Reference plot (MATCH, best match)"
 
 
 def test_reference_plot_with_unknown_stored_series_uses_the_best_match(
@@ -258,10 +293,11 @@ def test_reference_plot_is_skipped_without_crossdating_file(
     with patch.object(module, "save_crossdating_plot") as save, patch.object(
         module, "find_crossdating_files", return_value=[]
     ):
-        _worker()._update_reference_plot(
+        task = _worker()._update_reference_plot(
             str(tmp_path / "S1"), _rings(sample_widths)
         )
     save.assert_not_called()
+    assert task == "Reference plot skipped (no crossdating file)"
 
 
 def test_reference_plot_is_written(project, sample_widths, tmp_path):
@@ -314,8 +350,67 @@ def test_measuring_rings_does_not_redraw_the_annotated_image_twice(
     )
     rings = _rings(np.full(10, 100.0))
     with patch.object(
-        worker, "_measure", return_value=(rings, True)
+        worker, "_measure", return_value=(rings, True, "Rings")
     ), patch.object(module, "save_sample_annotated_image") as annotate:
-        worker._sw_version = worker._meas_by = "test"
         worker.run()
     annotate.assert_not_called()
+
+
+def test_worker_prints_info_for_each_processed_file(tmp_path, settings, capsys):
+    """Each sample is reported in the terminal, as in batch detection."""
+    stems = [str(tmp_path / "S1"), str(tmp_path / "S2")]
+    worker = module.Worker(
+        {},
+        {stem: {"cells": None, "rings": f"{stem}.rings.tif"} for stem in stems},
+        measure_cells=False,
+        measure_rings=True,
+        update_annotated_images=True,
+        update_reference_plots=True,
+    )
+    rings = _rings(np.full(10, 100.0))
+    with patch.object(
+        worker,
+        "_measure",
+        side_effect=[(rings, True, "Rings"), RuntimeError("broken")],
+    ), patch.object(
+        worker, "_update_reference_plot", return_value="Reference plot (A)"
+    ):
+        worker.run()
+
+    out = capsys.readouterr().out
+    assert (
+        "[Batch Measurements] [1/2] S1: Rings, Annotated image, Reference plot (A)"
+        in out
+    )
+    assert "[Batch Measurements] [2/2] Error processing S2: broken" in out
+    assert "[Batch Measurements] Completed 1 of 2 file(s) successfully." in out
+
+
+def test_reference_plot_far_from_its_reference_is_saved(tmp_path):
+    """
+    A sample without overlap is plotted over the whole gap to its reference,
+    which used to make the JPEG wider than its 65,535 pixel limit.
+    """
+    from napari_roxas_ai._crossdating._cross_dating_plotter import (
+        MAX_REFERENCE_PLOT_WIDTH_PX,
+        build_crossdating_plot_df,
+        save_crossdating_plot,
+    )
+
+    reference_years = np.arange(400, 500)
+    crossdating = pd.DataFrame(
+        {"REF": np.linspace(50, 150, len(reference_years))},
+        index=reference_years,
+    )
+    crossdating["average"] = crossdating["REF"]
+    widths = pd.Series(np.full(20, 100.0), index=np.arange(9980, 10000))
+    plot_df = build_crossdating_plot_df(crossdating, "REF", widths)
+
+    out_path = save_crossdating_plot(
+        plot_df, "REF", "S1", tmp_path / "S1_ReferenceSeries.jpg"
+    )
+
+    from PIL import Image
+
+    with Image.open(out_path) as image:
+        assert image.width <= MAX_REFERENCE_PLOT_WIDTH_PX

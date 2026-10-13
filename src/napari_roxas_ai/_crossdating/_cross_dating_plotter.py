@@ -15,7 +15,7 @@ from magicgui.widgets import (
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import MultipleLocator, StrMethodFormatter
-from napari.utils.notifications import show_info
+from napari.utils.notifications import show_info, show_warning
 from PIL import Image
 from qtpy.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from qtpy.QtGui import QColor, QCursor, QPainter, QPalette, QPen
@@ -126,6 +126,10 @@ def split_handle_labels(slider: RangeSlider) -> None:
         label._format_value = lambda value: str(int(round(value)))
         label.updateText()
         label._update_size()
+
+
+# Widest reference plot, kept below the JPEG limit of 65,535 pixels
+MAX_REFERENCE_PLOT_WIDTH_PX = 65000
 
 
 def find_crossdating_files(start_dir: Union[str, Path]) -> list:
@@ -426,9 +430,14 @@ def save_crossdating_plot(
         r_avg = np.nan
         glk_avg = np.nan
 
-    # Target dimensions in pixels
+    # Target dimensions in pixels: 50 px per year, but never wider than a
+    # JPEG can be (a sample far away from its reference would otherwise span
+    # thousands of years and fail to save)
     target_height_px = 800
-    target_width_px = 50 + (20 + overlap_max_ref - overlap_min_ref) * 50
+    target_width_px = min(
+        50 + (20 + overlap_max_ref - overlap_min_ref) * 50,
+        MAX_REFERENCE_PLOT_WIDTH_PX,
+    )
 
     # Build labels
     roxas_label = f"RXS: {image_id} ({period_ref})"
@@ -964,7 +973,11 @@ class CrossDatingPlotterWidget(Container):
 
         sample_name = layer.metadata.get("sample_name") or layer.name
 
-        out_path = self.save_crossdating_plot_image(out_dir, sample_name)
+        try:
+            out_path = self.save_crossdating_plot_image(out_dir, sample_name)
+        except (OSError, ValueError) as e:
+            show_warning(f"Export plot failed: {e}")
+            return
         if out_path is None:
             show_info("Export plot failed: plot not ready")
             return
