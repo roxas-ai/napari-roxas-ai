@@ -132,7 +132,7 @@ contributions:
       display_name: 9A - Measure cells & rings (individual image)
 
     - command: napari-roxas-ai.make_batch_sample_measurements_widget
-      display_name: 9B - Batch measure cells & rings
+      display_name: 9B - Batch measure & update
 
     - command: napari-roxas-ai.make_settings_widget
       display_name: ZZ - Settings

@@ -128,6 +128,435 @@ def split_handle_labels(slider: RangeSlider) -> None:
         label._update_size()
 
 
+def find_crossdating_files(start_dir: Union[str, Path]) -> list:
+    """
+    Find the crossdating files that apply to a sample in `start_dir`.
+
+    The closest directory wins: `start_dir` is searched first, then each of its
+    parents up to the root, and the files of the first directory holding any
+    are returned.
+    """
+    pattern = f"*{''.join(settings.get('file_extensions.crossdating_file_extension'))}"
+    current_path = Path(start_dir)
+    while True:
+        files = sorted(current_path.glob(pattern))
+        if files or current_path == current_path.parent:
+            return files
+        current_path = current_path.parent
+
+
+def ring_width_series(
+    rings_features: pd.DataFrame,
+    outmost_year: int,
+    image_width: int,
+    spatial_resolution: float,
+) -> Optional[pd.Series]:
+    """
+    Ring widths (µm) of a sample, indexed by year.
+
+    The years are aligned to `outmost_year` (the outmost complete ring year of
+    the metadata), so a stale table cannot misplace the series. Disabled rings
+    are NaN, so they are not plotted. Returns None if the table has no
+    "cells_above" column to derive the widths from.
+    """
+    layer_df = rings_features.set_index("YEAR").copy()
+
+    if "cells_above" not in layer_df.columns:
+        return None
+
+    # Sort by year to ensure correct diff
+    layer_df = layer_df.sort_index()
+
+    # The first value in cells_above is the area above the first ring.
+    # The ring width for year Y is cells_above(Y) - cells_above(Y-1).
+    # We calculate this using np.diff on the total area above each ring.
+    idx = layer_df.columns.get_loc("cells_above")
+    layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
+
+    # Handle disabled years: set their area to NaN so they are not plotted
+    if "enabled" in layer_df.columns:
+        layer_df.loc[~layer_df["enabled"].astype(bool), "cells_above"] = np.nan
+
+    # JUST-IN-TIME YEAR SYNCHRONIZATION:
+    # Before creating the plotting width_series, we ensure the index (YEARs)
+    # aligns with the outmost complete ring year in the metadata.
+    # This fixes the issue where prehistoric years (e.g. -99,999) might
+    # incorrectly default to year 1 in the visual plot if the table is stale.
+    if not layer_df.empty:
+        current_outmost_year = layer_df.index.max()
+        if current_outmost_year != outmost_year:
+            # Shift all years in the plotting copy to match metadata
+            year_offset = int(outmost_year - current_outmost_year)
+            layer_df.index = layer_df.index + year_offset
+            # Ensure index is integer type after shift
+            layer_df.index = layer_df.index.astype(int)
+
+    # Width calculation: total area (pixels) / (image width * scale factor)
+    return layer_df["cells_above"] / (image_width * spatial_resolution)
+
+
+def build_crossdating_plot_df(
+    crossdating_dataframe: pd.DataFrame,
+    reference_column: str,
+    width_series: pd.Series,
+) -> pd.DataFrame:
+    """
+    Combine a reference series, the average series and the sample's ring
+    widths into one table indexed by year.
+
+    `crossdating_dataframe` must hold the "average" column added when the
+    crossdating file is read.
+    """
+    reference_series = crossdating_dataframe[reference_column]
+    average_series = crossdating_dataframe.get(
+        "average", pd.Series(dtype=float)
+    )
+
+    # Build the final plotting DataFrame
+    # We start with the reference series index
+    plot_df = pd.DataFrame(index=crossdating_dataframe.index)
+    plot_df["reference_series"] = reference_series
+    plot_df["average"] = average_series
+
+    # Merge layer_series (width_series) - it might have different years (prehistoric)
+    # Use how='outer' and sort=True to ensure the index covers both ranges correctly
+    plot_df = plot_df.join(width_series.rename("layer_series"), how="outer", sort=True)
+    plot_df.index.name = "YEAR"
+
+    # FINAL SANITY CHECK: Ensure the combined index is of integer type and sorted.
+    # Mixed types (e.g. floats and ints) or unsorted indices can cause plotting misalignment.
+    plot_df.index = plot_df.index.astype(int)
+    return plot_df.sort_index()
+
+
+def calculate_glk(ref: np.ndarray, rox: np.ndarray) -> float:
+    """
+    Calculate the "Gleichläufigkeit" (GLK), an index of synchronous growth changes.
+    """
+    k = len(ref)
+    if k < 2:
+        return np.nan
+
+    # Directions of change: Ref(i) - Ref(i-1)
+    # Using np.diff: diff[i] = x[i+1] - x[i]
+    d_ref = np.diff(ref)
+    d_rox = np.diff(rox)
+
+    # iref = 0.5 if > 0, -0.5 if < 0, 0 if == 0
+    iref = np.zeros_like(d_ref, dtype=float)
+    iref[d_ref > 0] = 0.5
+    iref[d_ref < 0] = -0.5
+
+    irox = np.zeros_like(d_rox, dtype=float)
+    irox[d_rox > 0] = 0.5
+    irox[d_rox < 0] = -0.5
+
+    glk = np.sum(np.abs(iref + irox))
+    glk = glk / (k - 1)
+
+    # Convert to percentage (0-100)
+    return glk * 100
+
+
+def compute_alignment_candidates(
+    plot_df: pd.DataFrame, top_k: int = 4, use_mean: bool = False
+) -> list:
+    """
+    Find the positions of the sample series along the reference (or average)
+    series with the highest Pearson correlation, best first.
+    """
+    sample_series = (
+        plot_df["layer_series"]
+        .dropna()
+        .sort_index()
+    )
+    series_key = "average" if use_mean else "reference_series"
+    if series_key not in plot_df.columns:
+        return []
+
+    reference_series = (
+        plot_df[series_key]
+        .dropna()
+        .sort_index()
+    )
+
+    sample_vals = sample_series.to_numpy(dtype=float)
+    ref_vals = reference_series.to_numpy(dtype=float)
+    ref_years = reference_series.index.to_numpy()
+
+    n_sample = len(sample_vals)
+    n_ref = len(ref_vals)
+
+    if n_sample < 5 or n_ref < n_sample:
+        return []
+
+    # Pearson correlation vectorized:
+    # r = sum((x - mx) * (y - my)) / sqrt(sum((x - mx)^2) * sum((y - my)^2))
+    #   = sum(x' * y) / sqrt(sum(x'^2) * sum((y - my)^2))
+    # where x' = x - mx (demeaned sample)
+    # my is the rolling mean of y (reference window)
+
+    x = sample_vals
+    mx = np.mean(x)
+    x_prime = x - mx
+    sum_x_prime_sq = np.sum(x_prime ** 2)
+
+    if sum_x_prime_sq == 0:
+        return []
+
+    # Numerator: sum(x' * y)
+    # np.correlate(ref, sample_demeaned, mode='valid') gives sum(ref[i:i+W] * x_prime)
+    numerator = np.correlate(ref_vals, x_prime, mode='valid')
+
+    # Denominator: sqrt(sum_x_prime_sq * sum((y - my)^2))
+    # sum((y - my)^2) = sum(y^2) - n_sample * my^2
+    # where my = sum(y) / n_sample
+
+    # Use rolling sums for y and y^2
+    cumsum_y = np.cumsum(np.insert(ref_vals, 0, 0))
+    cumsum_y_sq = np.cumsum(np.insert(ref_vals ** 2, 0, 0))
+
+    sum_y = cumsum_y[n_sample:] - cumsum_y[:-n_sample]
+    sum_y_sq = cumsum_y_sq[n_sample:] - cumsum_y_sq[:-n_sample]
+
+    my = sum_y / n_sample
+    sum_y_centered_sq = sum_y_sq - n_sample * (my ** 2)
+
+    # Handle numerical precision issues (e.g. slightly negative due to floating point)
+    sum_y_centered_sq = np.maximum(sum_y_centered_sq, 0)
+
+    denominator = np.sqrt(sum_x_prime_sq * sum_y_centered_sq)
+
+    # Avoid division by zero
+    with np.errstate(divide='ignore', invalid='ignore'):
+        corrs = numerator / denominator
+
+    # Build candidates
+    candidates = []
+    for i, corr in enumerate(corrs):
+        if np.isnan(corr):
+            continue
+
+        # Calculate GLK for this candidate
+        # ref_vals[i : i + n_sample] is the window of the reference
+        ref_window = ref_vals[i: i + n_sample]
+        glk = calculate_glk(ref_window, sample_vals)
+
+        candidates.append({
+            "start_index": i,
+            "start_year": int(ref_years[i]),
+            "end_year": int(ref_years[i + n_sample - 1]),
+            "corr": float(corr),
+            "glk": float(glk),
+        })
+
+    candidates.sort(key=lambda x: x["corr"], reverse=True)
+    return candidates[:top_k]
+
+
+def reference_plot_path(out_dir: Union[str, Path], sample_name: str) -> Path:
+    """Where the crossdating reference plot of a sample is saved."""
+    return Path(out_dir) / f"{sample_name}_ReferenceSeries.jpg"
+
+
+def save_crossdating_plot(
+    plot_df: pd.DataFrame,
+    reference_name: str,
+    image_id: str,
+    out_path: Union[str, Path],
+    total_offset: int = 0,
+) -> Path:
+    """
+    Save a crossdating plot as a standardized JPG (height=800px, width scaled
+    by overlap range).
+
+    `plot_df` is a table built by build_crossdating_plot_df, `total_offset`
+    the shift in years applied to the sample series.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Calculate correlation and overlapping period
+    shifted_layer_series = plot_df["layer_series"].copy()
+    shifted_layer_series.index = shifted_layer_series.index + total_offset
+
+    corr_df = pd.concat([
+        plot_df["reference_series"],
+        shifted_layer_series,
+        plot_df["average"]
+    ], axis=1)
+    corr_df.columns = ["reference", "roxas", "average"]
+
+    mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
+    overlap_years_ref = corr_df.index[mask_ref].tolist()
+
+    if overlap_years_ref:
+        overlap_min_ref = min(overlap_years_ref)
+        overlap_max_ref = max(overlap_years_ref)
+        r_ref = corr_df["reference"].corr(corr_df["roxas"])
+        glk_ref = calculate_glk(
+            corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
+            corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
+        )
+        period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
+    else:
+        # Fallback if no overlap exists
+        valid_ref_years = corr_df.index[corr_df["reference"].notna()].tolist()
+        valid_roxas_years = corr_df.index[corr_df["roxas"].notna()].tolist()
+        all_valid = valid_ref_years + valid_roxas_years
+        if all_valid:
+            overlap_min_ref = min(all_valid)
+            overlap_max_ref = max(all_valid)
+        else:
+            overlap_min_ref = 0
+            overlap_max_ref = 0
+        r_ref = np.nan
+        glk_ref = np.nan
+        period_ref = "no overlap"
+
+    mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
+    overlap_years_avg = corr_df.index[mask_avg].tolist()
+    if overlap_years_avg:
+        r_avg = corr_df["average"].corr(corr_df["roxas"])
+        glk_avg = calculate_glk(
+            corr_df.loc[overlap_years_avg, "average"].to_numpy(),
+            corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
+        )
+    else:
+        r_avg = np.nan
+        glk_avg = np.nan
+
+    # Target dimensions in pixels
+    target_height_px = 800
+    target_width_px = 50 + (20 + overlap_max_ref - overlap_min_ref) * 50
+
+    # Build labels
+    roxas_label = f"RXS: {image_id} ({period_ref})"
+
+    ref_name = str(reference_name)
+    glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
+    r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
+    ref_label = f"{ref_name}{r_ref_text}"
+
+    glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
+    r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
+    avg_label = f"Average{r_avg_text}"
+
+    # Create offscreen figure with exact pixel size
+    dpi = 100
+    fig = Figure(
+        figsize=(target_width_px / dpi, target_height_px / dpi),
+        dpi=dpi,
+        facecolor="black"
+    )
+    ax = fig.add_subplot(111)
+    ax.set_facecolor("black")
+
+    # Configure margins with fixed pixel padding
+    right_margin_px = 15
+    left_margin_px = 140
+    top_margin_px = 15
+    bottom_margin_px = 50
+
+    fig.subplots_adjust(
+        left=left_margin_px / target_width_px,
+        right=(target_width_px - right_margin_px) / target_width_px,
+        top=(target_height_px - top_margin_px) / target_height_px,
+        bottom=bottom_margin_px / target_height_px,
+    )
+
+    years = plot_df.index.to_numpy(dtype=int)
+
+    # Plot the series with 3px line thickness
+    ax.plot(
+        years + total_offset,
+        plot_df["layer_series"],
+        color='red',
+        linestyle='-',
+        linewidth=3,
+        label=roxas_label,
+        zorder=3,
+    )
+    ax.plot(
+        years,
+        plot_df["reference_series"],
+        color='yellow',
+        linestyle='-',
+        linewidth=3,
+        label=ref_label,
+        zorder=2,
+    )
+    ax.plot(
+        years,
+        plot_df["average"],
+        color='white',
+        linestyle='-',
+        linewidth=3,
+        label=avg_label,
+        zorder=1,
+    )
+
+    ax.set_ylabel("Width (\u03BCm)", color='lightgrey', fontsize=20, labelpad=10)
+    legend = ax.legend(loc="best", facecolor='black', edgecolor='lightgrey', fontsize=20)
+    series_colors = ['red', 'yellow', 'white']
+    for text, color in zip(legend.get_texts(), series_colors):
+        text.set_color(color)
+
+    ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+    ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey', linewidth=1.5)
+    ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey', linewidth=1.0)
+    ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey', linewidth=1.5)
+
+    # Set x limits standard to overlap window +- 10 years
+    x_min = overlap_min_ref - 10
+    x_max = overlap_max_ref + 10
+    ax.set_xlim(x_min, x_max)
+
+    major_step = year_grid_step(x_max - x_min)
+    ax.xaxis.set_major_locator(MultipleLocator(major_step))
+    ax.xaxis.set_minor_locator(MultipleLocator(major_step / 2))
+
+    # Determine y limits based on visible data within [x_min, x_max]
+    visible_roxas = plot_df["layer_series"].copy()
+    visible_roxas.index = np.array(years) + total_offset
+    visible_roxas = visible_roxas[(visible_roxas.index >= x_min) & (visible_roxas.index <= x_max)].dropna()
+
+    visible_ref = plot_df["reference_series"].copy()
+    visible_ref = visible_ref[(visible_ref.index >= x_min) & (visible_ref.index <= x_max)].dropna()
+
+    visible_avg = plot_df["average"].copy()
+    visible_avg = visible_avg[(visible_avg.index >= x_min) & (visible_avg.index <= x_max)].dropna()
+
+    all_visible_values = pd.concat([visible_roxas, visible_ref, visible_avg])
+    if not all_visible_values.empty:
+        min_val = float(all_visible_values.min())
+        max_val = float(all_visible_values.max())
+        padding = (max_val - min_val) * 0.1 if max_val > min_val else 10.0
+        y_min = int(np.floor(max(0.0, min_val - padding)))
+        y_max = int(np.ceil(max_val + padding))
+    else:
+        y_min = 0
+        y_max = 100
+
+    if y_min >= y_max:
+        y_max = y_min + 10
+    ax.set_ylim(y_min, y_max)
+
+    ax.tick_params(colors='lightgrey', which='both', labelsize=20)
+    for spine in ax.spines.values():
+        spine.set_color('lightgrey')
+        spine.set_linewidth(2)
+
+    # Save exact standardized figure without changing bounding box sizes
+    fig.savefig(
+        out_path,
+        dpi=dpi,
+        facecolor="black",
+    )
+    return out_path
+
+
+
 class MatplotlibCanvas(Container):
     """A Container widget that wraps a matplotlib canvas."""
 
@@ -919,80 +1348,36 @@ class CrossDatingPlotterWidget(Container):
                 self.plot_widget.clear()
             return
 
-        # Get reference series
-        try:
-            reference_series = self.crossdating_dataframe[
-                self._crossdating_column_combo.value
-            ]
-        except (KeyError, AttributeError):
+        # Check the reference series
+        if (
+            getattr(self, "crossdating_dataframe", None) is None
+            or self._crossdating_column_combo.value
+            not in self.crossdating_dataframe.columns
+        ):
             show_info(f"Reference series '{self._crossdating_column_combo.value}' not found in data.")
             return
 
-        # Get the average series
-        average_series = self.crossdating_dataframe.get("average", pd.Series(dtype=float))
-
-        # Get the layer rings series
-        layer_df = layer.features.set_index("YEAR").copy()
-
-        # Compute the difference with previous year
-        if "cells_above" in layer_df.columns:
-            # Sort by year to ensure correct diff
-            layer_df = layer_df.sort_index()
-
-            # The first value in cells_above is the area above the first ring.
-            # The ring width for year Y is cells_above(Y) - cells_above(Y-1).
-            # We calculate this using np.diff on the total area above each ring.
-            idx = layer_df.columns.get_loc("cells_above")
-            layer_df.iloc[1:, idx] = np.diff(layer_df["cells_above"].values)
-        else:
+        # Get the layer rings series, aligned to the outmost complete ring year
+        if "cells_above" not in layer.features.columns:
             show_info("Layer features missing 'cells_above' column.")
             return
 
-        # Handle disabled years: set their area to NaN so they are not plotted
-        if "enabled" in layer_df.columns:
-            layer_df.loc[~layer_df["enabled"], "cells_above"] = np.nan
-
-        # Create ring width series
         # Ensure data and metadata are present
         if not hasattr(layer, "data") or "spatial_resolution" not in layer.metadata:
             return
 
-        # JUST-IN-TIME YEAR SYNCHRONIZATION:
-        # Before creating the plotting width_series, we ensure the index (YEARs)
-        # aligns with the outmost complete ring year in the metadata.
-        # This fixes the issue where prehistoric years (e.g. -99,999) might
-        # incorrectly default to year 1 in the visual plot if the table is stale.
-        metadata_outmost_year = layer.metadata.get("rings_outmost_complete_year", 9999)
-        if not layer_df.empty:
-            current_outmost_year = layer_df.index.max()
-            if current_outmost_year != metadata_outmost_year:
-                # Shift all years in the plotting copy to match metadata
-                year_offset = int(metadata_outmost_year - current_outmost_year)
-                layer_df.index = layer_df.index + year_offset
-                # Ensure index is integer type after shift
-                layer_df.index = layer_df.index.astype(int)
-
-        # Width calculation: total area (pixels) / (image width * scale factor)
-        width_series = layer_df["cells_above"] / (
-                layer.data.shape[1]
-                * layer.metadata["spatial_resolution"]
+        width_series = ring_width_series(
+            layer.features,
+            layer.metadata.get("rings_outmost_complete_year", 9999),
+            layer.data.shape[1],
+            layer.metadata["spatial_resolution"],
         )
 
-        # Build the final plotting DataFrame
-        # We start with the reference series index
-        self.plot_df = pd.DataFrame(index=self.crossdating_dataframe.index)
-        self.plot_df["reference_series"] = reference_series
-        self.plot_df["average"] = average_series
-
-        # Merge layer_series (width_series) - it might have different years (prehistoric)
-        # Use how='outer' and sort=True to ensure the index covers both ranges correctly
-        self.plot_df = self.plot_df.join(width_series.rename("layer_series"), how="outer", sort=True)
-        self.plot_df.index.name = "YEAR"
-
-        # FINAL SANITY CHECK: Ensure the combined index is of integer type and sorted.
-        # Mixed types (e.g. floats and ints) or unsorted indices can cause plotting misalignment.
-        self.plot_df.index = self.plot_df.index.astype(int)
-        self.plot_df = self.plot_df.sort_index()
+        self.plot_df = build_crossdating_plot_df(
+            self.crossdating_dataframe,
+            self._crossdating_column_combo.value,
+            width_series,
+        )
 
         # Update the plot
         self._plot_crossdating_data()
@@ -1457,34 +1842,7 @@ class CrossDatingPlotterWidget(Container):
                 elif hasattr(widget, "_magic_widget") and isinstance(widget._magic_widget, RingsLayerEditorWidget):
                     widget._magic_widget._update_year_spinbox()
 
-    @staticmethod
-    def calculate_glk(ref: np.ndarray, rox: np.ndarray) -> float:
-        """
-        Calculate the "Gleichläufigkeit" (GLK), an index of synchronous growth changes.
-        """
-        k = len(ref)
-        if k < 2:
-            return np.nan
-
-        # Directions of change: Ref(i) - Ref(i-1)
-        # Using np.diff: diff[i] = x[i+1] - x[i]
-        d_ref = np.diff(ref)
-        d_rox = np.diff(rox)
-
-        # iref = 0.5 if > 0, -0.5 if < 0, 0 if == 0
-        iref = np.zeros_like(d_ref, dtype=float)
-        iref[d_ref > 0] = 0.5
-        iref[d_ref < 0] = -0.5
-
-        irox = np.zeros_like(d_rox, dtype=float)
-        irox[d_rox > 0] = 0.5
-        irox[d_rox < 0] = -0.5
-
-        glk = np.sum(np.abs(iref + irox))
-        glk = glk / (k - 1)
-
-        # Convert to percentage (0-100)
-        return glk * 100
+    calculate_glk = staticmethod(calculate_glk)
 
     def _on_use_mean_changed(self, value=None):
         """Called when the 'Use Mean' checkbox is toggled."""
@@ -1548,94 +1906,7 @@ class CrossDatingPlotterWidget(Container):
     ):
         if plot_df is None:
             plot_df = self.plot_df
-
-        sample_series = (
-            plot_df["layer_series"]
-            .dropna()
-            .sort_index()
-        )
-        series_key = "average" if use_mean else "reference_series"
-        if series_key not in plot_df.columns:
-            return []
-
-        reference_series = (
-            plot_df[series_key]
-            .dropna()
-            .sort_index()
-        )
-
-        sample_vals = sample_series.to_numpy(dtype=float)
-        ref_vals = reference_series.to_numpy(dtype=float)
-        ref_years = reference_series.index.to_numpy()
-
-        n_sample = len(sample_vals)
-        n_ref = len(ref_vals)
-
-        if n_sample < 5 or n_ref < n_sample:
-            return []
-
-        # Pearson correlation vectorized:
-        # r = sum((x - mx) * (y - my)) / sqrt(sum((x - mx)^2) * sum((y - my)^2))
-        #   = sum(x' * y) / sqrt(sum(x'^2) * sum((y - my)^2))
-        # where x' = x - mx (demeaned sample)
-        # my is the rolling mean of y (reference window)
-
-        x = sample_vals
-        mx = np.mean(x)
-        x_prime = x - mx
-        sum_x_prime_sq = np.sum(x_prime ** 2)
-
-        if sum_x_prime_sq == 0:
-            return []
-
-        # Numerator: sum(x' * y)
-        # np.correlate(ref, sample_demeaned, mode='valid') gives sum(ref[i:i+W] * x_prime)
-        numerator = np.correlate(ref_vals, x_prime, mode='valid')
-
-        # Denominator: sqrt(sum_x_prime_sq * sum((y - my)^2))
-        # sum((y - my)^2) = sum(y^2) - n_sample * my^2
-        # where my = sum(y) / n_sample
-
-        # Use rolling sums for y and y^2
-        cumsum_y = np.cumsum(np.insert(ref_vals, 0, 0))
-        cumsum_y_sq = np.cumsum(np.insert(ref_vals ** 2, 0, 0))
-
-        sum_y = cumsum_y[n_sample:] - cumsum_y[:-n_sample]
-        sum_y_sq = cumsum_y_sq[n_sample:] - cumsum_y_sq[:-n_sample]
-
-        my = sum_y / n_sample
-        sum_y_centered_sq = sum_y_sq - n_sample * (my ** 2)
-
-        # Handle numerical precision issues (e.g. slightly negative due to floating point)
-        sum_y_centered_sq = np.maximum(sum_y_centered_sq, 0)
-
-        denominator = np.sqrt(sum_x_prime_sq * sum_y_centered_sq)
-
-        # Avoid division by zero
-        with np.errstate(divide='ignore', invalid='ignore'):
-            corrs = numerator / denominator
-
-        # Build candidates
-        candidates = []
-        for i, corr in enumerate(corrs):
-            if np.isnan(corr):
-                continue
-
-            # Calculate GLK for this candidate
-            # ref_vals[i : i + n_sample] is the window of the reference
-            ref_window = ref_vals[i: i + n_sample]
-            glk = self.calculate_glk(ref_window, sample_vals)
-
-            candidates.append({
-                "start_index": i,
-                "start_year": int(ref_years[i]),
-                "end_year": int(ref_years[i + n_sample - 1]),
-                "corr": float(corr),
-                "glk": float(glk),
-            })
-
-        candidates.sort(key=lambda x: x["corr"], reverse=True)
-        return candidates[:top_k]
+        return compute_alignment_candidates(plot_df, top_k=top_k, use_mean=use_mean)
 
     def _update_alignment_buttons(self):
         self._alignment_buttons_container.widgets = []
@@ -1710,194 +1981,13 @@ class CrossDatingPlotterWidget(Container):
         if self._crossdating_column_combo.value is None:
             return None
 
-        out_dir = Path(out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        out_path = out_dir / f"{sample_name}_ReferenceSeries.jpg"
-
-        # Calculate correlation and overlapping period
-        total_offset = self._base_offset + self._offset_slider.value
-        shifted_layer_series = self.plot_df["layer_series"].copy()
-        shifted_layer_series.index = shifted_layer_series.index + total_offset
-
-        corr_df = pd.concat([
-            self.plot_df["reference_series"],
-            shifted_layer_series,
-            self.plot_df["average"]
-        ], axis=1)
-        corr_df.columns = ["reference", "roxas", "average"]
-
-        mask_ref = corr_df["reference"].notna() & corr_df["roxas"].notna()
-        overlap_years_ref = corr_df.index[mask_ref].tolist()
-
-        if overlap_years_ref:
-            overlap_min_ref = min(overlap_years_ref)
-            overlap_max_ref = max(overlap_years_ref)
-            r_ref = corr_df["reference"].corr(corr_df["roxas"])
-            glk_ref = self.calculate_glk(
-                corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
-                corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
-            )
-            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
-        else:
-            # Fallback if no overlap exists
-            valid_ref_years = corr_df.index[corr_df["reference"].notna()].tolist()
-            valid_roxas_years = corr_df.index[corr_df["roxas"].notna()].tolist()
-            all_valid = valid_ref_years + valid_roxas_years
-            if all_valid:
-                overlap_min_ref = min(all_valid)
-                overlap_max_ref = max(all_valid)
-            else:
-                overlap_min_ref = 0
-                overlap_max_ref = 0
-            r_ref = np.nan
-            glk_ref = np.nan
-            period_ref = "no overlap"
-
-        mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
-        overlap_years_avg = corr_df.index[mask_avg].tolist()
-        if overlap_years_avg:
-            r_avg = corr_df["average"].corr(corr_df["roxas"])
-            glk_avg = self.calculate_glk(
-                corr_df.loc[overlap_years_avg, "average"].to_numpy(),
-                corr_df.loc[overlap_years_avg, "roxas"].to_numpy()
-            )
-        else:
-            r_avg = np.nan
-            glk_avg = np.nan
-
-        # Target dimensions in pixels
-        target_height_px = 800
-        target_width_px = 50 + (20 + overlap_max_ref - overlap_min_ref) * 50
-
-        # Build labels
         layer = self._input_layer if hasattr(self, "_viewer") and self._viewer is not None else None
         image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else sample_name
-        roxas_label = f"RXS: {image_id} ({period_ref})"
 
-        ref_name = str(self._crossdating_column_combo.value)
-        glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
-        r_ref_text = f": r={r_ref:.3f}{glk_ref_text}" if not np.isnan(r_ref) else ""
-        ref_label = f"{ref_name}{r_ref_text}"
-
-        glk_avg_text = f", glk={glk_avg:.0f}" if not np.isnan(glk_avg) else ""
-        r_avg_text = f": r={r_avg:.3f}{glk_avg_text}" if not np.isnan(r_avg) else ""
-        avg_label = f"Average{r_avg_text}"
-
-        # Create offscreen figure with exact pixel size
-        dpi = 100
-        fig = Figure(
-            figsize=(target_width_px / dpi, target_height_px / dpi),
-            dpi=dpi,
-            facecolor="black"
+        return save_crossdating_plot(
+            self.plot_df,
+            self._crossdating_column_combo.value,
+            image_id,
+            reference_plot_path(out_dir, sample_name),
+            total_offset=self._base_offset + self._offset_slider.value,
         )
-        ax = fig.add_subplot(111)
-        ax.set_facecolor("black")
-
-        # Configure margins with fixed pixel padding
-        right_margin_px = 15
-        left_margin_px = 140
-        top_margin_px = 15
-        bottom_margin_px = 50
-
-        fig.subplots_adjust(
-            left=left_margin_px / target_width_px,
-            right=(target_width_px - right_margin_px) / target_width_px,
-            top=(target_height_px - top_margin_px) / target_height_px,
-            bottom=bottom_margin_px / target_height_px,
-        )
-
-        years = self.plot_df.index.to_numpy(dtype=int)
-
-        # Plot the series with 3px line thickness
-        ax.plot(
-            years + total_offset,
-            self.plot_df["layer_series"],
-            color='red',
-            linestyle='-',
-            linewidth=3,
-            label=roxas_label,
-            zorder=3,
-        )
-        ax.plot(
-            years,
-            self.plot_df["reference_series"],
-            color='yellow',
-            linestyle='-',
-            linewidth=3,
-            label=ref_label,
-            zorder=2,
-        )
-        ax.plot(
-            years,
-            self.plot_df["average"],
-            color='white',
-            linestyle='-',
-            linewidth=3,
-            label=avg_label,
-            zorder=1,
-        )
-
-        ax.set_ylabel("Width (\u03BCm)", color='lightgrey', fontsize=20, labelpad=10)
-        legend = ax.legend(loc="best", facecolor='black', edgecolor='lightgrey', fontsize=20)
-        series_colors = ['red', 'yellow', 'white']
-        for text, color in zip(legend.get_texts(), series_colors):
-            text.set_color(color)
-
-        ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
-        ax.grid(True, which='major', axis='x', linestyle='-', alpha=0.5, color='lightgrey', linewidth=1.5)
-        ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey', linewidth=1.0)
-        ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey', linewidth=1.5)
-
-        # Set x limits standard to overlap window +- 10 years
-        x_min = overlap_min_ref - 10
-        x_max = overlap_max_ref + 10
-        ax.set_xlim(x_min, x_max)
-
-        major_step = year_grid_step(x_max - x_min)
-        ax.xaxis.set_major_locator(MultipleLocator(major_step))
-        ax.xaxis.set_minor_locator(MultipleLocator(major_step / 2))
-
-        # Determine y limits based on visible data within [x_min, x_max]
-        visible_roxas = self.plot_df["layer_series"].copy()
-        visible_roxas.index = np.array(years) + total_offset
-        visible_roxas = visible_roxas[(visible_roxas.index >= x_min) & (visible_roxas.index <= x_max)].dropna()
-
-        visible_ref = self.plot_df["reference_series"].copy()
-        visible_ref = visible_ref[(visible_ref.index >= x_min) & (visible_ref.index <= x_max)].dropna()
-
-        visible_avg = self.plot_df["average"].copy()
-        visible_avg = visible_avg[(visible_avg.index >= x_min) & (visible_avg.index <= x_max)].dropna()
-
-        all_visible_values = pd.concat([visible_roxas, visible_ref, visible_avg])
-        if not all_visible_values.empty:
-            min_val = float(all_visible_values.min())
-            max_val = float(all_visible_values.max())
-            padding = (max_val - min_val) * 0.1 if max_val > min_val else 10.0
-            y_min = int(np.floor(max(0.0, min_val - padding)))
-            y_max = int(np.ceil(max_val + padding))
-        else:
-            y_min = 0
-            y_max = 100
-
-        if y_min >= y_max:
-            y_max = y_min + 10
-        ax.set_ylim(y_min, y_max)
-
-        ax.tick_params(colors='lightgrey', which='both', labelsize=20)
-        for spine in ax.spines.values():
-            spine.set_color('lightgrey')
-            spine.set_linewidth(2)
-
-        # Save exact standardized figure without changing bounding box sizes
-        fig.savefig(
-            out_path,
-            dpi=dpi,
-            facecolor="black",
-        )
-        return out_path
-
-
-
-
-

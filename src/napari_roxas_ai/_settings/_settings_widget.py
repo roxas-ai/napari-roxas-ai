@@ -1034,14 +1034,19 @@ class SettingsWidget(Container):
                         break
 
         if dock_widget is None:
+            # A newly created widget floats itself; positioning it here as well
+            # would move it twice and make it flicker
             settings_widget = cls(viewer)
-            dock_widget = viewer.window.add_dock_widget(
+            viewer.window.add_dock_widget(
                 settings_widget,
                 name="ZZ – Settings",
                 area="right",
             )
-        
-        cls._configure_floating_dock(dock_widget, viewer)
+        else:
+            # Already open (e.g. docked by the user): bring it back to the
+            # floating layout. Its own lookup finds the hosting QDockWidget,
+            # whereas dock_widgets may only hold the inner widget.
+            settings_widget._ensure_floating()
 
         if section_name and settings_widget is not None:
             settings_widget.focus_section(section_name)

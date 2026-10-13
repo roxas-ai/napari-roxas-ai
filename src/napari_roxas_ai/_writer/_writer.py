@@ -716,6 +716,33 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     written_file_paths.append(rings_file_path)
 
     # --- Save annotated scan image ---
+    if not meta["features"].empty:
+        annotated_path = save_sample_annotated_image(sample_path, meta["features"])
+        if annotated_path is not None:
+            written_file_paths.append(annotated_path)
+
+    return written_file_paths
+
+
+def save_sample_annotated_image(
+    sample_path: Union[str, Path], rings_features: pd.DataFrame
+) -> Union[str, None]:
+    """
+    Draw the rings onto the scan of a sample and save it next to the sample.
+
+    Parameters
+    ----------
+    sample_path : str or Path
+        The sample stem (sample directory / sample name, without extensions).
+    rings_features : pd.DataFrame
+        The rings table holding the ring boundaries and years.
+
+    Returns
+    -------
+    str or None
+        The path to the annotated image, or None if it was not written.
+    """
+    sample_path = Path(sample_path)
     basename = sample_path.name  # use for annotated naming
     scan_file_extension = "".join(settings.get("file_extensions.scan_file_extension"))
     scan_file_path = f"{sample_path}{scan_file_extension}"
@@ -730,22 +757,21 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
     # annotated filename: <sample>_annotated.jpg, whatever the scan format:
     # JPEG keeps it small, and the preparation skips exactly this name
-    annotated_path = str(Path(sample_path).with_name(f"{basename}_annotated.jpg"))
+    annotated_path = str(sample_path.with_name(f"{basename}_annotated.jpg"))
 
     try:
         if not Path(scan_file_path).exists():
             print(f"Annotated image export skipped for {basename}: no scan file found")
-        elif not meta["features"].empty:
-            save_annotated_scan_image(
-                scan_path=scan_file_path,
-                annotated_path=annotated_path,
-                rings_features=meta["features"],
-            )
-            written_file_paths.append(annotated_path)
+            return None
+        save_annotated_scan_image(
+            scan_path=scan_file_path,
+            annotated_path=annotated_path,
+            rings_features=rings_features,
+        )
+        return annotated_path
     except Exception as e:
         print(f"Annotated image export failed for {basename}: {e}")
-
-    return written_file_paths
+        return None
 
 
 def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
