@@ -45,10 +45,18 @@ def batch_widget(request, settings):
 
 def test_batch_widget_shows_the_project_directory(batch_widget, tmp_path):
     assert batch_widget.input_directory_path == str(tmp_path)
-    assert (
-        batch_widget._input_file_dialog_button.text
-        == f"Project Directory: {tmp_path}"
-    )
+    if hasattr(batch_widget, "_project_directory_label"):
+        assert batch_widget._project_directory_label.value == "Project Directory:"
+        assert (
+            batch_widget._input_file_dialog_button.text
+            == _batch_sample_segmentation._elide_path(str(tmp_path))
+        )
+        assert batch_widget._input_file_dialog_button.tooltip == str(tmp_path)
+    else:
+        assert (
+            batch_widget._input_file_dialog_button.text
+            == f"Project Directory: {tmp_path}"
+        )
 
 
 def test_batch_widget_follows_a_change_made_elsewhere(
@@ -59,10 +67,18 @@ def test_batch_widget_follows_a_change_made_elsewhere(
     settings.set("project_directory", other)
 
     assert batch_widget.input_directory_path == other
-    assert (
-        batch_widget._input_file_dialog_button.text
-        == f"Project Directory: {other}"
-    )
+    if hasattr(batch_widget, "_project_directory_label"):
+        assert batch_widget._project_directory_label.value == "Project Directory:"
+        assert (
+            batch_widget._input_file_dialog_button.text
+            == _batch_sample_segmentation._elide_path(other)
+        )
+        assert batch_widget._input_file_dialog_button.tooltip == other
+    else:
+        assert (
+            batch_widget._input_file_dialog_button.text
+            == f"Project Directory: {other}"
+        )
 
 
 def test_batch_widget_choice_becomes_the_project_directory(
