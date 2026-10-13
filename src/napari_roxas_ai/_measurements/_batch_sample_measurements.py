@@ -530,7 +530,7 @@ class BatchSampleMeasurementsWidget(Container):
         )
         self._update_reference_checkbox = CheckBox(
             value=True,
-            label="Update Cross-dating Reference Files",
+            label="Update Crossdating Reference Files",
             tooltip=(
                 "Redraw and save the crossdating reference plots, using the "
                 "reference series and outmost complete ring year of each "
@@ -573,6 +573,8 @@ class BatchSampleMeasurementsWidget(Container):
             visible=False,
         )
         self._file_selection_container.margins = (0, 0, 0, 0)
+        if hasattr(self._file_selection_container.native, "layout") and self._file_selection_container.native.layout() is not None:
+            self._file_selection_container.native.layout().setAlignment(Qt.AlignTop)
 
         # Reverse selection button (initially hidden)
         self._reverse_selection_button = PushButton(
@@ -613,7 +615,11 @@ class BatchSampleMeasurementsWidget(Container):
                 self.progress_bar,
             ]
         )
-        if self.native.layout() is not None:
+        if hasattr(self.native, "layout") and self.native.layout() is not None:
+            self.native.layout().setAlignment(Qt.AlignTop)
+            self.native.layout().setAlignment(
+                self._file_selection_container.native, Qt.AlignTop
+            )
             # Spare height goes below the widgets instead of stretching the controls
             self.native.layout().addStretch()
 

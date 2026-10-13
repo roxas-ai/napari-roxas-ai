@@ -227,7 +227,7 @@ def test_crossdating_plotter_auto_floats_with_margins_and_size_grip(
     viewer = make_napari_viewer()
     widget = CrossDatingPlotterWidget(viewer)
     dock = viewer.window.add_dock_widget(
-        widget, name="7 – Visual cross-dating", area="right"
+        widget, name="7 – Visual crossdating", area="right"
     )
 
     qtbot.wait(100)

@@ -853,7 +853,7 @@ class CrossDatingPlotterWidget(Container):
             self._configure_floating_dock(dock, self._viewer)
 
     def _find_dock_widget(self) -> Optional[Any]:
-        """Find the QDockWidget wrapping this cross-dating widget."""
+        """Find the QDockWidget wrapping this crossdating widget."""
         # 1. Walk parent widgets
         parent = self.native.parentWidget()
         while parent is not None:

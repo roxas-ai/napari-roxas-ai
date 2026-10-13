@@ -93,7 +93,7 @@ def test_layout_follows_the_mockup(widget):
         "Measure Cells",
         "Measure Rings",
         "Update Annotated image",
-        "Update Cross-dating Reference Files",
+        "Update Crossdating Reference Files",
         "Manually Select Files To Process",
         "Check Settings",
     ]
