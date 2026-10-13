@@ -46,10 +46,10 @@ def batch_widget(request, settings):
 def test_batch_widget_shows_the_project_directory(batch_widget, tmp_path):
     assert batch_widget.input_directory_path == str(tmp_path)
     if hasattr(batch_widget, "_project_directory_label"):
-        module = __import__(type(batch_widget).__module__, fromlist=["_elide_path"])
         assert batch_widget._project_directory_label.value == "Project Directory:"
-        assert batch_widget._input_file_dialog_button.text == module._elide_path(
-            str(tmp_path)
+        assert (
+            batch_widget._input_file_dialog_button.text
+            == _batch_sample_segmentation._elide_path(str(tmp_path))
         )
         assert batch_widget._input_file_dialog_button.tooltip == str(tmp_path)
     else:
@@ -68,10 +68,10 @@ def test_batch_widget_follows_a_change_made_elsewhere(
 
     assert batch_widget.input_directory_path == other
     if hasattr(batch_widget, "_project_directory_label"):
-        module = __import__(type(batch_widget).__module__, fromlist=["_elide_path"])
         assert batch_widget._project_directory_label.value == "Project Directory:"
-        assert batch_widget._input_file_dialog_button.text == module._elide_path(
-            other
+        assert (
+            batch_widget._input_file_dialog_button.text
+            == _batch_sample_segmentation._elide_path(other)
         )
         assert batch_widget._input_file_dialog_button.tooltip == other
     else:
