@@ -1,6 +1,7 @@
 """The batch measure & update widget and its worker."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -263,7 +264,7 @@ def test_reference_plot_uses_the_stored_series(project, sample_widths):
     plot_df, reference_name, image_id, out_path = save.call_args.args
     assert reference_name == "OTHER"
     assert image_id == "S1"
-    assert str(out_path).endswith("trees/S1_ReferenceSeries.jpg")
+    assert Path(out_path).parts[-2:] == ("trees", "S1_ReferenceSeries.jpg")
     # Dated by the outmost complete ring year of the metadata
     assert plot_df["layer_series"].dropna().index.max() == OUTMOST_YEAR
 
