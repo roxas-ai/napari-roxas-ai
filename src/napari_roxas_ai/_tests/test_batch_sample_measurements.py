@@ -94,12 +94,12 @@ def test_layout_follows_the_mockup(widget):
         "Measure Rings",
         "Update Annotated image",
         "Update Crossdating Reference Files",
-        "Manually Select Files To Process",
+        "Manually Select Files To Process:",
         "Check Settings",
     ]
     assert widget._run_analysis_button.native.text() == "Measure && Update"
-    assert not widget._file_selection_container.visible
-    assert not widget._reverse_selection_button.visible
+    assert widget._file_selection_container.visible
+    assert widget._reverse_selection_button.visible
 
 
 def test_updates_are_locked_on_while_measuring(widget):
@@ -148,7 +148,7 @@ def test_samples_with_a_cells_or_rings_file_are_listed(widget, tmp_path):
 
 
 def test_manual_selection_and_reverse_selection(widget, tmp_path):
-    widget._handpick_files_checkbox.value = True
+    assert widget._handpick_files_checkbox.value is True
     assert widget._handpick_files_checkbox.text.endswith(":")
     assert widget._file_selection_container.visible
     assert widget._reverse_selection_button.visible
@@ -188,6 +188,15 @@ def test_file_list_is_refilled_not_replaced(widget, settings, tmp_path):
     assert list(widget._file_selection_container) == [file_list]
 
 
+def test_file_list_choices_retained_on_reset_choices_or_docking(
+    widget, make_napari_viewer
+):
+    """napari calls reset_choices() when adding dock widgets."""
+    assert len(widget._file_select_widget.choices) > 0
+    widget._file_select_widget.reset_choices()
+    assert len(widget._file_select_widget.choices) > 0
+
+
 def test_check_settings_opens_the_measurement_settings(widget):
     with patch.object(module.SettingsWidget, "open_floating") as open_floating:
         widget._open_settings()
@@ -210,7 +219,7 @@ def _worker(**kwargs):
     return module.Worker({}, {}, **options)
 
 
-def _rings(widths, reference_series=NO_REFERENCE_SERIES):
+def _rings(widths, sample_name="S1", reference_series=NO_REFERENCE_SERIES):
     """Rings as read from a file, with the given ring widths (µm)."""
     widths = np.asarray(widths, dtype=float)
     years = np.arange(OUTMOST_YEAR - len(widths) + 1, OUTMOST_YEAR + 1)
@@ -222,7 +231,7 @@ def _rings(widths, reference_series=NO_REFERENCE_SERIES):
         }
     )
     metadata = {
-        "sample_name": "S1",
+        "sample_name": sample_name,
         "spatial_resolution": SPATIAL_RESOLUTION,
         "rings_outmost_complete_year": OUTMOST_YEAR,
         "reference_series": reference_series,
@@ -243,11 +252,10 @@ def project(tmp_path, settings, sample_widths):
     rng = np.random.default_rng(1)
     years = np.arange(1950, 2011)
     noise = pd.Series(rng.uniform(50, 150, len(years)), index=years)
-    # "MATCH" holds the sample's widths at its dating, "OTHER" is unrelated
     match = noise.copy()
     match.loc[OUTMOST_YEAR - len(sample_widths) + 1 : OUTMOST_YEAR] = sample_widths
     other = pd.Series(rng.uniform(50, 150, len(years)), index=years)
-    table = pd.DataFrame({"OTHER": other, "MATCH": match}, index=years)
+    table = pd.DataFrame({"OTHER": other, "S1": match}, index=years)
     table.index.name = "YEAR"
     table.to_csv(tmp_path / "ref.crossdating.txt", sep="\t")
 
@@ -269,36 +277,67 @@ def test_reference_plot_uses_the_stored_series(project, sample_widths):
     assert plot_df["layer_series"].dropna().index.max() == OUTMOST_YEAR
 
 
-def test_reference_plot_without_stored_series_uses_the_best_match(
+def test_reference_plot_without_stored_series_uses_the_matching_name(
     project, sample_widths
 ):
-    with patch.object(module, "save_crossdating_plot") as save:
+    with patch.object(module, "save_crossdating_plot") as save, patch.object(
+        module, "update_metadata_file"
+    ) as update_meta:
         task = _worker()._update_reference_plot(project, _rings(sample_widths))
-    assert save.call_args.args[1] == "MATCH"
-    assert task == "Reference plot (MATCH, best match)"
+    assert save.call_args.args[1] == "S1"
+    assert task == "Reference plot (S1, best match)"
+    update_meta.assert_called_once()
+    assert update_meta.call_args.args[1]["reference_series"] == "S1"
 
 
-def test_reference_plot_with_unknown_stored_series_uses_the_best_match(
+def test_reference_plot_with_unknown_stored_series_uses_the_matching_name(
     project, sample_widths
 ):
-    with patch.object(module, "save_crossdating_plot") as save:
+    with patch.object(module, "save_crossdating_plot") as save, patch.object(
+        module, "update_metadata_file"
+    ) as update_meta:
         _worker()._update_reference_plot(
             project, _rings(sample_widths, reference_series="GONE")
         )
-    assert save.call_args.args[1] == "MATCH"
+    assert save.call_args.args[1] == "S1"
+    update_meta.assert_called_once()
+    assert update_meta.call_args.args[1]["reference_series"] == "S1"
+
+
+def test_reference_plot_without_matching_series_is_skipped(
+    project, sample_widths
+):
+    # Sample named "UNMATCHED" does not match columns "OTHER" or "S1"
+    sample_dir = Path(project).parent
+    unmatched_stem = str(sample_dir / "UNMATCHED")
+    rings = _rings(sample_widths, sample_name="UNMATCHED")
+    # Missing reference_series in metadata
+    del rings[1]["metadata"]["reference_series"]
+    with patch.object(module, "save_crossdating_plot") as save, patch.object(
+        module, "update_metadata_file"
+    ) as update_meta:
+        task = _worker()._update_reference_plot(unmatched_stem, rings)
+    save.assert_not_called()
+    assert task == "Reference plot skipped (no matching reference series)"
+    update_meta.assert_called_once()
+    assert update_meta.call_args.args[1]["reference_series"] == NO_REFERENCE_SERIES
 
 
 def test_reference_plot_is_skipped_without_crossdating_file(
     tmp_path, settings, sample_widths
 ):
+    rings = _rings(sample_widths)
+    del rings[1]["metadata"]["reference_series"]
     with patch.object(module, "save_crossdating_plot") as save, patch.object(
         module, "find_crossdating_files", return_value=[]
-    ):
+    ), patch.object(module, "update_metadata_file") as update_meta:
         task = _worker()._update_reference_plot(
-            str(tmp_path / "S1"), _rings(sample_widths)
+            str(tmp_path / "S1"), rings
         )
     save.assert_not_called()
     assert task == "Reference plot skipped (no crossdating file)"
+    update_meta.assert_called_once()
+    assert update_meta.call_args.args[1]["reference_series"] == NO_REFERENCE_SERIES
 
 
 def test_reference_plot_is_written(project, sample_widths, tmp_path):

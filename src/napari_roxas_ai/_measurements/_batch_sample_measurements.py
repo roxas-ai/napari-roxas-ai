@@ -21,22 +21,26 @@ from qtpy.QtWidgets import QFileDialog, QMessageBox
 
 from napari_roxas_ai._crossdating._cross_dating_plotter import (
     build_crossdating_plot_df,
-    compute_alignment_candidates,
     find_crossdating_files,
     reference_plot_path,
     ring_width_series,
     save_crossdating_plot,
+    simplify_string,
 )
 from napari_roxas_ai._reader import read_cells_file, read_rings_file
 from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from napari_roxas_ai._writer import write_single_layer
-from napari_roxas_ai._writer._writer import save_sample_annotated_image
+from napari_roxas_ai._writer._writer import (
+    save_sample_annotated_image,
+    update_metadata_file,
+)
 
 from .._utils._metadata_keys import (
     MEASUREMENT_PARAMETER_KEYS,
     NO_REFERENCE_SERIES,
+    SAMPLE_METADATA_PREFIXES,
 )
 from .._utils._version_utils import (
     get_measurement_operator,
@@ -395,6 +399,13 @@ class Worker(QObject):
 
         crossdating_files = find_crossdating_files(Path(stem).parent)
         if not crossdating_files:
+            if "reference_series" not in metadata:
+                metadata["reference_series"] = NO_REFERENCE_SERIES
+                update_metadata_file(
+                    f"{stem}.metadata.json",
+                    metadata,
+                    SAMPLE_METADATA_PREFIXES,
+                )
             return "Reference plot skipped (no crossdating file)"
 
         width_series = ring_width_series(
@@ -407,14 +418,34 @@ class Worker(QObject):
         plot = self._stored_reference_plot_df(
             metadata.get("reference_series"), crossdating_files, width_series
         )
+        sample_name = metadata.get("sample_name") or name
         best_match = plot is None
         if best_match:
-            plot = self._best_matching_plot_df(crossdating_files, width_series)
+            plot = self._best_matching_plot_df(
+                crossdating_files, sample_name, width_series
+            )
         if plot is None:
+            if (
+                metadata.get("reference_series") != NO_REFERENCE_SERIES
+                or "reference_series" not in metadata
+            ):
+                metadata["reference_series"] = NO_REFERENCE_SERIES
+                update_metadata_file(
+                    f"{stem}.metadata.json",
+                    metadata,
+                    SAMPLE_METADATA_PREFIXES,
+                )
             return "Reference plot skipped (no matching reference series)"
 
         reference_name, plot_df = plot
-        sample_name = metadata.get("sample_name") or name
+        if metadata.get("reference_series") != reference_name:
+            metadata["reference_series"] = reference_name
+            update_metadata_file(
+                f"{stem}.metadata.json",
+                metadata,
+                SAMPLE_METADATA_PREFIXES,
+            )
+
         save_crossdating_plot(
             plot_df,
             reference_name,
@@ -446,25 +477,32 @@ class Worker(QObject):
         return None
 
     def _best_matching_plot_df(
-        self, crossdating_files: List[Path], width_series: pd.Series
+        self,
+        crossdating_files: List[Path],
+        sample_name: str,
+        width_series: pd.Series,
     ) -> Optional[Tuple[str, pd.DataFrame]]:
         """
-        Plot data against the series with the best alignment correlation over
-        all crossdating files.
+        Plot data against the reference series whose name matches the sample name.
         """
-        best = None
-        best_corr = -np.inf
         for path in crossdating_files:
             dataframe = self._crossdating_dataframe(path)
-            for column in dataframe.columns.drop("average"):
-                plot_df = build_crossdating_plot_df(
-                    dataframe, column, width_series
+            column_names = sorted(
+                dataframe.drop("average", axis=1, errors="ignore").columns,
+                key=lambda x: len(x),
+                reverse=True,
+            )
+            matching_columns = [
+                col
+                for col in column_names
+                if simplify_string(col) in simplify_string(sample_name)
+            ]
+            if matching_columns:
+                col = matching_columns[0]
+                return col, build_crossdating_plot_df(
+                    dataframe, col, width_series
                 )
-                candidates = compute_alignment_candidates(plot_df, top_k=1)
-                if candidates and candidates[0]["corr"] > best_corr:
-                    best_corr = candidates[0]["corr"]
-                    best = (column, plot_df)
-        return best
+        return None
 
 
 class BatchSampleMeasurementsWidget(Container):
@@ -551,7 +589,7 @@ class BatchSampleMeasurementsWidget(Container):
 
         # File selection controls
         self._handpick_files_checkbox = CheckBox(
-            value=False, label=MANUAL_SELECTION_LABEL
+            value=True, label=f"{MANUAL_SELECTION_LABEL}:"
         )
         self._handpick_files_checkbox.changed.connect(
             self._toggle_file_selection
@@ -565,6 +603,9 @@ class BatchSampleMeasurementsWidget(Container):
             choices=[],
             allow_multiple=True,
             label="Select Files to Process",
+        )
+        self._file_select_widget.reset_choices = (
+            self._update_file_selection_widget
         )
         self._file_selection_container = Container(
             widgets=[self._file_select_widget],
