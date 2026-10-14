@@ -129,7 +129,7 @@ Where:
 
 Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
 
-<img src="../assets/MorkIndex.png" alt="Mork's Index Scheme" width="300" />
+![Mork's Index Scheme](../assets/MorkIndex.png){ width="300" }
 
 A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness ($4 \cdot CWTTAN$) its radial lumen width ($DRAD$) is larger than 1.
 
@@ -139,7 +139,7 @@ A tracheid is classified as latewood when the ratio between twice the double tan
 
 The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
 
-<img src="../assets/CellWallReinforcement.png" alt="Cell Wall Reinforcement Scheme" width="300" />
+![Cell Wall Reinforcement Scheme](../assets/CellWallReinforcement.png){ width="300" }
 
 The index is calculated as $(t/b)^2$, where $t$ is the thickness of the shared double cell wall and $b$ is the internal lumen diameter span across the corresponding orientation, taking the minimum of radial and tangential ratios.
 
