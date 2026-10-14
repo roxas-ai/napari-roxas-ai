@@ -207,8 +207,10 @@ These parameters define how cell walls are measured and how clusters are handled
 
 - **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.
 - **`relwidth_cwt_integration`**: The relative width along the cell wall used for integrating thickness measurements.
-- **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
-- **`opposite_cwt_ratio_limit`** & **`adjacent_cwt_ratio_limit`**: Quality control factors used to flag or correct suspicious wall thickness measurements on opposite and adjacent cell walls.
+- **`lower_limit_cwt_iqr_multiplier`**: Multiplier for the lower Tukey's fence ($Q_1 - k \cdot \text{IQR}$) in cell wall thickness outlier detection.
+- **`upper_limit_cwt_iqr_multiplier`**: Multiplier for the upper Tukey's fence ($Q_3 + k \cdot \text{IQR}$) in cell wall thickness outlier detection.
+- **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
+- **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
 ---
 
@@ -221,7 +223,17 @@ While the `.metadata.json` is unique to each sample, the `settings.json` file st
 The settings are organized into several logical blocks:
 
 ### 1. File Extensions (`file_extensions`)
-Defines how ROXAS AI recognizes and names files (e.g., `scan_file_extension`: `[".scan", ".jpg"]`, `cells_table_file_extension`: `[".cells_table", ".csv"]`, `rings_table_file_extension`: `[".rings_table", ".csv"]`, `metadata_file_extension`: `[".metadata", ".json"]`). It also specifies recognized image and text formats.
+Defines how ROXAS AI recognizes and names files:
+- **`scan_file_extension`**: `[".scan", ".jpg"]`
+- **`cells_file_extension`**: `[".cells", ".png"]`
+- **`cells_table_file_extension`**: `[".cells_table", ".csv"]`
+- **`rings_file_extension`**: `[".rings", ".tif"]`
+- **`rings_table_file_extension`**: `[".rings_table", ".csv"]`
+- **`metadata_file_extension`**: `[".metadata", ".json"]`
+- **`crossdating_file_extension`**: `[".crossdating", ".txt"]`
+- **`roxas_file_extensions`**: List of managed ROXAS file suffixes (`[".scan", ".cells", ".rings", ".metadata"]`).
+- **`image_file_extensions`**: Supported image formats (`[".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"]`).
+- **`text_file_extensions`**: Supported text and table formats (`[".rwl", ".tuc", ".txt", ".csv", ".tsv"]`).
 
 ### 2. Processing & GPU (`processing`)
 Allows configuring hardware acceleration and memory optimization:
@@ -244,7 +256,8 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 - **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
 - **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
 - **`cells_tangential_angle`**: Default angle for tangential orientation.
-- **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
+- **`lower_limit_cwt_iqr_multiplier`**: Multiplier for the lower Tukey's fence ($Q_1 - k \cdot \text{IQR}$) in cell wall thickness outlier detection.
+- **`upper_limit_cwt_iqr_multiplier`**: Multiplier for the upper Tukey's fence ($Q_3 + k \cdot \text{IQR}$) in cell wall thickness outlier detection.
 - **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
 - **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
@@ -253,7 +266,12 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 - **`project_directory`**: Path to the currently active project working directory.
 
 ### 7. Metadata Field Definitions (`samples_metadata`)
-Defines the structure, validation rules, and widget types for the input forms in the plugin (e.g., `sample_name`, `sample_type`, `meas_geometry`, `spatial_resolution`, `rings_outmost_complete_year`).
+Defines the structure, validation rules, and widget types for the input forms in the plugin:
+- **`sample_name`**: Text input for the unique sample identifier.
+- **`sample_type`**: Dropdown selection for wood type (`conifer`, `angiosperm`).
+- **`meas_geometry`**: Dropdown selection for measurement layout (`linear`, `circular`).
+- **`spatial_resolution`**: Numeric input for spatial resolution in $\text{px}/\mu\text{m}$.
+- **`rings_outmost_complete_year`**: Integer input for the calendar year of the outermost complete ring.
 
 ---
 
