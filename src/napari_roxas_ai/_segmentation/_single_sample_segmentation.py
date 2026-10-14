@@ -14,7 +14,7 @@ from magicgui.widgets import (
 )
 from napari.utils.notifications import show_info
 from PIL import Image
-from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtCore import QObject, Qt, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
 
 from napari_roxas_ai._assets_files import check_assets_and_download
@@ -43,6 +43,9 @@ MODULE_PATH = Path(__file__).parent.absolute()
 CELLS_MODELS_PATH = MODULE_PATH / "_models" / "_cells"
 RINGS_MODELS_PATH = MODULE_PATH / "_models" / "_rings"
 DEFAULT_RINGS_MODEL = "linear_rings_model.pth"
+
+# Gap between a row's label/checkbox and its combo box
+LABEL_SPACING = 10
 
 def apply_segmentation_results_to_viewer(
     viewer,
@@ -376,7 +379,8 @@ class Worker(QObject):
 
 class SingleSampleSegmentationWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__()
+        # The rows bring their own labels, a label column would only indent them
+        super().__init__(labels=False)
         self._viewer = viewer
         self.settings = SettingsManager()
 
@@ -407,6 +411,7 @@ class SingleSampleSegmentationWidget(Container):
             layout="horizontal",
             labels=True,
         )
+        self._cells_row.margins = (0, 0, 0, 0)
         if hasattr(self._cells_row.native, "layout"):
             layout = self._cells_row.native.layout()
             if layout is not None:
@@ -438,10 +443,46 @@ class SingleSampleSegmentationWidget(Container):
             layout="horizontal",
             labels=True,
         )
+        self._rings_row.margins = (0, 0, 0, 0)
         if hasattr(self._rings_row.native, "layout"):
             layout = self._rings_row.native.layout()
             if layout is not None:
                 layout.setContentsMargins(0, 0, 0, 0)
+
+        # Equalize checkbox widths so the model selection dropdowns align
+        # and take equal width, with sufficient padding to prevent truncation
+        checkbox_width = max(
+            self._segment_cells_checkbox.native.sizeHint().width(),
+            self._segment_rings_checkbox.native.sizeHint().width(),
+        ) + 25
+        self._segment_cells_checkbox.native.setFixedWidth(checkbox_width)
+        self._segment_rings_checkbox.native.setFixedWidth(checkbox_width)
+
+        # Equalize model selection dropdown widths based on all available choices
+        # across cell and ring models
+        all_model_choices = list(self._cells_model_weights_file.choices) + list(
+            self._rings_model_weights_file.choices
+        )
+        font_metrics = self._cells_model_weights_file.native.fontMetrics()
+        max_text_width = max(
+            (
+                font_metrics.horizontalAdvance(str(choice))
+                for choice in all_model_choices
+            ),
+            default=0,
+        )
+        model_dropdown_width = max_text_width + 70
+        self._cells_model_weights_file.native.setFixedWidth(model_dropdown_width)
+        self._rings_model_weights_file.native.setFixedWidth(model_dropdown_width)
+
+        if hasattr(self._cells_row.native, "layout") and self._cells_row.native.layout() is not None:
+            cells_layout = self._cells_row.native.layout()
+            cells_layout.setSpacing(LABEL_SPACING)
+            cells_layout.addStretch()
+        if hasattr(self._rings_row.native, "layout") and self._rings_row.native.layout() is not None:
+            rings_layout = self._rings_row.native.layout()
+            rings_layout.setSpacing(LABEL_SPACING)
+            rings_layout.addStretch()
 
         # Create a button to launch the analysis
         self._run_segmentation_button = PushButton(text="Run Segmentation")

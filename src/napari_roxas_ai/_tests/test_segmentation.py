@@ -15,6 +15,7 @@ from PIL import Image
 from napari_roxas_ai._segmentation._batch_sample_segmentation import (
     Worker as BatchWorker,
 )
+from qtpy.QtWidgets import QSizePolicy
 from napari_roxas_ai._segmentation._single_sample_segmentation import (
     Worker as SingleWorker,
 )
@@ -244,6 +245,14 @@ class TestSingleSampleSegmentation:
             assert widget._cells_model_weights_file in widget._cells_row
             assert widget._segment_rings_checkbox in widget._rings_row
             assert widget._rings_model_weights_file in widget._rings_row
+            assert (
+                widget._segment_cells_checkbox.native.width()
+                == widget._segment_rings_checkbox.native.width()
+            )
+            assert (
+                widget._cells_model_weights_file.native.width()
+                == widget._rings_model_weights_file.native.width()
+            )
             assert widget._run_segmentation_button.enabled is True
 
             # Untick both checkboxes -> button disabled
@@ -410,6 +419,153 @@ class TestBatchSampleSegmentation:
             )
             assert result == ("model1.pth", "model2.pth")
 
+    def test_batch_segmentation_widget_layout_and_visibility(self):
+        """Test BatchSampleSegmentationWidget row layout and visibility toggles."""
+        from napari_roxas_ai._segmentation._batch_sample_segmentation import (
+            BatchSampleSegmentationWidget,
+        )
+
+        with patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.check_assets_and_download"
+        ), patch.object(
+            BatchSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("model1.pth", "model2.pth"),
+        ):
+            widget = BatchSampleSegmentationWidget(MagicMock())
+
+            # Check row containers and labels
+            assert widget._segment_cells_checkbox.label == "Cell Segmentation:"
+            assert widget._segment_rings_checkbox.label == "Ring Segmentation:"
+            assert widget._cells_model_weights_file.label == ""
+            assert widget._rings_model_weights_file.label == ""
+
+            # Check rows in widget layout
+            assert widget[0] is widget._project_directory_row
+            assert widget[1] is widget._process_processed_checkbox
+            assert widget[2] is widget._handpick_files_checkbox
+            assert widget[3] is widget._file_selection_container
+            assert widget[4] is widget._reverse_selection_button
+            assert widget[5] is widget._cells_row
+            assert widget[6] is widget._rings_row
+            assert widget[7] is widget._run_segmentation_button
+            assert widget[8] is widget.progress_bar
+
+            # Check checkbox labels and tooltips
+            assert (
+                widget._process_processed_checkbox.label
+                == "Include Previously Segmented Images"
+            )
+            assert (
+                widget._process_processed_checkbox.tooltip
+                == "Also include images for which a .rings.tif or .cells.png file already exists."
+            )
+            assert (
+                widget._handpick_files_checkbox.label
+                == "Manually Select Files To Process:"
+            )
+
+            # Check that checkbox widths are equalized
+            assert (
+                widget._segment_cells_checkbox.native.width()
+                == widget._segment_rings_checkbox.native.width()
+            )
+            assert (
+                widget._cells_model_weights_file.native.width()
+                == widget._rings_model_weights_file.native.width()
+            )
+
+            # Initial state
+            assert widget._segment_cells_checkbox.value is True
+            assert not widget._cells_model_weights_file.native.isHidden()
+            assert widget._segment_rings_checkbox.value is True
+            assert not widget._rings_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is True
+
+            # Toggle cells checkbox -> hide combo
+            widget._segment_cells_checkbox.value = False
+            assert widget._cells_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is True
+
+            # Toggle rings checkbox -> hide combo & disable run button
+            widget._segment_rings_checkbox.value = False
+            assert widget._rings_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is False
+
+            # Toggle cells checkbox back -> show combo & enable run button
+            widget._segment_cells_checkbox.value = True
+            assert not widget._cells_model_weights_file.native.isHidden()
+            assert widget._run_segmentation_button.enabled is True
+
+    def test_batch_segmentation_widget_file_selection_and_filtering(self, tmp_path):
+        """Test file list filtering, handpicking and reverse selection in BatchSampleSegmentationWidget."""
+        from napari_roxas_ai._segmentation._batch_sample_segmentation import (
+            BatchSampleSegmentationWidget,
+        )
+        from napari_roxas_ai._settings import SettingsManager
+
+        # Create dummy scan files and output files
+        scan1 = tmp_path / "sample1.scan.jpg"
+        scan1.touch()
+        scan2 = tmp_path / "sample2.scan.jpg"
+        scan2.touch()
+        # sample2 has an existing .rings.tif
+        rings2 = tmp_path / "sample2.rings.tif"
+        rings2.touch()
+
+        with patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.check_assets_and_download"
+        ), patch.object(
+            BatchSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("model1.pth", "model2.pth"),
+        ):
+            widget = BatchSampleSegmentationWidget(MagicMock())
+            widget.input_directory_path = str(tmp_path)
+            widget._refresh_file_list()
+
+            # With _process_processed_checkbox = True (default), both scan1 and scan2 are included
+            assert str(scan1) in widget.source_files
+            assert str(scan2) in widget.source_files
+            assert len(widget.source_files) == 2
+
+            # When unchecked, scan2 is excluded because sample2.rings.tif exists
+            widget._process_processed_checkbox.value = False
+            widget._refresh_file_list()
+            assert str(scan1) in widget.source_files
+            assert str(scan2) not in widget.source_files
+            assert len(widget.source_files) == 1
+
+            # Test handpick checkbox default and toggling
+            assert widget._handpick_files_checkbox.value is True
+            assert not widget._file_selection_container.native.isHidden()
+            assert not widget._reverse_selection_button.native.isHidden()
+
+            # Untick handpick checkbox
+            widget._handpick_files_checkbox.value = False
+            widget._toggle_file_selection()
+            assert widget._file_selection_container.native.isHidden()
+            assert widget._reverse_selection_button.native.isHidden()
+
+            # Re-tick handpick checkbox
+            widget._process_processed_checkbox.value = True
+            widget._refresh_file_list()
+            widget._handpick_files_checkbox.value = True
+            widget._toggle_file_selection()
+            assert not widget._file_selection_container.native.isHidden()
+            assert not widget._reverse_selection_button.native.isHidden()
+            assert hasattr(widget, "_file_select_widget")
+            assert len(widget._file_select_widget.choices) == 2
+
+            # Test selection and reverse selection
+            widget._file_select_widget.value = [widget._file_select_widget.choices[0]]
+            assert len(widget._get_selected_file_paths()) == 1
+
+            widget._reverse_file_selection()
+            assert len(widget._file_select_widget.value) == 1
+            assert widget._file_select_widget.value[0] == widget._file_select_widget.choices[1]
+            assert widget._get_selected_file_paths() == [str(scan2)]
+
 
 class TestBatchWorkerFunctionality:
     """Test the BatchWorker class functionality directly."""
@@ -525,6 +681,62 @@ class TestBatchWorkerFunctionality:
                 # Process rings and verify
                 mock_rings_model.infer(scan_data)
                 mock_rings_model.infer.assert_called_with(scan_data)
+
+    def test_worker_run_terminal_logging(
+        self, sample_image_dir, mock_cells_model, mock_rings_model, capsys
+    ):
+        """Test terminal output logging during worker run."""
+        with patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
+        ) as mock_settings, patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_scan_file"
+        ) as mock_read_image, patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.write_single_layer"
+        ), patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.update_rings_geometries",
+            return_value=(pd.DataFrame(), np.zeros((10, 10)), None),
+        ), patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.get_metadata_from_file",
+            return_value={"rings_outmost_complete_year": 2020},
+        ):
+            mock_settings.get.side_effect = lambda key, default=None: {
+                "file_extensions.scan_file_extension": [".scan"],
+                "file_extensions.cells_file_extension": [".cells"],
+                "file_extensions.rings_file_extension": [".rings"],
+                "samples_metadata.fields": [{"id": "rings_outmost_complete_year", "default": 2020}],
+            }.get(key, default)
+
+            mock_read_image.return_value = (
+                create_test_image(),
+                {
+                    "metadata": {"sample_name": "sample_01"},
+                    "scale": (1.0, 1.0),
+                },
+                "image",
+            )
+
+            with patch.object(BatchWorker, "__init__", return_value=None):
+                worker = BatchWorker(None, None, None, None, None)
+                worker.input_directory_path = str(sample_image_dir)
+                worker.segment_cells = True
+                worker.segment_rings = True
+                worker.cells_model_weights_file = Path("/path/to/linear_cells_model.pth")
+                worker.rings_model_weights_file = Path("/path/to/linear_rings_model.pth")
+                worker.scan_file_paths = [
+                    str(sample_image_dir / "sample_01.scan.tif")
+                ]
+                worker.cells_model = mock_cells_model
+                worker.rings_model = mock_rings_model
+                worker.cells_content_ext = ".cells.png"
+                worker.rings_content_ext = ".rings.tif"
+                worker.progress = MagicMock()
+                worker.finished = MagicMock()
+
+                worker.run()
+
+                captured = capsys.readouterr()
+                assert "[Batch Segmentation] [1/1] sample_01.scan.tif: Cells (linear_cells_model.pth), Rings (linear_rings_model.pth)" in captured.out
+                assert "[Batch Segmentation] Completed 1 file(s) successfully." in captured.out
 
 
 if __name__ == "__main__":
