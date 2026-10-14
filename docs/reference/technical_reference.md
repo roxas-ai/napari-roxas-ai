@@ -125,6 +125,39 @@ Where:
 
 ---
 
+## Cell Wall Thickness (CWT) Quality Control & Filtering
+
+To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automated multi-stage quality control filters to all raw cell wall thickness measurements.
+
+![Cell Wall Thickness Filtering Scheme](../assets/cwt_filtering_scheme.png)
+
+### 1. Wall Definitions & Measurement Integration (Panel A)
+For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
+- **Tangential walls:** $CWT_{\text{PI}}$ (pith-facing, top) and $CWT_{\text{BA}}$ (bark-facing, bottom).
+- **Radial walls:** $CWT_{\text{LE}}$ (left) and $CWT_{\text{RI}}$ (right).
+- **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: 75%) to avoid corner-rounding biases.
+- **Aggregated metrics:**
+  - Tangential mean: $CWTTAN = (CWT_{\text{PI}} + CWT_{\text{BA}}) / 2$
+  - Radial mean: $CWTRAD = (CWT_{\text{LE}} + CWT_{\text{RI}}) / 2$
+  - Overall mean: $CWTALL = (CWTTAN + CWTRAD) / 2$
+
+### 2. Global IQR Distribution Filter / Tukey's Fences (Panel B)
+To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls ($CWT_{\text{PI}}, CWT_{\text{BA}}$) and radial walls ($CWT_{\text{LE}}, CWT_{\text{RI}}$):
+- **Lower Limit:** $\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})$ (controlled by `lower_limit_cwt_iqr_multiplier`)
+- **Upper Limit:** $Q_3 + 3.0 \cdot \text{IQR}$ (controlled by `upper_limit_cwt_iqr_multiplier`)
+- Values falling outside $[LL, UL]$ are set to **blank (NA)**.
+
+### 3. Opposite Wall Ratio Filter (Panel C)
+In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different cell type (such as wood ray cells) or an intercellular gap.
+- **Rule:** If $CWT_{\text{side}} > \text{opposite\_cwt\_ratio\_limit} \cdot CWT_{\text{opposite}}$ (default threshold: 1.5), the inflated side is excluded (**NA**), while the valid opposing side is retained.
+- **Anatomical context:** When a uniseriate ray cell is sandwiched between two tracheid files, the apparent distance measured across the ray between the tracheid lumina ($CWT_{\text{RI}}$) becomes overly large compared to the regular tracheid-to-tracheid wall ($CWT_{\text{LE}}$). The filter discards $CWT_{\text{RI}}$ while retaining $CWT_{\text{LE}}$.
+
+### 4. Adjacent Wall Ratio Filter (Panel D)
+Protects against severe local segmentation anomalies (e.g., tori or pit aperture artifacts) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
+- **Rule:** If $CWT_{\text{tan}} > \text{adjacent\_cwt\_ratio\_limit} \cdot \text{mean}(CWT_{\text{LE}}, CWT_{\text{RI}})$ (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
+
+---
+
 ## The Metadata File (`.metadata.json`)
 
 The metadata file ensures traceability and reproducibility of your analysis. It stores four main categories of information:
@@ -196,7 +229,7 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 - **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
 ### 6. Image Compression & Project Directory
-- **`JPEG_compression`**: Quality, optimization, and progressive encoding settings for saved JPEG images (e.g., annotated rings overlay and scans).
+- **`JPEG_compression`**: Quality, optimization, and progressive encoding settings for saved JPEG images (e.g., annotated rings overlay).
 - **`project_directory`**: Path to the currently active project working directory.
 
 ### 7. Metadata Field Definitions (`samples_metadata`)
