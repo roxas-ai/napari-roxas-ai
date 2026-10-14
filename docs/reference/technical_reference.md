@@ -223,7 +223,9 @@ While the `.metadata.json` is unique to each sample, the `settings.json` file st
 The settings are organized into several logical blocks:
 
 ### 1. File Extensions (`file_extensions`)
+
 Defines how ROXAS AI recognizes and names files:
+
 - **`scan_file_extension`**: `[".scan", ".jpg"]`
 - **`cells_file_extension`**: `[".cells", ".png"]`
 - **`cells_table_file_extension`**: `[".cells_table", ".csv"]`
@@ -236,22 +238,30 @@ Defines how ROXAS AI recognizes and names files:
 - **`text_file_extensions`**: Supported text and table formats (`[".rwl", ".tuc", ".txt", ".csv", ".tsv"]`).
 
 ### 2. Processing & GPU (`processing`)
+
 Allows configuring hardware acceleration and memory optimization:
+
 - **`try_to_use_gpu`**: Set to `true` to enable GPU acceleration if a compatible CUDA-enabled graphics card is available.
 - **`try_to_use_autocast`**: Set to `true` for mixed precision acceleration during deep learning inference.
 
 ### 3. Tables (`tables`)
+
 Defines the output format for tabular data:
+
 - **`separator`**: Column delimiter for output tables (default: `";"`).
 - **`index_column`**: Column identifier name (default: `"id"`).
 
 ### 4. Visualization (Vectorization & Rasterization)
+
 Controls how data appears in the napari viewer:
+
 - **`vectorization`**: Controls polygon smoothing tolerances, edge widths, and colors for cells (`cells_edge_width`, `cells_edge_color`, `cells_face_color`, `cells_tolerance`) and rings (`rings_edge_width`, `rings_edge_color`, `rings_tolerance`, `rerun_interactive_edge_color`).
 - **`rasterization`**: Controls color sequences for adjacent rings (`rings_color_sequence`), uncomplete rings (`uncomplete_ring_value`, `uncomplete_ring_color`), and cell masks (`cells_color`).
 
 ### 5. Measurement Defaults (`measurements`)
+
 Contains default parameters for anatomical analysis, used to populate metadata for new samples:
+
 - **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.
 - **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
 - **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
@@ -262,11 +272,14 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 - **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
 ### 6. Image Compression & Project Directory
+
 - **`JPEG_compression`**: Quality, optimization, and progressive encoding settings for saved JPEG images (e.g., annotated rings overlay).
 - **`project_directory`**: Path to the currently active project working directory.
 
 ### 7. Metadata Field Definitions (`samples_metadata`)
+
 Defines the structure, validation rules, and widget types for the input forms in the plugin:
+
 - **`sample_name`**: Text input for the unique sample identifier.
 - **`sample_type`**: Dropdown selection for wood type (`conifer`, `angiosperm`).
 - **`meas_geometry`**: Dropdown selection for measurement layout (`linear`, `circular`).
