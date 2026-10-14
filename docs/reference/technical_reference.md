@@ -60,7 +60,7 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 | **CWTTAN** | Tangential Wall Thickness | $\mu\text{m}$ | Mean of pith and bark sides: ([CWTPI+CWTBA]/2). |
 | **CWTRAD** | Radial Wall Thickness | $\mu\text{m}$ | Mean of left and right sides: ([CWTLE+CWTRI]/2). |
 | **CWTALL** | Overall Wall Thickness | $\mu\text{m}$ | Mean of all sides: ([CWTRAD+CWTTAN]/2). |
-| **RTSR** | Radial Thickness-to-Span Ratio | ratio | Mork's index; ratio between 4x CWT(tan) and radial diameter. |
+| **RTSR** | Radial Thickness-to-Span Ratio | ratio | Mork's index; ratio between 4x CWT(tan) and radial diameter (Denne 1989). |
 | **CTSR** | Circular Thickness-to-Span Ratio | ratio | Ratio between 4x CWT(all) and area-equivalent circle diameter. |
 | **DHW** | Hydraulic Diameter (W) | $\mu\text{m}$ | Mean per ring (Kolb & Sperry 1999). |
 | **DHM** | Hydraulic Diameter (M) | $\mu\text{m}$ | Mean per ring (Tyree & Zimmermann 2002). |
@@ -100,7 +100,7 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 | **CWTTAN** | Tangential Wall Thickness | $\mu\text{m}$ | Mean of ([CWTPI+CWTBA]/2). |
 | **CWTRAD** | Radial Wall Thickness | $\mu\text{m}$ | Mean of ([CWTLE+CWTRI]/2). |
 | **CWTALL** | Overall Wall Thickness | $\mu\text{m}$ | Mean of ([CWTRAD+CWTTAN]/2). |
-| **RTSR** | Radial Thickness-to-Span Ratio | ratio | Mork's index per cell. |
+| **RTSR** | Radial Thickness-to-Span Ratio | ratio | Mork's index per cell (Denne 1989). |
 | **CTSR** | Circular Thickness-to-Span Ratio | ratio | Circular ratio per cell. |
 | **DH** | Hydraulic Diameter | $\mu\text{m}$ | Corrected for elliptical shape (Lewis & Boose 1995). |
 | **DRAD** | Radial Diameter | $\mu\text{m}$ | Bark-to-pith direction, corrected for inclination. |
@@ -122,6 +122,26 @@ Where:
 - **m**: Mean hydraulic radius ($\pi ab / C$)
 - **k**: Geometry coefficient ($4 / (1 + \sqrt{1 - e^4})$)
 - **e**: Eccentricity of the ellipse
+
+---
+
+## Mork's Index (Radial Thickness-to-Span Ratio, RTSR)
+
+Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
+
+<img src="../assets/MorkIndex.png" alt="Mork's Index Scheme" width="300" />
+
+A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness ($4 \cdot CWTTAN$) its radial lumen width ($DRAD$) is larger than 1.
+
+---
+
+## Cell Wall Reinforcement Index ($(t/b)^2$, TB2)
+
+The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
+
+<img src="../assets/CellWallReinforcement.png" alt="Cell Wall Reinforcement Scheme" width="300" />
+
+The index is calculated as $(t/b)^2$, where $t$ is the thickness of the shared double cell wall and $b$ is the internal lumen diameter span across the corresponding orientation, taking the minimum of radial and tangential ratios.
 
 ---
 
@@ -240,6 +260,7 @@ Defines the structure, validation rules, and widget types for the input forms in
 ## References
 
 - **Carlquist 2001**: Carlquist, S. (2001). *Comparative Wood Anatomy: Systematic, Ecological, and Evolutionary Aspects of Dicotyledon Wood*. Springer-Verlag.
+- **Denne 1989**: Denne, M. P. (1989). Definition of latewood according to Mork (1928). *IAWA Bulletin*, 10:59–62.
 - **Hacke et al. 2001**: Hacke, U. G., Sperry, J. S., Pockman, W. T., Davis, S. D., & McCulloh, K. A. (2001). Trends in wood density and structure are linked to prevention of xylem cavitation by negative pressure. *Oecologia*, 126(4), 457–461.
 - **Kolb & Sperry 1999**: Kolb, K. J., & Sperry, J. S. (1999). Differences in drought adaptation between subspecies of sagebrush: *Artemisia tridentata*. *Ecology*, 80(7), 2373–2384.
 - **Lewis & Boose 1995**: Lewis, A. M., & Boose, E. R. (1995). Estimating volume flow rates through xylem conduits. *American Journal of Botany*, 82(9), 1112–1116.
