@@ -2,6 +2,10 @@
 
 Technical details about the files created by ROXAS AI and the numeric output variables.
 
+## Image Orientation Requirements
+
+Linear input images have to be oriented with +/- horizontal rings and the bark side at the bottom.
+
 ## File Formats
 
 ROXAS AI uses a standardized naming convention to organize analysis data. For a sample named `sample_01`, the following files are typically generated:
@@ -15,8 +19,8 @@ ROXAS AI uses a standardized naming convention to organize analysis data. For a 
 
 ### Data & Metadata Files
 - **`.metadata.json`**: A comprehensive JSON file containing sample information, imaging parameters, and all processing thresholds required to reproduce the analysis.
-- **`.cells_table.csv`**: A tab-separated CSV file containing measurements for every individual cell.
-- **`.rings_table.csv`**: A tab-separated CSV file containing aggregated measurements for each tree ring.
+- **`.cells_table.csv`**: A CSV file (semicolon-delimited by default, configurable in settings) containing measurements for every individual cell.
+- **`.rings_table.csv`**: A CSV file (semicolon-delimited by default, configurable in settings) containing aggregated measurements for each tree ring.
 
 ---
 
@@ -25,26 +29,30 @@ ROXAS AI uses a standardized naming convention to organize analysis data. For a 
 The output tables (`.cells_table.csv` and `.rings_table.csv`) use standardized acronyms. Most measurements are provided in **micrometers ($\mu\text{m}$)** or **square micrometers ($\mu\text{m}^2$)**.
 
 ### Missing Values & Error Codes
-Unlike ROXAS classic, which uses numeric error codes (e.g., `-99`, `-9999`), ROXAS AI leaves these fields **blank (NA)** in the CSV output to ensure compatibility with modern data analysis tools like R and Python.
+Missing values or empty fields are left **blank (NA)** in the CSV output to ensure compatibility with modern data analysis tools like R and Python.
 
 ### Ring-Level Output (`.rings_table.csv`)
 
 | Acronym | Description | Unit | Details |
 | :--- | :--- | :--- | :--- |
-| **RA** | Ring Area | $\text{mm}^2$ | - |
+| **ID** | Sample ID | - | Unique identifier for the sample. |
+| **YEAR** | Ring Affiliation | - | Calendar year of the tree ring. |
+| **RA** | Ring Area | $\text{mm}^2$ | Area of the analyzed ring. |
 | **MRW** | Mean Ring Width | $\mu\text{m}$ | Corrected for inclined ring boundaries. |
 | **CNO** | Number of Cells | count | Total cells in the tree ring. |
 | **CD** | Cell Density | no./$\text{mm}^2$ | Number of cells per $\text{mm}^2$. |
 | **CTA** | Cumulative Transsectional Area | $\text{mm}^2$ | Cumulative area of all counted cells. |
 | **RCTA** | Conductive Area Percentage | % | CTA / RA. |
 | **MLA** | Mean Lumen Area | $\mu\text{m}^2$ | Mean cell lumen area in the ring. |
-| **MINLA** | Minimum Lumen Area | $\mu\text{m}^2$ | - |
-| **MAXLA** | Maximum Lumen Area | $\mu\text{m}^2$ | - |
+| **MINLA** | Minimum Lumen Area | $\mu\text{m}^2$ | Minimum cell lumen area in the ring. |
+| **MAXLA** | Maximum Lumen Area | $\mu\text{m}^2$ | Maximum cell lumen area in the ring. |
 | **KH** | Hydraulic Conductance | $\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$ | Theoretical (Poiseuille) adjusted for elliptical tubes. |
 | **KS** | Specific Hydraulic Conductivity | $\text{m}^2\,\text{s}^{-1}\,\text{MPa}^{-1}$ | KH/RA (assuming tube length of 1m). |
 | **RVGI** | Vessel Grouping Index | index | Mean cells per group (Carlquist 2001). |
 | **RVSF** | Vessel Solitary Fraction | % | Fraction of solitary cells vs all cells. |
 | **RGSGV** | Group Size of Grouped Cells | index | Mean size of non-solitary cell groups. |
+| **AOIAR** | Area of Interest (Ring) | $\text{mm}^2$ | Area of interest within the ring. |
+| **RAOIAR** | Relative Area of Interest | % | Percentage of ring area covered by area of interest. |
 | **CWTPI** | Cell Wall Thickness - Pith | $\mu\text{m}$ | Inner wall facing towards the pith. |
 | **CWTBA** | Cell Wall Thickness - Bark | $\mu\text{m}$ | Outer wall facing towards the bark. |
 | **CWTLE** | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at the bottom. |
@@ -61,6 +69,9 @@ Unlike ROXAS classic, which uses numeric error codes (e.g., `-99`, `-9999`), ROX
 | **TB2** | Reinforcement Index $(t/b)^2$ | index | Hacke et al. 2001; uses the smaller of rad/tan values. |
 | **CWA** | Cell Wall Area | $\mu\text{m}^2$ | Mean per ring; may include pit artefacts. |
 | **RWD** | Relative Anatomical Density | ratio | Mean of CWA / (CWA+LA) per ring. |
+| **RBXY** | Ring Boundary Coordinates | pixels | Coordinate string defining the ring boundary. |
+| **cells_above** | Cells Above Boundary | count | Number of cells located above the ring boundary. |
+| **enabled** | Ring Enabled Status | boolean | Flag indicating whether the ring is enabled/valid. |
 
 ---
 
@@ -81,6 +92,7 @@ Unlike ROXAS classic, which uses numeric error codes (e.g., `-99`, `-9999`), ROX
 | **ASP** | Aspect Ratio | ratio | Major axis / minor axis of equivalent ellipse. |
 | **MAJAX** | Major Axis Deviation | degrees | Angular deviation from line towards X/Y origin. |
 | **KH** | Hydraulic Conductance | $\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$ | Theoretical conductance per cell. |
+| **AOI** | Area of Interest | boolean | Flag indicating whether the cell lies within the area of interest. |
 | **CWTPI** | Cell Wall Thickness - Pith | $\mu\text{m}$ | Facing towards the pith. |
 | **CWTBA** | Cell Wall Thickness - Bark | $\mu\text{m}$ | Facing towards the bark. |
 | **CWTLE** | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at bottom. |
@@ -93,7 +105,7 @@ Unlike ROXAS classic, which uses numeric error codes (e.g., `-99`, `-9999`), ROX
 | **DH** | Hydraulic Diameter | $\mu\text{m}$ | Corrected for elliptical shape (Lewis & Boose 1995). |
 | **DRAD** | Radial Diameter | $\mu\text{m}$ | Bark-to-pith direction, corrected for inclination. |
 | **DTAN** | Tangential Diameter | $\mu\text{m}$ | Tangential to pith, corrected for inclination. |
-| **TB2** | Reinforcement Index $(t/b)^2$ | index | Cell wall reinforcement index (t/b)^2. |
+| **TB2** | Reinforcement Index $(t/b)^2$ | index | Cell wall reinforcement index (t/b)^2 (Hacke et al. 2001). |
 | **CWA** | Cell Wall Area | $\mu\text{m}^2$ | Wall area per cell; may include pit artefacts. |
 | **RWD** | Relative Anatomical Density | ratio | Cell-level CWA / (CWA+LA). |
 
@@ -119,27 +131,31 @@ The metadata file ensures traceability and reproducibility of your analysis. It 
 
 ### 1. Sample & Project Information
 - **`sample_name`**: The unique identifier for the wood sample.
-- **`sample_type`**: The type of wood (e.g., `conifer`).
-- **`meas_geometry`**: The measurement layout (e.g., `linear`).
+- **`sample_stem_path`**: The relative path of the sample within the project directory.
+- **`sample_type`**: The type of wood (i.e., `conifer` or `angiosperm`; note that the `angiosperm` analysis is not implemented yet).
+- **`meas_geometry`**: The measurement layout (i.e., `linear` or `circular`; note that the `circular` analysis is not implemented yet).
 - **`rings_outmost_complete_year`**: The calendar year assigned to the most recent complete tree ring.
+- **`reference_series`**: The cross-dating reference series used (or `NA` if none).
 
 ### 2. Imaging & Spatial Metadata
-- **`spatial_resolution`**: The conversion factor from pixels to micrometers ($\mu\text{m}/\text{pixel}$). This is critical for all subsequent physical measurements.
+- **`spatial_resolution`**: The conversion factor from pixels to micrometers ($\text{px}/\mu\text{m}$). This is critical for all subsequent physical measurements.
 - **`scan_size`**: The dimensions of the original image in pixels (Height, Width).
 - **`scan_info`**: Detailed technical info about the image, including the detected **DPI** (Dots Per Inch).
 - **`scan_exif`**: Metadata extracted directly from the image file (e.g., software used for scanning, capture date).
 
 ### 3. Processing & Traceability
 - **`sw_version`**: The exact version of ROXAS AI used for the analysis.
-- **`cells_segmentation_model`** & **`rings_segmentation_model`**: The specific AI model filenames (`.pth`) used for detection.
+- **`meas_by`**: The username or system identifier that ran the measurement analysis.
+- **`cells_segmentation_model`** & **`rings_segmentation_model`**: The specific AI model filenames (`.pth` / `.pt`) used for detection.
 - **`meas_created_at`**: A timestamp of when the final measurement table was generated.
 
 ### 4. Analysis Parameters & Quality Control
 These parameters define how cell walls are measured and how clusters are handled:
 
-- **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters.
+- **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.
 - **`relwidth_cwt_integration`**: The relative width along the cell wall used for integrating thickness measurements.
-- **`opposite_cwt_ratio_limit`** & **`adjacent_cwt_ratio_limit`**: Quality control factors used to flag or correct suspicious wall thickness measurements.
+- **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
+- **`opposite_cwt_ratio_limit`** & **`adjacent_cwt_ratio_limit`**: Quality control factors used to flag or correct suspicious wall thickness measurements on opposite and adjacent cell walls.
 
 ---
 
@@ -151,27 +167,48 @@ While the `.metadata.json` is unique to each sample, the `settings.json` file st
 
 The settings are organized into several logical blocks:
 
-### 1. File Extensions
-Defines how ROXAS AI recognizes and names files (e.g., using `.scan.jpg` for images and `.cells_table.csv` for measurements). This ensures consistency across your projects.
+### 1. File Extensions (`file_extensions`)
+Defines how ROXAS AI recognizes and names files (e.g., `scan_file_extension`: `[".scan", ".jpg"]`, `cells_table_file_extension`: `[".cells_table", ".csv"]`, `rings_table_file_extension`: `[".rings_table", ".csv"]`, `metadata_file_extension`: `[".metadata", ".json"]`). It also specifies recognized image and text formats.
 
-### 2. Processing & GPU
-Allows you to toggle hardware acceleration. By setting `try_to_use_gpu` to `true`, you can significantly speed up the AI segmentation process if a compatible graphics card is available.
+### 2. Processing & GPU (`processing`)
+Allows configuring hardware acceleration and memory optimization:
+- **`try_to_use_gpu`**: Set to `true` to enable GPU acceleration if a compatible CUDA-enabled graphics card is available.
+- **`try_to_use_autocast`**: Set to `true` for mixed precision acceleration during deep learning inference.
 
-### 3. Visualization (Vectorization & Rasterization)
+### 3. Tables (`tables`)
+Defines the output format for tabular data:
+- **`separator`**: Column delimiter for output tables (default: `";"`).
+- **`index_column`**: Column identifier name (default: `"id"`).
+
+### 4. Visualization (Vectorization & Rasterization)
 Controls how data appears in the napari viewer:
-- **Colors**: Default colors for cells (e.g., lime), rings (e.g., red), and the color sequence used to distinguish adjacent tree rings.
-- **Line Widths**: Adjusts how thick the boundaries appear on your screen for better visibility.
+- **`vectorization`**: Controls polygon smoothing tolerances, edge widths, and colors for cells (`cells_edge_width`, `cells_edge_color`, `cells_face_color`, `cells_tolerance`) and rings (`rings_edge_width`, `rings_edge_color`, `rings_tolerance`, `rerun_interactive_edge_color`).
+- **`rasterization`**: Controls color sequences for adjacent rings (`rings_color_sequence`), uncomplete rings (`uncomplete_ring_value`, `uncomplete_ring_color`), and cell masks (`cells_color`).
 
-### 4. Measurement Defaults
-Contains the default thresholds for anatomical analysis. These values are used to populate the metadata for new samples:
+### 5. Measurement Defaults (`measurements`)
+Contains default parameters for anatomical analysis, used to populate metadata for new samples:
+- **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.
+- **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
+- **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
+- **`cells_tangential_angle`**: Default angle for tangential orientation.
+- **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
+- **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
+- **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
-*   **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits).
-*   **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
-*   **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
-*   **`cells_tangential_angle`**: Default angle for tangential orientation.
-*   **`lower_limit_cwt_iqr_multiplier`** & **`upper_limit_cwt_iqr_multiplier`**: Multipliers for identifying outliers in cell wall thickness using the Interquartile Range (IQR).
-*   **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
-*   **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
+### 6. Image Compression & Project Directory
+- **`JPEG_compression`**: Quality, optimization, and progressive encoding settings for saved JPEG images (e.g., annotated rings overlay and scans).
+- **`project_directory`**: Path to the currently active project working directory.
 
-### 5. Metadata Field Definitions
-Defines the structure of the input forms you see in the plugin widgets, ensuring that required information like `sample_type` or `spatial_resolution` is always captured correctly.
+### 7. Metadata Field Definitions (`samples_metadata`)
+Defines the structure, validation rules, and widget types for the input forms in the plugin (e.g., `sample_name`, `sample_type`, `meas_geometry`, `spatial_resolution`, `rings_outmost_complete_year`).
+
+---
+
+## References
+
+- **Carlquist 2001**: Carlquist, S. (2001). *Comparative Wood Anatomy: Systematic, Ecological, and Evolutionary Aspects of Dicotyledon Wood*. Springer-Verlag.
+- **Hacke et al. 2001**: Hacke, U. G., Sperry, J. S., Pockman, W. T., Davis, S. D., & McCulloh, K. A. (2001). Trends in wood density and structure are linked to prevention of xylem cavitation by negative pressure. *Oecologia*, 126(4), 457–461.
+- **Kolb & Sperry 1999**: Kolb, K. J., & Sperry, J. S. (1999). Differences in drought adaptation between subspecies of sagebrush: *Artemisia tridentata*. *Ecology*, 80(7), 2373–2384.
+- **Lewis & Boose 1995**: Lewis, A. M., & Boose, E. R. (1995). Estimating volume flow rates through xylem conduits. *American Journal of Botany*, 82(9), 1112–1116.
+- **Nonweiler 1975**: Nonweiler, T. R. F. (1975). *Computational Mathematics: An Introduction to Numerical Approximation*. Ellis Horwood.
+- **Tyree & Zimmermann 2002**: Tyree, M. T., & Zimmermann, M. H. (2002). *Xylem Structure and the Ascent of Sap*. Springer-Verlag.
