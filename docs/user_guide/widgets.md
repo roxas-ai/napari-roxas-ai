@@ -1,6 +1,6 @@
 # User Guide: Widgets & Tools
 
-`napari-roxas-ai` provides a modular suite of widgets within the napari environment designed to take your wood cross-section images through the entire Quantitative Wood Anatomy (QWA) pipeline—from raw image preparation to deep-learning segmentation, interactive manual curation, visual cross-dating, and anatomical feature extraction.
+**ROXAS AI** provides a modular suite of widgets within the napari environment designed to take your wood cross-section images through the entire Quantitative Wood Anatomy (QWA) pipeline—from raw anatomical image to deep-learning segmentation, interactive manual curation, visual cross-dating, and measurement of anatomical traits.
 
 Widgets are numbered in the napari **Plugins > ROXAS AI** menu according to their typical execution sequence.
 
@@ -26,15 +26,15 @@ flowchart TD
 | Widget Number & Name | Primary Purpose | Input | Output |
 | :--- | :--- | :--- | :--- |
 | **0 - Define project directory** | Set the active working directory for the project | Folder path | Global project path in settings |
-| **1 - Prepare project images for analysis** | Standardize filenames, extract EXIF/DPI, store initial metadata | Raw images (`.jpg`, `.tif`, etc.) & cross-dating files | `.scan.<ext>`, `.metadata.json`, `rings_series.crossdating.txt` |
-| **2/4 - Load image(s)** | Load sample scans and existing label masks into napari | Prepared sample files | Napari Image & Labels layers |
-| **3A - Detect cells & rings (individual image)** | Run deep-learning segmentation on currently loaded scan | Active napari scan layer | `.cells` and `.rings` Labels layers |
-| **3B - Batch detect cells & rings** | Run AI segmentation on multiple samples in the background | Prepared project directory | `.cells.png`, `.rings.tif`, `.metadata.json` |
+| **1 - Prepare project images for analysis** | Standardize filenames, define spatial resolution, store initial metadata | Raw images (`.jpg`, `.tif`, etc.) & crossdating files | `.scan.<ext>`, `.metadata.json`, `rings_series.crossdating.txt` |
+| **2/4 - Load image(s)** | Load sample images and any existing rings and cells label masks | Prepared sample files | Image & Labels layers |
+| **3A - Detect cells & rings (individual image)** | Run deep-learning segmentation on currently loaded scan | Active sample image | `.cells` and `.rings` Labels layers |
+| **3B - Batch detect cells & rings** | Run deep-learning segmentation on multiple samples in the background | Prepared project directory or manually selected sample images | `.cells.png`, `.rings.tif`, `.metadata.json` |
 | **5 - Edit cells** | Manually refine cell segmentations (raster brush/eraser, vector contours, lasso deletion) | `.cells` layer | Edited `.cells` layer |
 | **6 - Edit rings** | Manually adjust, add, delete, or re-detect tree-ring boundaries | `.rings` layer | Edited `.rings` layer & updated ring years |
-| **7 - Visual cross-dating** | Synchronize ring-width series against reference chronologies | `.rings` layer & crossdating file | Calibrated ring years & verified sample dating |
-| **8 - Save cells & rings editing** | Save manual edits from napari viewer back to disk | Active napari layers | Updated `.cells.png`, `.rings.tif`, `.metadata.json` |
-| **9A - Measure cells & rings (individual image)** | Calculate anatomical variables for active sample in viewer | `.cells` & `.rings` layers | `.cells_table.txt`, `.rings_table.txt` |
+| **7 - Visual cross-dating** | Align active ring-width series against reference series | `.rings` layer & crossdating file | Calibrated ring years & verified sample dating |
+| **8 - Save cells & rings editing** | Save manual edits back to disk | Active ROXAS AI layers | Updated `.cells.png`, `.rings.tif`, `.metadata.json` |
+| **9A - Measure cells & rings (individual image)** | Calculate anatomical traits for active sample image | `.cells` & `.rings` layers | `.cells_table.txt`, `.rings_table.txt` |
 | **9B - Batch measure cells & rings** | Calculate anatomical variables for all samples in directory | Project directory | Measurement tables for all samples |
 | **ZZ - Settings** | Configure global defaults, hardware acceleration, file extensions, and thresholds | User settings | `settings.json` configuration file |
 
@@ -58,7 +58,7 @@ When triggered from the menu, it opens a system folder browser. Selecting a fold
 
 ## 1 - Prepare Project Images for Analysis
 
-The **Prepare Project Images** widget standardizes raw microscopy or flatbed scans and associated cross-dating text files into the structured file naming conventions and data structures required by ROXAS AI.
+The **Prepare Project Images** widget standardizes anatomical images and associated cross-dating text files into the structured file naming conventions and data structures required by ROXAS AI.
 
 ![Screenshot: Sample Preparation Widget](../assets/screenshots/01_preparation_widget.png)
 
@@ -97,7 +97,7 @@ The cross-dating parser automatically recognizes and parses several standard den
     | 2018 | 142 | 165 |
     | 2019 | 118 | 130 |
     | 2020 | 155 | 148 |
-    | 2021 | 98 | 112 |
+    | 2021 |  98 | 112 |
     | 2022 | 125 | 135 |
 
 - **Tucson / Decadal Files (`.rwl`, `.tuc`)**:
@@ -135,11 +135,11 @@ The compiled series is saved in the root of the project directory as `rings_seri
 
 | YEAR | Series01 | Series02 |
 | :--- | :--- | :--- |
-| **2018** | 1420.0 | 1650.0 |
-| **2019** | 1180.0 | 1300.0 |
-| **2020** | 1550.0 | 1480.0 |
-| **2021** | 980.0 | 1120.0 |
-| **2022** | 1250.0 | 1350.0 |
+| **2018** | 1420 | 1650 |
+| **2019** | 1180 | 1300 |
+| **2020** | 1550 | 1480 |
+| **2021** |  980 | 1120 |
+| **2022** | 1250 | 1350 |
 
 ### Key Controls & Options
 - **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
@@ -166,10 +166,9 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 - **Single-Image Workflow Enforcement**: Only one sample image can be loaded in the napari viewer at a time. Attempting to load another image prompts the user to first close the currently active image.
 - Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata) and automatically loads any available associated `.rings` and `.cells` layers.
 - Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).
-- Automatically configures keyboard shortcuts (such as WASD keys for quick viewport panning) to streamline navigation across large high-resolution images.
 
 ### Key Controls
-- **Project Directory Label & Compact Button**: Displays the «Project Directory:» text label side by side in the same row as a compact directory button. The button path text is elided in the middle (showing the start and end of the path up to ~35 characters) to keep the panel tidy, with a tooltip displaying the full absolute path when hovered. Clicking opens the file dialog to update the active directory (the same directory selection functionality as in widget **0**).
+- **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
 - **Samples List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately opens that image along with its available associated rings and cells layers.
 - **Load Selected Image**: Loads the currently selected sample file (along with available associated rings and cells layers) into the viewer.
 - **Progress Bar**: Displays sample loading progress.
