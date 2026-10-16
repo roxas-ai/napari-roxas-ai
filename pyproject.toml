@@ -7,6 +7,7 @@ license = {file = "LICENSE"}
 authors = [
   {name = "Nicola Antonio Santacroce"},
   {name = "Marc Katzenmaier"},
+  {name = "Severin Goddon"},
   {name = "Triyan Bhardwaj"},
   {name = "Georg von Arx"},
   {name = "The WSL Dendrosciences Group", email = "roxas@wsl.ch"},
