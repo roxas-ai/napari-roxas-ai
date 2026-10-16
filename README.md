@@ -3,135 +3,105 @@
 [![License GNU GPL v3.0](https://img.shields.io/pypi/l/napari-roxas-ai.svg?color=green)](https://github.com/roxas-ai/napari-roxas-ai/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/napari-roxas-ai.svg?color=green)](https://pypi.org/project/napari-roxas-ai)
 [![Python Version](https://img.shields.io/pypi/pyversions/napari-roxas-ai.svg?color=green)](https://python.org)
+[![Documentation](https://img.shields.io/badge/docs-online-blue.svg)](https://roxas-ai.github.io/napari-roxas-ai/)
 [![tests](https://github.com/roxas-ai/napari-roxas-ai/workflows/tests/badge.svg)](https://github.com/roxas-ai/napari-roxas-ai/actions)
 [![codecov](https://codecov.io/gh/roxas-ai/napari-roxas-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/roxas-ai/napari-roxas-ai)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-roxas-ai)](https://napari-hub.org/plugins/napari-roxas-ai)
 
-A plugin that integrates the ROXAS AI analysis methods for quantitative wood anatomy in the napari platform.
+A plugin that integrates the ROXAS AI analysis methods for quantitative wood anatomy (QWA) in the [napari](https://napari.org) platform.
 
-Note: This plugin is currently under development and not yet stable nor officially released.
+> ⚠️ **Note**: This plugin is currently under active development and is not yet stable nor officially released.
 
-----------------------------------
+📖 **Official Documentation**: [https://roxas-ai.github.io/napari-roxas-ai/](https://roxas-ai.github.io/napari-roxas-ai/)
 
-This [napari] plugin was generated with [copier] using the [napari-plugin-template].
+---
 
-<!--
-Don't miss the full getting started guide to set up your new package:
-https://github.com/napari/napari-plugin-template#getting-started
+## Quickstart Installation
 
-and review the napari docs for plugin developers:
-https://napari.org/stable/plugins/index.html
--->
+For users familiar with Python/Conda environments:
 
-## Installation
-
-### Environment setup
-It's recommended to create a dedicated Python environment for napari-roxas-ai:
-
-1. Install Miniconda or Miniforge if you don't have it already:
-   - [Miniconda Installation Guide](https://docs.conda.io/en/latest/miniconda.html)
-   - [Miniforge Installer Repo](https://github.com/conda-forge/miniforge)
-
-2. Create a new environment:
 ```bash
+# 1. Create and activate a dedicated environment
 conda create -n roxas-ai python=3.12
 conda activate roxas-ai
-```
 
-### Installation
-Install `napari-roxas-ai` via [pip]:
-
-```bash
+# 2. Install napari-roxas-ai
 pip install napari-roxas-ai
-```
 
-### Launching the plugin
-Once installed, you can launch napari with the roxas-ai plugin (from within the activated environment):
-
-```bash
+# 3. Launch napari
 napari
 ```
 
-### Verifying installation
-To check if the plugin is working correctly:
-1. Go to `File > Open Sample > ROXAS AI` in the napari interface.
-2. The first time you open a sample, it may take some time as sample data and model weights are being downloaded. Progress will be logged in the terminal.
-3. After the downloads, a sample made of three layers should open in the viewer
+> 💡 **Detailed Step-by-Step Installation Guides:**  
+> For complete, beginner-friendly instructions—including Miniforge/Miniconda setup for **Windows**, **macOS**, and **Linux**, as well as **GPU acceleration (CUDA / Apple Silicon MPS)** configuration—see the **[Getting Started & Installation Guide](https://roxas-ai.github.io/napari-roxas-ai/getting_started/installation/)**.
 
-### GPU Support
-Model inference runs on the CPU by default. CPU inference works everywhere but is slow on large images; enabling GPU acceleration is strongly recommended if you have a compatible GPU.
+---
 
-**On Linux and Windows systems (NVIDIA GPUs):**
-The default installation ships a CPU-only build of PyTorch. To enable your NVIDIA GPU, reinstall PyTorch from the CUDA wheel index:
+## Verifying Installation
 
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-```
+To verify that the plugin is working correctly:
+1. In the napari menu, go to `File > Open Sample > ROXAS AI`.
+2. The first time you open a sample, sample data and model weights are downloaded automatically in the background. Progress will be displayed in the terminal.
+3. Three sample layers (image, rings, cells) will open in the viewer.
 
-This single command covers all recent NVIDIA GPUs (RTX 20-series and newer, including the RTX 50-series); the CUDA runtime is bundled with the wheels, so no separate CUDA toolkit installation is required. You only need an up-to-date NVIDIA driver ([Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/), [Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)). For older GPUs or drivers, pick the matching command from the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) instead.
+---
 
-**On macOS:**
-CUDA is not available for macOS, however, PyTorch is supporting GPU acceleration for Apple Silicon devices (M1 and newer) via MPS. There is no need to install drivers or CUDA. Note that the MPS acceleration can currently only be leveraged for the cell segmentation model.
+## GPU Acceleration
 
-Finally, enable GPU support in the napari-roxas-ai settings within the napari interface. Go to `Plugins > ROXAS AI > ZZ - Settings`, open the `processing` section, tick `try_to_use_gpu` and `try_to_use_autocast`, and press `Apply`. The settings take effect immediately and no restart is needed, but a segmentation or measurement run that is already in progress keeps the settings it started with.
+ROXAS AI runs on CPU by default. For large image datasets, GPU acceleration is strongly recommended:
+
+- **Windows & Linux (NVIDIA GPUs)**: Reinstall PyTorch with CUDA support:
+  ```bash
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+  ```
+- **macOS (Apple Silicon M1/M2/M3/M4)**: Supported out-of-the-box via Metal Performance Shaders (MPS).
+- **Settings**: In napari, go to `Plugins > ROXAS AI > ZZ - Settings` -> `processing`, enable `try_to_use_gpu` and `try_to_use_autocast`, then click `Apply`.
+
+For full GPU prerequisites, driver requirements, and troubleshooting, consult the **[Installation Documentation](https://roxas-ai.github.io/napari-roxas-ai/getting_started/installation/#step-3-optional-gpu-acceleration)**.
+
+---
 
 ## Contributing
 
-Contributions are very welcome. Tests are automatically run with [tox], please ensure
-the coverage at least stays the same before you submit a pull request.
+Contributions are very welcome! Tests are automatically run with [tox]; please ensure that test coverage remains consistent before submitting a pull request.
 
-### Contributor Installation
+### Contributor Setup
 
-In order to contribute to the development of the plugin the installation can be done as follows:
-1. Create an environment
+To set up a local development environment:
+
 ```bash
+# 1. Create and activate environment
 conda create -n roxas-ai python=3.12
 conda activate roxas-ai
-```
-2. In the cloned / forked plugin directory, install the plugin dependencies
-```bash
-pip install -e .
-```
 
-3. Install the testing dependencies, as well as the napari plugin engine
-```bash
+# 2. Install plugin in editable mode
+pip install -e .
+
+# 3. Install testing dependencies and napari plugin engine
 pip install -e ".[testing]"
 pip install npe2
-```
 
-4. Install pre-commit for quality checks
-```bash
+# 4. Install pre-commit hooks for quality checks
 pip install pre-commit
 pre-commit install
 ```
 
-### Documentation: Plugin Template and Development
-You can find more information on the plugin template on the [napari-plugin-template repository](https://github.com/napari/napari-plugin-template).
-You can find more information on plugin contributions and how to create plugins on the [plugins section of the napari documentation](https://napari.org/dev/plugins/index.html).
+### Documentation & Development Resources
+
+- [User Documentation & Tutorials](https://roxas-ai.github.io/napari-roxas-ai/)
+- [napari Plugin Developer Documentation](https://napari.org/stable/plugins/index.html)
+- [napari-plugin-template](https://github.com/napari/napari-plugin-template)
+
+---
 
 ## License
 
-Distributed under the terms of the [GNU GPL v3.0] license,
-"napari-roxas-ai" is free and open source software
+Distributed under the terms of the [GNU GPL v3.0] license, `napari-roxas-ai` is free and open source software.
 
 ## Issues
 
-If you encounter any problems, please [file an issue] along with a detailed description.
-
-[napari]: https://github.com/napari/napari
-[copier]: https://copier.readthedocs.io/en/stable/
-[@napari]: https://github.com/napari
-[MIT]: http://opensource.org/licenses/MIT
-[BSD-3]: http://opensource.org/licenses/BSD-3-Clause
-[GNU GPL v3.0]: http://www.gnu.org/licenses/gpl-3.0.txt
-[GNU LGPL v3.0]: http://www.gnu.org/licenses/lgpl-3.0.txt
-[Apache Software License 2.0]: http://www.apache.org/licenses/LICENSE-2.0
-[Mozilla Public License 2.0]: https://www.mozilla.org/media/MPL/2.0/index.txt
-[napari-plugin-template]: https://github.com/napari/napari-plugin-template
+If you encounter any problems or have feature requests, please [file an issue] along with a detailed description.
 
 [file an issue]: https://github.com/roxas-ai/napari-roxas-ai/issues
-
-[napari]: https://github.com/napari/napari
+[GNU GPL v3.0]: http://www.gnu.org/licenses/gpl-3.0.txt
 [tox]: https://tox.readthedocs.io/en/latest/
-[pip]: https://pypi.org/project/pip/
-[PyPI]: https://pypi.org/
