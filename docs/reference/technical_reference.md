@@ -145,7 +145,7 @@ The index is calculated as $(t/b)^2$, where $t$ is the thickness of the shared d
 
 ---
 
-## Cell Wall Thickness (CWT) Quality Control & Filtering
+## Cell Wall Thickness (`CWT`) Quality Control & Filtering
 
 To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automated multi-stage quality control filters to all raw cell wall thickness measurements.
 
@@ -153,28 +153,28 @@ To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automa
 
 ### 1. Wall Definitions & Measurement Integration (Panel A)
 For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
-- **Tangential walls:** `CWTPI` / $CWT_{\text{PI}}$ (pith-facing, top) and `CWTBA` / $CWT_{\text{BA}}$ (bark-facing, bottom).
-- **Radial walls:** `CWTLE` / $CWT_{\text{LE}}$ (left) and `CWTRI` / $CWT_{\text{RI}}$ (right).
+- **Tangential walls:** `CWTPI` (pith-facing, top) and `CWTBA` (bark-facing, bottom).
+- **Radial walls:** `CWTLE` (left) and `CWTRI` (right).
 - **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: 75%) to avoid corner-rounding biases.
 - **Aggregated metrics:**
-  - Tangential mean: $\text{CWTTAN} = (CWT_{\text{PI}} + CWT_{\text{BA}}) / 2$
-  - Radial mean: $\text{CWTRAD} = (CWT_{\text{LE}} + CWT_{\text{RI}}) / 2$
-  - Overall mean: $\text{CWTALL} = (\text{CWTTAN} + \text{CWTRAD}) / 2$
+  - Tangential mean: `CWTTAN` = (`CWTPI` + `CWTBA`) / 2
+  - Radial mean: `CWTRAD` = (`CWTLE` + `CWTRI`) / 2
+  - Overall mean: `CWTALL` = (`CWTTAN` + `CWTRAD`) / 2
 
 ### 2. Global IQR Distribution Filter / Tukey's Fences (Panel B)
-To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls ($CWT_{\text{PI}}, CWT_{\text{BA}}$) and radial walls ($CWT_{\text{LE}}, CWT_{\text{RI}}$):
+To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls (`CWTPI`, `CWTBA`) and radial walls (`CWTLE`, `CWTRI`):
 - **Lower Limit:** $\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})$ (controlled by `lower_limit_cwt_iqr_multiplier`)
 - **Upper Limit:** $Q_3 + 3.0 \cdot \text{IQR}$ (controlled by `upper_limit_cwt_iqr_multiplier`)
 - Values falling outside $[LL, UL]$ are set to **blank (NA)**.
 
 ### 3. Opposite Wall Ratio Filter (Panel C)
 In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different cell type (such as wood ray cells) or an intercellular gap.
-- **Rule:** If $CWT_{\text{side}} > \text{opposite\_cwt\_ratio\_limit} \cdot CWT_{\text{opposite}}$ (default threshold: 1.5), the inflated side is excluded (**NA**), while the valid opposing side is retained.
-- **Anatomical context:** When a uniseriate ray cell is sandwiched between two tracheid files, the apparent distance measured across the ray between the tracheid lumina ($CWT_{\text{RI}}$) becomes overly large compared to the regular tracheid-to-tracheid wall ($CWT_{\text{LE}}$). The filter discards $CWT_{\text{RI}}$ while retaining $CWT_{\text{LE}}$.
+- **Rule:** If the thickness of one wall exceeds `opposite_cwt_ratio_limit` $\cdot$ opposing wall thickness (default threshold: 1.5), the inflated side is excluded (**NA**), while the valid opposing side is retained.
+- **Anatomical context:** When a uniseriate ray cell is sandwiched between two tracheid files, the apparent distance measured across the ray between the tracheid lumina (`CWTRI`) becomes overly large compared to the regular tracheid-to-tracheid wall (`CWTLE`). The filter discards `CWTRI` while retaining `CWTLE`.
 
 ### 4. Adjacent Wall Ratio Filter (Panel D)
 Protects against severe local segmentation anomalies (e.g., tori or pit aperture artifacts) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
-- **Rule:** If $CWT_{\text{tan}} > \text{adjacent\_cwt\_ratio\_limit} \cdot \text{mean}(CWT_{\text{LE}}, CWT_{\text{RI}})$ (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
+- **Rule:** If a tangential wall thickness exceeds `adjacent_cwt_ratio_limit` $\cdot (\text{CWTLE} + \text{CWTRI}) / 2$ (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
 
 ---
 
