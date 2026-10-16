@@ -131,7 +131,7 @@ The compiled series is saved in the project directory as `<prefix><crossdating_f
 - **Updating and Merging Existing Files with Unit Scaling Logic**: You can select multiple raw files alongside existing `.crossdating.txt` files to merge them into a single reference file or update an existing project cross-dating file.
     - **Scaling suppression for existing `.crossdating.txt` files**: Any selected file that is already a cross-dating output file (e.g., `*.crossdating.txt` or containing `crossdating` in its filename) is recognized as already converted to micrometers ($\mu\text{m}$). The chosen unit scaling multiplier is automatically **suppressed** (multiplier $= 1.0$) for these files.
     - **Selective scaling for raw inputs**: The selected unit scaling multiplier is applied **only to newly added raw measurement files** (`.rwl`, `.tuc`, standard `.txt`).
-    - **Priority handling**: When merging, data from newly added raw files takes priority over older values in case of duplicate series and year combinations.
+    - **Priority handling**: When merging, data from newly added raw files takes priority over older values in case of duplicate series and year combinations. This allows updating existing chronologies with new measurements while preserving previously imported data.
 - **Format & Delimiter**: Tab-delimited plain text file (`\t` separator).
 - **Index (`YEAR`)**: The first column is named `YEAR` and contains unique calendar years spanning the complete chronological range across all imported series, sorted in ascending order.
 - **Series Columns**: Each imported file/series forms its own named column header (derived from series IDs or column labels in the source files).
@@ -185,8 +185,8 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 
 The **Single Sample Segmentation Widget** performs automated deep-learning inference to identify tracheid cell lumens and annual tree-ring boundaries on the currently displayed image.
 
-!!! warning "First-Time Launch & Model Downloads"
-    Opening this widget for the first time automatically triggers the download of the cell and ring segmentation models (`.pth` weights). This download may take several seconds, during which the application / widget may appear **temporarily frozen or stalled**. Once downloaded, subsequent openings are instantaneous.
+!!! info "Automatic Background Model Downloads"
+    Pre-trained neural network models (`.pth` / `.pt` weights) are downloaded automatically in the background if they are missing. Once downloaded, models are cached locally for all subsequent operations.
 
 ![Screenshot: Single Sample Segmentation Widget](../assets/screenshots/03a_single_segmentation_widget.png)
 
@@ -209,8 +209,8 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 
 The **Batch Sample Segmentation Widget** executes AI detection across multiple samples in the background without needing to load each image into the viewer.
 
-!!! warning "First-Time Launch & Model Downloads"
-    If the segmentation models have not been downloaded yet, opening this widget initiates the download for both cell and ring models. This process may take several seconds, during which the interface may appear **temporarily frozen or stalled**.
+!!! info "Automatic Background Model Downloads"
+    If segmentation model weights are not present locally, they are automatically downloaded in the background when needed and cached for future runs.
 
 ![Screenshot: Batch Segmentation Widget](../assets/screenshots/03b_batch_segmentation_widget.png)
 
@@ -295,8 +295,8 @@ When viewing and editing cells, standardized keyboard shortcuts allow rapid view
 
 The **Rings Layer Editor Widget** enables precise curation of annual tree-ring boundaries, outermost year re-numbering, and targeted model-assisted re-detection.
 
-!!! note "Initial Ring Model Download"
-    Opening this widget checks for and downloads missing ring segmentation model weights if they are not already present (required for the **Re-run Rings Model** feature). This can cause a brief delay when first opening the widget.
+!!! info "Automatic Background Model Downloads"
+    Opening this widget checks for missing ring segmentation model weights (required for the **Rerun Ring Segmentation** feature) and downloads them automatically in the background without blocking the interface. Once downloaded, models are cached locally for subsequent use.
 
 ![Screenshot: Rings Layer Editor Widget](../assets/screenshots/06_rings_layer_editor.png)
 
@@ -307,7 +307,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 2. Displays real-time calendar year labels (`Rings Years` overlay) along the sample.
 3. Allows interactive vertex adjustments, insertion of missing boundaries, or deletion of false boundaries using napari shape tools.
 4. Includes a **Lasso Selection Tool** to select and delete unwanted boundary vertices over a designated area.
-5. Offers **Re-run Rings Model**: Re-runs the ring boundary detection AI specifically in areas where manual deletions occurred, using previous edits as boundary constraints.
+5. Offers **Rerun Ring Segmentation**: Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
 6. When saved, completes boundary paths from edge to edge, validates ring ordering, and reconstructs the colored ring mask.
 
 ### Vectorization, Rasterization & Smoothing
