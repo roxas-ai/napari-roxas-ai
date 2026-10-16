@@ -236,6 +236,7 @@ class Worker(QObject):
         total = len(self.scan_file_paths) * factor
         total_files = len(self.scan_file_paths)
         i = 0
+        processed = 0
 
         default_rings_year_value = [
             field["default"]
@@ -351,6 +352,7 @@ class Worker(QObject):
                 print(
                     f"[Batch Segmentation] [{file_idx}/{total_files}] {file_name}: {tasks_str}"
                 )
+                processed += 1
 
             except Exception as e:
                 print(
@@ -359,7 +361,7 @@ class Worker(QObject):
 
         if total_files > 0:
             print(
-                f"[Batch Segmentation] Completed {total_files} file(s) successfully."
+                f"[Batch Segmentation] Completed {processed} of {total_files} file(s) successfully."
             )
 
         self.progress.emit(total, total)

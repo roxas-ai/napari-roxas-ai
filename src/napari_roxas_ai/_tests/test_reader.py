@@ -254,7 +254,8 @@ class TestReaderModule:
         ) as mock_get_metadata, patch("PIL.Image.open") as mock_open, patch(
             "pathlib.Path.exists", return_value=True
         ), patch(
-            "pandas.read_csv", return_value=pd.DataFrame()
+            "pandas.read_csv",
+            return_value=pd.DataFrame({"YEAR": [1990, 1991]}),
         ):
 
             # Mock Image.open behavior
@@ -271,10 +272,11 @@ class TestReaderModule:
             ), patch(
                 "napari_roxas_ai._reader._reader.make_rings_colormap"
             ):
-                # Mock metadata
+                # Mock metadata with an updated outmost complete year
                 mock_get_metadata.return_value = {
                     "spatial_resolution": 2.5,
                     "sample_name": "test_sample",
+                    "rings_outmost_complete_year": 2020,
                 }
 
                 # Test reading rings file
@@ -286,6 +288,9 @@ class TestReaderModule:
                 assert isinstance(data, np.ndarray)
                 assert "name" in add_kwargs
                 assert layer_type == "labels"
+                assert "features" in add_kwargs
+                # Expect years to be synchronized with rings_outmost_complete_year (2020)
+                assert add_kwargs["features"]["YEAR"].tolist() == [2019, 2020]
 
     def test_read_scan_file(self, test_files, mock_settings):
         """Test read_scan_file function."""
