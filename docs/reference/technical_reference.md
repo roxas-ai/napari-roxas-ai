@@ -35,43 +35,43 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 
 | Acronym | Description | Unit | Details |
 | :--- | :--- | :--- | :--- |
-| **ID** | Sample ID | - | Unique identifier for the sample. |
-| **YEAR** | Ring Affiliation | - | Calendar year of the tree ring. |
-| **RA** | Ring Area | $\text{mm}^2$ | Area of the analyzed ring. |
-| **MRW** | Mean Ring Width | $\mu\text{m}$ | Corrected for inclined ring boundaries. |
-| **CNO** | Number of Cells | count | Total cells in the tree ring. |
-| **CD** | Cell Density | no./$\text{mm}^2$ | Number of cells per $\text{mm}^2$. |
-| **CTA** | Cumulative Transsectional Area | $\text{mm}^2$ | Cumulative area of all counted cells. |
-| **RCTA** | Conductive Area Percentage | % | CTA / RA. |
-| **MLA** | Mean Lumen Area | $\mu\text{m}^2$ | Mean cell lumen area in the ring. |
-| **MINLA** | Minimum Lumen Area | $\mu\text{m}^2$ | Minimum cell lumen area in the ring. |
-| **MAXLA** | Maximum Lumen Area | $\mu\text{m}^2$ | Maximum cell lumen area in the ring. |
-| **KH** | Hydraulic Conductance | $\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$ | Theoretical (Poiseuille) adjusted for elliptical tubes. |
-| **KS** | Specific Hydraulic Conductivity | $\text{m}^2\,\text{s}^{-1}\,\text{MPa}^{-1}$ | KH/RA (assuming tube length of 1m). |
-| **RVGI** | Vessel Grouping Index | index | Mean cells per group (Carlquist 2001). |
-| **RVSF** | Vessel Solitary Fraction | % | Fraction of solitary cells vs all cells. |
-| **RGSGV** | Group Size of Grouped Cells | index | Mean size of non-solitary cell groups. |
-| **AOIAR** | Area of Interest (Ring) | $\text{mm}^2$ | Area of interest within the ring. |
-| **RAOIAR** | Relative Area of Interest | % | Percentage of ring area covered by area of interest. |
-| **CWTPI** | Cell Wall Thickness - Pith | $\mu\text{m}$ | Inner wall facing towards the pith. |
-| **CWTBA** | Cell Wall Thickness - Bark | $\mu\text{m}$ | Outer wall facing towards the bark. |
-| **CWTLE** | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at the bottom. |
-| **CWTRI** | Cell Wall Thickness - Right | $\mu\text{m}$ | Measured with bark at the bottom. |
-| **CWTTAN** | Tangential Wall Thickness | $\mu\text{m}$ | Mean of pith and bark sides: ([CWTPI+CWTBA]/2). |
-| **CWTRAD** | Radial Wall Thickness | $\mu\text{m}$ | Mean of left and right sides: ([CWTLE+CWTRI]/2). |
-| **CWTALL** | Overall Wall Thickness | $\mu\text{m}$ | Mean of all sides: ([CWTRAD+CWTTAN]/2). |
-| **RTSR** | Radial Thickness-to-Span Ratio | ratio | Mork's index; ratio between 4x CWT(tan) and radial diameter (Denne 1989). |
-| **CTSR** | Circular Thickness-to-Span Ratio | ratio | Ratio between 4x CWT(all) and area-equivalent circle diameter. |
-| **DHW** | Hydraulic Diameter (W) | $\mu\text{m}$ | Mean per ring (Kolb & Sperry 1999). |
-| **DHM** | Hydraulic Diameter (M) | $\mu\text{m}$ | Mean per ring (Tyree & Zimmermann 2002). |
-| **DRAD** | Mean Radial Diameter | $\mu\text{m}$ | Measured bark-to-pith, corrected for inclination. |
-| **DTAN** | Mean Tangential Diameter | $\mu\text{m}$ | Measured tangentially to pith, corrected for inclination. |
-| **TB2** | Reinforcement Index $(t/b)^2$ | index | Hacke et al. 2001; uses the smaller of rad/tan values. |
-| **CWA** | Cell Wall Area | $\mu\text{m}^2$ | Mean per ring; may include pit artefacts. |
-| **RWD** | Relative Anatomical Density | ratio | Mean of CWA / (CWA+LA) per ring. |
-| **RBXY** | Ring Boundary Coordinates | pixels | Coordinate string defining the ring boundary. |
-| **cells_above** | Cells Above Boundary | count | Number of cells located above the ring boundary. |
-| **enabled** | Ring Enabled Status | boolean | Flag indicating whether the ring is enabled/valid. |
+| `ID` | Sample ID | - | Unique identifier for the sample. |
+| `YEAR` | Ring Affiliation | - | Calendar year of the tree ring. |
+| `RA` | Ring Area | $\text{mm}^2$ | Area of the analyzed ring. |
+| `MRW` | Mean Ring Width | $\mu\text{m}$ | Corrected for inclined ring boundaries. |
+| `CNO` | Number of Cells | count | Total cells in the tree ring. |
+| `CD` | Cell Density | no./$\text{mm}^2$ | Number of cells per $\text{mm}^2$. |
+| `CTA` | Cumulative Transsectional Area | $\text{mm}^2$ | Cumulative area of all counted cells. |
+| `RCTA` | Conductive Area Percentage | % | `CTA` / `RA`. |
+| `MLA` | Mean Lumen Area | $\mu\text{m}^2$ | Mean cell lumen area in the ring. |
+| `MINLA` | Minimum Lumen Area | $\mu\text{m}^2$ | Minimum cell lumen area in the ring. |
+| `MAXLA` | Maximum Lumen Area | $\mu\text{m}^2$ | Maximum cell lumen area in the ring. |
+| `KH` | Hydraulic Conductance | $\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$ | Theoretical (Poiseuille) adjusted for elliptical tubes. |
+| `KS` | Specific Hydraulic Conductivity | $\text{m}^2\,\text{s}^{-1}\,\text{MPa}^{-1}$ | `KH` / `RA` (assuming tube length of 1m). |
+| `RVGI` | Vessel Grouping Index | index | Mean cells per group (Carlquist 2001). |
+| `RVSF` | Vessel Solitary Fraction | % | Fraction of solitary cells vs all cells. |
+| `RGSGV` | Group Size of Grouped Cells | index | Mean size of non-solitary cell groups. |
+| `AOIAR` | Area of Interest (Ring) | $\text{mm}^2$ | Area of interest within the ring. |
+| `RAOIAR` | Relative Area of Interest | % | Percentage of ring area covered by area of interest. |
+| `CWTPI` | Cell Wall Thickness - Pith | $\mu\text{m}$ | Inner wall facing towards the pith. |
+| `CWTBA` | Cell Wall Thickness - Bark | $\mu\text{m}$ | Outer wall facing towards the bark. |
+| `CWTLE` | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at the bottom. |
+| `CWTRI` | Cell Wall Thickness - Right | $\mu\text{m}$ | Measured with bark at the bottom. |
+| `CWTTAN` | Tangential Wall Thickness | $\mu\text{m}$ | Mean of pith and bark sides: (`[CWTPI+CWTBA]/2`). |
+| `CWTRAD` | Radial Wall Thickness | $\mu\text{m}$ | Mean of left and right sides: (`[CWTLE+CWTRI]/2`). |
+| `CWTALL` | Overall Wall Thickness | $\mu\text{m}$ | Mean of all sides: (`[CWTRAD+CWTTAN]/2`). |
+| `RTSR` | Radial Thickness-to-Span Ratio | ratio | Mork's index; ratio between 4x `CWTTAN` and radial diameter (Denne 1989). |
+| `CTSR` | Circular Thickness-to-Span Ratio | ratio | Ratio between 4x `CWTALL` and area-equivalent circle diameter. |
+| `DHW` | Hydraulic Diameter (W) | $\mu\text{m}$ | Mean per ring (Kolb & Sperry 1999). |
+| `DHM` | Hydraulic Diameter (M) | $\mu\text{m}$ | Mean per ring (Tyree & Zimmermann 2002). |
+| `DRAD` | Mean Radial Diameter | $\mu\text{m}$ | Measured bark-to-pith, corrected for inclination. |
+| `DTAN` | Mean Tangential Diameter | $\mu\text{m}$ | Measured tangentially to pith, corrected for inclination. |
+| `TB2` | Reinforcement Index $(t/b)^2$ | index | Hacke et al. 2001; uses the smaller of rad/tan values. |
+| `CWA` | Cell Wall Area | $\mu\text{m}^2$ | Mean per ring; may include pit artefacts. |
+| `RWD` | Relative Anatomical Density | ratio | Mean of `CWA` / (`CWA` + `LA`) per ring. |
+| `RBXY` | Ring Boundary Coordinates | pixels | Coordinate string defining the ring boundary. |
+| `cells_above` | Cells Above Boundary | count | Number of cells located above the ring boundary. |
+| `enabled` | Ring Enabled Status | boolean | Flag indicating whether the ring is enabled/valid. |
 
 ---
 
@@ -79,63 +79,63 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 
 | Acronym | Description | Unit | Details |
 | :--- | :--- | :--- | :--- |
-| **ID** | Sample ID | - | Unique identifier for the sample. |
-| **CID** | Cell ID | - | Unique cell identifier within the sample. |
-| **YEAR** | Ring Affiliation | - | Calendar year of cell formation. |
-| **LA** | Cell Lumen Area | $\mu\text{m}^2$ | - |
-| **XPIX** | X-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
-| **YPIX** | Y-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
-| **RADDISTR** | Radial Distance (Ring) | $\mu\text{m}$ | Distance of cell center from inner ring boundary. |
-| **RRADDISTR** | Relative Radial Position | % | 0.00 (proximal boundary) to 99.99 (distal boundary). |
-| **NBRNO** | Neighbor Number | count | Number of cells in the group this cell belongs to. |
-| **NBRID** | Neighbor IDs | - | IDs of all cells in the same group (blank if solitary). |
-| **ASP** | Aspect Ratio | ratio | Major axis / minor axis of equivalent ellipse. |
-| **MAJAX** | Major Axis Deviation | degrees | Angular deviation from line towards X/Y origin. |
-| **KH** | Hydraulic Conductance | $\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$ | Theoretical conductance per cell. |
-| **AOI** | Area of Interest | boolean | Flag indicating whether the cell lies within the area of interest. |
-| **CWTPI** | Cell Wall Thickness - Pith | $\mu\text{m}$ | Facing towards the pith. |
-| **CWTBA** | Cell Wall Thickness - Bark | $\mu\text{m}$ | Facing towards the bark. |
-| **CWTLE** | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at bottom. |
-| **CWTRI** | Cell Wall Thickness - Right | $\mu\text{m}$ | Measured with bark at bottom. |
-| **CWTTAN** | Tangential Wall Thickness | $\mu\text{m}$ | Mean of ([CWTPI+CWTBA]/2). |
-| **CWTRAD** | Radial Wall Thickness | $\mu\text{m}$ | Mean of ([CWTLE+CWTRI]/2). |
-| **CWTALL** | Overall Wall Thickness | $\mu\text{m}$ | Mean of ([CWTRAD+CWTTAN]/2). |
-| **RTSR** | Radial Thickness-to-Span Ratio | ratio | Mork's index per cell (Denne 1989). |
-| **CTSR** | Circular Thickness-to-Span Ratio | ratio | Circular ratio per cell. |
-| **DH** | Hydraulic Diameter | $\mu\text{m}$ | Corrected for elliptical shape (Lewis & Boose 1995). |
-| **DRAD** | Radial Diameter | $\mu\text{m}$ | Bark-to-pith direction, corrected for inclination. |
-| **DTAN** | Tangential Diameter | $\mu\text{m}$ | Tangential to pith, corrected for inclination. |
-| **TB2** | Reinforcement Index $(t/b)^2$ | index | Cell wall reinforcement index (t/b)^2 (Hacke et al. 2001). |
-| **CWA** | Cell Wall Area | $\mu\text{m}^2$ | Wall area per cell; may include pit artefacts. |
-| **RWD** | Relative Anatomical Density | ratio | Cell-level CWA / (CWA+LA). |
+| `ID` | Sample ID | - | Unique identifier for the sample. |
+| `CID` | Cell ID | - | Unique cell identifier within the sample. |
+| `YEAR` | Ring Affiliation | - | Calendar year of cell formation. |
+| `LA` | Cell Lumen Area | $\mu\text{m}^2$ | - |
+| `XPIX` | X-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
+| `YPIX` | Y-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
+| `RADDISTR` | Radial Distance (Ring) | $\mu\text{m}$ | Distance of cell center from inner ring boundary. |
+| `RRADDISTR` | Relative Radial Position | % | 0.00 (proximal boundary) to 99.99 (distal boundary). |
+| `NBRNO` | Neighbor Number | count | Number of cells in the group this cell belongs to. |
+| `NBRID` | Neighbor IDs | - | IDs of all cells in the same group (blank if solitary). |
+| `ASP` | Aspect Ratio | ratio | Major axis / minor axis of equivalent ellipse. |
+| `MAJAX` | Major Axis Deviation | degrees | Angular deviation from line towards X/Y origin. |
+| `KH` | Hydraulic Conductance | $\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$ | Theoretical conductance per cell. |
+| `AOI` | Area of Interest | boolean | Flag indicating whether the cell lies within the area of interest. |
+| `CWTPI` | Cell Wall Thickness - Pith | $\mu\text{m}$ | Facing towards the pith. |
+| `CWTBA` | Cell Wall Thickness - Bark | $\mu\text{m}$ | Facing towards the bark. |
+| `CWTLE` | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at bottom. |
+| `CWTRI` | Cell Wall Thickness - Right | $\mu\text{m}$ | Measured with bark at bottom. |
+| `CWTTAN` | Tangential Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTPI+CWTBA]/2`). |
+| `CWTRAD` | Radial Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTLE+CWTRI]/2`). |
+| `CWTALL` | Overall Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTRAD+CWTTAN]/2`). |
+| `RTSR` | Radial Thickness-to-Span Ratio | ratio | Mork's index per cell (Denne 1989). |
+| `CTSR` | Circular Thickness-to-Span Ratio | ratio | Circular ratio per cell. |
+| `DH` | Hydraulic Diameter | $\mu\text{m}$ | Corrected for elliptical shape (Lewis & Boose 1995). |
+| `DRAD` | Radial Diameter | $\mu\text{m}$ | Bark-to-pith direction, corrected for inclination. |
+| `DTAN` | Tangential Diameter | $\mu\text{m}$ | Tangential to pith, corrected for inclination. |
+| `TB2` | Reinforcement Index $(t/b)^2$ | index | Cell wall reinforcement index (t/b)^2 (Hacke et al. 2001). |
+| `CWA` | Cell Wall Area | $\mu\text{m}^2$ | Wall area per cell; may include pit artefacts. |
+| `RWD` | Relative Anatomical Density | ratio | Cell-level `CWA` / (`CWA` + `LA`). |
 
 ---
 
-## Theoretical Hydraulic Conductance ($K_h$)
+## Theoretical Hydraulic Conductance (`KH` / $K_h$)
 The theoretical hydraulic conductance is approximated by Poiseuille's law and adjusted for elliptical tubes (Nonweiler 1975):
 
-$$ KH = \frac{LA \cdot m^2}{\nu \cdot k} $$
+$$ \text{KH} = \frac{\text{LA} \cdot m^2}{\nu \cdot k} $$
 
 Where:
-- **LA**: Lumen area ($\text{m}^2$)
-- **$\nu$**: Viscosity of water ($1.002 \cdot 10^{-3}\,\text{Pa}\cdot\text{s}$ at 20°C)
-- **m**: Mean hydraulic radius ($\pi ab / C$)
-- **k**: Geometry coefficient ($4 / (1 + \sqrt{1 - e^4})$)
-- **e**: Eccentricity of the ellipse
+- `LA`: Lumen area ($\text{m}^2$)
+- $\nu$: Viscosity of water ($1.002 \cdot 10^{-3}\,\text{Pa}\cdot\text{s}$ at 20°C)
+- $m$: Mean hydraulic radius ($\pi ab / C$)
+- $k$: Geometry coefficient ($4 / (1 + \sqrt{1 - e^4})$)
+- $e$: Eccentricity of the ellipse
 
 ---
 
-## Mork's Index (Radial Thickness-to-Span Ratio, RTSR)
+## Mork's Index (Radial Thickness-to-Span Ratio, `RTSR`)
 
 Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
 
 ![Mork's Index Scheme](../assets/MorkIndex.png){ width="300" }
 
-A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness ($4 \cdot CWTTAN$) its radial lumen width ($DRAD$) is larger than 1.
+A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness ($4 \cdot \text{CWTTAN}$) and its radial lumen width (`DRAD`) is larger than 1.
 
 ---
 
-## Cell Wall Reinforcement Index ($(t/b)^2$, TB2)
+## Cell Wall Reinforcement Index ($(t/b)^2$, `TB2`)
 
 The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
 
@@ -153,13 +153,13 @@ To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automa
 
 ### 1. Wall Definitions & Measurement Integration (Panel A)
 For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
-- **Tangential walls:** $CWT_{\text{PI}}$ (pith-facing, top) and $CWT_{\text{BA}}$ (bark-facing, bottom).
-- **Radial walls:** $CWT_{\text{LE}}$ (left) and $CWT_{\text{RI}}$ (right).
+- **Tangential walls:** `CWTPI` / $CWT_{\text{PI}}$ (pith-facing, top) and `CWTBA` / $CWT_{\text{BA}}$ (bark-facing, bottom).
+- **Radial walls:** `CWTLE` / $CWT_{\text{LE}}$ (left) and `CWTRI` / $CWT_{\text{RI}}$ (right).
 - **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: 75%) to avoid corner-rounding biases.
 - **Aggregated metrics:**
-  - Tangential mean: $CWTTAN = (CWT_{\text{PI}} + CWT_{\text{BA}}) / 2$
-  - Radial mean: $CWTRAD = (CWT_{\text{LE}} + CWT_{\text{RI}}) / 2$
-  - Overall mean: $CWTALL = (CWTTAN + CWTRAD) / 2$
+  - Tangential mean: $\text{CWTTAN} = (CWT_{\text{PI}} + CWT_{\text{BA}}) / 2$
+  - Radial mean: $\text{CWTRAD} = (CWT_{\text{LE}} + CWT_{\text{RI}}) / 2$
+  - Overall mean: $\text{CWTALL} = (\text{CWTTAN} + \text{CWTRAD}) / 2$
 
 ### 2. Global IQR Distribution Filter / Tukey's Fences (Panel B)
 To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls ($CWT_{\text{PI}}, CWT_{\text{BA}}$) and radial walls ($CWT_{\text{LE}}, CWT_{\text{RI}}$):

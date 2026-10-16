@@ -372,7 +372,7 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 *Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
 
 ### How It Works
-- Computes mean ring width (MRW) from the ring boundaries currently in the viewer.
+- Computes mean ring width (`MRW`) from the ring boundaries currently in the viewer.
 - Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.
 - Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** up to **`9,999`** (CE).
 - Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
@@ -456,9 +456,9 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 ### How It Works
 - Combines the `.cells` lumen mask and `.rings` boundary geometry with spatial resolution metadata ($\mu\text{m}/\text{px}$).
 - Uses Continuous Wavelet Transform (CWT) and radial/tangential wall profiling to calculate:
-  - **Cell Lumen Metrics**: Lumen Area ($LA$), Hydraulic Diameter ($DH$), Theoretical Hydraulic Conductance ($KH$), Aspect Ratio ($ASP$).
-  - **Cell Wall Thickness (CWT)**: Radial ($CWTRAD$), Tangential ($CWTTAN$), Pith-side ($CWTPI$), Bark-side ($CWTBA$), Overall ($CWTALL$).
-  - **Ring-Level Aggregates**: Mean Ring Width ($MRW$), Cell Density ($CD$), Conductive Area Fraction ($RCTA$), Mork's Index ($RTSR$), Relative Anatomical Density ($RWD$).
+  - **Cell Lumen Metrics**: Lumen Area (`LA`), Hydraulic Diameter (`DH`), Theoretical Hydraulic Conductance (`KH`), Aspect Ratio (`ASP`).
+  - **Cell Wall Thickness (CWT)**: Radial (`CWTRAD`), Tangential (`CWTTAN`), Pith-side (`CWTPI`), Bark-side (`CWTBA`), Overall (`CWTALL`).
+  - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
 - Outputs tab-delimited tables: `<sample_name>.cells_table.txt` and `<sample_name>.rings_table.txt`.
 - **Always Re-creates Annotated Image**: Re-creates and saves an updated annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years whenever measurements are performed, ensuring the annotated image remains strictly in line with the measurements.
 
