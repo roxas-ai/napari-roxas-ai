@@ -49,7 +49,7 @@ The **Define Project Directory** widget configures the root folder where your sa
 *Figure 1: Project directory selection dialog.*
 
 ### How It Works
-When triggered from the menu, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory. Note that the exact same directory selection functionality is also triggered whenever selecting the project directory directly from within widgets **1 - Prepare Project Images**, **2/4 - Load Image(s)**, **3B - Batch Detect Cells & Rings**, and **9B - Batch Measure Cells & Rings**.
+When triggered from the menu, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory. Note that the exact same directory selection functionality is also triggered whenever selecting the project directory directly from within widgets [1 - Prepare Project Images](#1---prepare-project-images-for-analysis), [2/4 - Load Image(s)](#24---load-images), [3B - Batch Detect Cells & Rings](#3b---batch-detect-cells--rings), and [9B - Batch Measure Cells & Rings](#9b---batch-measure-cells--rings).
 
 ### Key Controls
 - **Select Project Directory**: Prompts the user to pick a folder. Upon confirmation, a notification displays the chosen path.
@@ -336,9 +336,9 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 - **Lasso Select**: Checkbox activating lasso-based vertex selection.
 - **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection.
 - **Undo Last Change**: Reverts the most recent shape edit or deletion made during the active editing session.
-- **Perform Visual Crossdating**: Opens the Visual Cross-Dating widget directly for the active sample.
+- **Perform Visual Crossdating**: Opens the Visual Cross-Dating widget directly for the active sample (see [7 - Visual Cross-Dating](#7---visual-cross-dating)).
 - **Rerun Model from Year Workflow**: Re-evaluates and automatically re-detects ring boundaries starting below a corrected reference ring boundary:
-    1. **Initial Detection**: Run standard automated tree-ring segmentation on the sample (via **3A - Detect Cells & Rings**).
+    1. **Initial Detection**: Run standard automated tree-ring segmentation on the sample (via [3A - Detect Cells & Rings](#3a---detect-cells--rings-individual-image)).
     2. **Inspect Boundaries**: Starting from the top (bark side), inspect the detected ring boundaries.
     3. **Correct Boundary Error**: If you notice a series of systematically incorrectly defined ring boundaries (e.g., jumps, jags; frequently starting from the top ring), delete the first/top erroneous boundary and manually redraw it correctly using the shape editing tools; then click **Apply Ring Changes**.
     4. **Re-enter Editing & Set Year**: Click **Edit Ring Boundaries** again and set **Rerun From Year:** to the calendar year of the manually added or corrected ring boundary.
@@ -464,7 +464,7 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 
 ### Key Controls
 - **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
-- **Check Settings Button**: Launches the Settings window as a floating widget that appears maximized with a comfortable margin on top of napari, automatically scrolling to and focusing on the measurement parameters.
+- **Check Settings Button**: Launches the Settings window (see [ZZ - Settings](#zz---settings)) as a floating widget that appears maximized with a comfortable margin on top of napari, automatically scrolling to and focusing on the measurement parameters.
 - **Measure Button**: Launches analysis in a background worker, writes measurement tables and the updated annotated image, and attaches measurements to layer properties for interactive table inspection.
 
 ---
@@ -488,7 +488,7 @@ The **Batch Sample Measurements Widget** runs the anatomical measurement engine 
 - **File Selection Mode**: Toggle between **Batch Process All Samples** and handpicking subsets (**Manually select files to process**).
 - **Reverse Selection**: Inverts current sample selections in the list.
 - **Measure Cells / Measure Rings**: Checkboxes for target measurement outputs.
-- **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings in **ZZ - Settings**.
+- **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings in [ZZ - Settings](#zz---settings).
 - **Run Analysis Button**: Runs batch extraction with real-time progress updates.
 
 ---
@@ -530,7 +530,7 @@ When updating or installing a new version of `napari-roxas-ai` over an older ins
    - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
 
 **How to resolve**:
-   - **Step 1 — Reset from the UI**: Open the **ZZ - Settings** widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
+   - **Step 1 — Reset from the UI**: Open the [ZZ - Settings](#zz---settings) widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
    - **Step 2 — Clean Reinstall**: If the settings or precision still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
      1. Uninstall the package:
         ```bash
