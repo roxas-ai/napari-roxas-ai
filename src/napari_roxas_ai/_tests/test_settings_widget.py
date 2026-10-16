@@ -1082,6 +1082,29 @@ def test_open_floating(make_napari_viewer, qtbot):
     assert reopened is settings_widget
 
 
+def test_open_floating_positions_widget_only_once(
+    make_napari_viewer, qtbot, monkeypatch
+):
+    viewer = make_napari_viewer()
+    configured = []
+    monkeypatch.setattr(
+        SettingsWidget,
+        "_configure_floating_dock",
+        staticmethod(lambda d, v: configured.append(d)),
+    )
+
+    # First opening: the new widget positions itself (deferred), so
+    # open_floating must not position it as well
+    SettingsWidget.open_floating(viewer, section_name="measurements")
+    assert configured == []
+    qtbot.wait(50)
+    assert len(configured) == 1
+
+    # Already open: it is brought back to the floating layout once
+    SettingsWidget.open_floating(viewer)
+    assert len(configured) == 2
+
+
 def test_settings_widget_dock_has_size_grip(make_napari_viewer, qtbot):
     from qtpy.QtWidgets import QSizeGrip
     from napari_roxas_ai._settings._settings_widget import _ProminentSizeGrip

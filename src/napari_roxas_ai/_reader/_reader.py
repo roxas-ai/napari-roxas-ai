@@ -401,6 +401,15 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         if rename_map:
             df = df.rename(columns=rename_map)
 
+        if metadata and "rings_outmost_complete_year" in metadata:
+            try:
+                last_year = int(metadata["rings_outmost_complete_year"])
+                df["YEAR"] = [
+                    a + 1 for a in range(last_year - len(df), last_year)
+                ]
+            except (ValueError, TypeError):
+                pass
+
         add_kwargs["features"] = df
 
     # Try to get sample metadata and rings metadata from metadata file

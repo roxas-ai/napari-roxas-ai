@@ -706,14 +706,18 @@ class TestBatchWorkerFunctionality:
                 "samples_metadata.fields": [{"id": "rings_outmost_complete_year", "default": 2020}],
             }.get(key, default)
 
-            mock_read_image.return_value = (
-                create_test_image(),
-                {
-                    "metadata": {"sample_name": "sample_01"},
-                    "scale": (1.0, 1.0),
-                },
-                "image",
-            )
+            # The second file cannot be read and must not count as done
+            mock_read_image.side_effect = [
+                (
+                    create_test_image(),
+                    {
+                        "metadata": {"sample_name": "sample_01"},
+                        "scale": (1.0, 1.0),
+                    },
+                    "image",
+                ),
+                OSError("broken"),
+            ]
 
             with patch.object(BatchWorker, "__init__", return_value=None):
                 worker = BatchWorker(None, None, None, None, None)
@@ -723,7 +727,8 @@ class TestBatchWorkerFunctionality:
                 worker.cells_model_weights_file = Path("/path/to/linear_cells_model.pth")
                 worker.rings_model_weights_file = Path("/path/to/linear_rings_model.pth")
                 worker.scan_file_paths = [
-                    str(sample_image_dir / "sample_01.scan.tif")
+                    str(sample_image_dir / "sample_01.scan.tif"),
+                    str(sample_image_dir / "sample_02.scan.tif"),
                 ]
                 worker.cells_model = mock_cells_model
                 worker.rings_model = mock_rings_model
@@ -735,8 +740,9 @@ class TestBatchWorkerFunctionality:
                 worker.run()
 
                 captured = capsys.readouterr()
-                assert "[Batch Segmentation] [1/1] sample_01.scan.tif: Cells (linear_cells_model.pth), Rings (linear_rings_model.pth)" in captured.out
-                assert "[Batch Segmentation] Completed 1 file(s) successfully." in captured.out
+                assert "[Batch Segmentation] [1/2] sample_01.scan.tif: Cells (linear_cells_model.pth), Rings (linear_rings_model.pth)" in captured.out
+                assert "[Batch Segmentation] [2/2] Error processing sample_02.scan.tif: broken" in captured.out
+                assert "[Batch Segmentation] Completed 1 of 2 file(s) successfully." in captured.out
 
 
 if __name__ == "__main__":

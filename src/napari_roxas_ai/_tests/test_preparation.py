@@ -900,3 +900,50 @@ class TestCrossdatingHandler:
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
+
+
+def test_worker_prints_info_for_each_processed_file(temp_dirs, capsys):
+    """Each prepared file is reported in the terminal, as in batch detection."""
+    project_dir = Path(temp_dirs)
+    test_file = project_dir / "sample_log.jpg"
+    create_test_image(test_file)
+
+    worker = Worker(
+        project_directory=str(project_dir),
+        scan_content_extension=".scan",
+        metadata_file_extension=".metadata.json",
+        image_file_extensions=[".jpg"],
+    )
+    worker.all_files = [str(test_file)]
+    worker.current_file_index = 0
+    worker._current_img_metadata = {"sample_stem_path": "sample_log"}
+
+    with patch.object(
+        worker, "load_cells_from_roxas_scl", return_value=False
+    ), patch.object(worker, "_process_next_file"):
+        worker.set_metadata(
+            {"sample_name": "sample_log"},
+            loading_params={
+                "load_cells_from_roxas": True,
+                "load_rings_from_roxas": False,
+            },
+        )
+
+    out = capsys.readouterr().out
+    assert (
+        "[Preparation] [1/1] sample_log.jpg: Metadata, "
+        "Cells skipped (no ROXAS SCL), Copied"
+    ) in out
+
+
+def test_worker_prints_a_summary_when_done(temp_dirs, capsys):
+    worker = Worker(
+        project_directory=str(temp_dirs),
+        scan_content_extension=".scan",
+        metadata_file_extension=".metadata.json",
+        image_file_extensions=[".jpg"],
+    )
+    worker.all_files = ["a.jpg", "b.jpg"]
+    worker.current_file_index = 2
+    worker._process_next_file()
+    assert "[Preparation] Completed 2 file(s)." in capsys.readouterr().out
