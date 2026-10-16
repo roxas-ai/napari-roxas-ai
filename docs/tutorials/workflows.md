@@ -57,7 +57,7 @@ This comprehensive, step-by-step workflow describes the standard protocol for ge
 
 ```mermaid
 flowchart TD
-    P1["Step 1: Project Setup & Image Preparation"] --> P2["Step 2: Automated Detection (3A)"]
+    P1["Step 1: Project Setup & Image Preparation"] --> P2["Step 2: Automated Cell & Ring Detection (3A)"]
     P2 --> P3["Step 3: High-Accuracy Lumen & Cell Wall Editing (5)"]
     P3 --> P4["Step 4: Tree-Ring Boundary Curation (6)"]
     P4 --> P5["Step 5: Visual Cross-Dating (7)"]
@@ -122,7 +122,7 @@ ROXAS AI offers two complementary editing modes for cell lumina:
 1. **Separating Merged Lumens**:
    - In Raster mode, switch to the **Eraser** tool with a small radius (10–15 px) and draw a dividing cut through the shared wall.
    - Run the connected component refresh to split into distinct labels.
-2. **Removing Debris & Resin Canals**:
+2. **Removing False Detections & Clearing Resin Canals**:
    - Use the **Lasso Selection** tool in Vector mode to encircle non-tracheid structures, poorly detected tracheids (e.g., due to tissue overlap) or resin ducts, then press `Delete` (or use the Lasso Delete option) to remove all enclosed objects simultaneously.
 3. **Restoring Overlooked Tracheids**:
    - Use the **Brush** tool in Raster mode or draw a new polygon in Vector mode over faint or damaged cell walls.
@@ -163,8 +163,7 @@ When an automatically detected ring boundary has significant geometric deviation
 
 1. **Delete the defective ring boundary** or clear its internal vertices.
 2. **Draw a simple polyline with at least three points** (beginning, intermediate, and end point across the lateral margins), as napari requires a minimum of three vertices before additional intermediate points can be inserted into the line.
-3. **Switch to vertex addition/insertion mode**: Starting from one margin and progressing systematically toward the other, insert intermediate vertices along the actual anatomical boundary.
-4. **Fine-tune**: Only place as many vertices as necessary to capture curvature and local boundary transitions.
+3. **Switch to vertex addition/insertion mode**: Starting from one margin and progressing systematically toward the other, insert intermediate vertices along the actual anatomical boundary. Only place as many vertices as necessary to capture curvature and local boundary transitions.
 
 This approach ensures minimal vertex count, eliminates loop artifacts, and is substantially faster than cleaning up messy automated traces.
 
@@ -174,7 +173,7 @@ This approach ensures minimal vertex count, eliminates loop artifacts, and is su
 
 #### Handling Missing, Wedging, and False Rings
 
-- **Mis-detected Rings**: If the neural network identified a wrong ring boundary, delete the boundary line. The calendar years of subsequent rings will automatically update in sequence.
+- **Mis-detected Rings**: If the deep-learning model identified a wrong ring boundary, delete the boundary line. The calendar years of subsequent rings will automatically update in sequence.
 - **Wedging Rings**: When two rings share part of their boundary, trace the boundary of the wedging ring up to the point of convergence, then finish off neatly. Alternatively, copy and paste the partly shared ring to create a separate ring. Then, adjust the vertices in the wedging portion to match the correct ring boundary. Therefore, you can either reposition the existing vertices individually or use the lasso delete option to remove misplaced vertices and add new ones along the correct boundary.
 - **Missing Rings**: Insert a new polyline at the expected anatomical position by copy-pasting the ring that should be duplicated. ROXAS AI will re-index all ring labels and calendar years accordingly.
 
@@ -242,7 +241,7 @@ When analyzing dozens or hundreds of wood sections, ROXAS AI allows automated ba
 
 ```mermaid
 flowchart TD
-    B1["Batch Preparation (Widget 1)"] --> B2["Headless Deep Learning (Widget 3B)"]
+    B1["Batch Preparation (Widget 1)"] --> B2["Batch Cell & Ring Segmentation (Widget 3B)"]
     B2 --> B3["Targeted Manual Editing (Widgets 2, 5, 6, 7, 8)"]
     B3 --> B4["Batch Trait Extraction (Widget 9B)"]
 ```
@@ -256,7 +255,7 @@ flowchart TD
 
 *Figure 13: Batch image preparation and metadata assignment.*
 
-### Step 2: Headless Deep Learning Segmentation
+### Step 2: Batch Cell & Ring Segmentation
 1. Open **Plugins > ROXAS AI > 3B - Batch detect cells & rings**.
 2. Select your project directory (or manually select specific sample files to include in the batch run) and choose desired segmentation models.
 3. Click **Run Batch Segmentation**.
@@ -273,8 +272,8 @@ flowchart TD
 
 ### Step 4: Automated Batch Measurement Extraction
 1. Open **Plugins > ROXAS AI > 9B - Batch measure cells & rings**.
-2. Select the project directory and desired anatomical trait calculation options.
-3. Click **Run Batch Measurements**.
+2. Select the project directory or manually select the images to process, then choose the desired options for anatomical trait calculation.
+3. Click **Measure & Update**.
 4. Measurement tables (`.cells_table.txt` and `.rings_table.txt`) are generated for all samples across the entire project directory.
 
 ![Screenshot: Batch measurement completion](../assets/screenshots/tutorials/batch_03_done.png)
@@ -284,3 +283,4 @@ flowchart TD
 ---
 
 ## 4. Troubleshooting & Quality Control Cookbook
+tbd
