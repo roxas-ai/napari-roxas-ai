@@ -111,7 +111,7 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 
 ---
 
-## Theoretical Hydraulic Conductance (`KH` / $K_h$)
+## Theoretical Hydraulic Conductance (`KH`)
 The theoretical hydraulic conductance is approximated by Poiseuille's law and adjusted for elliptical tubes (Nonweiler 1975):
 
 $$ \text{KH} = \frac{\text{LA} \cdot m^2}{\nu \cdot k} $$
@@ -135,7 +135,7 @@ A tracheid is classified as latewood when the ratio between twice the double tan
 
 ---
 
-## Cell Wall Reinforcement Index ($(t/b)^2$, `TB2`)
+## Cell Wall Reinforcement Index (`TB2`)
 
 The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
 
