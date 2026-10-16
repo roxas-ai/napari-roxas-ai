@@ -51,23 +51,23 @@ flowchart LR
 
 ---
 
-## 2. Standard Workflow: Dendroclimatic Tree-Ring & Cell Anatomy Time Series
+## 2. Standard Workflow: Tree-Ring & Cell Anatomy Time Series
 
 This comprehensive, step-by-step workflow describes the standard protocol for generating publication-quality dendroclimatic and wood anatomical time series from raw microsections or high-resolution surface scans.
 
 ```mermaid
 flowchart TD
-    P1["Phase 1: Project Setup & Image Preparation"] --> P2["Phase 2: Automated Detection (3A)"]
-    P2 --> P3["Phase 3: Tree-Ring Boundary Curation (6)"]
-    P3 --> P4["Phase 4: Visual Cross-Dating (7)"]
-    P4 --> P5["Phase 5: Cell Lumen Curation (5)"]
-    P5 --> P6["Phase 6: Save Annotations (8)"]
-    P6 --> P7["Phase 7: Trait Extraction (9A)"]
+    P1["Step 1: Project Setup & Image Preparation"] --> P2["Step 2: Automated Detection (3A)"]
+    P2 --> P3["Step 3: High-Accuracy Lumen & Cell Wall Editing (5)"]
+    P3 --> P4["Step 4: Tree-Ring Boundary Curation (6)"]
+    P4 --> P5["Step 5: Visual Cross-Dating (7)"]
+    P5 --> P6["Step 6: Save Annotations (8)"]
+    P6 --> P7["Step 7: Trait Extraction (9A)"]
 ```
 
 ---
 
-### Phase 1: Project Setup & Image Preparation
+### Step 1: Project Setup & Image Preparation
 
 1. Open **Plugins > ROXAS AI > 0 - Define project directory** and choose the root directory where your analysis files will reside.
 2. Open **Plugins > ROXAS AI > 1 - Prepare project images for analysis**.
@@ -85,7 +85,7 @@ flowchart TD
 
 ---
 
-### Phase 2: Loading & Automated Segmentation
+### Step 2: Loading & Automated Segmentation
 
 1. Open **Plugins > ROXAS AI > 2/4 - Load image(s)** and load your prepared sample.
 2. Open **Plugins > ROXAS AI > 3A - Detect cells & rings (individual image)**.
@@ -98,13 +98,50 @@ flowchart TD
 
 ---
 
-### Phase 3: Tree-Ring Editing & Boundary Curation
+### Step 3: High-Accuracy Lumen & Cell Wall Editing
+
+Refine cell lumen annotations using **Plugins > ROXAS AI > 5 - Edit cells**.
+
+> **Tip**: You can save your edits directly from within this widget at any time. Regularly saving edits is a good routine to preserve your work throughout the editing session.
+
+![Screenshot: Cell layer editor tools](../assets/screenshots/tutorials/std_05_cell_editor_tools.png)
+
+*Figure 6: Cell layer editor displaying raster brush/eraser controls and vector polygon conversion.*
+
+#### Raster vs. Vector Editing Modes
+
+ROXAS AI offers two complementary editing modes for cell lumina:
+
+| Mode | Best Used For | Tooling & Mechanics |
+| :--- | :--- | :--- |
+| **Raster Mode** | Rapid mask cleaning, separating merged cells, filling voids | Pixel brush, eraser, paint bucket. Direct modification of the integer label mask. |
+| **Vector Mode** | High-precision boundary adjustments, polygon vertex editing, batch lasso deletion | Polygon contour representation with vertex manipulation and Lasso Delete. |
+
+#### Editing Techniques
+
+1. **Separating Merged Lumens**:
+   - In Raster mode, switch to the **Eraser** tool with a small radius (10–15 px) and draw a dividing cut through the shared wall.
+   - Run the connected component refresh to split into distinct labels.
+2. **Removing Debris & Resin Canals**:
+   - Use the **Lasso Selection** tool in Vector mode to encircle non-tracheid structures, poorly detected tracheids (e.g., due to tissue overlap) or resin ducts, then press `Delete` (or use the Lasso Delete option) to remove all enclosed objects simultaneously.
+3. **Restoring Overlooked Tracheids**:
+   - Use the **Brush** tool in Raster mode or draw a new polygon in Vector mode over faint or damaged cell walls.
+
+![Screenshot: Lasso selection and multi-cell cleanup](../assets/screenshots/tutorials/std_05b_lasso_cleanup.png)
+
+*Figure 7: Using lasso selection to batch-remove resin canal cells and preparation artifacts.*
+
+---
+
+### Step 4: Tree-Ring Editing & Boundary Curation
 
 Accurate ring boundaries are essential because all radial cell positions and annual time series metrics depend on them. Open **Plugins > ROXAS AI > 6 - Edit rings**.
 
+> **Tip**: You can save your edits directly from within this widget at any time. Regularly saving edits is a good routine to preserve your work throughout the editing session.
+
 ![Screenshot: Tree-ring boundary editing widget](../assets/screenshots/tutorials/std_03_ring_editing_overview.png)
 
-*Figure 6: Ring layer editor interface with polyline modification tools.*
+*Figure 8: Ring layer editor interface with polyline modification tools.*
 
 #### Best Practices for Ring Boundary Tracing
 
@@ -121,35 +158,35 @@ Editing ring polylines in napari requires an efficient vertex manipulation strat
     
     **Rule**: Always confirm/apply your changes after deleting vertices before starting a new edit action to insert additional vertices.
 
-##### The "Two-Point Reset" Strategy (Fastest Reconstruction)
-When an automatically detected ring boundary has significant geometric deviations or artifacts, attempting to move individual vertices or perform mixed delete/insert operations often takes excessive time. Instead, use the **Two-Point Reset**:
+##### The Polyline Reset Strategy (Fastest Reconstruction)
+When an automatically detected ring boundary has significant geometric deviations or artifacts, attempting to move individual vertices or perform mixed delete/insert operations often takes excessive time. Instead, use a reset strategy:
 
 1. **Delete the defective ring boundary** or clear its internal vertices.
-2. **Draw a simple straight line** connecting the start and end points at the lateral sample margins.
+2. **Draw a simple polyline with at least three points** (beginning, intermediate, and end point across the lateral margins), as napari requires a minimum of three vertices before additional intermediate points can be inserted into the line.
 3. **Switch to vertex addition/insertion mode**: Starting from one margin and progressing systematically toward the other, insert intermediate vertices along the actual anatomical boundary.
 4. **Fine-tune**: Only place as many vertices as necessary to capture curvature and local boundary transitions.
 
 This approach ensures minimal vertex count, eliminates loop artifacts, and is substantially faster than cleaning up messy automated traces.
 
-![Screenshot: Two-point reset strategy for ring boundary reconstruction](../assets/screenshots/tutorials/std_03b_ring_twopoint_strategy.png)
+![Screenshot: Polyline reset strategy for ring boundary reconstruction](../assets/screenshots/tutorials/std_03b_ring_twopoint_strategy.png)
 
-*Figure 7: The Two-Point Reset strategy: (A) draw initial straight polyline; (B) sequentially insert critical intermediate vertices along the terminal latewood boundary.*
+*Figure 9: Polyline reset strategy: (A) draw initial polyline with minimum vertices; (B) sequentially insert critical intermediate vertices along the terminal latewood boundary.*
 
 #### Handling Missing, Wedging, and False Rings
 
-- **Wedging Rings**: When a ring tapers off laterally, trace the boundary up to the point of convergence and terminate cleanly according to standard dendrochronological rules.
-- **Intra-Annual Density Fluctuations (False Rings)**: If the neural network identified a false latewood band, delete the boundary line. The calendar years of subsequent rings will automatically update in sequence.
-- **Locally Absent / Missing Rings**: Insert a new polyline at the expected anatomical position. ROXAS AI will re-index all ring labels and calendar years accordingly.
+- **Mis-detected Rings**: If the neural network identified a wrong ring boundary, delete the boundary line. The calendar years of subsequent rings will automatically update in sequence.
+- **Wedging Rings**: When two rings share part of their boundary, trace the boundary of the wedging ring up to the point of convergence, then finish off neatly. Alternatively, copy and paste the partly shared ring to create a separate ring. Then, adjust the vertices in the wedging portion to match the correct ring boundary. Therefore, you can either reposition the existing vertices individually or use the lasso delete option to remove misplaced vertices and add new ones along the correct boundary.
+- **Missing Rings**: Insert a new polyline at the expected anatomical position by copy-pasting the ring that should be duplicated. ROXAS AI will re-index all ring labels and calendar years accordingly.
 
 ---
 
-### Phase 4: Visual Cross-Dating & Ring Synchronization
+### Step 5: Visual Cross-Dating & Ring Synchronization
 
-To verify ring counts and calendar year assignments against existing master chronologies or sister cores, open **Plugins > ROXAS AI > 7 - Visual cross-dating**.
+To verify ring counts and calendar year assignments against its reference series or the mean chronology, open **Plugins > ROXAS AI > 7 - Visual cross-dating**.
 
 ![Screenshot: Visual cross-dating interface](../assets/screenshots/tutorials/std_04_crossdating_plotter.png)
 
-*Figure 8: Visual cross-dating plotter showing sample ring widths (blue) synchronized against reference series (orange).*
+*Figure 10: Visual cross-dating plotter showing sample ring widths (red) synchronized against reference series (yellow) and mean chronology (white).*
 
 1. **Select Reference Series**: Choose the active sample or master chronology from the series list.
 2. **Inspect Ring-Width Plots**: Examine the curve overlay in raw or log-transformed scale. Characteristic pointer years (exceptionally narrow or wide rings) provide anchor points.
@@ -160,40 +197,9 @@ To verify ring counts and calendar year assignments against existing master chro
 
 ---
 
-### Phase 5: High-Accuracy Lumen & Cell Wall Editing
+### Step 6: Saving Verified Annotations
 
-With verified ring boundaries in place, refine cell lumen annotations. Open **Plugins > ROXAS AI > 5 - Edit cells**.
-
-![Screenshot: Cell layer editor tools](../assets/screenshots/tutorials/std_05_cell_editor_tools.png)
-
-*Figure 9: Cell layer editor displaying raster brush/eraser controls and vector polygon conversion.*
-
-#### Raster vs. Vector Editing Modes
-
-ROXAS AI offers two complementary editing modes for cell lumina:
-
-| Mode | Best Used For | Tooling & Mechanics |
-| :--- | :--- | :--- |
-| **Raster Mode** | Rapid mask cleaning, separating merged cells, filling voids | Pixel brush, eraser, paint bucket. Direct modification of the integer label mask. |
-| **Vector Mode** | High-precision boundary adjustments, split lines, polygon inspection | Polygon contour representation with vertex manipulation. |
-
-#### Editing Techniques
-
-1. **Separating Merged Lumens**:
-   - In Raster mode, switch to the **Eraser** tool with a small radius (1–2 px) and draw a dividing cut through the shared wall.
-   - Run the connected component refresh to split into distinct labels.
-2. **Removing Debris & Resin Canals**:
-   - Use the **Lasso Selection** tool in Vector mode to encircle non-tracheid structures or resin ducts, then press `Delete` to remove all enclosed objects simultaneously.
-3. **Restoring Overlooked Tracheids**:
-   - Use the **Brush** tool in Raster mode or draw a new polygon in Vector mode over faint or damaged cell walls.
-
-![Screenshot: Lasso selection and multi-cell cleanup](../assets/screenshots/tutorials/std_05b_lasso_cleanup.png)
-
-*Figure 10: Using lasso selection to batch-remove resin canal cells and preparation artifacts.*
-
----
-
-### Phase 6: Saving Verified Annotations
+While you can save edits directly from Widgets 5 and 6 during editing sessions, you can also use **Plugins > ROXAS AI > 8 - Save cells & rings editing** to review and persist all modified layers simultaneously.
 
 1. Open **Plugins > ROXAS AI > 8 - Save cells & rings editing**.
 2. Select the active sample and confirm layer selections.
@@ -209,33 +215,20 @@ ROXAS AI offers two complementary editing modes for cell lumina:
 
 ---
 
-### Phase 7: Anatomical Traits Extraction & Chronology Export
+### Step 7: Anatomical Traits Extraction & Chronology Export
 
 1. Open **Plugins > ROXAS AI > 9A - Measure cells & rings (individual image)**.
-2. Configure measurement parameters:
-   - **Cell Wall Thickness (CWT) Method**: Continuous Wavelet Transform (CWT) filtering parameters.
-   - **Mork's Index Threshold**: Default $4.0$ for distinguishing earlywood from latewood tracheids.
-   - **Radial Sector Bands**: Number of tangential sub-sectors for radial profile averaging.
+2. *(Optional)* If you wish to review or adjust default measurement parameters (such as CWT calculation options or tangential sector bands), open the **Settings** widget directly from the button inside this widget.
 3. Click **Run Measurements**.
 
 #### Generated Output Tables
 
-The measurement engine outputs two primary text tables in the sample directory:
+The measurement engine outputs two primary text tables in the sample directory (as `.txt` or `.csv`, depending on your settings):
 
-1. **`<sample>.cells_table.txt`**: Cell-level records:
-   - `ID`, `X_CAL`, `Y_CAL`: Spatial coordinates ($\mu\text{m}$).
-   - `AREA`: Lumen area ($\mu\text{m}^2$).
-   - `CWT_RAD`, `CWT_TAN`, `CWT_ALL`: Radial, tangential, and mean cell wall thickness ($\mu\text{m}$).
-   - `MORK`: Mork's index value and earlywood/latewood classification.
-   - `RING_YEAR`: Calendar year of the enclosing tree ring.
-   - `REL_RAD_POS`: Normalized radial position within the ring ($0.0 = \text{earlywood start}, 1.0 = \text{ring boundary}$).
-2. **`<sample>.rings_table.txt`**: Ring-level summary records:
-   - `YEAR`: Calendar year.
-   - `RING_WIDTH`: Measured ring width ($\mu\text{m}$).
-   - `NUM_CELLS`: Total count of measured tracheids.
-   - `MEAN_LUMEN_AREA`: Mean lumen area per annual ring ($\mu\text{m}^2$).
-   - `MEAN_CWT`: Mean annual cell wall thickness ($\mu\text{m}$).
-   - `EARLYWOOD_WIDTH`, `LATEWOOD_WIDTH`: Zonal width measurements.
+- **[`<sample>.cells_table.txt` / `.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Individual cell-level records (e.g., cell ID `CID`, ring affiliation year `YEAR`, lumen area `LA`, radial/tangential/overall cell wall thickness `CWTRAD`/`CWTTAN`/`CWTALL`, relative radial position `RRADDISTR`, and Mork's index `RTSR`).
+- **[`<sample>.rings_table.txt` / `.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring-level summary records (e.g., calendar year `YEAR`, mean ring width `MRW`, cell count `CNO`, mean lumen area `MLA`, cell density `CD`, and mean cell wall thickness `CWTALL`).
+
+> For the complete list of all measured anatomical variables, abbreviations, theoretical hydraulic traits, and unit definitions, see the [Technical Reference: Output Variables](../reference/technical_reference.md#output-variables-acronyms).
 
 ![Screenshot: Final measurement tables and visual summary](../assets/screenshots/tutorials/std_07_measurement_summary.png)
 
@@ -250,11 +243,11 @@ When analyzing dozens or hundreds of wood sections, ROXAS AI allows automated ba
 ```mermaid
 flowchart TD
     B1["Batch Preparation (Widget 1)"] --> B2["Headless Deep Learning (Widget 3B)"]
-    B2 --> B3["Targeted Visual Curation (Widgets 2, 5, 6, 7, 8)"]
+    B2 --> B3["Targeted Manual Editing (Widgets 2, 5, 6, 7, 8)"]
     B3 --> B4["Batch Trait Extraction (Widget 9B)"]
 ```
 
-### Phase 1: Batch Preparation & Standardization
+### Step 1: Batch Preparation & Standardization
 1. Organize raw scans into your designated project folder.
 2. Launch **Plugins > ROXAS AI > 1 - Prepare project images for analysis**.
 3. Choose the directory and batch-assign spatial resolution and metadata across all matching images.
@@ -263,9 +256,9 @@ flowchart TD
 
 *Figure 13: Batch image preparation and metadata assignment.*
 
-### Phase 2: Headless Deep Learning Segmentation
+### Step 2: Headless Deep Learning Segmentation
 1. Open **Plugins > ROXAS AI > 3B - Batch detect cells & rings**.
-2. Select your project directory and desired segmentation models.
+2. Select your project directory (or manually select specific sample files to include in the batch run) and choose desired segmentation models.
 3. Click **Run Batch Segmentation**.
 4. The background queue sequentially processes each image, generating `.cells.png` and `.rings.tif` masks without requiring manual interaction for each image.
 
@@ -273,12 +266,12 @@ flowchart TD
 
 *Figure 14: Batch segmentation execution and progress tracking.*
 
-### Phase 3: Targeted Quality Control
+### Step 3: Targeted Quality Control
 1. Open **Plugins > ROXAS AI > 2/4 - Load image(s)**.
 2. Iterate through processed samples.
-3. Perform targeted curation only on samples with irregular anatomy, reaction wood, or damaged sections using Widgets **5**, **6**, **7**, and **8**.
+3. Perform targeted manual editing using Widgets **5**, **6**, **7**, and **8**.
 
-### Phase 4: Automated Batch Measurement Extraction
+### Step 4: Automated Batch Measurement Extraction
 1. Open **Plugins > ROXAS AI > 9B - Batch measure cells & rings**.
 2. Select the project directory and desired anatomical trait calculation options.
 3. Click **Run Batch Measurements**.
@@ -291,26 +284,3 @@ flowchart TD
 ---
 
 ## 4. Troubleshooting & Quality Control Cookbook
-
-### Problem 1: Low-Contrast or Unevenly Stained Cross-Sections
-- **Symptom**: Automated deep-learning segmentation under-segments cell lumina in dark or poorly illuminated regions.
-- **Solution**:
-  1. In the napari layer controls for the active image layer, adjust **contrast limits** and **gamma** to enhance cell wall visibility.
-  2. In **5 - Edit cells**, use the raster brush with auto-thresholding enabled to quickly paint over faint lumina.
-
-### Problem 2: Wedging Rings and Ambiguous Boundaries
-- **Symptom**: Ring boundaries converge or become indistinct due to micro-wedging or localized compression.
-- **Solution**:
-  1. Inspect neighboring radial tracks to trace the anatomical trajectory of the ring boundary.
-  2. Use the **Two-Point Reset Strategy** (see [Phase 3](#the-two-point-reset-strategy-fastest-reconstruction)) to place a clean reference guide line.
-  3. Validate against the reference chronology in **7 - Visual cross-dating**.
-
-### Problem 3: Ring Orientation and Lateral Border Clipping
-- **Symptom**: Ring boundaries fail to register cell assignments near the outer image edges.
-- **Solution**:
-  - Ensure that ring boundary polylines completely cross the lateral edges of the analyzed cell area. Polylines that stop short will exclude bordering tracheids from annual ring assignment.
-
-### Problem 4: Resolving Vertex Loops in Ring Tracing
-- **Symptom**: A ring boundary creates an unexpected loop or cross-pattern after adding vertices.
-- **Solution**:
-  - Delete the misordered vertices, click outside or toggle the edit tool to commit the clean state, and then re-insert the vertices sequentially from one end of the polyline to the other.
