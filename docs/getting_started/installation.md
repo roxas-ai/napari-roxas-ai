@@ -1,6 +1,6 @@
 # Installation & Setup Guide
 
-Welcome to **ROXAS AI**! This guide walks you through setting up a clean Python environment, installing the `napari-roxas-ai` plugin, and configuring optional GPU acceleration for fast neural network inference.
+Welcome to **ROXAS AI**! This guide walks you through setting up a clean Python environment, installing the `napari-roxas-ai` plugin, and configuring optional GPU acceleration for fast deep-learning inference.
 
 ---
 
@@ -73,15 +73,21 @@ While ROXAS AI functions fully on CPU, enabling GPU acceleration significantly s
 
     1. **Install CUDA-enabled PyTorch:**
         ```bash
-        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+        pip install torch torchvision \
+          --index-url https://download.pytorch.org/whl/cu128
         ```
         *This single command supports all recent NVIDIA GPUs (RTX 20-series, 30-series, 40-series, and 50-series / Blackwell). The CUDA runtime is bundled with the wheels, so no separate CUDA toolkit installation is needed—only an up-to-date NVIDIA display driver.*
 
         *(Note: If your system uses an older display driver that cannot be updated, you can install the CUDA 12.6 build instead by replacing `cu128` with `cu126`).*
 
     2. **Verify GPU / CUDA availability:**
-        ```bash
-        python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
+        ```python
+        python -c "
+        import torch
+        print('CUDA available:', torch.cuda.is_available())
+        print('CUDA version:', torch.version.cuda)
+        print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')
+        "
         ```
         *For a functional GPU installation, `CUDA available:` should output `True` and list your GPU device name.*
 
@@ -89,7 +95,8 @@ While ROXAS AI functions fully on CPU, enabling GPU acceleration significantly s
         If `CUDA available:` reports `False` after installation (e.g., if a CPU-only PyTorch build was previously cached or installed), cleanly remove PyTorch and reinstall:
         ```bash
         pip uninstall torch torchvision torchaudio -y
-        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+        pip install torch torchvision \
+          --index-url https://download.pytorch.org/whl/cu128
         ```
 
     *(For supported AMD GPUs on Linux, consult the [PyTorch ROCm installation guide](https://pytorch.org/get-started/locally/)).*
@@ -100,8 +107,12 @@ While ROXAS AI functions fully on CPU, enabling GPU acceleration significantly s
       PyTorch leverages Apple's **Metal Performance Shaders (MPS)** backend natively. No separate CUDA or driver installation is necessary. The standard ROXAS AI package includes the appropriate PyTorch build.
       
       To verify MPS availability on Apple Silicon:
-      ```bash
-      python -c "import torch; print('MPS available:', torch.backends.mps.is_available()); print('MPS built:', torch.backends.mps.is_built())"
+      ```python
+      python -c "
+      import torch
+      print('MPS available:', torch.backends.mps.is_available())
+      print('MPS built:', torch.backends.mps.is_built())
+      "
       ```
       *When `MPS available: True` is displayed, ROXAS AI will accelerate cell segmentation using your Apple GPU.*
 
