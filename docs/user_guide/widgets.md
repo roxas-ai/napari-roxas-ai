@@ -116,22 +116,28 @@ The cross-dating parser automatically recognizes and parses several standard den
 #### Unit Scaling Conversion
 Because tree-ring measurement devices export widths in varying units, the selection dialog allows specifying the unit scale of the input files to convert all values into standard **micrometers ($\mu\text{m}$)**:
 
-| Selected Unit Option | Multiplier Applied | Resulting Unit | Typical Use Case |
-| :--- | :--- | :--- | :--- |
-| **`1 / 100 mm`** *(default)* | $\times 10.0$ | $\mu\text{m}$ | Standard LINTAB / TSAP 1/100 mm resolution |
-| **`1 / 10 mm`** | $\times 100.0$ | $\mu\text{m}$ | Low-resolution 0.1 mm measurement systems |
-| **`1 / 1000 mm`** | $\times 1.0$ | $\mu\text{m}$ | Precision 1/1000 mm ($1\,\mu\text{m}$) stage micrometers |
-| **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ | Raw values recorded in tenths of micrometers |
+| Selected Unit Option | Multiplier Applied | Resulting Unit |
+| :--- | :--- | :--- |
+| **`1 / 1 mm`** | $\times 1000.0$ | $\mu\text{m}$ |
+| **`1 / 10 mm`** | $\times 100.0$ | $\mu\text{m}$ |
+| **`1 / 100 mm`** *(default)* | $\times 10.0$ | $\mu\text{m}$ |
+| **`1 / 1000 mm`** | $\times 1.0$ | $\mu\text{m}$ |
+| **`divide values by 10`** | $\times 0.1$ | $\mu\text{m}$ |
 
-#### Output File Structure
-The compiled series is saved in the root of the project directory as `rings_series<crossdating_file_extension>` (by default `rings_series.crossdating.txt`, where `file_extensions.crossdating_file_extension` in `settings.json` is configured as `[".crossdating", ".txt"]`, which concatenates to `[".crossdating.txt"]`:
+#### Output File Structure & Merging Logic
+The compiled series is saved in the project directory as `<prefix><crossdating_file_extension>` (by default `rings_series.crossdating.txt`, where `file_extensions.crossdating_file_extension` in `settings.json` is configured as `[".crossdating", ".txt"]`, which concatenates to `.crossdating.txt`):
 
+- **Customizable Output Prefix**: Users can customize the filename prefix in the dialog (defaulting to `rings_series`). This allows naming the cross-dating file after a site, project, or chronology acronym (e.g., `TORN.PISY.crossdating.txt` for a *Pinus sylvestris* chronology from the Torneträsk site).
+- **Updating and Merging Existing Files with Unit Scaling Logic**: You can select multiple raw files alongside existing `.crossdating.txt` files to merge them into a single reference file or update an existing project cross-dating file.
+    - **Scaling suppression for existing `.crossdating.txt` files**: Any selected file that is already a cross-dating output file (e.g., `*.crossdating.txt` or containing `crossdating` in its filename) is recognized as already converted to micrometers ($\mu\text{m}$). The chosen unit scaling multiplier is automatically **suppressed** (multiplier $= 1.0$) for these files.
+    - **Selective scaling for raw inputs**: The selected unit scaling multiplier is applied **only to newly added raw measurement files** (`.rwl`, `.tuc`, standard `.txt`).
+    - **Priority handling**: When merging, data from newly added raw files takes priority over older values in case of duplicate series and year combinations.
 - **Format & Delimiter**: Tab-delimited plain text file (`\t` separator).
 - **Index (`YEAR`)**: The first column is named `YEAR` and contains unique calendar years spanning the complete chronological range across all imported series, sorted in ascending order.
 - **Series Columns**: Each imported file/series forms its own named column header (derived from series IDs or column labels in the source files).
 - **Data Alignment & Missing Values**: Ring widths are aligned by year across all series in micrometers ($\mu\text{m}$). Years not covered by a given series are left empty (`NaN`), allowing seamless integration of chronologies with differing time spans.
 
-*Example Output File (`rings_series.crossdating.txt`, tab-delimited, values in $\mu\text{m}$ after applying $\times 10.0$ scaling):*
+*Example Output File (`TORN.PISY.crossdating.txt`, tab-delimited, values in $\mu\text{m}$ after applying $\times 10.0$ scaling to raw 1/100 mm files):*
 
 | YEAR | Series01 | Series02 |
 | :--- | :--- | :--- |
@@ -146,9 +152,9 @@ The compiled series is saved in the root of the project directory as `rings_seri
 - **Process already processed files**: When unchecked (default), skips files that already have the `.scan` extension.
 - **Manually select files to process**: Expands a multi-selection list allowing selective processing of specific samples instead of the entire directory.
 - **Reverse Selection**: Inverts the current file selection in the list.
-- **Ignore ROXAS Output files**: Filters out visualization previews (e.g., `_annotated.jpg`, `_ReferenceSeries.jpg`).
+- **Automatic Filtering of ROXAS Output Files**: The widget automatically ignores and excludes ROXAS AI output layers (`.cells.*`, `.rings.*`), annotated overviews (`_annotated.jpg`), cross-dating plots (`_ReferenceSeries.jpg`), and ROXAS Classic output files (`_annotated_cells.jpg`, `_annotated_twin.jpg`, `_ReferenceSeries.gif`, `_Preview.jpg`, etc.) from the candidate input list.
 - **Start Processing Image Files**: Launches the preparation worker thread with a live progress bar.
-- **Start Processing Crossdating Files**: Opens the cross-dating file selection and unit conversion dialog to merge external ring-width files into the project reference series.
+- **Start Processing Crossdating Files**: Opens the cross-dating file selection, unit conversion, and custom filename prefix dialog to compile or update project reference series.
 
 ---
 
@@ -169,7 +175,7 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 
 ### Key Controls
 - **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
-- **Samples List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately opens that image along with its available associated rings and cells layers.
+- **Available Images List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately loads that image into the viewer along with its available associated rings and cells layers (identical to selecting the file and clicking **Load Selected Image**).
 - **Load Selected Image**: Loads the currently selected sample file (along with available associated rings and cells layers) into the viewer.
 - **Progress Bar**: Displays sample loading progress.
 
@@ -217,10 +223,11 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 
 ### Key Controls
 - **Project Directory Selection**: Choose the target folder containing prepared samples (triggering the same global project directory selection dialog).
-- **File Selection Mode**: Toggle between batch processing all samples or handpicked subsets.
+- **File Selection Mode**: Toggle between **Batch Process All Samples** and handpicking subsets (**Manually select files to process**).
+- **Reverse Selection**: Inverts current sample selections in the list.
 - **Segmentation Targets**: Checkboxes for **Segment Cells** and **Segment Rings**.
 - **Model Dropdowns**: Select weights for cell and ring models.
-- **Start Batch Segmentation**: Launches the batch worker with overall progress tracking.
+- **Run Segmentation Button**: Launches the batch worker with overall progress tracking.
 
 ---
 
@@ -267,7 +274,20 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 - **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the `Delete` key).
 - **Apply Cell Changes**: Commits edits, updates the `.cells` layer, restores layer visibility, and exits editing mode.
 - **Cancel Cell Changes**: Discards pending modifications, removes the working layer, restores original layer visibility, and exits editing mode.
-- **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar.
+- **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar. For full details on the saving routine, see [8 - Save Cells & Rings Editing](#8---save-cells--rings-editing).
+
+### Keyboard Navigation Shortcuts
+When viewing and editing cells, standardized keyboard shortcuts allow rapid viewport navigation without switching away from active drawing tools:
+
+| Action | Assigned Key(s) | Description |
+| :--- | :--- | :--- |
+| **Pan Up** | <kbd>W</kbd> or <kbd>↑</kbd> | Shifts the viewport upward by 200 pixels (adjusted for current zoom level). |
+| **Pan Down** | <kbd>S</kbd> or <kbd>↓</kbd> | Shifts the viewport downward by 200 pixels. |
+| **Pan Left** | <kbd>A</kbd> or <kbd>←</kbd> | Shifts the viewport leftward by 200 pixels. |
+| **Pan Right** | <kbd>D</kbd> or <kbd>→</kbd> | Shifts the viewport rightward by 200 pixels. |
+| **Fast Pan** | <kbd>Shift</kbd> + (<kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or <kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>) | Doubles the panning step speed (400 pixels per step). |
+| **Zoom Out** | <kbd>Q</kbd> | Decreases magnification level by a step of $0.25$. |
+| **Zoom In** | <kbd>E</kbd> | Increases magnification level by a step of $0.25$. |
 
 ---
 
@@ -313,14 +333,33 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 - **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
 - **Update Year**: Updates the calendar year metadata and recalculates ring year labels in the viewer.
 - **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
-- **Lasso Selection Mode**: Checkbox activating lasso-based vertex selection.
-- **Delete Vertices in Lasso**: Removes all vertices enclosed by the lasso selection.
-- **Rerun Model from year**: Re-evaluates ring boundaries with tunable parameters starting from a selected calendar year:
-  - *Rerun from Year (SpinBox)*: Calendar year to start re-detecting boundaries from.
-  - *Model (ComboBox)*: Ring segmentation model weights file to use for boundary re-detection.
-  - *Run (PushButton)*: Executes targeted boundary re-detection in edited areas.
+- **Lasso Select**: Checkbox activating lasso-based vertex selection.
+- **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection.
+- **Undo Last Change**: Reverts the most recent shape edit or deletion made during the active editing session.
+- **Perform Visual Crossdating**: Opens the Visual Cross-Dating widget directly for the active sample.
+- **Rerun Model from Year Workflow**: Re-evaluates and automatically re-detects ring boundaries starting below a corrected reference ring boundary:
+    1. **Initial Detection**: Run standard automated tree-ring segmentation on the sample (via **3A - Detect Cells & Rings**).
+    2. **Inspect Boundaries**: Starting from the top (bark side), inspect the detected ring boundaries.
+    3. **Correct Boundary Error**: If you notice a series of systematically incorrectly defined ring boundaries (e.g., jumps, jags; frequently starting from the top ring), delete the first/top erroneous boundary and manually redraw it correctly using the shape editing tools; then click **Apply Ring Changes**.
+    4. **Re-enter Editing & Set Year**: Click **Edit Ring Boundaries** again and set **Rerun From Year:** to the calendar year of the manually added or corrected ring boundary.
+    5. **Select Model & Re-run**: In the **Model:** dropdown, choose the ring model checkpoint (e.g., `LinearRingModel_v3_iterative.pt`) and click **Rerun Ring Segmentation**.
+    6. **Iterative Re-detection**: All ring boundaries below the manually corrected ring boundary are automatically re-detected and reconstructed based on the corrected boundary geometry.
 - **Apply Ring Changes**: Validates topology, updates `.rings` labels, updates `.rings_table.txt`, and saves year metadata.
 - **Cancel Ring Changes**: Reverts to original ring boundaries and restores previous layer states.
+- **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar. For full details on the saving routine, see [8 - Save Cells & Rings Editing](#8---save-cells--rings-editing).
+
+### Keyboard Navigation Shortcuts
+When curating tree-ring boundaries, standardized keyboard shortcuts allow rapid viewport navigation without switching away from active drawing tools:
+
+| Action | Assigned Key(s) | Description |
+| :--- | :--- | :--- |
+| **Pan Up** | <kbd>W</kbd> or <kbd>↑</kbd> | Shifts the viewport upward by 200 pixels (adjusted for current zoom level). |
+| **Pan Down** | <kbd>S</kbd> or <kbd>↓</kbd> | Shifts the viewport downward by 200 pixels. |
+| **Pan Left** | <kbd>A</kbd> or <kbd>←</kbd> | Shifts the viewport leftward by 200 pixels. |
+| **Pan Right** | <kbd>D</kbd> or <kbd>→</kbd> | Shifts the viewport rightward by 200 pixels. |
+| **Fast Pan** | <kbd>Shift</kbd> + (<kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or <kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>) | Doubles the panning step speed (400 pixels per step). |
+| **Zoom Out** | <kbd>Q</kbd> | Decreases magnification level by a step of $0.25$. |
+| **Zoom In** | <kbd>E</kbd> | Increases magnification level by a step of $0.25$. |
 
 ---
 
@@ -445,10 +484,12 @@ The **Batch Sample Measurements Widget** runs the anatomical measurement engine 
 - Writes `<sample>.cells_table.txt` and `<sample>.rings_table.txt` directly to each sample folder.
 
 ### Key Controls
-- **Input Directory**: Path to project directory containing segmented samples (selecting or changing the directory here triggers the same global project directory selection dialog).
+- **Project Directory**: Path to project directory containing segmented samples (selecting or changing the directory here triggers the same global project directory selection dialog).
+- **File Selection Mode**: Toggle between **Batch Process All Samples** and handpicking subsets (**Manually select files to process**).
+- **Reverse Selection**: Inverts current sample selections in the list.
 - **Measure Cells / Measure Rings**: Checkboxes for target measurement outputs.
-- **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings.
-- **Start Batch Measurements Button**: Runs batch extraction with real-time progress updates.
+- **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings in **ZZ - Settings**.
+- **Run Analysis Button**: Runs batch extraction with real-time progress updates.
 
 ---
 
