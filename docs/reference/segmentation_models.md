@@ -22,11 +22,6 @@ The cell segmentation model automatically detects and delineates individual trac
 - **Reflection Padding**: To eliminate boundary and edge distortions at patch margins, inputs are padded in `reflect` mode ($112\text{ px}$ margin), and only the unpadded central regions are stitched back into the final sample mask.
 - **Instance Labeling**: The binary lumen predictions are transformed into unique Cell IDs (CID) via connected-component labeling (`skimage.measure.label`).
 
-### Scientific Reference
-The cell segmentation methodology and validation are described in:
-
-> **Katzenmaier M, Sainte Fare Garnot V, Björklund J, Schneider L, Wegner JD, von Arx G. 2023.** Towards ROXAS AI: deep learning for faster and more accurate conifer cell analysis. *Dendrochronologia* 81:126126. [https://doi.org/10.1016/j.dendro.2023.126126](https://doi.org/10.1016/j.dendro.2023.126126)
-
 ---
 
 ## Tree-Ring Boundary Segmentation Model
@@ -37,11 +32,6 @@ The tree-ring boundary model identifies annual ring boundaries in wood samples, 
 - **Iterative Boundary Regression**: Rather than performing standard pixel-wise segmentation, the model detects ring boundary trajectories sequentially along the radial growth axis, formulating boundary line identification as an iterative regression problem.
 - **Post-Processing & Ordering**: Identified boundary trajectories are sorted continuously from bark to pith, extended across the sample width, and converted into labeled annual ring bands.
 - **Relation to Published Model**: The ring boundary model implemented in ROXAS AI is based on the deep-learning regression framework introduced in Katzenmaier et al. (2025). Note that while the published paper demonstrates the approach for angiosperms and circular sample geometries, the model integrated in this version of the app is adapted for linear conifer anatomies.
-
-### Scientific Reference
-The underlying ring boundary regression methodology is described in:
-
-> **Katzenmaier M, Garnot VSF, Wegner JD, von Arx G. 2025.** Towards ROXAS AI: automatic multi-species ring boundaries segmentation as regression in anatomical images. *Frontiers in Plant Science* 16:1516635. [https://doi.org/10.3389/fpls.2025.1516635](https://doi.org/10.3389/fpls.2025.1516635)
 
 ---
 
