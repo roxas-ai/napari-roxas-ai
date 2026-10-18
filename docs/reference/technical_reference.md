@@ -70,7 +70,7 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 | `CWA` | Cell Wall Area | $\mu\text{m}^2$ | Mean per ring; may include pit artefacts. |
 | `RWD` | Relative Anatomical Density | ratio | Mean of `CWA` / (`CWA` + `LA`) per ring. |
 | `RBXY` | Ring Boundary Coordinates | pixels | Coordinate string defining the ring boundary. |
-| `cells_above` | Cells Above Boundary | count | Number of cells located above the ring boundary. |
+| `cells_above`  | Cells Above Boundary | count | Number of cells located above the ring boundary. |
 | `enabled` | Ring Enabled Status | boolean | Flag indicating whether the ring is enabled/valid. |
 
 ---
@@ -125,21 +125,23 @@ Where:
 
 ---
 
-## Mork's Index (Radial Thickness-to-Span Ratio, `RTSR`)
+## Mork's Index (Radial Thickness-to-Span Ratio, `RTSR`, Figure 1)
 
 Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
 
-![Mork's Index Scheme](../assets/MorkIndex.png){ width="300" }
+![Mork's Index Scheme](../assets/mork_index.png){ width="300" }
+*Figure 1: Definition of Mork's index based on tangential cell wall thickness and radial lumen diameter.*
 
-A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness ($4 \cdot \text{CWTTAN}$) and its radial lumen width (`DRAD`) is larger than 1.
+A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness (4x `CWTTAN`) and its radial lumen width (`DRAD`) is larger than 1.
 
 ---
 
-## Cell Wall Reinforcement Index (`TB2`)
+## Cell Wall Reinforcement Index (`TB2`, Figure 2)
 
 The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
 
-![Cell Wall Reinforcement Scheme](../assets/CellWallReinforcement.png){ width="300" }
+![Cell Wall Reinforcement Scheme](../assets/cell_wall_reinforcement.png){ width="300" }
+*Figure 2: Definition of the cell wall reinforcement index $(t/b)^2$.*
 
 The index is calculated as $(t/b)^2$, where $t$ is the thickness of the shared double cell wall and $b$ is the internal lumen diameter span across the corresponding orientation, taking the minimum of radial and tangential ratios.
 
@@ -149,10 +151,13 @@ The index is calculated as $(t/b)^2$, where $t$ is the thickness of the shared d
 
 To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automated multi-stage quality control filters to all raw cell wall thickness measurements.
 
-![Cell Wall Thickness Filtering Scheme](../assets/cwt_filtering_scheme.png)
+### 1. Wall Definitions & Measurement Integration (Figure 3)
 
-### 1. Wall Definitions & Measurement Integration (Panel A)
+![Wall Definitions and Measurement Integration](../assets/cwt_measurements_definitions.png)
+*Figure 3: Definition of tangential and radial wall orientations and the central measurement integration span.*
+
 For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
+
 - **Tangential walls:** `CWTPI` (pith-facing, top) and `CWTBA` (bark-facing, bottom).
 - **Radial walls:** `CWTLE` (left) and `CWTRI` (right).
 - **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: 75%) to avoid corner-rounding biases.
@@ -161,20 +166,35 @@ For each conifer tracheid, cell walls are measured across four distinct anatomic
   - Radial mean: `CWTRAD` = (`CWTLE` + `CWTRI`) / 2
   - Overall mean: `CWTALL` = (`CWTTAN` + `CWTRAD`) / 2
 
-### 2. Global IQR Distribution Filter / Tukey's Fences (Panel B)
-To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls (`CWTPI`, `CWTBA`) and radial walls (`CWTLE`, `CWTRI`):
+### 2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)
+
+![Global IQR Distribution Filter](../assets/cwt_iqr_filter.png)
+*Figure 4: Global IQR outlier filtering based on lower and upper Tukey's fences.*
+
+To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls (`CWTPI`, `CWTBA`) and radial walls (`CWTLE`, `CWTRI`), based on the Interquartile Range ($\text{IQR} = Q_3 - Q_1$):
+
 - **Lower Limit:** $\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})$ (controlled by `lower_limit_cwt_iqr_multiplier`)
 - **Upper Limit:** $Q_3 + 3.0 \cdot \text{IQR}$ (controlled by `upper_limit_cwt_iqr_multiplier`)
 - Values falling outside $[LL, UL]$ are set to **blank (NA)**.
 
-### 3. Opposite Wall Ratio Filter (Panel C)
+### 3. Opposite Wall Ratio Filter (Figure 5)
+
+![Opposite Wall Ratio Filter](../assets/cwt_opposite_wall_ration_filter.png)
+*Figure 5: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.*
+
 In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different cell type (such as wood ray cells) or an intercellular gap.
+
 - **Rule:** If the thickness of one wall exceeds `opposite_cwt_ratio_limit` $\cdot$ opposing wall thickness (default threshold: 1.5), the inflated side is excluded (**NA**), while the valid opposing side is retained.
 - **Anatomical context:** When a uniseriate ray cell is sandwiched between two tracheid files, the apparent distance measured across the ray between the tracheid lumina (`CWTRI`) becomes overly large compared to the regular tracheid-to-tracheid wall (`CWTLE`). The filter discards `CWTRI` while retaining `CWTLE`.
 
-### 4. Adjacent Wall Ratio Filter (Panel D)
-Protects against severe local segmentation anomalies (e.g., tori or pit aperture artifacts) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
-- **Rule:** If a tangential wall thickness exceeds `adjacent_cwt_ratio_limit` $\cdot (\text{CWTLE} + \text{CWTRI}) / 2$ (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
+### 4. Adjacent Wall Ratio Filter (Figure 6)
+
+![Adjacent Wall Ratio Filter](../assets/cwt_adjacent_wall_ratio_filter.png)
+*Figure 6: Adjacent wall ratio filter detecting and discarding local segmentation anomalies.*
+
+Protects against severe local segmentation anomalies (e.g., pit aperture artifacts, small pollutions, tracheids sandwiched between two rays) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
+
+- **Rule:** If a tangential wall thickness exceeds `adjacent_cwt_ratio_limit` $\cdot (`CWTLE` + `CWTRI`) / 2$ (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
 
 ---
 
