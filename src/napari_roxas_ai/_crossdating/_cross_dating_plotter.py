@@ -21,6 +21,7 @@ from qtpy.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from qtpy.QtGui import QColor, QCursor, QPainter, QPalette, QPen
 from qtpy.QtWidgets import (
     QApplication,
+    QMainWindow,
     QSizeGrip,
     QSizePolicy,
     QVBoxLayout,
@@ -887,8 +888,12 @@ class CrossDatingPlotterWidget(Container):
         target_screen = None
         try:
             main_window = None
-            if viewer is not None and hasattr(viewer, "window") and hasattr(viewer.window, "_qt_window"):
-                main_window = viewer.window._qt_window
+            # Walk up to napari's main window (a floating QDockWidget stays parented to it)
+            parent = getattr(dock_widget, "native", dock_widget)
+            while parent is not None and not isinstance(parent, QMainWindow):
+                parent = parent.parentWidget() if hasattr(parent, "parentWidget") else None
+            if parent is not None:
+                main_window = parent
             elif hasattr(dock_widget, "native"):
                 main_window = dock_widget.native.window()
             elif hasattr(dock_widget, "window"):
@@ -1835,25 +1840,13 @@ class CrossDatingPlotterWidget(Container):
             RingsLayerEditorWidget,
         )
 
-        # Look for the widget in the viewer's window
-        if hasattr(self._viewer.window, "_qt_window"):
-            for dock in self._viewer.window._qt_window.findChildren(QWidget):
-                # Using QWidget as a broad search, then checking class name
-                # magicgui widgets are wrapped in QWidget
-                if "RingsLayerEditorWidget" in str(type(dock)):
-                    # If it's the right widget class, it might be the magicgui container or its native widget
-                    # Let's try to find the actual container object if possible.
-                    # Usually, dock widgets have the container as an attribute or it's the 'dock' itself if it was added via add_dock_widget
-                    pass
-
-            # Alternative: iterate through dock widgets
-            for name, dock_widget in self._viewer.window._dock_widgets.items():
-                widget = dock_widget.widget()
-                if isinstance(widget, RingsLayerEditorWidget):
-                    widget._update_year_spinbox()
-                # Also check if it's a magicgui container wrapping it
-                elif hasattr(widget, "_magic_widget") and isinstance(widget._magic_widget, RingsLayerEditorWidget):
-                    widget._magic_widget._update_year_spinbox()
+        # dock_widgets maps to the inner widget (magicgui container or QWidget)
+        for widget in self._viewer.window.dock_widgets.values():
+            if isinstance(widget, RingsLayerEditorWidget):
+                widget._update_year_spinbox()
+            # Also check if it's a native QWidget wrapping the magicgui container
+            elif hasattr(widget, "_magic_widget") and isinstance(widget._magic_widget, RingsLayerEditorWidget):
+                widget._magic_widget._update_year_spinbox()
 
     calculate_glk = staticmethod(calculate_glk)
 
