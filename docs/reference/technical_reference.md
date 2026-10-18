@@ -191,7 +191,7 @@ To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, 
 
 ### 3. Opposite Wall Ratio Filter (Figure 5)
 
-![Opposite Wall Ratio Filter](../assets/cwt_opposite_wall_ration_filter.png){ width="100%" }
+![Opposite Wall Ratio Filter](../assets/cwt_opposite_wall_ration_filter.png){ width="80%" }
 
 *Figure 5: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.*
 
