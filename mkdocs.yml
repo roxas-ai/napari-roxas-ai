@@ -69,3 +69,4 @@ nav:
       - Workflows: tutorials/workflows.md
   - Reference:
       - Technical Reference: reference/technical_reference.md
+      - Segmentation Models: reference/segmentation_models.md

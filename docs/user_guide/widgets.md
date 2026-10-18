@@ -193,9 +193,9 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 *Figure 6: Single sample AI segmentation interface.*
 
 ### How It Works
-- Runs neural network models (PyTorch / PyTorch Lightning / SMP architectures) locally on either GPU or CPU.
-- **Cells Detection**: Predicts individual cell lumen instances and outputs a labeled mask layer (`<sample>.cells`).
-- **Rings Detection**: Detects continuous tree-ring boundaries, sorts boundaries from bark to pith, enforces boundary continuity across the sample width, and constructs labeled annual ring bands (`<sample>.rings`).
+- Runs neural network models (PyTorch / PyTorch Lightning / SMP architectures) locally on either GPU or CPU. For full architectural details and literature citations, see [Deep-Learning Segmentation Models](../reference/segmentation_models.md).
+- **Cells Detection**: Predicts individual cell lumen instances using a U-Net architecture with a ResNet-50 backbone (Katzenmaier et al. 2023) and outputs a labeled mask layer (`<sample>.cells`).
+- **Rings Detection**: Detects continuous tree-ring boundaries using an iterative regression formulation based on Katzenmaier et al. (2025), sorts boundaries from bark to pith, enforces boundary continuity across the sample width, and constructs labeled annual ring bands (`<sample>.rings`).
 - Post-processes masks to eliminate edge artefacts (e.g., boundary-touching partial cells).
 
 ### Key Controls & Options
@@ -218,7 +218,7 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 
 ### How It Works
 - Iterates over all discovered sample scans in the project directory.
-- Applies the selected neural network models sequentially.
+- Applies the selected neural network models sequentially (see [Deep-Learning Segmentation Models](../reference/segmentation_models.md)).
 - Automatically saves segmentation masks (`.cells.png` and `.rings.tif`) directly to disk alongside updated `.metadata.json` files.
 
 ### Key Controls
