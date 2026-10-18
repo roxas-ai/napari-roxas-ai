@@ -159,15 +159,23 @@ To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automa
 
 *Figure 3: Definition of tangential and radial wall orientations and the central measurement integration span.*
 
+#### Cell Wall Identification Algorithm
+To measure the cell wall thickness of individual cells from segmented lumen masks, ROXAS AI uses an automated Euclidean distance and watershed-based approach:
+
+1. **Lumen Boundaries & Euclidean Distance Mask:** Based on the segmented cell lumina, an inverted binary mask is created where background and cell walls are foreground pixels. A Euclidean distance transform is calculated across this mask, computing the exact spatial distance of every wall pixel to the nearest cell lumen boundary.
+2. **Watershed Mask & Middle Lamella Approximation:** A watershed segmentation algorithm is computed between adjacent cell lumina to detect the contact boundary (the watershed line) between neighboring tracheids. Following Prendin et al. (2017), the exact position of the middle lamella separating two adjacent cells cannot be resolved directly from optical lumen contours alone; it is therefore geometrically approximated by assuming that each wall of two adjacent sharing cells has equal thickness (i.e., the middle lamella is located equidistant between the two lumina along the watershed ridge).
+3. **Lateral Integration:** For each of the four anatomical wall sectors (`CWTPI`, `CWTBA`, `CWTLE`, `CWTRI`), distance values are sampled along the watershed line. To avoid geometric distortion at rounded cell corners, measurements are laterally integrated over the central portion of the wall (defined by `relwidth_cwt_integration`, default: 75%).
+
+#### Wall Sectors & Aggregated Metrics
 For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
 
 - **Tangential walls:** `CWTPI` (pith-facing, top) and `CWTBA` (bark-facing, bottom).
 - **Radial walls:** `CWTLE` (left) and `CWTRI` (right).
 - **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: 75%) to avoid corner-rounding biases.
 - **Aggregated metrics:**
-  - Tangential mean: `CWTTAN` = (`CWTPI` + `CWTBA`) / 2
-  - Radial mean: `CWTRAD` = (`CWTLE` + `CWTRI`) / 2
-  - Overall mean: `CWTALL` = (`CWTTAN` + `CWTRAD`) / 2
+    - Tangential mean: `CWTTAN` = (`CWTPI` + `CWTBA`) / 2; or any of the two if the other **NA**
+    - Radial mean: `CWTRAD` = (`CWTLE` + `CWTRI`) / 2; or any of the two if the other **NA**
+    - Overall mean: `CWTALL` = (`CWTTAN` + `CWTRAD`) / 2; or any of the two if the other **NA**
 
 ### 2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)
 
@@ -179,18 +187,18 @@ To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, 
 
 - **Lower Limit:** $\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})$ (controlled by `lower_limit_cwt_iqr_multiplier`)
 - **Upper Limit:** $Q_3 + 3.0 \cdot \text{IQR}$ (controlled by `upper_limit_cwt_iqr_multiplier`)
-- Values falling outside $[LL, UL]$ are set to **blank (NA)**.
+- Values falling outside **Lower Limit:** or **Upper Limit:** are set to **blank (NA)**.
 
 ### 3. Opposite Wall Ratio Filter (Figure 5)
 
-![Opposite Wall Ratio Filter](../assets/cwt_opposite_wall_ration_filter.png)
+![Opposite Wall Ratio Filter](../assets/cwt_opposite_wall_ration_filter.png){ width="80%" }
 
 *Figure 5: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.*
 
 In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different cell type (such as wood ray cells) or an intercellular gap.
 
 - **Rule:** If the thickness of one wall exceeds `opposite_cwt_ratio_limit` $\cdot$ opposing wall thickness (default threshold: 1.5), the inflated side is excluded (**NA**), while the valid opposing side is retained.
-- **Anatomical context:** When a uniseriate ray cell is sandwiched between two tracheid files, the apparent distance measured across the ray between the tracheid lumina (`CWTRI`) becomes overly large compared to the regular tracheid-to-tracheid wall (`CWTLE`). The filter discards `CWTRI` while retaining `CWTLE`.
+- **Anatomical and technical context:** Because the distance-to-watershed algorithm assumes equal double-wall thickness between adjacent detected lumina (Prendin et al. 2017), unsegmented or narrower intervening structures like uniseriate wood ray parenchyma cells are not recognized as independent tracheid lumina. Consequently, the Euclidean distance measured across the entire ray gap between two tracheid files is assigned as a single inflated tracheid wall (`CWTRI` in Figure 5). The filter identifies this asymmetric inflation relative to the normal opposing wall (`CWTLE`), discarding the artifactual `CWTRI` measurement while preserving `CWTLE`.
 
 ### 4. Adjacent Wall Ratio Filter (Figure 6)
 
@@ -200,7 +208,7 @@ In conifer xylem, opposing walls of a single tracheid have comparable thicknesse
 
 Protects against severe local segmentation anomalies (e.g., pit aperture artifacts, small pollutions, tracheids sandwiched between two rays) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
 
-- **Rule:** If a tangential wall thickness exceeds `adjacent_cwt_ratio_limit` $\cdot (\text{CWTLE} + \text{CWTRI}) / 2$ (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
+- **Rule:** If an individual tangential wall thickness exceeds `adjacent_cwt_ratio_limit` (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls!).
 
 ---
 
@@ -322,4 +330,5 @@ Defines the structure, validation rules, and widget types for the input forms in
 - **Kolb & Sperry 1999**: Kolb, K. J., & Sperry, J. S. (1999). Differences in drought adaptation between subspecies of sagebrush: *Artemisia tridentata*. *Ecology*, 80(7), 2373–2384.
 - **Lewis & Boose 1995**: Lewis, A. M., & Boose, E. R. (1995). Estimating volume flow rates through xylem conduits. *American Journal of Botany*, 82(9), 1112–1116.
 - **Nonweiler 1975**: Nonweiler, T. R. F. (1975). *Computational Mathematics: An Introduction to Numerical Approximation*. Ellis Horwood.
+- **Prendin et al. 2017**: Prendin, A. L., Petit, G., Carrer, M., Fonti, P., Björklund, J., & von Arx, G. (2017). New research perspectives from a novel approach to quantify tracheid wall thickness. *Tree Physiology*, 37(7), 976–983. https://doi.org/10.1093/treephys/tpx037
 - **Tyree & Zimmermann 2002**: Tyree, M. T., & Zimmermann, M. H. (2002). *Xylem Structure and the Ascent of Sap*. Springer-Verlag.
