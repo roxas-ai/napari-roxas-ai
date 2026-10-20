@@ -67,13 +67,17 @@ testing = [
     "napari==0.7.1",
     "pyqt6",
 ]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
 
 [project.entry-points."napari.manifest"]
 napari-roxas-ai = "napari_roxas_ai:napari.yaml"
 
 [project.urls]
 "Bug Tracker" = "https://github.com/roxas-ai/napari-roxas-ai/issues"
-"Documentation" = "https://github.com/roxas-ai/napari-roxas-ai#README.md"
+"Documentation" = "https://roxas-ai.github.io/napari-roxas-ai/"
 "Source Code" = "https://github.com/roxas-ai/napari-roxas-ai"
 "User Support" = "https://github.com/roxas-ai/napari-roxas-ai/issues"
 
