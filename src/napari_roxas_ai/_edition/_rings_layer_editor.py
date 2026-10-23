@@ -11,14 +11,15 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
-    PushButton,
+    Label,
     ProgressBar,
+    PushButton,
     SpinBox,
 )
 from napari.layers.base._base_constants import ActionType
 from napari.utils.notifications import show_info, show_warning
 from qtpy.QtCore import QObject, QThread, QTimer, Signal
-from qtpy.QtWidgets import QMessageBox
+from qtpy.QtWidgets import QMessageBox, QSizePolicy
 
 from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._saving import SamplesSavingWidget
@@ -42,6 +43,20 @@ RERUN_BUTTON_TEXT = "Rerun Ring Segmentation"
 DEFAULT_RINGS_MODEL = "LinearRingModel_v3_iterative.pt"
 MODEL_FILE_SUFFIXES = (".pt", ".pth")
 CROSSDATING_WIDGET_NAME = "7 - Visual crossdating"
+
+
+def _get_separator_style() -> str:
+    """Return separator style using napari's theme foreground color."""
+    try:
+        from napari.settings import get_settings
+        from napari.utils.theme import get_theme
+
+        theme = get_theme(get_settings().appearance.theme)
+        color = theme.foreground.as_hex()
+    except Exception:
+        color = "#414851"
+
+    return f"background-color: {color}; margin-top: 10px; margin-bottom: 6px;"
 
 
 def rearrange_coordinates(coords: list) -> list:
@@ -613,7 +628,9 @@ class RingsLayerEditorWidget(Container):
         
         # Explicitly toggle visibility of lasso and rerun model rows
         self._lasso_container.visible = editing
-        self._rerun_params_row.visible = editing
+        self._rerun_separator.visible = editing
+        self._rerun_year_row.visible = editing
+        self._rerun_model_row.visible = editing
         self._rerun_model_button.visible = editing
         
         # Ensure lasso selection elements are properly handled
@@ -627,6 +644,13 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.value = False
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
+
+    def _update_rerun_separator_style(self, *args) -> None:
+        """Update separator styling to match the active napari theme."""
+        if hasattr(self, "_rerun_separator") and hasattr(
+            self._rerun_separator, "native"
+        ):
+            self._rerun_separator.native.setStyleSheet(_get_separator_style())
 
     def _abort_editing_mode(self, message: str) -> None:
         """Leave editing mode cleanly when an edit session cannot be started/finished.
@@ -746,7 +770,15 @@ class RingsLayerEditorWidget(Container):
         )
 
         # --- RERUN MODEL UI ---
-        # Line 1: Rerun From Year: --- spinbox --- Model: --- combo
+        # Horizontal separator line on top of the rerunning block
+        self._rerun_separator = Label(value="", visible=False)
+        self._rerun_separator.native.setFixedHeight(1)
+        self._rerun_separator.native.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )
+        self._update_rerun_separator_style()
+
+        # Line 1: Rerun From Year: --- spinbox
         # The minimum value is set to -1,001,000 to provide a 1,000-year internal buffer
         # relative to the user limit (-100,000), supporting long series and padding.
         self._rerun_model_year_spinbox = SpinBox(
@@ -757,6 +789,7 @@ class RingsLayerEditorWidget(Container):
             step=1,
         )
 
+        # Line 2: Model: --- combo
         # The choices are read from the models folder whenever they are reset,
         # so that models downloaded later show up as well
         self._rings_model_weights_file = ComboBox(
@@ -768,17 +801,33 @@ class RingsLayerEditorWidget(Container):
         # model is downloaded in the background without blocking the UI
         ensure_rings_models_downloaded(self._refresh_rings_model_choices)
 
-        # Horizontal row for the rerun model parameters
-        self._rerun_params_row = Container(
-            widgets=[
-                self._rerun_model_year_spinbox,
-                self._rings_model_weights_file,
-            ],
+        # Horizontal rows for the rerun model parameters
+        self._rerun_year_row = Container(
+            widgets=[self._rerun_model_year_spinbox],
             layout="horizontal",
-            labels=True,  # Enable labels for Year and Model
+            labels=True,
             visible=False,
         )
-        # Line 2: Run
+        if hasattr(self._rerun_year_row.native, "layout"):
+            layout = self._rerun_year_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+
+        self._rerun_model_row = Container(
+            widgets=[self._rings_model_weights_file],
+            layout="horizontal",
+            labels=True,
+            visible=False,
+        )
+        if hasattr(self._rerun_model_row.native, "layout"):
+            layout = self._rerun_model_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+
+        # Alias for backwards compatibility
+        self._rerun_params_row = self._rerun_year_row
+
+        # Line 3: Run
         self._rerun_model_button = PushButton(
             text=RERUN_BUTTON_TEXT,
             visible=False,
@@ -842,13 +891,19 @@ class RingsLayerEditorWidget(Container):
                 self._apply_rings_geometries_button,
                 self._undo_button,
                 self._lasso_container,
-                self._rerun_params_row,
+                self._rerun_separator,
+                self._rerun_year_row,
+                self._rerun_model_row,
                 self._rerun_model_button,
             ]
         )
 
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
+        if hasattr(self._viewer, "events") and hasattr(
+            self._viewer.events, "theme"
+        ):
+            self._viewer.events.theme.connect(self._update_rerun_separator_style)
 
         # --- INITIALIZATION ---
         self._connect_layer_callback()

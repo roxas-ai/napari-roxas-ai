@@ -76,6 +76,9 @@ def test_ui_visibility_idle_and_editing(make_napari_viewer, models_path):
     assert widget._visual_crossdating_button.visible
     assert not widget._apply_rings_geometries_button.visible
     assert not widget._undo_button.visible
+    assert not widget._rerun_separator.visible
+    assert not widget._rerun_year_row.visible
+    assert not widget._rerun_model_row.visible
     assert not widget._rerun_model_button.visible
 
     # Editing mode
@@ -88,7 +91,9 @@ def test_ui_visibility_idle_and_editing(make_napari_viewer, models_path):
     assert widget._undo_button.visible
     assert not widget._undo_button.enabled  # nothing to undo yet
     assert widget._lasso_container.visible
-    assert widget._rerun_params_row.visible
+    assert widget._rerun_separator.visible
+    assert widget._rerun_year_row.visible
+    assert widget._rerun_model_row.visible
     assert widget._rerun_model_button.visible
 
     # Back to idle mode
@@ -96,6 +101,10 @@ def test_ui_visibility_idle_and_editing(make_napari_viewer, models_path):
     assert widget._save_all_layers_button.visible
     assert widget._visual_crossdating_button.visible
     assert not widget._undo_button.visible
+    assert not widget._rerun_separator.visible
+    assert not widget._rerun_year_row.visible
+    assert not widget._rerun_model_row.visible
+    assert not widget._rerun_model_button.visible
 
 
 def test_undo_lasso_deletion(make_napari_viewer, qtbot, models_path):
