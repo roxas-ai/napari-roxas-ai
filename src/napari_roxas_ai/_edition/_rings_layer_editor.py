@@ -1756,6 +1756,8 @@ class RingsLayerEditorWidget(Container):
         """
         Iterates through all drawn lasso polygons and identifies all ring boundary vertices
         that fall within their boundaries using point-in-polygon tests.
+        When ring boundaries overlap perfectly, vertices are only selected from the topmost
+        ring boundary (highest shape index in the layer).
         """
         if "Lasso Selection" not in self._viewer.layers:
             return
@@ -1769,16 +1771,33 @@ class RingsLayerEditorWidget(Container):
             
         edit_layer = self._viewer.layers["Rings Modification"]
         
-        for lasso_poly in lasso_layer.data:
-            for i, shape_data in enumerate(edit_layer.data):
-                # Only register a shape once a vertex was actually hit, so that
-                # an empty selection stays falsy for the caller.
-                for j, vertex in enumerate(shape_data):
-                    try:
-                        if self._is_point_in_polygon(vertex, lasso_poly):
-                            self._selected_vertices.setdefault(i, set()).add(j)
-                    except Exception:
+        claimed_coords = []
+        
+        # Iterate in reverse order (top-most shape to bottom-most shape)
+        for i in range(len(edit_layer.data) - 1, -1, -1):
+            shape_data = edit_layer.data[i]
+            shape_claimed_coords = []
+            for j, vertex in enumerate(shape_data):
+                try:
+                    inside_lasso = any(
+                        self._is_point_in_polygon(vertex, lasso_poly)
+                        for lasso_poly in lasso_layer.data
+                    )
+                    if not inside_lasso:
                         continue
+
+                    # Check if this vertex coordinate overlaps with a vertex claimed by a strictly higher shape
+                    if claimed_coords and any(
+                        np.allclose(vertex, c_pt, atol=1e-3)
+                        for c_pt in claimed_coords
+                    ):
+                        continue
+
+                    self._selected_vertices.setdefault(i, set()).add(j)
+                    shape_claimed_coords.append(vertex)
+                except Exception:
+                    continue
+            claimed_coords.extend(shape_claimed_coords)
         
         self._highlight_selected_vertices()
 
@@ -1829,7 +1848,7 @@ class RingsLayerEditorWidget(Container):
                         points_layer = self._viewer.add_points(
                             points,
                             name="Selected Vertices",
-                            size=75,
+                            size=50,
                             face_color="yellow",
                             border_color="black",
                             scale=edit_layer.scale,
