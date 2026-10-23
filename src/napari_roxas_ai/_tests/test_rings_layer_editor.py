@@ -570,3 +570,76 @@ def test_transform_tool_undo_restores_affine(
 
     assert np.allclose(edit_layer.affine.affine_matrix, initial_affine)
     assert not widget._undo_button.enabled
+
+
+def test_nudge_selected_rings_fine_and_fast(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    orig_shape_0 = np.array(edit_layer.data[0], copy=True)
+    orig_shape_1 = np.array(edit_layer.data[1], copy=True)
+
+    # When no shape is selected, nudging does nothing
+    edit_layer.selected_data = set()
+    widget._nudge_selected_rings(1.0, 0.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0)
+    assert not widget._undo_button.enabled
+
+    # Select only shape 0
+    edit_layer.selected_data = {0}
+
+    # Nudge fine (-1 px Y) -> Control-Up
+    widget._nudge_selected_rings(-1.0, 0.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [-1.0, 0.0])
+    assert np.allclose(edit_layer.data[1], orig_shape_1)
+    assert widget._undo_button.enabled
+
+    # Nudge fast (+10 px X) -> Control-Shift-Right
+    widget._nudge_selected_rings(0.0, 10.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [-1.0, 10.0])
+    assert np.allclose(edit_layer.data[1], orig_shape_1)
+
+    # Undo fast nudge
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [-1.0, 0.0])
+
+    # Undo fine nudge
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.data[0], orig_shape_0)
+    assert not widget._undo_button.enabled
+
+
+def test_nudge_multiple_selected_rings(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    orig_shape_0 = np.array(edit_layer.data[0], copy=True)
+    orig_shape_1 = np.array(edit_layer.data[1], copy=True)
+
+    # Select both shapes 0 and 1
+    edit_layer.selected_data = {0, 1}
+
+    # Nudge both shapes (+1 px Y, +10 px X)
+    widget._nudge_selected_rings(1.0, 10.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [1.0, 10.0])
+    assert np.allclose(edit_layer.data[1], orig_shape_1 + [1.0, 10.0])
+    assert edit_layer.selected_data == {0, 1}
+    assert widget._undo_button.enabled
+
+    # Undo restores both shapes
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.data[0], orig_shape_0)
+    assert np.allclose(edit_layer.data[1], orig_shape_1)
+    assert not widget._undo_button.enabled

@@ -1132,6 +1132,34 @@ class RingsLayerEditorWidget(Container):
         self._highlight_selected_vertices()
         self._years_update_timer.start(100)
 
+    def _nudge_selected_rings(self, dy: float, dx: float) -> None:
+        """
+        Nudge the entirety of all currently selected ring boundaries by (dy, dx).
+        """
+        if not self._is_editing:
+            return
+        layer = self._get_edit_layer()
+        if layer is None or not layer.selected_data:
+            return
+
+        selected_indices = set(layer.selected_data)
+        new_data = []
+        for i, shape_coords in enumerate(layer.data):
+            if i in selected_indices:
+                shifted = np.array(shape_coords, copy=True, dtype=np.float64) + np.array(
+                    [dy, dx], dtype=np.float64
+                )
+                new_data.append(shifted)
+            else:
+                new_data.append(shape_coords)
+
+        with self._undoable_operation():
+            layer.data = list(zip(new_data, layer.shape_type))
+            layer.selected_data = selected_indices
+            layer.refresh()
+
+        self._years_update_timer.start(100)
+
     def _refresh_rings_model_choices(self) -> None:
         """List the local rings models and preselect the default one."""
         try:
@@ -1453,6 +1481,48 @@ class RingsLayerEditorWidget(Container):
         shapes_layer.events.affine.connect(self._on_edit_layer_affine_change)
         shapes_layer.bind_key(
             "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
+        )
+
+        # Fine-positioning controls (1 px fine with Ctrl+Arrow, 10 px with Ctrl+Shift+Arrow)
+        shapes_layer.bind_key(
+            "Control-Up",
+            lambda _layer: self._nudge_selected_rings(-1.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Down",
+            lambda _layer: self._nudge_selected_rings(1.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Left",
+            lambda _layer: self._nudge_selected_rings(0.0, -1.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Right",
+            lambda _layer: self._nudge_selected_rings(0.0, 1.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Up",
+            lambda _layer: self._nudge_selected_rings(-10.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Down",
+            lambda _layer: self._nudge_selected_rings(10.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Left",
+            lambda _layer: self._nudge_selected_rings(0.0, -10.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Right",
+            lambda _layer: self._nudge_selected_rings(0.0, 10.0),
+            overwrite=True,
         )
 
         self._update_year_spinbox()
