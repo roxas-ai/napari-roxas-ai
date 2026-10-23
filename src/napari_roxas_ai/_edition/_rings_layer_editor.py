@@ -1769,9 +1769,10 @@ class RingsLayerEditorWidget(Container):
                     pass
             self._delete_lasso_vertices_button.visible = False
 
-        # Bind the Delete key to our custom handler to support lasso-delete via keyboard.
+        # Bind the Delete and Backspace keys to our custom handler to support lasso-delete via keyboard across platforms (e.g. macOS).
         # We deselect lasso polygons before execution to prevent napari from deleting the lasso shape itself.
         @self._viewer.bind_key("Delete", overwrite=True)
+        @self._viewer.bind_key("Backspace", overwrite=True)
         def _delete_selected(viewer):
             if not self._is_editing:
                 return
