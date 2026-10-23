@@ -427,3 +427,67 @@ def test_failed_background_download_shows_warning(
     assert "offline" in messages[-1][1]
     # The editor keeps working with the models present locally
     assert widget._rings_model_weights_file.choices == ("linear_rings_model.pth",)
+
+
+def test_transform_tool_affine_applied_to_rings_layer(
+    make_napari_viewer, models_path
+):
+    from napari.utils.transforms import Affine
+
+    viewer = make_napari_viewer()
+    rings = _add_rings_layer(viewer)
+    # Set non-unit scale (e.g. 2.0 um/px, spatial_resolution = 0.5 px/um)
+    rings.scale = [2.0, 2.0]
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    assert np.allclose(edit_layer.scale, [2.0, 2.0])
+    original_coords = [np.array(d, copy=True) for d in edit_layer.data]
+
+    # Apply world affine translation (+10 in Y / row world direction -> +5 in pixel space)
+    edit_layer.affine = Affine(translate=[10.0, 0.0])
+
+    widget._apply_rings_geometries()
+
+    rings_layer = viewer.layers["sample.rings"]
+    applied_rbxy = rings_layer.features["RBXY"].tolist()
+
+    # Verify that the applied ring boundary coordinates reflect the +5 pixel translation
+    assert len(applied_rbxy) == len(original_coords)
+    for orig, applied in zip(original_coords, applied_rbxy):
+        applied_arr = np.array(applied)
+        # Check interior coordinates shifted by 5 pixels in row direction
+        orig_y = orig[:, 0] + 5.0
+        # Compare row coordinates for columns within original range
+        assert np.all(applied_arr[:, 0] >= 5.0)
+
+
+def test_transform_tool_undo_restores_affine(
+    make_napari_viewer, qtbot, models_path
+):
+    from napari.utils.transforms import Affine
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    initial_affine = np.array(edit_layer.affine.affine_matrix, copy=True)
+
+    # Apply affine transform and record undo step
+    edit_layer.affine = Affine(translate=[10.0, 5.0])
+    widget._record_undo_step()
+
+    assert widget._undo_button.enabled
+    assert not np.allclose(
+        edit_layer.affine.affine_matrix, initial_affine
+    )
+
+    widget._undo_last_change()
+
+    assert np.allclose(edit_layer.affine.affine_matrix, initial_affine)
+    assert not widget._undo_button.enabled

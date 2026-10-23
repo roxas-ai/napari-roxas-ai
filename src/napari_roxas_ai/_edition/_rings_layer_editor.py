@@ -595,7 +595,26 @@ class RingsLayerEditorWidget(Container):
         # Handle RBXY extraction
         if "RBXY" not in df.columns:
             if isinstance(source_layer, napari.layers.Shapes):
-                df["RBXY"] = [coords.tolist() for coords in source_layer.data]
+                affine = getattr(source_layer, "affine", None)
+                scale = np.array(
+                    getattr(source_layer, "scale", [1.0, 1.0])[-2:], dtype=float
+                )
+                if affine is not None and not np.allclose(
+                    affine.affine_matrix, np.eye(3)
+                ):
+                    # Conjugate affine matrix by scale to convert from world to data coordinates
+                    S = np.diag(np.append(scale, 1.0))
+                    S_inv = np.diag(np.append(1.0 / scale, 1.0))
+                    data_affine_matrix = S_inv @ affine.affine_matrix @ S
+                    from napari.utils.transforms import Affine
+
+                    data_affine = Affine(affine_matrix=data_affine_matrix)
+                    df["RBXY"] = [
+                        data_affine(coords).tolist()
+                        for coords in source_layer.data
+                    ]
+                else:
+                    df["RBXY"] = [coords.tolist() for coords in source_layer.data]
             else:
                 return pd.DataFrame()
 
@@ -675,6 +694,12 @@ class RingsLayerEditorWidget(Container):
         self._years_update_timer = QTimer()
         self._years_update_timer.setSingleShot(True)
         self._years_update_timer.timeout.connect(self._update_rings_years_layer)
+
+        # Debounce timer for affine changes to record undo step on transform completion
+        self._affine_undo_timer = QTimer()
+        self._affine_undo_timer.setSingleShot(True)
+        self._affine_undo_timer.setInterval(250)
+        self._affine_undo_timer.timeout.connect(self._record_undo_step)
 
         # --- SELECTION & VISIBILITY STATE ---
         # Stores indices of vertices selected via lasso: shape_index -> set of vertex_indices
@@ -987,6 +1012,10 @@ class RingsLayerEditorWidget(Container):
 
     def _snapshot_edit_layer(self, layer: "napari.layers.Shapes") -> dict:
         """Capture everything needed to restore the edit layer to its current state."""
+        affine_matrix = None
+        if hasattr(layer, "affine") and layer.affine is not None:
+            affine_matrix = np.array(layer.affine.affine_matrix, copy=True)
+
         return {
             "data": [np.array(d, copy=True) for d in layer.data],
             "shape_type": list(layer.shape_type),
@@ -994,6 +1023,7 @@ class RingsLayerEditorWidget(Container):
             "edge_width": list(layer.edge_width),
             "features": layer.features.copy(),
             "deleted_points": list(self._all_deleted_points),
+            "affine": affine_matrix,
         }
 
     @staticmethod
@@ -1005,6 +1035,13 @@ class RingsLayerEditorWidget(Container):
             np.array_equal(da, db) for da, db in zip(a["data"], b["data"])
         ):
             return False
+        aff_a = a.get("affine")
+        aff_b = b.get("affine")
+        if (aff_a is None) != (aff_b is None):
+            return False
+        if aff_a is not None and aff_b is not None:
+            if not np.allclose(aff_a, aff_b):
+                return False
         return a["features"].equals(b["features"])
 
     def _reset_undo_history(
@@ -1052,6 +1089,13 @@ class RingsLayerEditorWidget(Container):
             return
         self._record_undo_step()
 
+    def _on_edit_layer_affine_change(self, event=None) -> None:
+        """Record an undo step and update year labels when affine transform changes."""
+        if self._undo_recording_paused:
+            return
+        self._years_update_timer.start(100)
+        self._affine_undo_timer.start(250)
+
     def _update_undo_button_state(self) -> None:
         """Enable the undo button only if there is something to undo."""
         self._undo_button.enabled = self._is_editing and bool(self._undo_stack)
@@ -1072,6 +1116,10 @@ class RingsLayerEditorWidget(Container):
                 layer.edge_color = snapshot["edge_color"]
                 layer.edge_width = snapshot["edge_width"]
             layer.features = snapshot["features"].copy()
+            if snapshot.get("affine") is not None:
+                from napari.utils.transforms import Affine
+
+                layer.affine = Affine(affine_matrix=snapshot["affine"])
             layer.refresh()
         finally:
             self._undo_recording_paused = False
@@ -1402,6 +1450,7 @@ class RingsLayerEditorWidget(Container):
         # Track the edit session history for undo (button and Ctrl/Cmd+Z)
         self._reset_undo_history(shapes_layer)
         shapes_layer.events.data.connect(self._on_edit_layer_data_change)
+        shapes_layer.events.affine.connect(self._on_edit_layer_affine_change)
         shapes_layer.bind_key(
             "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
         )
