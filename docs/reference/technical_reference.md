@@ -308,7 +308,7 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 ### 6. Annotated Image & Project Directory
 
 - **`project_directory`**: Path to the currently active project working directory.
-- **`annotated_image`**: Configuration for saved annotated verification images (`_annotated.jpg`), including cell overlay opacity (`cell_opacity`), fill color (`cell_fill_color`), downscaling factor (`scale_factor`), and JPEG quality and compression settings (`quality`, `optimize`, `progressive`).
+- **`annotated_image`**: Configuration for saved annotated verification images (`_annotated.jpg`), including cell overlay opacity (`cell_opacity`), fill color (`cell_fill_color`), year label font size (`year_label_size`), downscaling factor (`scale_factor`), and JPEG quality and compression settings (`quality`, `optimize`, `progressive`).
 
 ### 7. Metadata Field Definitions (`samples_metadata`)
 

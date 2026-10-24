@@ -600,6 +600,61 @@ class TestWriterModule:
         # Check vertical placement: year 1 around y ~ 30 + th/2, year 2 around y ~ 100 + th/2
         assert placed_texts[0]["org"][1] < placed_texts[1]["org"][1]
 
+    def test_save_annotated_scan_image_custom_year_label_size(self, temp_dir):
+        """Test save_annotated_scan_image respects annotated_image.year_label_size setting."""
+        from PIL import Image
+        import cv2
+        from napari_roxas_ai._writer import _writer
+
+        scan_path = temp_dir / "sample_size.scan.jpg"
+        annotated_path = temp_dir / "sample_size_annotated.jpg"
+
+        # Create 200x200 RGB scan image
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        # 2 rings with large width (band area 20000 -> rw = 100 px width)
+        rings_features = pd.DataFrame({
+            "YEAR": [2020, 2021],
+            "RBXY": [
+                [[100.0, 0.0], [100.0, 200.0]],
+                [[200.0, 0.0], [200.0, 200.0]],
+            ],
+            "cells_above": [0, 20000],
+        })
+
+        captured_font_scales = []
+        orig_put_text = cv2.putText
+
+        def mock_put_text(img, text, org, font_face, font_scale, color, thickness=1, line_type=None):
+            captured_font_scales.append(font_scale)
+            return orig_put_text(img, text, org, font_face, font_scale, color, thickness, line_type)
+
+        # Case 1: default (20%) -> 0.2 * 100 = 20 px target_h
+        with patch("cv2.putText", side_effect=mock_put_text):
+            with patch.object(_writer.settings, "get", side_effect=lambda k, d=None: 20 if k == "annotated_image.year_label_size" else d):
+                save_annotated_scan_image(
+                    scan_path=str(scan_path),
+                    annotated_path=str(annotated_path),
+                    rings_features=rings_features,
+                )
+        font_scale_20 = captured_font_scales[0]
+
+        captured_font_scales.clear()
+
+        # Case 2: custom 50% -> 0.5 * 100 = 50 px target_h
+        with patch("cv2.putText", side_effect=mock_put_text):
+            with patch.object(_writer.settings, "get", side_effect=lambda k, d=None: 50 if k == "annotated_image.year_label_size" else d):
+                save_annotated_scan_image(
+                    scan_path=str(scan_path),
+                    annotated_path=str(annotated_path),
+                    rings_features=rings_features,
+                )
+        font_scale_50 = captured_font_scales[0]
+
+        # 50% should produce 2.5x larger font scale than 20%
+        assert font_scale_50 == pytest.approx(font_scale_20 * 2.5, rel=1e-2)
+
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

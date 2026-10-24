@@ -206,6 +206,9 @@ SETTING_HINTS: Dict[str, str] = {
         "Opacity percentage of the cells overlay (0-100)"
     ),
     "annotated_image.cell_fill_color": "Fill color for cell lumina",
+    "annotated_image.year_label_size": (
+        "Label size for calendar years as percentage of mean ring width (minimum 12 px)"
+    ),
     "annotated_image.scale_factor": (
         "Scale factor for downscaling the annotated image"
     ),

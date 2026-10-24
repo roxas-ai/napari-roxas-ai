@@ -185,7 +185,7 @@ def save_annotated_scan_image(
 
     - Overlays cell lumina with configured opacity and fill color.
     - Uses a single, constant font size for all rings.
-    - Font height is set to ~20% of the mean ring width (in pixels).
+    - Font height is set based on configured year_label_size percentage of mean ring width (min 12 px).
     - YEAR label is placed vertically centered between this ring and the next one.
     - Ring separator lines are drawn black and thicker.
     - Draws black text (no outline).
@@ -264,8 +264,14 @@ def save_annotated_scan_image(
         if not rw_valid.empty:
             mean_ring_width_px = float(rw_valid.mean())
 
-    # Target font height is 20% of mean ring width (clamped)
-    target_h = max(12.0, 0.2 * mean_ring_width_px)
+    # Target font height is determined by configured year_label_size percentage of mean ring width (min 12 px)
+    raw_label_size = settings.get("annotated_image.year_label_size", 20)
+    try:
+        year_label_fraction = max(0.0, float(raw_label_size) / 100.0)
+    except (ValueError, TypeError):
+        year_label_fraction = 0.20
+
+    target_h = max(12.0, year_label_fraction * mean_ring_width_px)
 
     # Convert desired pixel height to OpenCV font scale
     sample_label = "9999"
