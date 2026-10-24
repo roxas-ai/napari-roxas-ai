@@ -217,6 +217,19 @@ SETTING_HINTS: Dict[str, str] = {
     ),
 }
 
+# Specific (single_step, decimals) for float settings by dotted path.
+# Float settings not listed here fall back to (1.0, _decimals_for(value)).
+FLOAT_SETTING_SPECS: Dict[str, Tuple[float, int]] = {
+    "measurements.cluster_dbl_cwt_threshold": (0.1, 2),
+    "measurements.relwidth_cwt_integration": (0.05, 2),
+    "measurements.cells_tangential_angle": (1.0, 2),
+    "measurements.lower_limit_cwt_iqr_multiplier": (0.1, 2),
+    "measurements.upper_limit_cwt_iqr_multiplier": (0.1, 2),
+    "measurements.opposite_cwt_ratio_limit": (0.1, 2),
+    "measurements.adjacent_cwt_ratio_limit": (0.1, 2),
+    "annotated_image.scale_factor": (0.01, 2),
+}
+
 # Marker for a setting that has an explanation. A character rather than an
 # icon file: it scales with the font and needs no light and dark variant.
 INFO_ICON = "\u24d8"  # circled latin small letter i
@@ -299,7 +312,10 @@ def _decimals_for(value: float) -> int:
 
 
 def _make_editor(
-    value: Any, read_only: bool = False
+    value: Any,
+    read_only: bool = False,
+    step: Optional[float] = None,
+    decimals: Optional[int] = None,
 ) -> Tuple[QWidget, Callable[[], Any]]:
     """
     Build an editor for a single settings value.
@@ -323,7 +339,11 @@ def _make_editor(
 
     if isinstance(value, float):
         float_spin_box = QDoubleSpinBox()
-        float_spin_box.setDecimals(_decimals_for(value))
+        float_spin_box.setDecimals(
+            decimals if decimals is not None else _decimals_for(value)
+        )
+        if step is not None:
+            float_spin_box.setSingleStep(step)
         float_spin_box.setRange(-FLOAT_LIMIT, FLOAT_LIMIT)
         float_spin_box.setValue(value)
         return float_spin_box, lambda: float(float_spin_box.value())
@@ -537,15 +557,21 @@ def _build_group(
             entries.append(entry)
 
         else:
+            full_key = f"{path}{key}"
+            spec = FLOAT_SETTING_SPECS.get(full_key)
+            step, decimals = spec if spec is not None else (None, None)
             editor, getter = _make_editor(
-                value, read_only=key in read_only_keys
+                value,
+                read_only=key in read_only_keys,
+                step=step,
+                decimals=decimals,
             )
-            hint = SETTING_HINTS.get(f"{path}{key}", "")
+            hint = SETTING_HINTS.get(full_key, "")
             label = _row_label(key, hint)
             form.addRow(label, editor)
             collectors[key] = getter
             entries.append(
-                _FormEntry(f"{path}{key}", [label, editor], depth)
+                _FormEntry(full_key, [label, editor], depth)
             )
 
     return lambda: {key: getter() for key, getter in collectors.items()}
