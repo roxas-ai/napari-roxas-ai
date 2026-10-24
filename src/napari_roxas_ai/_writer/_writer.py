@@ -12,11 +12,11 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageColor
 import cv2
 
 # Import SettingsManager to get file extensions
@@ -28,11 +28,6 @@ if TYPE_CHECKING:
 
 # Get file extensions from settings
 settings = SettingsManager()
-
-# JPEG quality (1-100) of the annotated rings image. It only serves to check
-# ring boundaries and years, so it trades detail for about half the file size
-# of a quality 95 scan.
-ANNOTATED_IMAGE_JPEG_QUALITY = 75
 
 from napari_roxas_ai._utils._metadata_keys import (
     RUN_METADATA_PREFIXES,
@@ -142,18 +137,36 @@ def save_image(path: str, image: np.ndarray, rescale: bool = False) -> str:
 
     return path
 
+def _parse_color_rgb(color: Any) -> tuple[int, int, int]:
+    """Parse color into (R, G, B) tuple in 0-255 range."""
+    if isinstance(color, str):
+        try:
+            return ImageColor.getrgb(color)[:3]
+        except Exception:
+            return (0, 255, 255)
+    elif isinstance(color, (list, tuple)) and len(color) >= 3:
+        c = color[:3]
+        if all(isinstance(x, float) and x <= 1.0 for x in c):
+            return tuple(int(round(x * 255)) for x in c)
+        return tuple(int(x) for x in c)
+    return (0, 255, 255)
+
+
 def save_annotated_scan_image(
     scan_path: str,
     annotated_path: str,
     rings_features: pd.DataFrame,
+    cells_data: Optional[np.ndarray] = None,
 ) -> None:
-    """Draw ring polylines + YEAR labels onto the scan image and save.
+    """Draw cells layer + ring polylines + YEAR labels onto scan image and save.
 
+    - Overlays cell lumina with configured opacity and fill color.
     - Uses a single, constant font size for all rings.
     - Font height is set to ~20% of the mean ring width (in pixels).
     - YEAR label is placed vertically centered between this ring and the next one.
     - Ring separator lines are drawn black and thicker.
     - Draws black text (no outline).
+    - Downscales the image according to configured scale_factor.
     """
 
     if rings_features is None or rings_features.empty:
@@ -169,6 +182,38 @@ def save_annotated_scan_image(
         img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
     else:
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+    h, w = img.shape[:2]
+
+    # Blend cells layer if available
+    if cells_data is not None and isinstance(cells_data, np.ndarray) and cells_data.size > 0:
+        if cells_data.ndim == 3:
+            cells_mask = np.any(cells_data != 0, axis=-1)
+        else:
+            cells_mask = cells_data != 0
+
+        if cells_mask.shape[:2] != (h, w):
+            cells_mask = cv2.resize(
+                cells_mask.astype(np.uint8),
+                (w, h),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(bool)
+
+        if np.any(cells_mask):
+            raw_opacity = settings.get("annotated_image.cell_opacity", 33)
+            try:
+                cell_opacity = float(raw_opacity) / 100.0
+            except (ValueError, TypeError):
+                cell_opacity = 0.33
+            cell_opacity = max(0.0, min(1.0, cell_opacity))
+
+            fill_color = settings.get("annotated_image.cell_fill_color", "cyan")
+            r, g, b = _parse_color_rgb(fill_color)
+            color_bgr = np.array([b, g, r], dtype=np.float32)
+
+            img_cells = img[cells_mask].astype(np.float32)
+            blended = img_cells * (1.0 - cell_opacity) + color_bgr * cell_opacity
+            img[cells_mask] = np.clip(np.round(blended), 0, 255).astype(np.uint8)
 
     df = rings_features.copy()
     h, w = img.shape[:2]
@@ -297,8 +342,40 @@ def save_annotated_scan_image(
     if not did_draw:
         return
 
+    # Downscale image if configured
+    raw_scale = settings.get("annotated_image.scale_factor", 0.75)
+    try:
+        scale_factor = float(raw_scale)
+    except (ValueError, TypeError):
+        scale_factor = 0.75
+
+    if scale_factor > 0 and scale_factor != 1.0:
+        new_w = max(1, int(round(w * scale_factor)))
+        new_h = max(1, int(round(h * scale_factor)))
+        img = cv2.resize(
+            img,
+            (new_w, new_h),
+            interpolation=cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_LINEAR,
+        )
+
     out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    Image.fromarray(out_rgb).save(annotated_path, quality=ANNOTATED_IMAGE_JPEG_QUALITY)
+    raw_quality = settings.get("annotated_image.quality", 75)
+    try:
+        quality = int(raw_quality)
+    except (ValueError, TypeError):
+        quality = 75
+    quality = max(1, min(100, quality))
+
+    optimize = bool(settings.get("annotated_image.optimize", True))
+    progressive = bool(settings.get("annotated_image.progressive", False))
+
+    Image.fromarray(out_rgb).save(
+        annotated_path,
+        "JPEG",
+        quality=quality,
+        optimize=optimize,
+        progressive=progressive,
+    )
 
 
 
@@ -725,10 +802,12 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
 
 def save_sample_annotated_image(
-    sample_path: Union[str, Path], rings_features: pd.DataFrame
+    sample_path: Union[str, Path],
+    rings_features: pd.DataFrame,
+    cells_data: Optional[np.ndarray] = None,
 ) -> Union[str, None]:
     """
-    Draw the rings onto the scan of a sample and save it next to the sample.
+    Draw the cells and rings onto the scan of a sample and save it next to the sample.
 
     Parameters
     ----------
@@ -736,6 +815,8 @@ def save_sample_annotated_image(
         The sample stem (sample directory / sample name, without extensions).
     rings_features : pd.DataFrame
         The rings table holding the ring boundaries and years.
+    cells_data : np.ndarray, optional
+        In-memory cell labels/mask. If None, looks for the sample's cells file on disk.
 
     Returns
     -------
@@ -755,6 +836,26 @@ def save_sample_annotated_image(
                 scan_file_path = alt_path
                 break
 
+    # If cells_data not provided, look for cells raster file on disk
+    if cells_data is None:
+        cells_file_extension = "".join(
+            settings.get("file_extensions.cells_file_extension")
+        )
+        cells_file_path = f"{sample_path}{cells_file_extension}"
+        if not Path(cells_file_path).exists():
+            cells_content_ext = settings.get("file_extensions.cells_file_extension")[0]
+            for ext in settings.get("file_extensions.image_file_extensions"):
+                alt_cells = f"{sample_path}{cells_content_ext}{ext}"
+                if Path(alt_cells).exists():
+                    cells_file_path = alt_cells
+                    break
+        if Path(cells_file_path).exists():
+            try:
+                with Image.open(cells_file_path) as c_img:
+                    cells_data = np.array(c_img)
+            except Exception as e:
+                print(f"Could not load cells image from {cells_file_path}: {e}")
+
     # annotated filename: <sample>_annotated.jpg, whatever the scan format:
     # JPEG keeps it small, and the preparation skips exactly this name
     annotated_path = str(sample_path.with_name(f"{basename}_annotated.jpg"))
@@ -767,6 +868,7 @@ def save_sample_annotated_image(
             scan_path=scan_file_path,
             annotated_path=annotated_path,
             rings_features=rings_features,
+            cells_data=cells_data,
         )
         return annotated_path
     except Exception as e:

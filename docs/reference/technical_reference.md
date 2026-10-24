@@ -305,10 +305,10 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 - **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
 - **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
 
-### 6. Image Compression & Project Directory
+### 6. Annotated Image & Project Directory
 
-- **`JPEG_compression`**: Quality, optimization, and progressive encoding settings for saved JPEG images (e.g., annotated rings overlay).
 - **`project_directory`**: Path to the currently active project working directory.
+- **`annotated_image`**: Configuration for saved annotated verification images (`_annotated.jpg`), including cell overlay opacity (`cell_opacity`), fill color (`cell_fill_color`), downscaling factor (`scale_factor`), and JPEG quality and compression settings (`quality`, `optimize`, `progressive`).
 
 ### 7. Metadata Field Definitions (`samples_metadata`)
 

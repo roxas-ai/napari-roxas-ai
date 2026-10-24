@@ -14,7 +14,9 @@ import pytest
 from napari_roxas_ai._writer._writer import (
     round_column,
     round_column_sci,
+    save_annotated_scan_image,
     save_image,
+    save_sample_annotated_image,
     update_metadata_file,
     write_cells_file,
     write_multiple_layers,
@@ -448,6 +450,75 @@ class TestWriterModule:
         # Column that doesn't exist should be ignored without error
         result_no_change = round_column_sci(df.copy(), "non_existent", 3)
         assert "non_existent" not in result_no_change.columns
+
+    def test_save_annotated_scan_image_with_cells_and_downscale(self, temp_dir):
+        """Test save_annotated_scan_image overlays cells and scales to 75%."""
+        from PIL import Image
+
+        scan_path = temp_dir / "sample.scan.jpg"
+        annotated_path = temp_dir / "sample_annotated.jpg"
+
+        # Create 200x200 RGB scan image (white background)
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        # Create cells data with some cell lumina (1s in center)
+        cells_data = np.zeros((200, 200), dtype=np.uint8)
+        cells_data[80:120, 80:120] = 1
+
+        # Create rings features
+        rings_features = pd.DataFrame({
+            "YEAR": [2020, 2021],
+            "RBXY": [
+                [[50, 0], [50, 100], [50, 199]],
+                [[150, 0], [150, 100], [150, 199]],
+            ],
+            "cells_above": [5000, 15000],
+        })
+
+        save_annotated_scan_image(
+            scan_path=str(scan_path),
+            annotated_path=str(annotated_path),
+            rings_features=rings_features,
+            cells_data=cells_data,
+        )
+
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            # Original was 200x200, scaled by 0.75 -> 150x150
+            assert img.size == (150, 150)
+            img_arr = np.array(img)
+            # Center pixels should have cell fill color blended (cyan hue: high G and B, lower R)
+            center_color = img_arr[75, 75]
+            assert center_color[0] < center_color[1] or center_color[0] < center_color[2]
+
+    def test_save_sample_annotated_image_auto_loads_cells_file(self, temp_dir):
+        """Test save_sample_annotated_image loads <sample>.cells.png from disk."""
+        from PIL import Image
+
+        sample_stem = temp_dir / "tree1"
+        scan_path = temp_dir / "tree1.scan.jpg"
+        cells_path = temp_dir / "tree1.cells.png"
+        annotated_path = temp_dir / "tree1_annotated.jpg"
+
+        scan_arr = np.full((100, 100, 3), 200, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        cells_arr = np.zeros((100, 100), dtype=np.uint8)
+        cells_arr[40:60, 40:60] = 1
+        Image.fromarray(cells_arr).save(cells_path)
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2022],
+            "RBXY": [[[50, 0], [50, 99]]],
+            "cells_above": [5000],
+        })
+
+        result_path = save_sample_annotated_image(sample_stem, rings_features)
+        assert result_path == str(annotated_path)
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            assert img.size == (75, 75)  # 100 * 0.75
 
 
 if __name__ == "__main__":

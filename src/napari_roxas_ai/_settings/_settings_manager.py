@@ -25,6 +25,7 @@ SETTINGS_WRITE_ENCODING = "utf-8"
 #
 # Never mutate this dictionary; hand out deepcopy()s of it.
 DEFAULT_SETTINGS: Dict[str, Any] = {
+    "project_directory": None,  # Current project directory
     # Metadata settings with fields for UI
     "samples_metadata": {
         "fields": [
@@ -181,7 +182,14 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "opposite_cwt_ratio_limit": 1.5,  # Max CWT ratio between opposite cell sides
         "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
     },
-    "project_directory": None,  # Current project directory
+    "annotated_image": {
+        "cell_opacity": 33,  # Opacity percentage of the cells overlay (0-100)
+        "cell_fill_color": "cyan",  # Fill color for cell lumina
+        "scale_factor": 0.75,  # Scale factor for downscaling the annotated image
+        "quality": 75,  # JPEG quality (1-100) of the annotated image
+        "optimize": True,  # Whether to enable JPEG file size optimization
+        "progressive": False,  # Whether to save as progressive JPEG
+    },
 }
 
 

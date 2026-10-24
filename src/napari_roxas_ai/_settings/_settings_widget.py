@@ -202,6 +202,22 @@ SETTING_HINTS: Dict[str, str] = {
         "Max CWT ratio between a side and its adjacent sides"
     ),
     "project_directory": "Current project directory",
+    "annotated_image.cell_opacity": (
+        "Opacity percentage of the cells overlay (0-100)"
+    ),
+    "annotated_image.cell_fill_color": "Fill color for cell lumina",
+    "annotated_image.scale_factor": (
+        "Scale factor for downscaling the annotated image"
+    ),
+    "annotated_image.quality": (
+        "JPEG quality (1-100) of the annotated image"
+    ),
+    "annotated_image.optimize": (
+        "Whether to enable JPEG file size optimization"
+    ),
+    "annotated_image.progressive": (
+        "Whether to save as progressive JPEG"
+    ),
 }
 
 # Marker for a setting that has an explanation. A character rather than an
