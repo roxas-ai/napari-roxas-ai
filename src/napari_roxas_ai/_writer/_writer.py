@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -121,13 +121,21 @@ def save_image(path: str, image: np.ndarray, rescale: bool = False) -> str:
     """
     # Rescale the image to 0-255 uint8 if required
     if rescale:
-        if np.max:
-            # Normalize the image to the range [0, 255]
-            image = (
-                (image - np.min(image)) / (np.max(image) - np.min(image)) * 255
-            ).astype(np.uint8)
-        else:  # If the image has a single value, set it to zero
+        if image.size == 0:
             image = np.zeros_like(image, dtype=np.uint8)
+        else:
+            min_val = np.min(image)
+            max_val = np.max(image)
+            if min_val == max_val:
+                image = np.zeros_like(image, dtype=np.uint8)
+            elif min_val == 0 and max_val == 1:
+                image = (image.astype(np.uint8)) * 255
+            elif min_val == 0 and max_val == 255 and image.dtype == np.uint8:
+                pass
+            else:
+                image = (
+                    (image - min_val) / (max_val - min_val) * 255
+                ).astype(np.uint8)
 
     # Create a PIL Image from the numpy array
     pil_image = Image.fromarray(image)
@@ -176,10 +184,11 @@ def interpolate_row_at_col(coords_rc: Any, col_query: float) -> float:
 
 
 def save_annotated_scan_image(
-    scan_path: str,
-    annotated_path: str,
-    rings_features: pd.DataFrame,
+    scan_path: Optional[str] = None,
+    annotated_path: str = "",
+    rings_features: Optional[pd.DataFrame] = None,
     cells_data: Optional[np.ndarray] = None,
+    scan_data: Optional[np.ndarray] = None,
 ) -> None:
     """Draw cells layer + ring polylines + YEAR labels onto scan image and save.
 
@@ -197,8 +206,14 @@ def save_annotated_scan_image(
     if "RBXY" not in rings_features.columns:
         return
 
-    # Load scan
-    img = np.array(Image.open(scan_path))
+    # Load or use in-memory scan image
+    if scan_data is not None and isinstance(scan_data, np.ndarray) and scan_data.size > 0:
+        img = scan_data.copy()
+    elif scan_path is not None and Path(scan_path).exists():
+        img = np.array(Image.open(scan_path))
+    else:
+        return
+
     if img.ndim == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     elif img.shape[2] == 4:
@@ -232,15 +247,21 @@ def save_annotated_scan_image(
 
             fill_color = settings.get("annotated_image.cell_fill_color", "cyan")
             r, g, b = _parse_color_rgb(fill_color)
-            color_bgr = np.array([b, g, r], dtype=np.uint16)
+            color_bgr = np.array([b, g, r], dtype=np.uint8)
 
-            alpha_int = int(round(cell_opacity * 256))
-            inv_alpha = 256 - alpha_int
+            lut_3ch = np.zeros((1, 256, 3), dtype=np.uint8)
+            for c in range(3):
+                lut_3ch[0, :, c] = np.clip(
+                    np.round(
+                        np.arange(256) * (1.0 - cell_opacity) + color_bgr[c] * cell_opacity
+                    ),
+                    0,
+                    255,
+                ).astype(np.uint8)
 
-            pts = img[cells_mask].astype(np.uint16)
-            img[cells_mask] = (
-                (pts * inv_alpha + color_bgr * alpha_int + 128) >> 8
-            ).astype(np.uint8)
+            blended = cv2.LUT(img, lut_3ch)
+            mask_u8 = cells_mask.astype(np.uint8) if cells_mask.dtype != np.uint8 else cells_mask
+            cv2.copyTo(blended, mask_u8, img)
 
     df = rings_features.copy()
     h, w = img.shape[:2]
@@ -680,7 +701,12 @@ def round_column_sci(df, col, decimals):
         )
     return df
 
-def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
+def write_cells_file(
+    path: str,
+    data: Any,
+    meta: dict,
+    progress_callback: Optional[Callable[[float], None]] = None,
+) -> list[str]:
     """Writes a cells file.
 
     Parameters
@@ -692,6 +718,8 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     meta : dict
         A dictionary containing all other attributes from the napari layer
         (excluding the `.data` layer attribute).
+    progress_callback : callable, optional
+        A callback receiving completion fraction (0.0 to 1.0) for this layer.
 
     Returns
     -------
@@ -701,6 +729,7 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     written_file_paths = []
 
     md = meta.get("metadata") or {}
+    cb = progress_callback or md.get("progress_callback")
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
@@ -723,6 +752,8 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
         metadata_file_path, meta["metadata"], ("cells_", *RUN_METADATA_PREFIXES)
     )
     written_file_paths.append(metadata_file_path)
+    if cb:
+        cb(0.1)
 
     # Save the tabular data
     if not meta["features"].empty:
@@ -739,6 +770,8 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
             index=False,
         )
         written_file_paths.append(cells_table_file_path)
+    if cb:
+        cb(0.4)
 
     # Save the image data
     cells_file_extension = "".join(
@@ -747,12 +780,19 @@ def write_cells_file(path: str, data: Any, meta: dict) -> list[str]:
     cells_file_path = f"{sample_path}{cells_file_extension}"
     save_image(cells_file_path, data, rescale=True)
     written_file_paths.append(cells_file_path)
+    if cb:
+        cb(1.0)
 
     # return path to any file(s) that were successfully written
     return written_file_paths
 
 
-def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
+def write_rings_file(
+    path: str,
+    data: Any,
+    meta: dict,
+    progress_callback: Optional[Callable[[float], None]] = None,
+) -> list[str]:
     """Writes a rings file.
 
     Parameters
@@ -764,6 +804,8 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     meta : dict
         A dictionary containing all other attributes from the napari layer
         (excluding the `.data` layer attribute).
+    progress_callback : callable, optional
+        A callback receiving completion fraction (0.0 to 1.0) for this layer.
 
     Returns
     -------
@@ -773,6 +815,7 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     written_file_paths = []
 
     md = meta.get("metadata") or {}
+    cb = progress_callback or md.get("progress_callback")
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
@@ -811,6 +854,8 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
             index=False,
         )
         written_file_paths.append(rings_table_file_path)
+    if cb:
+        cb(0.3)
 
     # Save the image data
     rings_file_extension = "".join(
@@ -819,15 +864,23 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
     rings_file_path = f"{sample_path}{rings_file_extension}"
     save_image(rings_file_path, data, rescale=False)
     written_file_paths.append(rings_file_path)
+    if cb:
+        cb(0.6)
 
     # --- Save annotated scan image ---
     if not meta["features"].empty:
         cells_data = (meta.get("metadata") or {}).get("cells_data")
+        scan_data = (meta.get("metadata") or {}).get("scan_data")
         annotated_path = save_sample_annotated_image(
-            sample_path, meta["features"], cells_data=cells_data
+            sample_path,
+            meta["features"],
+            cells_data=cells_data,
+            scan_data=scan_data,
         )
         if annotated_path is not None:
             written_file_paths.append(annotated_path)
+    if cb:
+        cb(1.0)
 
     return written_file_paths
 
@@ -836,6 +889,7 @@ def save_sample_annotated_image(
     sample_path: Union[str, Path],
     rings_features: pd.DataFrame,
     cells_data: Optional[np.ndarray] = None,
+    scan_data: Optional[np.ndarray] = None,
 ) -> Union[str, None]:
     """
     Draw the cells and rings onto the scan of a sample and save it next to the sample.
@@ -848,6 +902,8 @@ def save_sample_annotated_image(
         The rings table holding the ring boundaries and years.
     cells_data : np.ndarray, optional
         In-memory cell labels/mask. If None, looks for the sample's cells file on disk.
+    scan_data : np.ndarray, optional
+        In-memory scan image. If None, looks for the sample's scan file on disk.
 
     Returns
     -------
@@ -892,14 +948,16 @@ def save_sample_annotated_image(
     annotated_path = str(sample_path.with_name(f"{basename}_annotated.jpg"))
 
     try:
-        if not Path(scan_file_path).exists():
-            print(f"Annotated image export skipped for {basename}: no scan file found")
+        has_scan_source = (scan_data is not None and isinstance(scan_data, np.ndarray) and scan_data.size > 0) or Path(scan_file_path).exists()
+        if not has_scan_source:
+            print(f"Annotated image export skipped for {basename}: no scan image available")
             return None
         save_annotated_scan_image(
             scan_path=scan_file_path,
             annotated_path=annotated_path,
             rings_features=rings_features,
             cells_data=cells_data,
+            scan_data=scan_data,
         )
         return annotated_path
     except Exception as e:
@@ -907,7 +965,12 @@ def save_sample_annotated_image(
         return None
 
 
-def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
+def write_single_layer(
+    path: str,
+    data: Any,
+    meta: dict,
+    progress_callback: Optional[Callable[[float], None]] = None,
+) -> list[str]:
     """Writes a single image layer.
 
     Parameters
@@ -919,6 +982,8 @@ def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
     meta : dict
         A dictionary containing all other attributes from the napari layer
         (excluding the `.data` layer attribute).
+    progress_callback : callable, optional
+        A callback receiving completion fraction (0.0 to 1.0) for this layer.
 
     Returns
     -------
@@ -938,9 +1003,13 @@ def write_single_layer(path: str, data: Any, meta: dict) -> list[str]:
     if layer_name.endswith(scan_content_ext):
         written_file_paths += write_scan_file(path, data, meta)
     elif layer_name.endswith(cells_content_ext):
-        written_file_paths += write_cells_file(path, data, meta)
+        written_file_paths += write_cells_file(
+            path, data, meta, progress_callback=progress_callback
+        )
     elif layer_name.endswith(rings_content_ext):
-        written_file_paths += write_rings_file(path, data, meta)
+        written_file_paths += write_rings_file(
+            path, data, meta, progress_callback=progress_callback
+        )
     else:
         return written_file_paths
     # return path to any file(s) that were successfully written

@@ -39,14 +39,22 @@ class Worker(QObject):
 
         rings_ext = settings.get("file_extensions.rings_file_extension")[0]
         cells_ext = settings.get("file_extensions.cells_file_extension")[0]
+        scan_ext = settings.get("file_extensions.scan_file_extension")[0]
 
         total = len(self.layers)
 
         for i, layer in enumerate(self.layers):
-            self.progress.emit(i, total)
+            self.progress.emit(int(100 * i / total) if total > 0 else 0, 100)
 
             data, kwargs, layer_type = layer.as_layer_data_tuple()
             meta = (kwargs.get("metadata") or {}).copy()
+
+            def make_callback(layer_idx):
+                def cb(fraction):
+                    if total > 0:
+                        pct = int(100 * (layer_idx + fraction) / total)
+                        self.progress.emit(pct, 100)
+                return cb
 
             # Prefer explicit per-layer file_path (like SingleSampleMeasurementsWidget)
             file_path = meta.get("file_path")
@@ -66,7 +74,7 @@ class Worker(QObject):
             # Ensure parent exists
             out_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # If this is a rings layer, check if matching cells data is available in memory
+            # If this is a rings layer, check if matching cells or scan data is available in memory
             if layer.name.endswith(rings_ext):
                 stem = meta.get("sample_stem_path")
                 sample_name = meta.get("sample_name") or layer.name
@@ -74,32 +82,45 @@ class Worker(QObject):
                     sample_name = sample_name[: -len(rings_ext)]
 
                 cells_data = None
+                scan_data = None
                 for other_layer in self.all_layers:
-                    if not other_layer.name.endswith(cells_ext):
-                        continue
                     other_meta = getattr(other_layer, "metadata", None) or {}
                     other_stem = other_meta.get("sample_stem_path")
                     other_sample_name = (
                         other_meta.get("sample_name") or other_layer.name
                     )
-                    if isinstance(other_sample_name, str) and other_sample_name.endswith(
-                        cells_ext
-                    ):
-                        other_sample_name = other_sample_name[: -len(cells_ext)]
 
-                    if (
-                        (stem and other_stem and stem == other_stem)
-                        or (
-                            sample_name
-                            and other_sample_name
-                            and sample_name == other_sample_name
-                        )
-                    ):
-                        cells_data = getattr(other_layer, "data", None)
-                        break
+                    is_match = False
+                    if other_layer.name.endswith(cells_ext):
+                        if isinstance(other_sample_name, str) and other_sample_name.endswith(cells_ext):
+                            other_sample_name = other_sample_name[: -len(cells_ext)]
+                        if (
+                            (stem and other_stem and stem == other_stem)
+                            or (
+                                sample_name
+                                and other_sample_name
+                                and sample_name == other_sample_name
+                            )
+                        ):
+                            cells_data = getattr(other_layer, "data", None)
+
+                    elif other_layer.name.endswith(scan_ext):
+                        if isinstance(other_sample_name, str) and other_sample_name.endswith(scan_ext):
+                            other_sample_name = other_sample_name[: -len(scan_ext)]
+                        if (
+                            (stem and other_stem and stem == other_stem)
+                            or (
+                                sample_name
+                                and other_sample_name
+                                and sample_name == other_sample_name
+                            )
+                        ):
+                            scan_data = getattr(other_layer, "data", None)
 
                 if cells_data is not None:
                     meta["cells_data"] = cells_data
+                if scan_data is not None:
+                    meta["scan_data"] = scan_data
 
             # Keep kwargs metadata in sync (optional but helps later)
             meta["file_path"] = str(out_path)
@@ -109,9 +130,10 @@ class Worker(QObject):
                 str(out_path),
                 data,
                 kwargs,
+                progress_callback=make_callback(i),
             )
 
-        self.progress.emit(total, total)
+        self.progress.emit(100, 100)
         self.finished.emit()
 
 

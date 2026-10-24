@@ -726,6 +726,75 @@ class TestWriterModule:
             center = arr[40, 50]
             assert center[0] < center[1] or center[0] < center[2]
 
+    def test_write_rings_file_uses_in_memory_scan_data(self, temp_dir):
+        """Test write_rings_file passes in-memory scan_data to save_sample_annotated_image without scan file on disk."""
+        from napari_roxas_ai._writer._writer import write_rings_file
+        from PIL import Image
+
+        sample_stem = temp_dir / "sample_mem_scan"
+        # Notice we do NOT create sample_mem_scan.scan.jpg on disk!
+        scan_data_mem = np.full((100, 100, 3), 200, dtype=np.uint8)
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2022],
+            "RBXY": [[[50, 0], [50, 99]]],
+            "cells_above": [5000],
+        })
+
+        meta = {
+            "name": "sample_mem_scan.rings",
+            "features": rings_features,
+            "metadata": {
+                "sample_name": "sample_mem_scan",
+                "scan_data": scan_data_mem,
+            },
+        }
+
+        rings_data = np.zeros((100, 100), dtype=np.uint8)
+        written = write_rings_file(str(sample_stem), rings_data, meta)
+
+        annotated_path = temp_dir / "sample_mem_scan_annotated.jpg"
+        assert str(annotated_path) in written
+        assert annotated_path.exists()
+        assert not (temp_dir / "sample_mem_scan.scan.jpg").exists()
+
+    def test_save_image_rescaling(self, temp_dir):
+        """Test save_image rescaling behavior for binary, uniform, and arbitrary arrays."""
+        from napari_roxas_ai._writer._writer import save_image
+        from PIL import Image
+
+        # 1. Binary 0/1 array rescaled to 0/255
+        p1 = temp_dir / "test_bin.png"
+        arr1 = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+        save_image(str(p1), arr1, rescale=True)
+        with Image.open(p1) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, np.array([[0, 255], [255, 0]], dtype=np.uint8))
+
+        # 2. Binary 0/255 array rescaled
+        p2 = temp_dir / "test_255.png"
+        arr2 = np.array([[0, 255], [255, 0]], dtype=np.uint8)
+        save_image(str(p2), arr2, rescale=True)
+        with Image.open(p2) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, np.array([[0, 255], [255, 0]], dtype=np.uint8))
+
+        # 3. Uniform constant array
+        p3 = temp_dir / "test_const.png"
+        arr3 = np.full((10, 10), 42, dtype=np.uint8)
+        save_image(str(p3), arr3, rescale=True)
+        with Image.open(p3) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, np.zeros((10, 10), dtype=np.uint8))
+
+        # 4. Without rescale
+        p4 = temp_dir / "test_no_rescale.png"
+        arr4 = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+        save_image(str(p4), arr4, rescale=False)
+        with Image.open(p4) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, arr4)
+
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
