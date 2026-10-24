@@ -152,6 +152,29 @@ def _parse_color_rgb(color: Any) -> tuple[int, int, int]:
     return (0, 255, 255)
 
 
+def interpolate_row_at_col(coords_rc: Any, col_query: float) -> float:
+    """Compute the row (y) coordinate where a polyline crosses col_query."""
+    if not isinstance(coords_rc, (list, tuple, np.ndarray)):
+        return float("nan")
+    pts = np.asarray(coords_rc, dtype=float)
+    if pts.ndim != 2 or len(pts) == 0:
+        return float("nan")
+    if len(pts) == 1:
+        return float(pts[0, 0])
+
+    for i in range(len(pts) - 1):
+        r0, c0 = pts[i]
+        r1, c1 = pts[i + 1]
+        if (c0 <= col_query <= c1) or (c1 <= col_query <= c0):
+            if c1 == c0:
+                return float(r0)
+            t = (col_query - c0) / (c1 - c0)
+            return float(r0 + t * (r1 - r0))
+
+    idx = int(np.argmin(np.abs(pts[:, 1] - col_query)))
+    return float(pts[idx, 0])
+
+
 def save_annotated_scan_image(
     scan_path: str,
     annotated_path: str,
@@ -258,20 +281,20 @@ def save_annotated_scan_image(
     ring_line_thickness = 6  # was 3 (double thickness)
 
     did_draw = False
-    # Precompute mid-points (in image coords) for each ring polyline
-    mids_rc = []
+    # Horizontally center the calendar years across the image width
+    center_c = w / 2.0
+
+    # Precompute row (y) positions at the center column for each ring boundary
+    rows_at_center = []
     for i, row in df.iterrows():
         coords = row["RBXY"]
-        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
-            mids_rc.append(None)
-            continue
-        mid = coords[len(coords) // 2]  # [row, col]
-        mids_rc.append((float(mid[0]), float(mid[1])))
+        r = interpolate_row_at_col(coords, center_c)
+        rows_at_center.append(r)
 
     # Draw each ring and label
     for i, row in df.iterrows():
         coords = row["RBXY"]
-        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+        if not isinstance(coords, (list, tuple, np.ndarray)) or len(coords) < 2:
             continue
 
         # RBXY is [row, col]; OpenCV expects (x=col, y=row)
@@ -298,20 +321,16 @@ def save_annotated_scan_image(
         if year is None:
             continue
 
-        # Place the year label in the band above this ring boundary
-        # (between the previous ring and this one).
-        this_mid = mids_rc[i]
-        if this_mid is None:
+        this_r = rows_at_center[i]
+        if np.isnan(this_r):
             continue
 
-        if i - 1 >= 0 and mids_rc[i - 1] is not None:
-            prev_mid = mids_rc[i - 1]
-            center_r = 0.5 * (prev_mid[0] + this_mid[0])
-            center_c = 0.5 * (prev_mid[1] + this_mid[1])
-        else:
-            # For the first ring, center between image top and this boundary
-            center_r = 0.5 * this_mid[0]
-            center_c = this_mid[1]
+        prev_r = (
+            rows_at_center[i - 1]
+            if i > 0 and not np.isnan(rows_at_center[i - 1])
+            else 0.0
+        )
+        center_r = 0.5 * (prev_r + this_r)
 
         label = str(int(year))
 
@@ -319,8 +338,8 @@ def save_annotated_scan_image(
         (tw, th), baseline = cv2.getTextSize(
             label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness_text
         )
-        x = int(round(center_c - tw / 2))
-        y = int(round(center_r + th / 2))
+        x = int(round(center_c - tw / 2.0))
+        y = int(round(center_r + th / 2.0))
 
         # Keep text inside the image bounds
         x = max(0, min(x, w - tw - 1))
