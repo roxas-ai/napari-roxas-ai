@@ -452,8 +452,8 @@ class TestWriterModule:
         result_no_change = round_column_sci(df.copy(), "non_existent", 3)
         assert "non_existent" not in result_no_change.columns
 
-    def test_save_annotated_scan_image_with_cells_and_downscale(self, temp_dir):
-        """Test save_annotated_scan_image overlays cells and scales to 75%."""
+    def test_save_annotated_scan_image_with_cells_default_100_percent(self, temp_dir):
+        """Test save_annotated_scan_image overlays cells and defaults to 100% scale."""
         from PIL import Image
 
         scan_path = temp_dir / "sample.scan.jpg"
@@ -486,12 +486,40 @@ class TestWriterModule:
 
         assert annotated_path.exists()
         with Image.open(annotated_path) as img:
-            # Original was 200x200, scaled by 0.75 -> 150x150
-            assert img.size == (150, 150)
+            # Default scale is 1.0 (100%) -> (200, 200)
+            assert img.size == (200, 200)
             img_arr = np.array(img)
             # Center pixels should have cell fill color blended (cyan hue: high G and B, lower R)
-            center_color = img_arr[75, 75]
+            center_color = img_arr[100, 100]
             assert center_color[0] < center_color[1] or center_color[0] < center_color[2]
+
+    def test_save_annotated_scan_image_with_custom_downscale(self, temp_dir):
+        """Test save_annotated_scan_image respects custom scale_factor setting."""
+        from PIL import Image
+        from napari_roxas_ai._writer import _writer
+
+        scan_path = temp_dir / "sample_scaled.scan.jpg"
+        annotated_path = temp_dir / "sample_scaled_annotated.jpg"
+
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2020],
+            "RBXY": [[[50, 0], [50, 199]]],
+            "cells_above": [5000],
+        })
+
+        with patch.object(_writer.settings, "get", side_effect=lambda k, d=None: 0.75 if k == "annotated_image.scale_factor" else d):
+            save_annotated_scan_image(
+                scan_path=str(scan_path),
+                annotated_path=str(annotated_path),
+                rings_features=rings_features,
+            )
+
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            assert img.size == (150, 150)
 
     def test_save_sample_annotated_image_auto_loads_cells_file(self, temp_dir):
         """Test save_sample_annotated_image loads <sample>.cells.png from disk."""
@@ -519,7 +547,7 @@ class TestWriterModule:
         assert result_path == str(annotated_path)
         assert annotated_path.exists()
         with Image.open(annotated_path) as img:
-            assert img.size == (75, 75)  # 100 * 0.75
+            assert img.size == (100, 100)  # 100% default scale
 
 
     def test_interpolate_row_at_col(self):

@@ -367,12 +367,12 @@ def save_annotated_scan_image(
     if not did_draw:
         return
 
-    # Downscale image if configured
-    raw_scale = settings.get("annotated_image.scale_factor", 0.75)
+    # Resize image if scale factor is configured and different from 1.0
+    raw_scale = settings.get("annotated_image.scale_factor", 1.0)
     try:
         scale_factor = float(raw_scale)
     except (ValueError, TypeError):
-        scale_factor = 0.75
+        scale_factor = 1.0
 
     if scale_factor > 0 and scale_factor != 1.0:
         new_w = max(1, int(round(w * scale_factor)))
@@ -400,6 +400,7 @@ def save_annotated_scan_image(
         quality=quality,
         optimize=optimize,
         progressive=progressive,
+        subsampling=0,
     )
 
 
