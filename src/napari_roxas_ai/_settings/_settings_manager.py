@@ -188,8 +188,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "year_label_size": 20,  # Label size for calendar years as percentage of mean ring width (min 12 px)
         "scale_factor": 1.0,  # Scale factor for resizing the annotated image (1.0 = original dimensions)
         "quality": 75,  # JPEG quality (1-100) of the annotated image
-        "optimize": True,  # Whether to enable JPEG file size optimization
-        "progressive": False,  # Whether to save as progressive JPEG
     },
 }
 

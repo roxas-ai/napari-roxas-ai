@@ -215,12 +215,6 @@ SETTING_HINTS: Dict[str, str] = {
     "annotated_image.quality": (
         "JPEG quality (1-100) of the annotated image"
     ),
-    "annotated_image.optimize": (
-        "Whether to enable JPEG file size optimization"
-    ),
-    "annotated_image.progressive": (
-        "Whether to save as progressive JPEG"
-    ),
 }
 
 # Marker for a setting that has an explanation. A character rather than an

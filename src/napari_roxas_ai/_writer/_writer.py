@@ -232,11 +232,15 @@ def save_annotated_scan_image(
 
             fill_color = settings.get("annotated_image.cell_fill_color", "cyan")
             r, g, b = _parse_color_rgb(fill_color)
-            color_bgr = np.array([b, g, r], dtype=np.float32)
+            color_bgr = np.array([b, g, r], dtype=np.uint16)
 
-            img_cells = img[cells_mask].astype(np.float32)
-            blended = img_cells * (1.0 - cell_opacity) + color_bgr * cell_opacity
-            img[cells_mask] = np.clip(np.round(blended), 0, 255).astype(np.uint8)
+            alpha_int = int(round(cell_opacity * 256))
+            inv_alpha = 256 - alpha_int
+
+            pts = img[cells_mask].astype(np.uint16)
+            img[cells_mask] = (
+                (pts * inv_alpha + color_bgr * alpha_int + 128) >> 8
+            ).astype(np.uint8)
 
     df = rings_features.copy()
     h, w = img.shape[:2]
@@ -383,7 +387,6 @@ def save_annotated_scan_image(
             interpolation=cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_LINEAR,
         )
 
-    out_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     raw_quality = settings.get("annotated_image.quality", 75)
     try:
         quality = int(raw_quality)
@@ -391,17 +394,16 @@ def save_annotated_scan_image(
         quality = 75
     quality = max(1, min(100, quality))
 
-    optimize = bool(settings.get("annotated_image.optimize", True))
-    progressive = bool(settings.get("annotated_image.progressive", False))
-
-    Image.fromarray(out_rgb).save(
-        annotated_path,
-        "JPEG",
-        quality=quality,
-        optimize=optimize,
-        progressive=progressive,
-        subsampling=0,
+    success = cv2.imwrite(
+        str(annotated_path),
+        img,
+        [cv2.IMWRITE_JPEG_QUALITY, quality],
     )
+    if not success:
+        is_success, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if is_success:
+            with open(annotated_path, "wb") as f:
+                f.write(buf)
 
 
 
@@ -820,7 +822,10 @@ def write_rings_file(path: str, data: Any, meta: dict) -> list[str]:
 
     # --- Save annotated scan image ---
     if not meta["features"].empty:
-        annotated_path = save_sample_annotated_image(sample_path, meta["features"])
+        cells_data = (meta.get("metadata") or {}).get("cells_data")
+        annotated_path = save_sample_annotated_image(
+            sample_path, meta["features"], cells_data=cells_data
+        )
         if annotated_path is not None:
             written_file_paths.append(annotated_path)
 

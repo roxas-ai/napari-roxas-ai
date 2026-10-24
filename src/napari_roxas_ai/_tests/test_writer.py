@@ -683,6 +683,49 @@ class TestWriterModule:
         # 50% should produce 2.5x larger font scale than 20%
         assert font_scale_50 == pytest.approx(font_scale_20 * 2.5, rel=1e-2)
 
+    def test_write_rings_file_uses_in_memory_cells_data(self, temp_dir):
+        """Test write_rings_file passes in-memory cells_data to save_sample_annotated_image."""
+        from napari_roxas_ai._writer._writer import write_rings_file
+        from PIL import Image
+
+        sample_stem = temp_dir / "sample_mem"
+        scan_path = temp_dir / "sample_mem.scan.jpg"
+        scan_arr = np.full((100, 100, 3), 200, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        cells_data_mem = np.zeros((100, 100), dtype=np.uint8)
+        cells_data_mem[30:70, 30:70] = 1
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2022],
+            "RBXY": [[[50, 0], [50, 99]]],
+            "cells_above": [5000],
+        })
+
+        meta = {
+            "name": "sample_mem.rings",
+            "features": rings_features,
+            "metadata": {
+                "sample_name": "sample_mem",
+                "cells_data": cells_data_mem,
+            },
+        }
+
+        rings_data = np.zeros((100, 100), dtype=np.uint8)
+        written = write_rings_file(str(sample_stem), rings_data, meta)
+
+        annotated_path = temp_dir / "sample_mem_annotated.jpg"
+        assert str(annotated_path) in written
+        assert annotated_path.exists()
+
+        # Check that the in-memory cell mask was drawn without reading .cells.png from disk
+        assert not (temp_dir / "sample_mem.cells.png").exists()
+        with Image.open(annotated_path) as img:
+            arr = np.array(img)
+            # Cell pixels away from the ring line (e.g. at (40, 50)) should be cyan-tinted
+            center = arr[40, 50]
+            assert center[0] < center[1] or center[0] < center[2]
+
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
