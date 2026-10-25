@@ -636,7 +636,7 @@ def test_ctrl_mouse_wheel_adjusts_brush_size(make_napari_viewer):
     assert edit_layer.brush_size == 3
 
 
-def test_ctrl_double_click_switches_eraser_to_brush(make_napari_viewer):
+def test_ctrl_double_click_toggles_eraser_and_brush(make_napari_viewer):
     viewer = make_napari_viewer()
     data = np.zeros((50, 50), dtype=np.uint8)
     data[5:15, 5:15] = 1
@@ -656,6 +656,20 @@ def test_ctrl_double_click_switches_eraser_to_brush(make_napari_viewer):
         edit_layer, SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), handled=False)
     )
     assert edit_layer.mode == "paint"
+
+    # And back from the brush to the eraser
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), handled=False)
+    )
+    assert edit_layer.mode == "erase"
+
+    # Other tools are not affected
+    edit_layer.mode = "fill"
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), handled=False)
+    )
+    assert edit_layer.mode == "fill"
+    edit_layer.mode = "paint"
 
     # CTRL+clicks do not paint/erase, plain clicks still do
     drag_callback = edit_layer.mouse_drag_callbacks[-1]
