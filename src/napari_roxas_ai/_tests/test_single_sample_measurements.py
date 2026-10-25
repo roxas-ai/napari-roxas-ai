@@ -200,7 +200,7 @@ def test_single_sample_measurements_run_analysis_missing_layers(make_napari_view
     with patch("napari_roxas_ai._measurements._single_sample_measurements.show_info") as mock_show_info:
         widget._run_analysis()
         mock_show_info.assert_called_with(
-            "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
+            "Cells layer not found in the viewer. Please load the cells layer first or uncheck 'Measure Cells'."
         )
 
 

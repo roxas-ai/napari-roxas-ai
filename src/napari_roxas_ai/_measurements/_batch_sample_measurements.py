@@ -125,6 +125,7 @@ def find_samples(directory: str) -> Dict[str, Dict[str, Optional[str]]]:
 class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
+    message = Signal(str)
 
     def __init__(
         self,
@@ -179,17 +180,17 @@ class Worker(QObject):
                     rings = rings or self._read_rings(files)
                     tasks.append(self._update_reference_plot(stem, rings))
 
-                print(
+                self.message.emit(
                     f"[Batch Measurements] [{file_idx}/{total}] {name}: {', '.join(tasks)}"
                 )
                 processed += 1
             except Exception as e:
-                print(
+                self.message.emit(
                     f"[Batch Measurements] [{file_idx}/{total}] Error processing {name}: {e}"
                 )
 
         if total > 0:
-            print(
+            self.message.emit(
                 f"[Batch Measurements] Completed {processed} of {total} file(s) successfully."
             )
 
@@ -889,6 +890,7 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Connect progress signal
         self.worker.progress.connect(self._update_progress)
+        self.worker.message.connect(show_info)
 
         # Disable the run button while processing
         self._run_analysis_button.enabled = False

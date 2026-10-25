@@ -207,7 +207,7 @@ class SingleSampleMeasurementsWidget(Container):
         cells_layer = self._cells_layer
         if self._measure_cells_checkbox.value and cells_layer is None:
             show_info(
-                "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
+                "Cells layer not found in the viewer. Please load the cells layer first or uncheck 'Measure Cells'."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Measure"
@@ -217,7 +217,7 @@ class SingleSampleMeasurementsWidget(Container):
         rings_layer = self._rings_layer
         if self._measure_rings_checkbox.value and rings_layer is None:
             show_info(
-                "Rings layer not found in the viewer. Please load the sample first or disable rings processing."
+                "Rings layer not found in the viewer. Please load the rings layer first or uncheck 'Measure Rings'."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Measure"

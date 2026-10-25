@@ -36,6 +36,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QScrollArea,
@@ -938,8 +939,12 @@ class SettingsWidget(Container):
         target_screen = None
         try:
             main_window = None
-            if viewer is not None and hasattr(viewer, "window") and hasattr(viewer.window, "_qt_window"):
-                main_window = viewer.window._qt_window
+            # Walk up to napari's main window (a floating QDockWidget stays parented to it)
+            parent = getattr(dock_widget, "native", dock_widget)
+            while parent is not None and not isinstance(parent, QMainWindow):
+                parent = parent.parentWidget() if hasattr(parent, "parentWidget") else None
+            if parent is not None:
+                main_window = parent
             elif hasattr(dock_widget, "native"):
                 main_window = dock_widget.native.window()
             elif hasattr(dock_widget, "window"):

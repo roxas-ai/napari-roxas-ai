@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import napari.layers
 from magicgui.widgets import Container, ProgressBar, PushButton
+from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, QThread, Signal
 
 from napari_roxas_ai._settings._settings_manager import SettingsManager
@@ -84,14 +85,14 @@ class SamplesSavingWidget(Container):
             text="Save Selected Layers", visible=True
         )
         self._save_selected_layers_button.changed.connect(
-            lambda: self._save_layers(how="selected")
+            lambda: self._save_layers_with_feedback(how="selected")
         )
 
         self._save_all_layers_button = PushButton(
             text="Save All Layers", visible=True
         )
         self._save_all_layers_button.changed.connect(
-            lambda: self._save_layers(how="all")
+            lambda: self._save_layers_with_feedback(how="all")
         )
 
         # Add a progress bar with a description
@@ -106,6 +107,22 @@ class SamplesSavingWidget(Container):
                 self._save_all_layers_button,
                 self._progress_bar,
             ]
+        )
+
+    def _save_layers_with_feedback(self, how: str):
+        """Save layers and report the outcome to the user."""
+        # Drop references to a previous (already finished) save run
+        self.worker = None
+        self.worker_thread = None
+        self._save_layers(how=how)
+        if self.worker is None or self.worker_thread is None:
+            # Nothing to save: no worker was started
+            show_info("No rings or cells layers to save")
+            return
+
+        n_layers = len(self.worker.layers)
+        self.worker_thread.finished.connect(
+            lambda: show_info(f"{n_layers} layer(s) saved successfully")
         )
 
     def _save_layers(self, how: str):
