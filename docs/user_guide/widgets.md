@@ -248,7 +248,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 ### How It Works
 - Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
 - Supports two distinct editing paradigms:
-  - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
+  - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation. The brush size (up to 100 pixels) can be adjusted with <kbd>Ctrl</kbd>+mouse wheel while painting or erasing, and <kbd>Ctrl</kbd>+double-click switches from the eraser to the brush, e.g. to split merged cells and complete incomplete cells in the same edit.
   - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
 - Includes a **Lasso Selection Tool** in Vector editing mode to quickly encircle and batch-delete unwanted cell polygons across a designated region.
 - When applied, rasterizes vectors back to label masks, resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
@@ -259,7 +259,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
   - Contours are geometrically simplified and smoothed using the **Ramer-Douglas-Peucker algorithm** (`cv2.approxPolyDP` with `closed=True`) to eliminate single-pixel staircase artefacts while preserving anatomical shape fidelity.
   - Simplified polygons with fewer than 3 vertices are automatically discarded.
 - **Rasterization**:
-  - When applying vector edits, polygon vertices are rounded to integer pixel coordinates and filled onto a zero-initialized raster grid via OpenCV polygon contour rendering (`cv2.drawContours`). No secondary morphological smoothing is applied during this rasterization step.
+  - When applying vector edits, polygon vertices are rounded to integer pixel coordinates and filled onto a zero-initialized raster grid via OpenCV polygon contour rendering (`cv2.drawContours`). Each polygon is filled individually, so overlapping polygons are combined (union) and their overlapping area is preserved. No secondary morphological smoothing is applied during this rasterization step.
 - **Corresponding Settings & Default Values**:
   - `vectorization.cells_tolerance`: Maximum approximation distance $\epsilon$ (in pixels) for Douglas-Peucker contour simplification. (*Default:* `1`)
   - `vectorization.cells_edge_width`: Display line width (in pixels) of cell vector boundaries in the viewer. (*Default:* `5`)
@@ -271,7 +271,8 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 - **Editing Mode**: Switch between `Vector` and `Raster` editing modes.
 - **Edit Cells**: Enters editing mode, hides ring layers, and creates the working canvas (`Cells Modification`).
 - **Lasso Select**: Checkbox (available during Vector editing) that activates a yellow `Lasso Selection` shapes layer for freehand polygon area selection.
-- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the `Delete` key).
+- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the `Delete` or `Backspace` key).
+- **Undo Last Change**: Reverts the most recent edit (brush/eraser stroke, shape edit or lasso deletion) made during the active editing session (also available with <kbd>Ctrl</kbd>+<kbd>Z</kbd>).
 - **Apply Cell Changes**: Commits edits, updates the `.cells` layer, restores layer visibility, and exits editing mode.
 - **Cancel Cell Changes**: Discards pending modifications, removes the working layer, restores original layer visibility, and exits editing mode.
 - **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar. For full details on the saving routine, see [8 - Save Cells & Rings Editing](#8---save-cells--rings-editing).

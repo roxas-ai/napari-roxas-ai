@@ -1,4 +1,5 @@
 import warnings
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, ContextManager
 from contextlib import contextmanager
@@ -33,6 +34,9 @@ if TYPE_CHECKING:
     import napari
 
 settings = SettingsManager()
+
+# Maximum number of edits kept in the undo history (older edits are dropped)
+UNDO_HISTORY_LIMIT = 50
 
 SEGMENTATION_MODULE_PATH = (
     Path(__file__).parent.parent.absolute() / "_segmentation"
@@ -670,7 +674,7 @@ class RingsLayerEditorWidget(Container):
 
         # --- UNDO STATE ---
         # Snapshots of the "Rings Modification" layer taken before each completed edit
-        self._undo_stack = []
+        self._undo_stack = deque(maxlen=UNDO_HISTORY_LIMIT)
         # Snapshot of the current (last committed) state of the edit layer
         self._undo_current = None
         # Suppresses snapshot recording during programmatic modifications
@@ -956,7 +960,7 @@ class RingsLayerEditorWidget(Container):
         self, layer: Optional["napari.layers.Shapes"] = None
     ) -> None:
         """Clear the undo history and use the given layer state as starting point."""
-        self._undo_stack = []
+        self._undo_stack = deque(maxlen=UNDO_HISTORY_LIMIT)
         self._undo_current = (
             self._snapshot_edit_layer(layer) if layer is not None else None
         )
