@@ -83,6 +83,7 @@ class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
     result_ready = Signal(object)
+    message = Signal(str)
 
     def __init__(
         self,
@@ -360,9 +361,9 @@ class Worker(QObject):
                 )
 
         if total_files > 0:
-            print(
-                f"[Batch Segmentation] Completed {processed} of {total_files} file(s) successfully."
-            )
+            summary = f"[Batch Segmentation] Completed {processed} of {total_files} file(s) successfully."
+            print(summary)
+            self.message.emit(summary)
 
         self.progress.emit(total, total)
         self.finished.emit()
@@ -864,14 +865,14 @@ class BatchSampleSegmentationWidget(Container):
 
         # Connect progress signal
         self.worker.progress.connect(self._update_progress)
+        self.worker.message.connect(show_info)
 
         # Disable the run button while processing
         self._run_segmentation_button.enabled = False
 
-        # Restore run segmentation button and show message when finished
+        # Restore run segmentation button when finished
         def on_finished():
             self._run_segmentation_button.enabled = True
-            show_info("Segmentation complete")
 
         self.worker_thread.finished.connect(on_finished)
 

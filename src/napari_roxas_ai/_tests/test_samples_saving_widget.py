@@ -78,3 +78,49 @@ def test_progress_bar_update(make_napari_viewer):
     widget._update_progress(2, 2)
     assert widget._progress_bar.value == 100
     assert not widget._progress_bar.native.isHidden()
+
+
+def test_save_buttons_report_nothing_to_save(make_napari_viewer, monkeypatch):
+    viewer = make_napari_viewer()
+    viewer.add_image(np.zeros((10, 10)), name="sample1.scan")
+    widget = SamplesSavingWidget(viewer)
+
+    messages = []
+    monkeypatch.setattr(
+        "napari_roxas_ai._saving._samples_saving_widget.show_info", messages.append
+    )
+
+    widget._save_layers_with_feedback(how="all")
+    assert messages == ["No rings or cells layers to save"]
+
+
+def test_save_buttons_report_saved_layers(make_napari_viewer, monkeypatch):
+    viewer = make_napari_viewer()
+    viewer.add_labels(np.zeros((10, 10), dtype=int), name="sample1.cells")
+    viewer.add_labels(np.zeros((10, 10), dtype=int), name="sample1.rings")
+    widget = SamplesSavingWidget(viewer)
+
+    messages = []
+    monkeypatch.setattr(
+        "napari_roxas_ai._saving._samples_saving_widget.show_info", messages.append
+    )
+    worker = MagicMock()
+    thread = MagicMock()
+
+    def make_worker(layers):
+        worker.layers = layers
+        return worker
+
+    monkeypatch.setattr(
+        "napari_roxas_ai._saving._samples_saving_widget.Worker", make_worker
+    )
+    monkeypatch.setattr(
+        "napari_roxas_ai._saving._samples_saving_widget.QThread", lambda: thread
+    )
+
+    widget._save_layers_with_feedback(how="all")
+    assert messages == []
+
+    # The success message is the last callback run when the save thread ends
+    thread.finished.connect.call_args_list[-1].args[0]()
+    assert messages == ["2 layer(s) saved successfully"]

@@ -1,4 +1,5 @@
-from collections import defaultdict
+import sys
+from collections import defaultdict, deque
 from typing import TYPE_CHECKING, Optional
 
 import cv2
@@ -12,6 +13,8 @@ from magicgui.widgets import (
     ProgressBar,
     PushButton,
 )
+from napari.components._viewer_mouse_bindings import dims_scroll
+from napari.layers.base._base_constants import ActionType
 from napari.qt.threading import thread_worker
 from napari.utils.notifications import show_info
 from PIL import Image
@@ -28,6 +31,15 @@ if TYPE_CHECKING:
 Image.MAX_IMAGE_PIXELS = None
 
 settings = SettingsManager()
+
+# Maximum number of edits kept in the undo history (older edits are dropped)
+UNDO_HISTORY_LIMIT = 50
+
+# Maximum brush size (in pixels) in raster editing mode
+MAX_BRUSH_SIZE = 100
+# Keyboard modifier for the brush size (mouse wheel) and tool switch (double-click)
+# shortcuts: the CTRL key, which Qt reports as "Meta" on macOS ("Control" is Cmd there)
+BRUSH_SHORTCUT_MODIFIER = "Meta" if sys.platform == "darwin" else "Control"
 
 
 @thread_worker
@@ -67,6 +79,20 @@ class CellsLayerEditorWidget(Container):
 
         # Stores visibility of .rings and Rings Year layers before editing to restore them later
         self._layer_visibility_states = {}
+
+        # --- UNDO STATE ---
+        # Snapshots of the vector "Cells Modification" layer taken before each completed edit
+        # (in raster mode, the undo history of the labels layer itself is used)
+        self._undo_stack = deque(maxlen=UNDO_HISTORY_LIMIT)
+        # Snapshot of the current (last committed) state of the vector edit layer
+        self._undo_current = None
+        # Suppresses snapshot recording during programmatic modifications
+        self._undo_recording_paused = False
+
+        # Unrounded brush size, so that small (trackpad) wheel steps accumulate
+        self._brush_size_target = None
+        # Whether napari's dims slider scrolling is disabled for the raster edit session
+        self._dims_scroll_disabled = False
 
         # --- LASSO SELECTION UI ---
         self._lasso_selection_checkbox = CheckBox(
@@ -158,6 +184,12 @@ class CellsLayerEditorWidget(Container):
             self._apply_cells_geometries
         )
 
+        # Create a button to undo the last change of the edit session
+        self._undo_button = PushButton(
+            text="Undo Last Change", visible=False
+        )
+        self._undo_button.changed.connect(self._undo_last_change)
+
         # Append the widgets to the container
         self.extend(
             [
@@ -168,6 +200,7 @@ class CellsLayerEditorWidget(Container):
                 self._progress_bar,
                 self._cancel_cells_geometries_button,
                 self._apply_cells_geometries_button,
+                self._undo_button,
             ]
         )
 
@@ -233,7 +266,7 @@ class CellsLayerEditorWidget(Container):
                 lasso_layer.mode = "add_polygon_lasso"
 
             self._delete_lasso_cells_button.visible = True
-            show_info("Lasso Mode: Draw polygons and click 'Delete Selected Cells' (or press 'Delete')")
+            show_info("Lasso Mode: Draw polygons and click 'Delete Selected Cells' (or press 'Delete' / 'Backspace')")
         else:
             if "Lasso Selection" in self._viewer.layers:
                 self._deferred_remove_layer("Lasso Selection")
@@ -248,8 +281,7 @@ class CellsLayerEditorWidget(Container):
                     pass
             self._delete_lasso_cells_button.visible = False
 
-        # Bind the Delete key to our custom handler
-        @self._viewer.bind_key("Delete", overwrite=True)
+        # Bind the Delete key (and Backspace for macOS) to our custom handler
         def _delete_selected(viewer):
             if not self._cancel_cells_geometries_button.visible:
                 return
@@ -259,6 +291,9 @@ class CellsLayerEditorWidget(Container):
                     self._viewer.layers["Lasso Selection"].selected_data = set()
                 self._execute_lasso_deletion()
                 return
+
+        self._viewer.bind_key("Delete", _delete_selected, overwrite=True)
+        self._viewer.bind_key("Backspace", _delete_selected, overwrite=True)
 
     def _execute_lasso_deletion(self) -> None:
         """
@@ -364,6 +399,198 @@ class CellsLayerEditorWidget(Container):
             if self._edition_mode == "Vector":
                 self._lasso_container.visible = True
 
+    # --- UNDO ---
+
+    def _get_edit_layer(self) -> Optional["napari.layers.Layer"]:
+        """Get the 'Cells Modification' layer of the current edit session."""
+        if "Cells Modification" in self._viewer.layers:
+            return self._viewer.layers["Cells Modification"]
+        return None
+
+    @staticmethod
+    def _snapshot_edit_layer(layer: "napari.layers.Shapes") -> dict:
+        """Capture everything needed to restore the vector edit layer to its current state."""
+        return {
+            "data": [np.array(d, copy=True) for d in layer.data],
+            "shape_type": list(layer.shape_type),
+        }
+
+    @staticmethod
+    def _snapshots_equal(a: dict, b: dict) -> bool:
+        """Compare the geometries of two snapshots."""
+        if len(a["data"]) != len(b["data"]):
+            return False
+        return all(
+            np.array_equal(da, db) for da, db in zip(a["data"], b["data"])
+        )
+
+    def _reset_undo_history(
+        self, layer: Optional["napari.layers.Shapes"] = None
+    ) -> None:
+        """Clear the undo history and use the given layer state as starting point."""
+        self._undo_stack = deque(maxlen=UNDO_HISTORY_LIMIT)
+        self._undo_current = (
+            self._snapshot_edit_layer(layer) if layer is not None else None
+        )
+        self._update_undo_button_state()
+
+    def _record_undo_step(self) -> None:
+        """Store the last committed state if the vector edit layer has changed since."""
+        layer = self._get_edit_layer()
+        if not isinstance(layer, napari.layers.Shapes) or self._undo_current is None:
+            return
+        new_snapshot = self._snapshot_edit_layer(layer)
+        if not self._snapshots_equal(new_snapshot, self._undo_current):
+            self._undo_stack.append(self._undo_current)
+        self._undo_current = new_snapshot
+        self._update_undo_button_state()
+
+    def _on_edit_layer_data_change(self, event=None) -> None:
+        """Record an undo step once a user edit of the vector edit layer is completed."""
+        if self._undo_recording_paused:
+            return
+        # Only completed actions are recorded: the "-ing" events are not emitted
+        # for every edit (e.g. not for vertex moves in direct mode).
+        if getattr(event, "action", None) not in (
+            ActionType.CHANGED,
+            ActionType.ADDED,
+            ActionType.REMOVED,
+        ):
+            return
+        self._record_undo_step()
+
+    def _update_undo_button_state(self, event=None) -> None:
+        """Enable the undo button only if there is something to undo."""
+        layer = self._get_edit_layer()
+        if isinstance(layer, napari.layers.Labels):
+            can_undo = bool(layer._undo_history)
+        else:
+            can_undo = layer is not None and bool(self._undo_stack)
+        self._undo_button.enabled = can_undo
+
+    def _undo_last_change(self) -> None:
+        """Restore the edit layer to the state before the last change."""
+        layer = self._get_edit_layer()
+        if layer is None:
+            show_info("Nothing to undo")
+            return
+
+        if isinstance(layer, napari.layers.Labels):
+            # Raster mode: use the paint history of the labels layer
+            if not layer._undo_history:
+                show_info("Nothing to undo")
+                return
+            layer.undo()
+            self._update_undo_button_state()
+            return
+
+        if not self._undo_stack:
+            show_info("Nothing to undo")
+            return
+
+        snapshot = self._undo_stack.pop()
+        self._undo_recording_paused = True
+        try:
+            layer.selected_data = set()
+            layer.data = list(zip(snapshot["data"], snapshot["shape_type"]))
+            layer.refresh()
+        finally:
+            self._undo_recording_paused = False
+
+        self._undo_current = snapshot
+        self._update_undo_button_state()
+
+    # --- RASTER EDITING SHORTCUTS ---
+
+    @staticmethod
+    def _has_brush_shortcut_modifier(event) -> bool:
+        """Check whether the CTRL key is held during a mouse event."""
+        return BRUSH_SHORTCUT_MODIFIER in event.modifiers
+
+    def _setup_raster_shortcuts(self, layer: "napari.layers.Labels") -> None:
+        """
+        Add the raster editing shortcuts to the labels edit layer:
+        - CTRL+mouse wheel: adjust the brush size (up to MAX_BRUSH_SIZE pixels)
+        - CTRL+double-click: switch from the eraser to the brush tool
+        """
+        self._brush_size_target = None
+
+        # CTRL+clicks are reserved for the shortcuts: they must not paint or erase,
+        # otherwise the first click of a CTRL+double-click would erase a brush spot.
+        def _wrap_draw(draw):
+            def _draw_without_shortcut_modifier(layer, event):
+                if self._has_brush_shortcut_modifier(event):
+                    return
+                yield from draw(layer, event)
+
+            return _draw_without_shortcut_modifier
+
+        layer._drag_modes = {
+            mode: (
+                _wrap_draw(callback) if mode in ("paint", "erase") else callback
+            )
+            for mode, callback in layer._drag_modes.items()
+        }
+
+        layer.mouse_wheel_callbacks.append(self._on_raster_mouse_wheel)
+        # napari scrolls the dims slider on "Control"+wheel (CTRL on Windows/Linux):
+        # for 2D data this only triggers a costly reslicing of all layers on every
+        # wheel step, so it is disabled during the raster edit session
+        if dims_scroll in self._viewer.mouse_wheel_callbacks:
+            self._viewer.mouse_wheel_callbacks.remove(dims_scroll)
+            self._dims_scroll_disabled = True
+        layer.mouse_double_click_callbacks.append(
+            self._on_raster_double_click
+        )
+
+        # Allow brush sizes up to MAX_BRUSH_SIZE in the layer controls slider
+        try:
+            controls = self._viewer.window._qt_viewer.controls.widgets[layer]
+            controls._brush_size_slider_control.brush_size_slider.setMaximum(
+                MAX_BRUSH_SIZE
+            )
+        except (AttributeError, KeyError):
+            pass
+
+    def _restore_dims_scroll(self) -> None:
+        """Restore napari's dims slider scrolling after the raster edit session."""
+        if self._dims_scroll_disabled:
+            if dims_scroll not in self._viewer.mouse_wheel_callbacks:
+                self._viewer.mouse_wheel_callbacks.append(dims_scroll)
+            self._dims_scroll_disabled = False
+
+    def _on_raster_mouse_wheel(self, layer, event) -> None:
+        """Adjust the brush size with CTRL+mouse wheel while painting or erasing."""
+        if layer.mode not in ("paint", "erase"):
+            return
+        if not self._has_brush_shortcut_modifier(event):
+            return
+
+        delta = event.delta[1] if event.delta[1] else event.delta[0]
+        if not delta:
+            return
+
+        # Resync with the slider if the brush size was changed elsewhere
+        if (
+            self._brush_size_target is None
+            or round(self._brush_size_target) != layer.brush_size
+        ):
+            self._brush_size_target = float(layer.brush_size)
+
+        # Proportional steps: fine control for small brushes, fast for large ones
+        step = max(1.0, 0.15 * self._brush_size_target)
+        self._brush_size_target = float(
+            np.clip(self._brush_size_target + delta * step, 1, MAX_BRUSH_SIZE)
+        )
+        layer.brush_size = round(self._brush_size_target)
+        event.handled = True
+
+    def _on_raster_double_click(self, layer, event) -> None:
+        """Switch from the eraser to the brush tool with CTRL+double-click."""
+        if layer.mode == "erase" and self._has_brush_shortcut_modifier(event):
+            layer.mode = "paint"
+            event.handled = True
+
     def _restore_original_visibility(self) -> None:
         """
         Restore the original visibility state of layers that were hidden during editing.
@@ -462,6 +689,17 @@ class CellsLayerEditorWidget(Container):
             if sample_stem_path is not None:
                 work_layer.metadata["sample_stem_path"] = sample_stem_path
 
+            self._setup_raster_shortcuts(work_layer)
+
+            # Track the edit session history for undo (button and Ctrl/Cmd+Z)
+            self._reset_undo_history()
+            work_layer.events.paint.connect(self._update_undo_button_state)
+            work_layer.bind_key(
+                "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
+            )
+            self._undo_button.visible = True
+            self._update_undo_button_state()
+
         elif self._edition_mode == "Vector":
             # Disable controls while background worker is running
             self._edit_cells_geometries_button.enabled = False
@@ -508,6 +746,15 @@ class CellsLayerEditorWidget(Container):
                     self._lasso_selection_checkbox.visible = True
                     self._lasso_selection_checkbox.value = False
                     self._delete_lasso_cells_button.visible = False
+
+                    # Track the edit session history for undo (button and Ctrl/Cmd+Z)
+                    self._reset_undo_history(work_layer)
+                    work_layer.events.data.connect(self._on_edit_layer_data_change)
+                    work_layer.bind_key(
+                        "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
+                    )
+                    self._undo_button.visible = True
+                    self._update_undo_button_state()
                 finally:
                     self._edit_cells_geometries_button.enabled = True
                     self._edition_mode_combo.enabled = True
@@ -544,6 +791,7 @@ class CellsLayerEditorWidget(Container):
         # Remove the working layer - original layer was never modified
         if "Cells Modification" in self._viewer.layers:
             self._viewer.layers.remove("Cells Modification")
+        self._reset_undo_history()
 
         # Reset the button visibility
         self._edition_mode_combo.visible = True
@@ -553,11 +801,13 @@ class CellsLayerEditorWidget(Container):
         self._progress_bar.visible = False
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
+        self._undo_button.visible = False
 
+        self._restore_dims_scroll()
         self._restore_original_visibility()
 
         # Show confirmation message
-        show_info("Cells geometries modification cancelled")
+        show_info("Cell changes cancelled")
 
     def _apply_cells_geometries(self) -> None:
         """Apply the changes to the input layer."""
@@ -582,11 +832,16 @@ class CellsLayerEditorWidget(Container):
             ]
             self._viewer.layers.remove("Cells Modification")
 
-            # Rasterize the new shapes
+            # Rasterize the new shapes. Each polygon is filled individually so
+            # overlapping polygons are combined (OR) instead of being toggled
+            # by the even-odd rule (XOR) of filling all contours at once.
             new_cells_raster = np.zeros_like(self.input_layer.data).astype(
                 "uint8"
             )
-            cv2.drawContours(new_cells_raster, new_cells_shapes, -1, 1, -1)
+            for shape in new_cells_shapes:
+                cv2.drawContours(new_cells_raster, [shape], -1, 1, -1)
+
+        self._reset_undo_history()
 
         # Update the cells layer with the new geometries
         self.input_layer.data = new_cells_raster
@@ -600,8 +855,10 @@ class CellsLayerEditorWidget(Container):
         self._progress_bar.visible = False
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
+        self._undo_button.visible = False
 
+        self._restore_dims_scroll()
         self._restore_original_visibility()
 
         # Show confirmation message
-        show_info("Cells geometries successfully updated")
+        show_info("Cells shapes successfully updated")
