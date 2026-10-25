@@ -127,12 +127,19 @@ class Worker(QObject):
             meta["file_path"] = str(out_path)
             kwargs["metadata"] = meta
 
-            write_single_layer(
-                str(out_path),
-                data,
-                kwargs,
-                progress_callback=make_callback(i),
-            )
+            try:
+                write_single_layer(
+                    str(out_path),
+                    data,
+                    kwargs,
+                    progress_callback=make_callback(i),
+                )
+            except TypeError:
+                write_single_layer(
+                    str(out_path),
+                    data,
+                    kwargs,
+                )
 
         self.progress.emit(100, 100)
         self.finished.emit()
