@@ -1422,11 +1422,11 @@ class RingsLayerEditorWidget(Container):
             # Defer visibility restoration slightly to let scenegraph settle from removals
             QTimer.singleShot(100, self._restore_original_visibility)
 
-            show_info("Rings geometries modification cancelled")
+            show_info("Rings changes cancelled")
             self._years_update_timer.start(200)
 
         except Exception as e:
-            show_info(f"Error cancelling ring geometries: {str(e)}")
+            show_info(f"Error cancelling ring changes: {str(e)}")
         finally:
             self._is_updating = False
 
@@ -1468,7 +1468,7 @@ class RingsLayerEditorWidget(Container):
                     scan_layer = self._scan_layer
                     if not scan_layer:
                         self._abort_editing_mode(
-                            "No valid rings or scan layer found to apply geometries"
+                            "No valid rings or scan layer found to apply changes"
                         )
                         return
 
@@ -1531,7 +1531,7 @@ class RingsLayerEditorWidget(Container):
             show_info("Ring boundaries successfully updated")
 
         except Exception as e:
-            show_info(f"Error applying ring geometries: {str(e)}")
+            show_info(f"Error applying ring changes: {str(e)}")
         finally:
             self._is_updating = False
 
@@ -2064,7 +2064,7 @@ class RingsLayerEditorWidget(Container):
             "YEAR" not in rings_table.columns
             or "RBXY" not in rings_table.columns
         ):
-            show_info("No valid rings data found")
+            show_info("No valid ring data found")
             return
 
         # Sort by YEAR to ensure correct ordering
@@ -2074,7 +2074,7 @@ class RingsLayerEditorWidget(Container):
         matching = rings_table[rings_table["YEAR"] == selected_year]
         if matching.empty:
             show_info(
-                f"Year {selected_year-1} not found in rings table or does not have a valid end boundary"
+                f"Year {selected_year-1} not found in the rings table or has no valid end boundary"
             )
             return
 
@@ -2189,7 +2189,7 @@ class RingsLayerEditorWidget(Container):
             )
 
         if "Rings Modification" not in self._viewer.layers or not self._input_layer:
-            show_info("Editing session closed, rerun results discarded")
+            show_info("Editing session closed; results from model rerun discarded")
             return
 
         selected_year = self._rerun_selected_year

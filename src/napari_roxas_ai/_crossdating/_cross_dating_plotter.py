@@ -1250,7 +1250,7 @@ class CrossDatingPlotterWidget(Container):
 
         if not self.crossdating_columns:
             show_info(
-                f"No data found in the crossdating file {self._crossdating_file_combo.value} for layer {self._input_layer}."
+                f"No data or series found in the crossdating file {self._crossdating_file_combo.value}."
             )
 
         self._update_crossdating_plot()
@@ -1372,12 +1372,14 @@ class CrossDatingPlotterWidget(Container):
             or self._crossdating_column_combo.value
             not in self.crossdating_dataframe.columns
         ):
-            show_info(f"Reference series '{self._crossdating_column_combo.value}' not found in data.")
+            show_info(
+                f"Reference series '{self._crossdating_column_combo.value}' not found in crossdating file {self._crossdating_file_combo.value}."
+            )
             return
 
         # Get the layer rings series, aligned to the outmost complete ring year
         if "cells_above" not in layer.features.columns:
-            show_info("Layer features missing 'cells_above' column.")
+            show_info("Cannot plot series: ring widths are not available for this sample.")
             return
 
         # Ensure data and metadata are present

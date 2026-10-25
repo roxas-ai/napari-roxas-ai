@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import napari.layers
 from magicgui.widgets import Container, Label, ProgressBar, PushButton, Select
+from napari.utils.notifications import show_info
 from qtpy.QtCore import QObject, Qt, QThread, Signal
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -181,7 +182,7 @@ class SamplesLoadingWidget(Container):
                 mark_shortcuts_applied(viewer)
 
         except Exception as e:
-            print("Shortcut installation failed:", e)
+            show_info(f"Shortcut installation failed: {e}")
 
         # Directory selection
         self.project_directory = settings.get("project_directory")

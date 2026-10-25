@@ -396,8 +396,8 @@ def test_measuring_rings_does_not_redraw_the_annotated_image_twice(
     annotate.assert_not_called()
 
 
-def test_worker_prints_info_for_each_processed_file(tmp_path, settings, capsys):
-    """Each sample is reported in the terminal, as in batch detection."""
+def test_worker_reports_info_for_each_processed_file(tmp_path, settings):
+    """Each sample is reported as an info message, as in batch detection."""
     stems = [str(tmp_path / "S1"), str(tmp_path / "S2")]
     worker = module.Worker(
         {},
@@ -407,6 +407,8 @@ def test_worker_prints_info_for_each_processed_file(tmp_path, settings, capsys):
         update_annotated_images=True,
         update_reference_plots=True,
     )
+    messages = []
+    worker.message.connect(messages.append)
     rings = _rings(np.full(10, 100.0))
     with patch.object(
         worker,
@@ -417,13 +419,11 @@ def test_worker_prints_info_for_each_processed_file(tmp_path, settings, capsys):
     ):
         worker.run()
 
-    out = capsys.readouterr().out
-    assert (
-        "[Batch Measurements] [1/2] S1: Rings, Annotated image, Reference plot (A)"
-        in out
-    )
-    assert "[Batch Measurements] [2/2] Error processing S2: broken" in out
-    assert "[Batch Measurements] Completed 1 of 2 file(s) successfully." in out
+    assert messages == [
+        "[Batch Measurements] [1/2] S1: Rings, Annotated image, Reference plot (A)",
+        "[Batch Measurements] [2/2] Error processing S2: broken",
+        "[Batch Measurements] Completed 1 of 2 file(s) successfully.",
+    ]
 
 
 def test_reference_plot_far_from_its_reference_is_saved(tmp_path):
