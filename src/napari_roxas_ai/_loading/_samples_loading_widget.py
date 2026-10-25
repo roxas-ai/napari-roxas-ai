@@ -219,7 +219,7 @@ class SamplesLoadingWidget(Container):
 
         # sample selection container
         self._samples_selection_container = Container(
-            widgets=[], labels=False, layout="vertical", visible=True
+            widgets=[], labels=False, layout="vertical"
         )
         self._samples_selection_container.margins = (0, 0, 0, 0)
         self._available_images_label = Label(value="Available Images:")
@@ -250,7 +250,7 @@ class SamplesLoadingWidget(Container):
 
         # Load selected sample button
         self._load_samples_button = PushButton(
-            text="Load Selected Image", visible=True
+            text="Load Selected Image"
         )
         self._load_samples_button.changed.connect(self._load_selected_samples)
         self._is_loading = False

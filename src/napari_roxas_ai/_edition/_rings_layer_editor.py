@@ -552,6 +552,17 @@ class RerunWorker(QObject):
 
 class RingsLayerEditorWidget(Container):
     @property
+    def _saving_widget(self) -> SamplesSavingWidget:
+        """Lazily initialize the background saving helper widget."""
+        if getattr(self, "_saving_widget_instance", None) is None:
+            self._saving_widget_instance = SamplesSavingWidget(self._viewer)
+        return self._saving_widget_instance
+
+    @_saving_widget.setter
+    def _saving_widget(self, value):
+        self._saving_widget_instance = value
+
+    @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
         """Get the single valid ring layer currently in the viewer."""
         valid_layers = self._get_valid_layers()
@@ -698,8 +709,7 @@ class RingsLayerEditorWidget(Container):
         )
 
         self._last_year_update_button = PushButton(
-            text="Update Year",
-            visible=True,
+            text="Update Year"
         )
         self._last_year_update_button.changed.connect(self._update_layer_year)
 
@@ -734,7 +744,7 @@ class RingsLayerEditorWidget(Container):
         self._undo_button.changed.connect(self._undo_last_change)
 
         # Create a button to save all layers
-        self._saving_widget = SamplesSavingWidget(self._viewer)
+        self._saving_widget_instance = None
         self._save_all_layers_button = PushButton(text="Save All Layers")
         self._save_all_layers_button.changed.connect(self._save_all_layers)
 

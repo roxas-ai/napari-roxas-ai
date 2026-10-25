@@ -68,6 +68,17 @@ def vectorize_cells_worker(layer_data: np.ndarray, tolerance: float):
 
 class CellsLayerEditorWidget(Container):
     @property
+    def _saving_widget(self) -> SamplesSavingWidget:
+        """Lazily initialize the background saving helper widget."""
+        if getattr(self, "_saving_widget_instance", None) is None:
+            self._saving_widget_instance = SamplesSavingWidget(self._viewer)
+        return self._saving_widget_instance
+
+    @_saving_widget.setter
+    def _saving_widget(self, value):
+        self._saving_widget_instance = value
+
+    @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
         """Get the single valid cells layer currently in the viewer."""
         valid_layers = self._get_valid_layers()
@@ -157,9 +168,9 @@ class CellsLayerEditorWidget(Container):
                 layout.setContentsMargins(0, 0, 0, 0)
 
         # Create a button to save all layers
-        self._saving_widget = SamplesSavingWidget(self._viewer)
+        self._saving_widget_instance = None
         self._save_all_layers_button = PushButton(
-            text="Save All Layers", visible=True
+            text="Save All Layers"
         )
         self._save_all_layers_button.changed.connect(
             self._save_all_layers
