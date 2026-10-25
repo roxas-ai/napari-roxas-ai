@@ -183,8 +183,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
     },
     "annotated_image": {
-        "cell_opacity": 33,  # Opacity percentage of the cells overlay (0-100)
-        "cell_fill_color": "cyan",  # Fill color for cell lumina
+        "cell_opacity": 50,  # Opacity percentage of the cells overlay (0-100)
+        "cell_fill_color": "yellow",  # Fill color for cell lumina
         "year_label_size": 20,  # Label size for calendar years as percentage of mean ring width (min 12 px)
         "scale_factor": 1.0,  # Scale factor for resizing the annotated image (1.0 = original dimensions)
         "quality": 75,  # JPEG quality (1-100) of the annotated image

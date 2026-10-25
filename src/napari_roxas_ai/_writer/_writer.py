@@ -238,14 +238,14 @@ def save_annotated_scan_image(
             ).astype(bool)
 
         if np.any(cells_mask):
-            raw_opacity = settings.get("annotated_image.cell_opacity", 33)
+            raw_opacity = settings.get("annotated_image.cell_opacity", 50)
             try:
                 cell_opacity = float(raw_opacity) / 100.0
             except (ValueError, TypeError):
-                cell_opacity = 0.33
+                cell_opacity = 0.50
             cell_opacity = max(0.0, min(1.0, cell_opacity))
 
-            fill_color = settings.get("annotated_image.cell_fill_color", "cyan")
+            fill_color = settings.get("annotated_image.cell_fill_color", "yellow")
             r, g, b = _parse_color_rgb(fill_color)
             color_bgr = np.array([b, g, r], dtype=np.uint8)
 

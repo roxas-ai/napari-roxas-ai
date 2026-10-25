@@ -489,9 +489,9 @@ class TestWriterModule:
             # Default scale is 1.0 (100%) -> (200, 200)
             assert img.size == (200, 200)
             img_arr = np.array(img)
-            # Center pixels should have cell fill color blended (cyan hue: high G and B, lower R)
+            # Center pixels should have cell fill color blended (yellow hue: high R and G, lower B)
             center_color = img_arr[100, 100]
-            assert center_color[0] < center_color[1] or center_color[0] < center_color[2]
+            assert center_color[2] < center_color[0] or center_color[2] < center_color[1]
 
     def test_save_annotated_scan_image_with_custom_downscale(self, temp_dir):
         """Test save_annotated_scan_image respects custom scale_factor setting."""
@@ -722,9 +722,9 @@ class TestWriterModule:
         assert not (temp_dir / "sample_mem.cells.png").exists()
         with Image.open(annotated_path) as img:
             arr = np.array(img)
-            # Cell pixels away from the ring line (e.g. at (40, 50)) should be cyan-tinted
+            # Cell pixels away from the ring line (e.g. at (40, 50)) should be yellow-tinted
             center = arr[40, 50]
-            assert center[0] < center[1] or center[0] < center[2]
+            assert center[2] < center[0] or center[2] < center[1]
 
     def test_write_rings_file_uses_in_memory_scan_data(self, temp_dir):
         """Test write_rings_file passes in-memory scan_data to save_sample_annotated_image without scan file on disk."""
