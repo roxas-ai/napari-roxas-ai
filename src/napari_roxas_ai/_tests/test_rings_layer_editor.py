@@ -6,6 +6,7 @@ from napari.layers import Shapes
 from napari_roxas_ai._edition import _rings_layer_editor
 from napari_roxas_ai._edition._rings_layer_editor import (
     DEFAULT_RINGS_MODEL,
+    UNDO_HISTORY_LIMIT,
     RingsLayerEditorWidget,
 )
 
@@ -418,3 +419,20 @@ def test_failed_background_download_shows_warning(
     assert "offline" in messages[-1][1]
     # The editor keeps working with the models present locally
     assert widget._rings_model_weights_file.choices == ("linear_rings_model.pth",)
+
+
+def test_undo_history_keeps_only_last_edits(make_napari_viewer, qtbot, models_path):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    first_snapshot = widget._undo_current
+    for i in range(UNDO_HISTORY_LIMIT + 5):
+        widget._undo_current = dict(first_snapshot, data=[np.full((2, 2), i)])
+        widget._record_undo_step()
+
+    # The oldest edits are dropped from the history
+    assert len(widget._undo_stack) == UNDO_HISTORY_LIMIT
+    assert widget._undo_stack[0]["data"][0][0, 0] == 5
