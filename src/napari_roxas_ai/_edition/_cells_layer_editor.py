@@ -524,7 +524,7 @@ class CellsLayerEditorWidget(Container):
         """
         Add the raster editing shortcuts to the labels edit layer:
         - CTRL+mouse wheel: adjust the brush size (up to MAX_BRUSH_SIZE pixels)
-        - CTRL+double-click: switch from the eraser to the brush tool
+        - CTRL+double-click: toggle between the eraser and the brush tool
         """
         self._brush_size_target = None
 
@@ -599,9 +599,14 @@ class CellsLayerEditorWidget(Container):
         event.handled = True
 
     def _on_raster_double_click(self, layer, event) -> None:
-        """Switch from the eraser to the brush tool with CTRL+double-click."""
-        if layer.mode == "erase" and self._has_brush_shortcut_modifier(event):
+        """Toggle between the eraser and the brush tool with CTRL+double-click."""
+        if not self._has_brush_shortcut_modifier(event):
+            return
+        if layer.mode == "erase":
             layer.mode = "paint"
+            event.handled = True
+        elif layer.mode == "paint":
+            layer.mode = "erase"
             event.handled = True
 
     def _restore_original_visibility(self) -> None:

@@ -248,7 +248,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 ### How It Works
 - Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
 - Supports two distinct editing paradigms:
-  - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation. The brush size (up to 100 pixels) can be adjusted with <kbd>Ctrl</kbd>+mouse wheel while painting or erasing, and <kbd>Ctrl</kbd>+double-click switches from the eraser to the brush, e.g. to split merged cells and complete incomplete cells in the same edit.
+  - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation. The brush size (up to 100 pixels) can be adjusted with <kbd>Ctrl</kbd>+mouse wheel while painting or erasing, and <kbd>Ctrl</kbd>+double-click toggles between the eraser and the brush, e.g. to split merged cells and complete incomplete cells in the same edit.
   - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
 - Includes a **Lasso Selection Tool** in Vector editing mode to quickly encircle and batch-delete unwanted cell polygons across a designated region.
 - When applied, rasterizes vectors back to label masks, resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
