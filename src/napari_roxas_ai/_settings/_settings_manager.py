@@ -1,4 +1,5 @@
 import json
+import os
 import warnings
 import weakref
 from copy import deepcopy
@@ -367,6 +368,22 @@ def upgrade_settings(stored: Dict[str, Any]) -> Dict[str, Any]:
     return merged
 
 
+def _is_accessible_directory(path: Any) -> bool:
+    """
+    Check whether `path` is an existing, accessible directory.
+
+    Safely handles PermissionError and OSError when inspecting directories
+    across user profiles on multi-user systems.
+    """
+    if not path:
+        return False
+    try:
+        p = Path(path).resolve()
+        return p.is_dir() and os.access(p, os.R_OK | os.X_OK)
+    except (PermissionError, OSError):
+        return False
+
+
 class SettingsManager:
     """
     Manages plugin settings, including loading, saving, and accessing settings.
@@ -466,6 +483,23 @@ class SettingsManager:
             return
 
         self._settings = upgrade_settings(stored)
+
+        # Validate project directory accessibility (e.g. multi-user PC profile changes or deleted paths)
+        project_dir = self._settings.get("project_directory")
+        if project_dir is not None and not _is_accessible_directory(project_dir):
+            message = (
+                f"Configured project directory '{project_dir}' is inaccessible or "
+                "does not exist. Resetting project directory to None."
+            )
+            print(f"[settings] {message}")
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+            try:
+                from napari.utils.notifications import show_warning
+
+                show_warning(message)
+            except Exception:
+                pass
+            self._settings["project_directory"] = None
 
         # Only touch the file when the upgrade actually changed something
         if self._settings != stored:
