@@ -27,6 +27,7 @@ from napari_roxas_ai.shortcuts import (
     install_wasd_shortcuts,
     has_shortcuts_applied,
     mark_shortcuts_applied,
+    prevent_duplicate_dock_if_already_present,
 )
 from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
 
@@ -176,6 +177,7 @@ class SamplesLoadingWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(self, viewer, "2/4 - Load image(s)")
         try:
             if not has_shortcuts_applied(viewer):
                 install_wasd_shortcuts(viewer)
@@ -267,8 +269,6 @@ class SamplesLoadingWidget(Container):
                 self._progress_bar,
             ]
         )
-        # Spare height goes below the widgets instead of stretching the list
-        self.native.layout().addStretch()
         self._refresh_samples_list()
 
         # --- BACKGROUND MONITORING INITIALIZATION ---
@@ -278,6 +278,11 @@ class SamplesLoadingWidget(Container):
         from qtpy.QtCore import QTimer
         def _init_rings_editor():
             try:
+                # If RingsLayerEditorWidget is already present in the sidebar (e.g. in a group),
+                # do not create a duplicate instance in the background.
+                from napari_roxas_ai.shortcuts import is_widget_already_present
+                if is_widget_already_present(self._viewer, RingsLayerEditorWidget):
+                    return
                 # Instantiate the widget. Even if not docked, it connects to viewer events
                 # to manage the 'Rings Years' layer. A reference is kept on the loader
                 # widget to prevent the editor from being garbage collected.

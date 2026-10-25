@@ -23,6 +23,7 @@ from qtpy.QtWidgets import QMessageBox
 
 from napari_roxas_ai._saving._samples_saving_widget import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 if TYPE_CHECKING:
     import napari
@@ -75,6 +76,7 @@ class CellsLayerEditorWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(self, viewer, "5 - Edit cells")
         self.settings = SettingsManager()
 
         # Stores visibility of .rings and Rings Year layers before editing to restore them later

@@ -32,6 +32,7 @@ from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._writer._writer import (
     save_sample_annotated_image,
     update_metadata_file,
@@ -511,6 +512,9 @@ class BatchSampleMeasurementsWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "9B - Batch measure & update"
+        )
 
         # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
@@ -662,8 +666,6 @@ class BatchSampleMeasurementsWidget(Container):
             self.native.layout().setAlignment(
                 self._file_selection_container.native, Qt.AlignTop
             )
-            # Spare height goes below the widgets instead of stretching the controls
-            self.native.layout().addStretch()
 
         self._sync_update_checkboxes()
         self._refresh_file_list()

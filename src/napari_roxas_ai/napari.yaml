@@ -60,6 +60,18 @@ contributions:
       python_name: napari_roxas_ai:SettingsWidget
       title: Settings widget
 
+    - id: napari-roxas-ai.load_manual_editing_group
+      python_name: napari_roxas_ai:load_manual_editing_group
+      title: Group - Manual Editing
+
+    - id: napari-roxas-ai.load_batch_operations_group
+      python_name: napari_roxas_ai:load_batch_operations_group
+      title: Group - Batch Operations
+
+    - id: napari-roxas-ai.close_all_dock_widgets
+      python_name: napari_roxas_ai:close_all_dock_widgets
+      title: Close All Open Widgets
+
     # Readers contributions
     - id: napari-roxas-ai.napari_get_reader
       python_name: napari_roxas_ai:napari_get_reader
@@ -101,6 +113,12 @@ contributions:
       key: unique_id.1
 
   widgets:
+    - command: napari-roxas-ai.load_manual_editing_group
+      display_name: Group - Manual Editing
+
+    - command: napari-roxas-ai.load_batch_operations_group
+      display_name: Group - Batch Operations
+
     - command: napari-roxas-ai.open_project_directory_dialog
       display_name: 0 - Define project directory
 

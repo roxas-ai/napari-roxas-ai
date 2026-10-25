@@ -23,6 +23,7 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file, read_scan_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
@@ -374,6 +375,9 @@ class BatchSampleSegmentationWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "3B - Batch detect cells & rings"
+        )
 
         # Ensure model weights are present before listing them below.
         # (Moved out of import time; only downloads if the dirs are missing.)
@@ -576,8 +580,6 @@ class BatchSampleSegmentationWidget(Container):
             self.native.layout().setAlignment(
                 self._file_selection_container.native, Qt.AlignTop
             )
-            # Spare height goes below the widgets instead of stretching the controls
-            self.native.layout().addStretch()
 
         # Initialize visibility of model selection widgets, button state, and file list
         self._update_cells_model_visibility()

@@ -25,6 +25,7 @@ from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._saving import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
     unregister_layer_callback,
@@ -645,6 +646,7 @@ class RingsLayerEditorWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(self, viewer, "6 - Edit rings")
         self.settings = SettingsManager()
 
         self._layer_callback = None
@@ -1858,7 +1860,10 @@ class RingsLayerEditorWidget(Container):
             
         # Do not update year labels while the user is drawing a lasso selection polygon
         # to avoid scenegraph race conditions during high-frequency mouse events.
-        if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
+        try:
+            if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
+                return
+        except (RuntimeError, Exception):
             return
 
         try:

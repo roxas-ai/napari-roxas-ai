@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (
 )
 
 from napari_roxas_ai._settings._settings_manager import SettingsManager
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from ._crossdating_handler import process_crossdating_files
 from ._metadata_dialog import MetadataDialog
@@ -81,6 +82,9 @@ class PreparationWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "1 - Prepare project images for analysis"
+        )
 
         # Initialize state variables
         self.project_directory = None
@@ -265,8 +269,6 @@ class PreparationWidget(Container):
         self.native.layout().setAlignment(
             self._file_selection_container.native, Qt.AlignTop
         )
-        # Spare height goes below the widgets instead of stretching the controls
-        self.native.layout().addStretch()
         self._refresh_file_list()
 
     def _update_project_dialog_button(self):
