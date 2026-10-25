@@ -557,7 +557,7 @@ class CellsLayerEditorWidget(Container):
         self._restore_original_visibility()
 
         # Show confirmation message
-        show_info("Cells geometries modification cancelled")
+        show_info("Cell changes cancelled")
 
     def _apply_cells_geometries(self) -> None:
         """Apply the changes to the input layer."""
@@ -604,4 +604,4 @@ class CellsLayerEditorWidget(Container):
         self._restore_original_visibility()
 
         # Show confirmation message
-        show_info("Cells geometries successfully updated")
+        show_info("Cells shapes successfully updated")

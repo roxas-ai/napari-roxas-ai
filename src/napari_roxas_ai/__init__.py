@@ -21,6 +21,22 @@ os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
 # Suppress PyTorch TypedStorage deprecation warning (common when using torch.package)
 warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
 
+# Suppress napari's GL_MAX_TEXTURE_SIZE warning for large scans: only the on-screen
+# texture is downsampled, layer data stays at full resolution
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r"data shape .* exceeds GL_MAX_TEXTURE_SIZE",
+)
+
+# The project directory "widget" only opens a folder dialog and returns None, which
+# napari then fails to dock; nothing is meant to be docked, so the warning is noise
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r"Processor .* failed to process result \(None, '0 - Define project directory",
+)
+
 # NumPy 2.0 Compatibility Patch
 # Many older models/packages use np.Inf, np.NaN, etc. which were removed in NumPy 2.0.
 try:
