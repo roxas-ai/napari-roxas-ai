@@ -431,12 +431,12 @@ def save_crossdating_plot(
         r_avg = np.nan
         glk_avg = np.nan
 
-    # Target dimensions in pixels: 50 px per year, but never wider than a
+    # Target dimensions in pixels: 70 px per year, but never wider than a
     # JPEG can be (a sample far away from its reference would otherwise span
     # thousands of years and fail to save)
     target_height_px = 800
     target_width_px = min(
-        50 + (20 + overlap_max_ref - overlap_min_ref) * 50,
+        50 + (20 + overlap_max_ref - overlap_min_ref) * 70,
         MAX_REFERENCE_PLOT_WIDTH_PX,
     )
 

@@ -54,10 +54,10 @@ def widget(settings, tmp_path, qtbot):
 # --- Widget -----------------------------------------------------------------
 
 
-def test_long_project_directory_is_elided_to_35_characters():
+def test_long_project_directory_is_elided_to_40_characters():
     path = "C:/Users/vonarx/Desktop/" + "x" * 60 + "/ROXAS AI"
     elided = module._elide_path(path)
-    assert len(elided) == 35
+    assert len(elided) == 40
     assert elided.startswith("C:/Users/vonarx/")
     assert elided.endswith("/ROXAS AI")
     assert "…" in elided

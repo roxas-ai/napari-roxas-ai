@@ -57,7 +57,7 @@ Image.MAX_IMAGE_PIXELS = None
 # The file list is at least this many rows high and otherwise grows with
 # its content, one row per file, up to MAX_VISIBLE_IMAGE_ROWS
 MIN_VISIBLE_IMAGE_ROWS = 5
-MAX_VISIBLE_IMAGE_ROWS = 10
+MAX_VISIBLE_IMAGE_ROWS = 7
 
 # Gap between a row's label and its box. Set explicitly because the style's
 # default depends on the widget pair (on macOS label-to-button is wider than
@@ -66,7 +66,7 @@ LABEL_SPACING = 10
 
 # Longest project directory shown on the button, longer paths are elided in the
 # middle (the full path is in the tooltip)
-MAX_PROJECT_DIRECTORY_CHARS = 35
+MAX_PROJECT_DIRECTORY_CHARS = 40
 
 # Label of the manual selection checkbox, which ends in a colon while the file
 # list below it is shown

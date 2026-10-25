@@ -1989,7 +1989,7 @@ class RingsLayerEditorWidget(Container):
                         "string": "{YEAR}",
                         "anchor": "upper_left",
                         "translation": [0, 0],
-                        "size": 8,
+                        "size": 14,
                         "color": "black",
                         "blending": "translucent",
                         "visible": True,

@@ -300,9 +300,9 @@ def test_save_crossdating_plot_image_scaling(tmp_path):
     with Image.open(out_path) as img:
         w, h = img.size
         # overlap_min_ref = 2000, overlap_max_ref = 2010
-        # Expected width = 50 + (20 + 2010 - 2000) * 50 = 50 + 30 * 50 = 1550
+        # Expected width = 50 + (20 + 2010 - 2000) * 70 = 50 + 30 * 70 = 2150
         # Expected height = 800
-        expected_w = 50 + (20 + 2010 - 2000) * 50
+        expected_w = 50 + (20 + 2010 - 2000) * 70
         expected_h = 800
         assert w == expected_w
         assert h == expected_h
