@@ -127,6 +127,24 @@ def test_float_precision_is_not_lost(widget):
     )
     assert resolution["default"] == 2.267574
     assert resolution["min"] == 0.001
+    assert resolution["step"] == 0.1
+    assert resolution["decimals"] == 6
+
+
+def test_float_setting_step_and_precision_specs(widget):
+    from napari_roxas_ai._settings._settings_widget import FLOAT_SETTING_SPECS
+
+    for full_key, (expected_step, expected_decimals) in FLOAT_SETTING_SPECS.items():
+        parts = full_key.split(".")
+        editor = _editor_for(widget, *parts)
+        assert editor.singleStep() == pytest.approx(expected_step)
+        assert editor.decimals() == expected_decimals
+
+
+def test_vectorization_rings_defaults():
+    manager = SettingsManager()
+    assert manager.get("vectorization.rings_edge_width") == 7
+    assert manager.get("vectorization.rings_edge_color") == "black"
 
 
 @pytest.mark.parametrize(

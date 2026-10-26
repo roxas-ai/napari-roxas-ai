@@ -434,6 +434,8 @@ class SingleSampleMeasurementsWidget(Container):
         # ---------------------------
         scan_layer = self._scan_layer
         rings_layer = getattr(self, "_rings_input_layer", None) or self._rings_layer
+        cells_layer = getattr(self, "_cells_input_layer", None) or getattr(self, "_cells_layer", None)
+        cells_data = cells_layer.data if cells_layer is not None and hasattr(cells_layer, "data") else None
         rings_features = (
             rings_table
             if not rings_table.empty
@@ -459,6 +461,7 @@ class SingleSampleMeasurementsWidget(Container):
                         scan_path=scan_path,
                         annotated_path=annotated_path,
                         rings_features=rings_features,
+                        cells_data=cells_data,
                     )
                     show_info(f"Annotated image exported to: {annotated_path}")
                 except Exception as e:
