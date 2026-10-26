@@ -8,6 +8,7 @@ import pytest
 from napari_roxas_ai._measurements import _batch_sample_measurements
 from napari_roxas_ai._segmentation import _batch_sample_segmentation
 from napari_roxas_ai._settings import DEFAULT_SETTINGS, SettingsManager
+from napari_roxas_ai._settings._settings_manager import _is_accessible_directory
 
 
 @pytest.fixture
@@ -96,3 +97,51 @@ def test_batch_widget_choice_becomes_the_project_directory(
     assert batch_widget.input_directory_path == other
     on_disk = json.loads(settings.settings_file.read_text(encoding="utf-8"))
     assert on_disk["project_directory"] == other
+
+
+def test_inaccessible_project_directory_resets_to_none(tmp_path, monkeypatch):
+    """When settings.json contains an inaccessible path, it resets to None and overwrites on disk."""
+    settings_data = {**DEFAULT_SETTINGS, "project_directory": "C:/Restricted/OtherUser/Project"}
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings_data, indent=4), encoding="utf-8")
+
+    monkeypatch.setattr(SettingsManager, "_instance", None)
+    monkeypatch.setattr(SettingsManager, "_settings_file", settings_path)
+
+    with patch("napari_roxas_ai._settings._settings_manager._is_accessible_directory", return_value=False):
+        manager = SettingsManager()
+
+    assert manager.get("project_directory") is None
+    on_disk = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert on_disk["project_directory"] is None
+
+
+def test_permission_error_in_accessibility_check_returns_false(tmp_path):
+    """_is_accessible_directory safely catches PermissionError and OSError."""
+    with patch("pathlib.Path.resolve", side_effect=PermissionError("Access denied")):
+        assert not _is_accessible_directory(str(tmp_path))
+
+    with patch("os.access", side_effect=OSError("Drive inaccessible")):
+        assert not _is_accessible_directory(str(tmp_path))
+
+    assert not _is_accessible_directory(None)
+    assert not _is_accessible_directory("")
+    assert not _is_accessible_directory(tmp_path / "non_existent_subdir")
+    assert _is_accessible_directory(tmp_path)
+
+
+def test_valid_project_directory_is_preserved_on_load(tmp_path, monkeypatch):
+    """When settings.json contains a valid accessible path, it is preserved."""
+    valid_dir = tmp_path / "valid_project"
+    valid_dir.mkdir()
+    settings_data = {**DEFAULT_SETTINGS, "project_directory": str(valid_dir)}
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings_data, indent=4), encoding="utf-8")
+
+    monkeypatch.setattr(SettingsManager, "_instance", None)
+    monkeypatch.setattr(SettingsManager, "_settings_file", settings_path)
+
+    manager = SettingsManager()
+    assert manager.get("project_directory") == str(valid_dir)
+    on_disk = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert on_disk["project_directory"] == str(valid_dir)
