@@ -736,6 +736,7 @@ class TestBatchWorkerFunctionality:
                 worker.rings_content_ext = ".rings.tif"
                 worker.progress = MagicMock()
                 worker.finished = MagicMock()
+                worker.message = MagicMock()
 
                 worker.run()
 
@@ -743,6 +744,9 @@ class TestBatchWorkerFunctionality:
                 assert "[Batch Segmentation] [1/2] sample_01.scan.tif: Cells (linear_cells_model.pth), Rings (linear_rings_model.pth)" in captured.out
                 assert "[Batch Segmentation] [2/2] Error processing sample_02.scan.tif: broken" in captured.out
                 assert "[Batch Segmentation] Completed 1 of 2 file(s) successfully." in captured.out
+                worker.message.emit.assert_called_once_with(
+                    "[Batch Segmentation] Completed 1 of 2 file(s) successfully."
+                )
 
 
 if __name__ == "__main__":

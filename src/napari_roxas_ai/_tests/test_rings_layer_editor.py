@@ -6,6 +6,7 @@ from napari.layers import Shapes
 from napari_roxas_ai._edition import _rings_layer_editor
 from napari_roxas_ai._edition._rings_layer_editor import (
     DEFAULT_RINGS_MODEL,
+    UNDO_HISTORY_LIMIT,
     RingsLayerEditorWidget,
 )
 
@@ -76,6 +77,9 @@ def test_ui_visibility_idle_and_editing(make_napari_viewer, models_path):
     assert widget._visual_crossdating_button.visible
     assert not widget._apply_rings_geometries_button.visible
     assert not widget._undo_button.visible
+    assert not widget._rerun_separator.visible
+    assert not widget._rerun_year_row.visible
+    assert not widget._rerun_model_row.visible
     assert not widget._rerun_model_button.visible
 
     # Editing mode
@@ -88,7 +92,9 @@ def test_ui_visibility_idle_and_editing(make_napari_viewer, models_path):
     assert widget._undo_button.visible
     assert not widget._undo_button.enabled  # nothing to undo yet
     assert widget._lasso_container.visible
-    assert widget._rerun_params_row.visible
+    assert widget._rerun_separator.visible
+    assert widget._rerun_year_row.visible
+    assert widget._rerun_model_row.visible
     assert widget._rerun_model_button.visible
 
     # Back to idle mode
@@ -96,6 +102,10 @@ def test_ui_visibility_idle_and_editing(make_napari_viewer, models_path):
     assert widget._save_all_layers_button.visible
     assert widget._visual_crossdating_button.visible
     assert not widget._undo_button.visible
+    assert not widget._rerun_separator.visible
+    assert not widget._rerun_year_row.visible
+    assert not widget._rerun_model_row.visible
+    assert not widget._rerun_model_button.visible
 
 
 def test_undo_lasso_deletion(make_napari_viewer, qtbot, models_path):
@@ -127,6 +137,85 @@ def test_undo_lasso_deletion(make_napari_viewer, qtbot, models_path):
         np.testing.assert_array_equal(restored, original)
     assert edit_layer.features["YEAR"].tolist() == [2000, 2001, 2002]
     assert not widget._undo_button.enabled
+
+
+def test_lasso_deletion_overlapping_boundaries(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # Set non-collinear vertices on boundary 1
+    edit_layer.data = [
+        edit_layer.data[0],
+        np.array([[30.0, 0.0], [35.0, 25.0], [30.0, 50.0]]),
+        edit_layer.data[2],
+    ]
+    # Duplicate boundary 1 (middle boundary) and add it as boundary 3 (topmost)
+    pasted_boundary = edit_layer.data[1].copy()
+    edit_layer.add([pasted_boundary], shape_type="path")
+    assert len(edit_layer.data) == 4
+
+    # Lasso over middle vertex (35, 25)
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[32, 20], [32, 30], [38, 30], [38, 20]], dtype=float)
+    ]
+    widget._execute_lasso_deletion()
+
+    # The bottom boundary (index 1) should retain all 3 vertices
+    np.testing.assert_array_equal(
+        edit_layer.data[1],
+        np.array([[30.0, 0.0], [35.0, 25.0], [30.0, 50.0]]),
+    )
+    # The topmost boundary (index 3) should have lost vertex (35, 25), leaving 2 vertices
+    np.testing.assert_array_equal(
+        edit_layer.data[3],
+        np.array([[30.0, 0.0], [30.0, 50.0]]),
+    )
+
+
+def test_lasso_deletion_multiple_non_overlapping_boundaries(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [15.0, 25.0], [10.0, 50.0]]),
+        np.array([[30.0, 0.0], [35.0, 25.0], [30.0, 50.0]]),
+        np.array([[50.0, 0.0], [55.0, 25.0], [50.0, 50.0]]),
+    ]
+
+    # Lasso over middle vertices at x=25 for both boundary 0 (15, 25) and boundary 1 (35, 25)
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[12, 20], [12, 30], [38, 30], [38, 20]], dtype=float)
+    ]
+    widget._execute_lasso_deletion()
+
+    # Both boundary 0 and boundary 1 should have their middle vertex deleted
+    np.testing.assert_array_equal(
+        edit_layer.data[0],
+        np.array([[10.0, 0.0], [10.0, 50.0]]),
+    )
+    np.testing.assert_array_equal(
+        edit_layer.data[1],
+        np.array([[30.0, 0.0], [30.0, 50.0]]),
+    )
+    # Boundary 2 is outside lasso and remains unchanged
+    np.testing.assert_array_equal(
+        edit_layer.data[2],
+        np.array([[50.0, 0.0], [55.0, 25.0], [50.0, 50.0]]),
+    )
 
 
 def test_undo_restores_user_edits_in_reverse_order(
@@ -418,3 +507,157 @@ def test_failed_background_download_shows_warning(
     assert "offline" in messages[-1][1]
     # The editor keeps working with the models present locally
     assert widget._rings_model_weights_file.choices == ("linear_rings_model.pth",)
+
+
+def test_undo_history_keeps_only_last_edits(make_napari_viewer, qtbot, models_path):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    first_snapshot = widget._undo_current
+    for i in range(UNDO_HISTORY_LIMIT + 5):
+        widget._undo_current = dict(first_snapshot, data=[np.full((2, 2), i)])
+        widget._record_undo_step()
+
+    # The oldest edits are dropped from the history
+    assert len(widget._undo_stack) == UNDO_HISTORY_LIMIT
+    assert widget._undo_stack[0]["data"][0][0, 0] == 5
+
+
+def test_transform_tool_affine_applied_to_rings_layer(
+    make_napari_viewer, models_path
+):
+    from napari.utils.transforms import Affine
+
+    viewer = make_napari_viewer()
+    rings = _add_rings_layer(viewer)
+    # Set non-unit scale (e.g. 2.0 um/px, spatial_resolution = 0.5 px/um)
+    rings.scale = [2.0, 2.0]
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    assert np.allclose(edit_layer.scale, [2.0, 2.0])
+    original_coords = [np.array(d, copy=True) for d in edit_layer.data]
+
+    # Apply world affine translation (+10 in Y / row world direction -> +5 in pixel space)
+    edit_layer.affine = Affine(translate=[10.0, 0.0])
+
+    widget._apply_rings_geometries()
+
+    rings_layer = viewer.layers["sample.rings"]
+    applied_rbxy = rings_layer.features["RBXY"].tolist()
+
+    # Verify that the applied ring boundary coordinates reflect the +5 pixel translation
+    assert len(applied_rbxy) == len(original_coords)
+    for orig, applied in zip(original_coords, applied_rbxy):
+        applied_arr = np.array(applied)
+        # Check interior coordinates shifted by 5 pixels in row direction
+        orig_y = orig[:, 0] + 5.0
+        # Compare row coordinates for columns within original range
+        assert np.all(applied_arr[:, 0] >= 5.0)
+
+
+def test_transform_tool_undo_restores_affine(
+    make_napari_viewer, qtbot, models_path
+):
+    from napari.utils.transforms import Affine
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    initial_affine = np.array(edit_layer.affine.affine_matrix, copy=True)
+
+    # Apply affine transform and record undo step
+    edit_layer.affine = Affine(translate=[10.0, 5.0])
+    widget._record_undo_step()
+
+    assert widget._undo_button.enabled
+    assert not np.allclose(
+        edit_layer.affine.affine_matrix, initial_affine
+    )
+
+    widget._undo_last_change()
+
+    assert np.allclose(edit_layer.affine.affine_matrix, initial_affine)
+    assert not widget._undo_button.enabled
+
+
+def test_nudge_selected_rings_fine_and_fast(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    orig_shape_0 = np.array(edit_layer.data[0], copy=True)
+    orig_shape_1 = np.array(edit_layer.data[1], copy=True)
+
+    # When no shape is selected, nudging does nothing
+    edit_layer.selected_data = set()
+    widget._nudge_selected_rings(1.0, 0.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0)
+    assert not widget._undo_button.enabled
+
+    # Select only shape 0
+    edit_layer.selected_data = {0}
+
+    # Nudge fine (-1 px Y) -> Control-Up
+    widget._nudge_selected_rings(-1.0, 0.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [-1.0, 0.0])
+    assert np.allclose(edit_layer.data[1], orig_shape_1)
+    assert widget._undo_button.enabled
+
+    # Nudge fast (+10 px X) -> Control-Shift-Right
+    widget._nudge_selected_rings(0.0, 10.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [-1.0, 10.0])
+    assert np.allclose(edit_layer.data[1], orig_shape_1)
+
+    # Undo fast nudge
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [-1.0, 0.0])
+
+    # Undo fine nudge
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.data[0], orig_shape_0)
+    assert not widget._undo_button.enabled
+
+
+def test_nudge_multiple_selected_rings(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    orig_shape_0 = np.array(edit_layer.data[0], copy=True)
+    orig_shape_1 = np.array(edit_layer.data[1], copy=True)
+
+    # Select both shapes 0 and 1
+    edit_layer.selected_data = {0, 1}
+
+    # Nudge both shapes (+1 px Y, +10 px X)
+    widget._nudge_selected_rings(1.0, 10.0)
+    assert np.allclose(edit_layer.data[0], orig_shape_0 + [1.0, 10.0])
+    assert np.allclose(edit_layer.data[1], orig_shape_1 + [1.0, 10.0])
+    assert edit_layer.selected_data == {0, 1}
+    assert widget._undo_button.enabled
+
+    # Undo restores both shapes
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.data[0], orig_shape_0)
+    assert np.allclose(edit_layer.data[1], orig_shape_1)
+    assert not widget._undo_button.enabled

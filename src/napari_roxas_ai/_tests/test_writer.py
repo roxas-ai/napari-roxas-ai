@@ -12,9 +12,12 @@ import pandas as pd
 import pytest
 
 from napari_roxas_ai._writer._writer import (
+    interpolate_row_at_col,
     round_column,
     round_column_sci,
+    save_annotated_scan_image,
     save_image,
+    save_sample_annotated_image,
     update_metadata_file,
     write_cells_file,
     write_multiple_layers,
@@ -448,6 +451,349 @@ class TestWriterModule:
         # Column that doesn't exist should be ignored without error
         result_no_change = round_column_sci(df.copy(), "non_existent", 3)
         assert "non_existent" not in result_no_change.columns
+
+    def test_save_annotated_scan_image_with_cells_default_100_percent(self, temp_dir):
+        """Test save_annotated_scan_image overlays cells and defaults to 100% scale."""
+        from PIL import Image
+
+        scan_path = temp_dir / "sample.scan.jpg"
+        annotated_path = temp_dir / "sample_annotated.jpg"
+
+        # Create 200x200 RGB scan image (white background)
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        # Create cells data with some cell lumina (1s in center)
+        cells_data = np.zeros((200, 200), dtype=np.uint8)
+        cells_data[80:120, 80:120] = 1
+
+        # Create rings features
+        rings_features = pd.DataFrame({
+            "YEAR": [2020, 2021],
+            "RBXY": [
+                [[50, 0], [50, 100], [50, 199]],
+                [[150, 0], [150, 100], [150, 199]],
+            ],
+            "cells_above": [5000, 15000],
+        })
+
+        save_annotated_scan_image(
+            scan_path=str(scan_path),
+            annotated_path=str(annotated_path),
+            rings_features=rings_features,
+            cells_data=cells_data,
+        )
+
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            # Default scale is 1.0 (100%) -> (200, 200)
+            assert img.size == (200, 200)
+            img_arr = np.array(img)
+            # Center pixels should have cell fill color blended (yellow hue: high R and G, lower B)
+            center_color = img_arr[100, 100]
+            assert center_color[2] < center_color[0] or center_color[2] < center_color[1]
+
+    def test_save_annotated_scan_image_with_custom_downscale(self, temp_dir):
+        """Test save_annotated_scan_image respects custom scale_factor setting."""
+        from PIL import Image
+        from napari_roxas_ai._writer import _writer
+
+        scan_path = temp_dir / "sample_scaled.scan.jpg"
+        annotated_path = temp_dir / "sample_scaled_annotated.jpg"
+
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2020],
+            "RBXY": [[[50, 0], [50, 199]]],
+            "cells_above": [5000],
+        })
+
+        with patch.object(_writer.settings, "get", side_effect=lambda k, d=None: 0.75 if k == "annotated_image.scale_factor" else d):
+            save_annotated_scan_image(
+                scan_path=str(scan_path),
+                annotated_path=str(annotated_path),
+                rings_features=rings_features,
+            )
+
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            assert img.size == (150, 150)
+
+    def test_save_sample_annotated_image_auto_loads_cells_file(self, temp_dir):
+        """Test save_sample_annotated_image loads <sample>.cells.png from disk."""
+        from PIL import Image
+
+        sample_stem = temp_dir / "tree1"
+        scan_path = temp_dir / "tree1.scan.jpg"
+        cells_path = temp_dir / "tree1.cells.png"
+        annotated_path = temp_dir / "tree1_annotated.jpg"
+
+        scan_arr = np.full((100, 100, 3), 200, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        cells_arr = np.zeros((100, 100), dtype=np.uint8)
+        cells_arr[40:60, 40:60] = 1
+        Image.fromarray(cells_arr).save(cells_path)
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2022],
+            "RBXY": [[[50, 0], [50, 99]]],
+            "cells_above": [5000],
+        })
+
+        result_path = save_sample_annotated_image(sample_stem, rings_features)
+        assert result_path == str(annotated_path)
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            assert img.size == (100, 100)  # 100% default scale
+
+
+    def test_interpolate_row_at_col(self):
+        """Test interpolate_row_at_col helper on horizontal, diagonal, and reversed polylines."""
+        # Horizontal line at row=50 from col=0 to col=100
+        line_h = [[50.0, 0.0], [50.0, 100.0]]
+        assert interpolate_row_at_col(line_h, 50.0) == pytest.approx(50.0)
+        assert interpolate_row_at_col(line_h, 0.0) == pytest.approx(50.0)
+        assert interpolate_row_at_col(line_h, 100.0) == pytest.approx(50.0)
+
+        # Diagonal line from (row=20, col=0) to (row=80, col=100)
+        line_diag = [[20.0, 0.0], [80.0, 100.0]]
+        assert interpolate_row_at_col(line_diag, 50.0) == pytest.approx(50.0)
+        assert interpolate_row_at_col(line_diag, 25.0) == pytest.approx(35.0)
+
+        # Reversed order (col=100 to col=0)
+        line_rev = [[80.0, 100.0], [20.0, 0.0]]
+        assert interpolate_row_at_col(line_rev, 50.0) == pytest.approx(50.0)
+
+        # Out-of-bounds query should clamp to nearest vertex
+        assert interpolate_row_at_col(line_diag, -10.0) == pytest.approx(20.0)
+        assert interpolate_row_at_col(line_diag, 150.0) == pytest.approx(80.0)
+
+        # Invalid/empty input
+        assert np.isnan(interpolate_row_at_col([], 50.0))
+        assert np.isnan(interpolate_row_at_col(None, 50.0))
+
+    def test_save_annotated_scan_image_centers_calendar_years_with_diagonal_rings(
+        self, temp_dir
+    ):
+        """Test save_annotated_scan_image horizontally centers year labels at w/2."""
+        from PIL import Image
+
+        scan_path = temp_dir / "sample_diag.scan.jpg"
+        annotated_path = temp_dir / "sample_diag_annotated.jpg"
+
+        # Create 200x200 RGB scan image
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        # Create diagonal ring boundaries with asymmetric vertex distributions
+        rings_features = pd.DataFrame({
+            "YEAR": [2020, 2021],
+            "RBXY": [
+                # First boundary tilted: at col=100 (midpoint), row is 60
+                [[40.0, 0.0], [50.0, 50.0], [60.0, 100.0], [80.0, 200.0]],
+                # Second boundary tilted: at col=100 (midpoint), row is 140
+                [[120.0, 0.0], [140.0, 100.0], [150.0, 150.0], [160.0, 200.0]],
+            ],
+            "cells_above": [6000, 14000],
+        })
+
+        placed_texts = []
+
+        import cv2
+
+        orig_put_text = cv2.putText
+
+        def mock_put_text(img, text, org, font_face, font_scale, color, thickness=1, line_type=None):
+            placed_texts.append({"text": text, "org": org})
+            return orig_put_text(img, text, org, font_face, font_scale, color, thickness, line_type)
+
+        with patch("cv2.putText", side_effect=mock_put_text):
+            save_annotated_scan_image(
+                scan_path=str(scan_path),
+                annotated_path=str(annotated_path),
+                rings_features=rings_features,
+            )
+
+        assert len(placed_texts) == 2
+        # Center column is 200 / 2 = 100.
+        # Year 2020 is placed between row 0 and row 60 -> center_r = 30
+        # Year 2021 is placed between row 60 and row 140 -> center_r = 100
+        # Both labels "2020" and "2021" have the exact same width `tw`, so their x coordinates must be identical!
+        assert placed_texts[0]["text"] == "2020"
+        assert placed_texts[1]["text"] == "2021"
+        assert placed_texts[0]["org"][0] == placed_texts[1]["org"][0]
+        # Check vertical placement: year 1 around y ~ 30 + th/2, year 2 around y ~ 100 + th/2
+        assert placed_texts[0]["org"][1] < placed_texts[1]["org"][1]
+
+    def test_save_annotated_scan_image_custom_year_label_size(self, temp_dir):
+        """Test save_annotated_scan_image respects annotated_image.year_label_size setting."""
+        from PIL import Image
+        import cv2
+        from napari_roxas_ai._writer import _writer
+
+        scan_path = temp_dir / "sample_size.scan.jpg"
+        annotated_path = temp_dir / "sample_size_annotated.jpg"
+
+        # Create 200x200 RGB scan image
+        scan_arr = np.full((200, 200, 3), 255, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        # 2 rings with large width (band area 20000 -> rw = 100 px width)
+        rings_features = pd.DataFrame({
+            "YEAR": [2020, 2021],
+            "RBXY": [
+                [[100.0, 0.0], [100.0, 200.0]],
+                [[200.0, 0.0], [200.0, 200.0]],
+            ],
+            "cells_above": [0, 20000],
+        })
+
+        captured_font_scales = []
+        orig_put_text = cv2.putText
+
+        def mock_put_text(img, text, org, font_face, font_scale, color, thickness=1, line_type=None):
+            captured_font_scales.append(font_scale)
+            return orig_put_text(img, text, org, font_face, font_scale, color, thickness, line_type)
+
+        # Case 1: default (20%) -> 0.2 * 100 = 20 px target_h
+        with patch("cv2.putText", side_effect=mock_put_text):
+            with patch.object(_writer.settings, "get", side_effect=lambda k, d=None: 20 if k == "annotated_image.year_label_size" else d):
+                save_annotated_scan_image(
+                    scan_path=str(scan_path),
+                    annotated_path=str(annotated_path),
+                    rings_features=rings_features,
+                )
+        font_scale_20 = captured_font_scales[0]
+
+        captured_font_scales.clear()
+
+        # Case 2: custom 50% -> 0.5 * 100 = 50 px target_h
+        with patch("cv2.putText", side_effect=mock_put_text):
+            with patch.object(_writer.settings, "get", side_effect=lambda k, d=None: 50 if k == "annotated_image.year_label_size" else d):
+                save_annotated_scan_image(
+                    scan_path=str(scan_path),
+                    annotated_path=str(annotated_path),
+                    rings_features=rings_features,
+                )
+        font_scale_50 = captured_font_scales[0]
+
+        # 50% should produce 2.5x larger font scale than 20%
+        assert font_scale_50 == pytest.approx(font_scale_20 * 2.5, rel=1e-2)
+
+    def test_write_rings_file_uses_in_memory_cells_data(self, temp_dir):
+        """Test write_rings_file passes in-memory cells_data to save_sample_annotated_image."""
+        from napari_roxas_ai._writer._writer import write_rings_file
+        from PIL import Image
+
+        sample_stem = temp_dir / "sample_mem"
+        scan_path = temp_dir / "sample_mem.scan.jpg"
+        scan_arr = np.full((100, 100, 3), 200, dtype=np.uint8)
+        Image.fromarray(scan_arr).save(scan_path)
+
+        cells_data_mem = np.zeros((100, 100), dtype=np.uint8)
+        cells_data_mem[30:70, 30:70] = 1
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2022],
+            "RBXY": [[[50, 0], [50, 99]]],
+            "cells_above": [5000],
+        })
+
+        meta = {
+            "name": "sample_mem.rings",
+            "features": rings_features,
+            "metadata": {
+                "sample_name": "sample_mem",
+                "cells_data": cells_data_mem,
+            },
+        }
+
+        rings_data = np.zeros((100, 100), dtype=np.uint8)
+        written = write_rings_file(str(sample_stem), rings_data, meta)
+
+        annotated_path = temp_dir / "sample_mem_annotated.jpg"
+        assert str(annotated_path) in written
+        assert annotated_path.exists()
+
+        # Check that the in-memory cell mask was drawn without reading .cells.png from disk
+        assert not (temp_dir / "sample_mem.cells.png").exists()
+        with Image.open(annotated_path) as img:
+            arr = np.array(img)
+            # Cell pixels away from the ring line (e.g. at (40, 50)) should be yellow-tinted
+            center = arr[40, 50]
+            assert center[2] < center[0] or center[2] < center[1]
+
+    def test_write_rings_file_uses_in_memory_scan_data(self, temp_dir):
+        """Test write_rings_file passes in-memory scan_data to save_sample_annotated_image without scan file on disk."""
+        from napari_roxas_ai._writer._writer import write_rings_file
+        from PIL import Image
+
+        sample_stem = temp_dir / "sample_mem_scan"
+        # Notice we do NOT create sample_mem_scan.scan.jpg on disk!
+        scan_data_mem = np.full((100, 100, 3), 200, dtype=np.uint8)
+
+        rings_features = pd.DataFrame({
+            "YEAR": [2022],
+            "RBXY": [[[50, 0], [50, 99]]],
+            "cells_above": [5000],
+        })
+
+        meta = {
+            "name": "sample_mem_scan.rings",
+            "features": rings_features,
+            "metadata": {
+                "sample_name": "sample_mem_scan",
+                "scan_data": scan_data_mem,
+            },
+        }
+
+        rings_data = np.zeros((100, 100), dtype=np.uint8)
+        written = write_rings_file(str(sample_stem), rings_data, meta)
+
+        annotated_path = temp_dir / "sample_mem_scan_annotated.jpg"
+        assert str(annotated_path) in written
+        assert annotated_path.exists()
+        assert not (temp_dir / "sample_mem_scan.scan.jpg").exists()
+
+    def test_save_image_rescaling(self, temp_dir):
+        """Test save_image rescaling behavior for binary, uniform, and arbitrary arrays."""
+        from napari_roxas_ai._writer._writer import save_image
+        from PIL import Image
+
+        # 1. Binary 0/1 array rescaled to 0/255
+        p1 = temp_dir / "test_bin.png"
+        arr1 = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+        save_image(str(p1), arr1, rescale=True)
+        with Image.open(p1) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, np.array([[0, 255], [255, 0]], dtype=np.uint8))
+
+        # 2. Binary 0/255 array rescaled
+        p2 = temp_dir / "test_255.png"
+        arr2 = np.array([[0, 255], [255, 0]], dtype=np.uint8)
+        save_image(str(p2), arr2, rescale=True)
+        with Image.open(p2) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, np.array([[0, 255], [255, 0]], dtype=np.uint8))
+
+        # 3. Uniform constant array
+        p3 = temp_dir / "test_const.png"
+        arr3 = np.full((10, 10), 42, dtype=np.uint8)
+        save_image(str(p3), arr3, rescale=True)
+        with Image.open(p3) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, np.zeros((10, 10), dtype=np.uint8))
+
+        # 4. Without rescale
+        p4 = temp_dir / "test_no_rescale.png"
+        arr4 = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+        save_image(str(p4), arr4, rescale=False)
+        with Image.open(p4) as im:
+            loaded = np.array(im)
+            assert np.array_equal(loaded, arr4)
 
 
 if __name__ == "__main__":

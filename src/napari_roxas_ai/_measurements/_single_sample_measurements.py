@@ -13,6 +13,7 @@ from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QInputDialog
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from ._sample_measurer import SampleAnalyzer
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import (
@@ -79,6 +80,9 @@ class SingleSampleMeasurementsWidget(Container):
         self._spinner_timer.timeout.connect(self._update_spinner)
 
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "9A - Measure cells & rings (individual image)"
+        )
         self._selected_sample = None
 
         # Cells measurement checkbox
@@ -207,7 +211,7 @@ class SingleSampleMeasurementsWidget(Container):
         cells_layer = self._cells_layer
         if self._measure_cells_checkbox.value and cells_layer is None:
             show_info(
-                "Cells layer not found in the viewer. Please load the sample first or disable cells processing."
+                "Cells layer not found in the viewer. Please load the cells layer first or uncheck 'Measure Cells'."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Measure"
@@ -217,7 +221,7 @@ class SingleSampleMeasurementsWidget(Container):
         rings_layer = self._rings_layer
         if self._measure_rings_checkbox.value and rings_layer is None:
             show_info(
-                "Rings layer not found in the viewer. Please load the sample first or disable rings processing."
+                "Rings layer not found in the viewer. Please load the rings layer first or uncheck 'Measure Rings'."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Measure"
@@ -434,6 +438,8 @@ class SingleSampleMeasurementsWidget(Container):
         # ---------------------------
         scan_layer = self._scan_layer
         rings_layer = getattr(self, "_rings_input_layer", None) or self._rings_layer
+        cells_layer = getattr(self, "_cells_input_layer", None) or getattr(self, "_cells_layer", None)
+        cells_data = cells_layer.data if cells_layer is not None and hasattr(cells_layer, "data") else None
         rings_features = (
             rings_table
             if not rings_table.empty
@@ -459,6 +465,7 @@ class SingleSampleMeasurementsWidget(Container):
                         scan_path=scan_path,
                         annotated_path=annotated_path,
                         rings_features=rings_features,
+                        cells_data=cells_data,
                     )
                     show_info(f"Annotated image exported to: {annotated_path}")
                 except Exception as e:

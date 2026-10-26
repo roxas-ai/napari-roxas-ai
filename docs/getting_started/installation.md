@@ -133,10 +133,11 @@ pip install napari-roxas-ai
 
 ## Step 5: Launch & Verify
 
-1. **Launch napari:**
+1. **Launch napari with ROXAS AI:**
    ```bash
-   napari
+   napari-roxas
    ```
+   This starts napari with the ROXAS AI shortcuts installed and the **Manual Editing** widget group docked. Plain `napari` works as well, the shortcuts then become available once a ROXAS AI widget is opened.
 2. **Open sample data:**
    - In the napari menu, navigate to `File > Open Sample > ROXAS AI`.
    - Three layers (**Image**, **Rings**, and **Cells**) will load into the viewer.
@@ -159,7 +160,7 @@ pip install napari-roxas-ai
 - [x] Dedicated Python 3.12 environment created and activated (`conda activate roxas-ai`).
 - [x] *(Optional)* GPU PyTorch installed and tested (`CUDA available: True` / `MPS available: True`).
 - [x] `napari-roxas-ai` installed via `pip`.
-- [x] `napari` launched and sample data loaded successfully.
+- [x] `napari-roxas` launched and sample data loaded successfully.
 - [x] *(Optional)* `try_to_use_gpu` enabled in `ZZ - Settings`.
 
 !!! warning "Important note"

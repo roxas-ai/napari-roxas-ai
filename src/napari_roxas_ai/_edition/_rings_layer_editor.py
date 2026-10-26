@@ -1,4 +1,5 @@
 import warnings
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, ContextManager
 from contextlib import contextmanager
@@ -11,19 +12,21 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
-    PushButton,
+    Label,
     ProgressBar,
+    PushButton,
     SpinBox,
 )
 from napari.layers.base._base_constants import ActionType
 from napari.utils.notifications import show_info, show_warning
 from qtpy.QtCore import QObject, QThread, QTimer, Signal
-from qtpy.QtWidgets import QMessageBox
+from qtpy.QtWidgets import QMessageBox, QSizePolicy
 
 from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._saving import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
     unregister_layer_callback,
@@ -34,6 +37,9 @@ if TYPE_CHECKING:
 
 settings = SettingsManager()
 
+# Maximum number of edits kept in the undo history (older edits are dropped)
+UNDO_HISTORY_LIMIT = 50
+
 SEGMENTATION_MODULE_PATH = (
     Path(__file__).parent.parent.absolute() / "_segmentation"
 )
@@ -42,6 +48,20 @@ RERUN_BUTTON_TEXT = "Rerun Ring Segmentation"
 DEFAULT_RINGS_MODEL = "LinearRingModel_v3_iterative.pt"
 MODEL_FILE_SUFFIXES = (".pt", ".pth")
 CROSSDATING_WIDGET_NAME = "7 - Visual crossdating"
+
+
+def _get_separator_style() -> str:
+    """Return separator style using napari's theme foreground color."""
+    try:
+        from napari.settings import get_settings
+        from napari.utils.theme import get_theme
+
+        theme = get_theme(get_settings().appearance.theme)
+        color = theme.foreground.as_hex()
+    except Exception:
+        color = "#414851"
+
+    return f"background-color: {color}; margin-top: 10px; margin-bottom: 6px;"
 
 
 def rearrange_coordinates(coords: list) -> list:
@@ -547,6 +567,17 @@ class RerunWorker(QObject):
 
 class RingsLayerEditorWidget(Container):
     @property
+    def _saving_widget(self) -> SamplesSavingWidget:
+        """Lazily initialize the background saving helper widget."""
+        if getattr(self, "_saving_widget_instance", None) is None:
+            self._saving_widget_instance = SamplesSavingWidget(self._viewer)
+        return self._saving_widget_instance
+
+    @_saving_widget.setter
+    def _saving_widget(self, value):
+        self._saving_widget_instance = value
+
+    @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
         """Get the single valid ring layer currently in the viewer."""
         valid_layers = self._get_valid_layers()
@@ -580,7 +611,26 @@ class RingsLayerEditorWidget(Container):
         # Handle RBXY extraction
         if "RBXY" not in df.columns:
             if isinstance(source_layer, napari.layers.Shapes):
-                df["RBXY"] = [coords.tolist() for coords in source_layer.data]
+                affine = getattr(source_layer, "affine", None)
+                scale = np.array(
+                    getattr(source_layer, "scale", [1.0, 1.0])[-2:], dtype=float
+                )
+                if affine is not None and not np.allclose(
+                    affine.affine_matrix, np.eye(3)
+                ):
+                    # Conjugate affine matrix by scale to convert from world to data coordinates
+                    S = np.diag(np.append(scale, 1.0))
+                    S_inv = np.diag(np.append(1.0 / scale, 1.0))
+                    data_affine_matrix = S_inv @ affine.affine_matrix @ S
+                    from napari.utils.transforms import Affine
+
+                    data_affine = Affine(affine_matrix=data_affine_matrix)
+                    df["RBXY"] = [
+                        data_affine(coords).tolist()
+                        for coords in source_layer.data
+                    ]
+                else:
+                    df["RBXY"] = [coords.tolist() for coords in source_layer.data]
             else:
                 return pd.DataFrame()
 
@@ -613,7 +663,9 @@ class RingsLayerEditorWidget(Container):
         
         # Explicitly toggle visibility of lasso and rerun model rows
         self._lasso_container.visible = editing
-        self._rerun_params_row.visible = editing
+        self._rerun_separator.visible = editing
+        self._rerun_year_row.visible = editing
+        self._rerun_model_row.visible = editing
         self._rerun_model_button.visible = editing
         
         # Ensure lasso selection elements are properly handled
@@ -628,6 +680,13 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
 
+    def _update_rerun_separator_style(self, *args) -> None:
+        """Update separator styling to match the active napari theme."""
+        if hasattr(self, "_rerun_separator") and hasattr(
+            self._rerun_separator, "native"
+        ):
+            self._rerun_separator.native.setStyleSheet(_get_separator_style())
+
     def _abort_editing_mode(self, message: str) -> None:
         """Leave editing mode cleanly when an edit session cannot be started/finished.
 
@@ -641,6 +700,7 @@ class RingsLayerEditorWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(self, viewer, "6 - Edit rings")
         self.settings = SettingsManager()
 
         self._layer_callback = None
@@ -651,6 +711,12 @@ class RingsLayerEditorWidget(Container):
         self._years_update_timer = QTimer()
         self._years_update_timer.setSingleShot(True)
         self._years_update_timer.timeout.connect(self._update_rings_years_layer)
+
+        # Debounce timer for affine changes to record undo step on transform completion
+        self._affine_undo_timer = QTimer()
+        self._affine_undo_timer.setSingleShot(True)
+        self._affine_undo_timer.setInterval(250)
+        self._affine_undo_timer.timeout.connect(self._record_undo_step)
 
         # --- SELECTION & VISIBILITY STATE ---
         # Stores indices of vertices selected via lasso: shape_index -> set of vertex_indices
@@ -670,7 +736,7 @@ class RingsLayerEditorWidget(Container):
 
         # --- UNDO STATE ---
         # Snapshots of the "Rings Modification" layer taken before each completed edit
-        self._undo_stack = []
+        self._undo_stack = deque(maxlen=UNDO_HISTORY_LIMIT)
         # Snapshot of the current (last committed) state of the edit layer
         self._undo_current = None
         # Suppresses snapshot recording during programmatic modifications
@@ -692,8 +758,7 @@ class RingsLayerEditorWidget(Container):
         )
 
         self._last_year_update_button = PushButton(
-            text="Update Year",
-            visible=True,
+            text="Update Year"
         )
         self._last_year_update_button.changed.connect(self._update_layer_year)
 
@@ -728,7 +793,7 @@ class RingsLayerEditorWidget(Container):
         self._undo_button.changed.connect(self._undo_last_change)
 
         # Create a button to save all layers
-        self._saving_widget = SamplesSavingWidget(self._viewer)
+        self._saving_widget_instance = None
         self._save_all_layers_button = PushButton(text="Save All Layers")
         self._save_all_layers_button.changed.connect(self._save_all_layers)
 
@@ -746,7 +811,15 @@ class RingsLayerEditorWidget(Container):
         )
 
         # --- RERUN MODEL UI ---
-        # Line 1: Rerun From Year: --- spinbox --- Model: --- combo
+        # Horizontal separator line on top of the rerunning block
+        self._rerun_separator = Label(value="", visible=False)
+        self._rerun_separator.native.setFixedHeight(1)
+        self._rerun_separator.native.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )
+        self._update_rerun_separator_style()
+
+        # Line 1: Rerun From Year: --- spinbox
         # The minimum value is set to -1,001,000 to provide a 1,000-year internal buffer
         # relative to the user limit (-100,000), supporting long series and padding.
         self._rerun_model_year_spinbox = SpinBox(
@@ -757,6 +830,7 @@ class RingsLayerEditorWidget(Container):
             step=1,
         )
 
+        # Line 2: Model: --- combo
         # The choices are read from the models folder whenever they are reset,
         # so that models downloaded later show up as well
         self._rings_model_weights_file = ComboBox(
@@ -768,17 +842,33 @@ class RingsLayerEditorWidget(Container):
         # model is downloaded in the background without blocking the UI
         ensure_rings_models_downloaded(self._refresh_rings_model_choices)
 
-        # Horizontal row for the rerun model parameters
-        self._rerun_params_row = Container(
-            widgets=[
-                self._rerun_model_year_spinbox,
-                self._rings_model_weights_file,
-            ],
+        # Horizontal rows for the rerun model parameters
+        self._rerun_year_row = Container(
+            widgets=[self._rerun_model_year_spinbox],
             layout="horizontal",
-            labels=True,  # Enable labels for Year and Model
+            labels=True,
             visible=False,
         )
-        # Line 2: Run
+        if hasattr(self._rerun_year_row.native, "layout"):
+            layout = self._rerun_year_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+
+        self._rerun_model_row = Container(
+            widgets=[self._rings_model_weights_file],
+            layout="horizontal",
+            labels=True,
+            visible=False,
+        )
+        if hasattr(self._rerun_model_row.native, "layout"):
+            layout = self._rerun_model_row.native.layout()
+            if layout is not None:
+                layout.setContentsMargins(0, 0, 0, 0)
+
+        # Alias for backwards compatibility
+        self._rerun_params_row = self._rerun_year_row
+
+        # Line 3: Run
         self._rerun_model_button = PushButton(
             text=RERUN_BUTTON_TEXT,
             visible=False,
@@ -842,13 +932,19 @@ class RingsLayerEditorWidget(Container):
                 self._apply_rings_geometries_button,
                 self._undo_button,
                 self._lasso_container,
-                self._rerun_params_row,
+                self._rerun_separator,
+                self._rerun_year_row,
+                self._rerun_model_row,
                 self._rerun_model_button,
             ]
         )
 
         self._viewer.layers.events.inserted.connect(self._on_layer_change)
         self._viewer.layers.events.removed.connect(self._on_layer_change)
+        if hasattr(self._viewer, "events") and hasattr(
+            self._viewer.events, "theme"
+        ):
+            self._viewer.events.theme.connect(self._update_rerun_separator_style)
 
         # --- INITIALIZATION ---
         self._connect_layer_callback()
@@ -932,6 +1028,10 @@ class RingsLayerEditorWidget(Container):
 
     def _snapshot_edit_layer(self, layer: "napari.layers.Shapes") -> dict:
         """Capture everything needed to restore the edit layer to its current state."""
+        affine_matrix = None
+        if hasattr(layer, "affine") and layer.affine is not None:
+            affine_matrix = np.array(layer.affine.affine_matrix, copy=True)
+
         return {
             "data": [np.array(d, copy=True) for d in layer.data],
             "shape_type": list(layer.shape_type),
@@ -939,6 +1039,7 @@ class RingsLayerEditorWidget(Container):
             "edge_width": list(layer.edge_width),
             "features": layer.features.copy(),
             "deleted_points": list(self._all_deleted_points),
+            "affine": affine_matrix,
         }
 
     @staticmethod
@@ -950,13 +1051,20 @@ class RingsLayerEditorWidget(Container):
             np.array_equal(da, db) for da, db in zip(a["data"], b["data"])
         ):
             return False
+        aff_a = a.get("affine")
+        aff_b = b.get("affine")
+        if (aff_a is None) != (aff_b is None):
+            return False
+        if aff_a is not None and aff_b is not None:
+            if not np.allclose(aff_a, aff_b):
+                return False
         return a["features"].equals(b["features"])
 
     def _reset_undo_history(
         self, layer: Optional["napari.layers.Shapes"] = None
     ) -> None:
         """Clear the undo history and use the given layer state as starting point."""
-        self._undo_stack = []
+        self._undo_stack = deque(maxlen=UNDO_HISTORY_LIMIT)
         self._undo_current = (
             self._snapshot_edit_layer(layer) if layer is not None else None
         )
@@ -997,6 +1105,13 @@ class RingsLayerEditorWidget(Container):
             return
         self._record_undo_step()
 
+    def _on_edit_layer_affine_change(self, event=None) -> None:
+        """Record an undo step and update year labels when affine transform changes."""
+        if self._undo_recording_paused:
+            return
+        self._years_update_timer.start(100)
+        self._affine_undo_timer.start(250)
+
     def _update_undo_button_state(self) -> None:
         """Enable the undo button only if there is something to undo."""
         self._undo_button.enabled = self._is_editing and bool(self._undo_stack)
@@ -1017,6 +1132,10 @@ class RingsLayerEditorWidget(Container):
                 layer.edge_color = snapshot["edge_color"]
                 layer.edge_width = snapshot["edge_width"]
             layer.features = snapshot["features"].copy()
+            if snapshot.get("affine") is not None:
+                from napari.utils.transforms import Affine
+
+                layer.affine = Affine(affine_matrix=snapshot["affine"])
             layer.refresh()
         finally:
             self._undo_recording_paused = False
@@ -1027,6 +1146,34 @@ class RingsLayerEditorWidget(Container):
         # Restore the markers of vertices deleted before the undone change
         self._all_deleted_points = list(snapshot["deleted_points"])
         self._highlight_selected_vertices()
+        self._years_update_timer.start(100)
+
+    def _nudge_selected_rings(self, dy: float, dx: float) -> None:
+        """
+        Nudge the entirety of all currently selected ring boundaries by (dy, dx).
+        """
+        if not self._is_editing:
+            return
+        layer = self._get_edit_layer()
+        if layer is None or not layer.selected_data:
+            return
+
+        selected_indices = set(layer.selected_data)
+        new_data = []
+        for i, shape_coords in enumerate(layer.data):
+            if i in selected_indices:
+                shifted = np.array(shape_coords, copy=True, dtype=np.float64) + np.array(
+                    [dy, dx], dtype=np.float64
+                )
+                new_data.append(shifted)
+            else:
+                new_data.append(shape_coords)
+
+        with self._undoable_operation():
+            layer.data = list(zip(new_data, layer.shape_type))
+            layer.selected_data = selected_indices
+            layer.refresh()
+
         self._years_update_timer.start(100)
 
     def _refresh_rings_model_choices(self) -> None:
@@ -1347,8 +1494,51 @@ class RingsLayerEditorWidget(Container):
         # Track the edit session history for undo (button and Ctrl/Cmd+Z)
         self._reset_undo_history(shapes_layer)
         shapes_layer.events.data.connect(self._on_edit_layer_data_change)
+        shapes_layer.events.affine.connect(self._on_edit_layer_affine_change)
         shapes_layer.bind_key(
             "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
+        )
+
+        # Fine-positioning controls (1 px fine with Ctrl+Arrow, 10 px with Ctrl+Shift+Arrow)
+        shapes_layer.bind_key(
+            "Control-Up",
+            lambda _layer: self._nudge_selected_rings(-1.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Down",
+            lambda _layer: self._nudge_selected_rings(1.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Left",
+            lambda _layer: self._nudge_selected_rings(0.0, -1.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Right",
+            lambda _layer: self._nudge_selected_rings(0.0, 1.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Up",
+            lambda _layer: self._nudge_selected_rings(-10.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Down",
+            lambda _layer: self._nudge_selected_rings(10.0, 0.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Left",
+            lambda _layer: self._nudge_selected_rings(0.0, -10.0),
+            overwrite=True,
+        )
+        shapes_layer.bind_key(
+            "Control-Shift-Right",
+            lambda _layer: self._nudge_selected_rings(0.0, 10.0),
+            overwrite=True,
         )
 
         self._update_year_spinbox()
@@ -1422,11 +1612,11 @@ class RingsLayerEditorWidget(Container):
             # Defer visibility restoration slightly to let scenegraph settle from removals
             QTimer.singleShot(100, self._restore_original_visibility)
 
-            show_info("Rings geometries modification cancelled")
+            show_info("Rings changes cancelled")
             self._years_update_timer.start(200)
 
         except Exception as e:
-            show_info(f"Error cancelling ring geometries: {str(e)}")
+            show_info(f"Error cancelling ring changes: {str(e)}")
         finally:
             self._is_updating = False
 
@@ -1468,7 +1658,7 @@ class RingsLayerEditorWidget(Container):
                     scan_layer = self._scan_layer
                     if not scan_layer:
                         self._abort_editing_mode(
-                            "No valid rings or scan layer found to apply geometries"
+                            "No valid rings or scan layer found to apply changes"
                         )
                         return
 
@@ -1531,7 +1721,7 @@ class RingsLayerEditorWidget(Container):
             show_info("Ring boundaries successfully updated")
 
         except Exception as e:
-            show_info(f"Error applying ring geometries: {str(e)}")
+            show_info(f"Error applying ring changes: {str(e)}")
         finally:
             self._is_updating = False
 
@@ -1595,9 +1785,10 @@ class RingsLayerEditorWidget(Container):
                     pass
             self._delete_lasso_vertices_button.visible = False
 
-        # Bind the Delete key to our custom handler to support lasso-delete via keyboard.
+        # Bind the Delete and Backspace keys to our custom handler to support lasso-delete via keyboard across platforms (e.g. macOS).
         # We deselect lasso polygons before execution to prevent napari from deleting the lasso shape itself.
         @self._viewer.bind_key("Delete", overwrite=True)
+        @self._viewer.bind_key("Backspace", overwrite=True)
         def _delete_selected(viewer):
             if not self._is_editing:
                 return
@@ -1652,6 +1843,8 @@ class RingsLayerEditorWidget(Container):
         """
         Iterates through all drawn lasso polygons and identifies all ring boundary vertices
         that fall within their boundaries using point-in-polygon tests.
+        When ring boundaries overlap perfectly, vertices are only selected from the topmost
+        ring boundary (highest shape index in the layer).
         """
         if "Lasso Selection" not in self._viewer.layers:
             return
@@ -1665,16 +1858,33 @@ class RingsLayerEditorWidget(Container):
             
         edit_layer = self._viewer.layers["Rings Modification"]
         
-        for lasso_poly in lasso_layer.data:
-            for i, shape_data in enumerate(edit_layer.data):
-                # Only register a shape once a vertex was actually hit, so that
-                # an empty selection stays falsy for the caller.
-                for j, vertex in enumerate(shape_data):
-                    try:
-                        if self._is_point_in_polygon(vertex, lasso_poly):
-                            self._selected_vertices.setdefault(i, set()).add(j)
-                    except Exception:
+        claimed_coords = []
+        
+        # Iterate in reverse order (top-most shape to bottom-most shape)
+        for i in range(len(edit_layer.data) - 1, -1, -1):
+            shape_data = edit_layer.data[i]
+            shape_claimed_coords = []
+            for j, vertex in enumerate(shape_data):
+                try:
+                    inside_lasso = any(
+                        self._is_point_in_polygon(vertex, lasso_poly)
+                        for lasso_poly in lasso_layer.data
+                    )
+                    if not inside_lasso:
                         continue
+
+                    # Check if this vertex coordinate overlaps with a vertex claimed by a strictly higher shape
+                    if claimed_coords and any(
+                        np.allclose(vertex, c_pt, atol=1e-3)
+                        for c_pt in claimed_coords
+                    ):
+                        continue
+
+                    self._selected_vertices.setdefault(i, set()).add(j)
+                    shape_claimed_coords.append(vertex)
+                except Exception:
+                    continue
+            claimed_coords.extend(shape_claimed_coords)
         
         self._highlight_selected_vertices()
 
@@ -1725,7 +1935,7 @@ class RingsLayerEditorWidget(Container):
                         points_layer = self._viewer.add_points(
                             points,
                             name="Selected Vertices",
-                            size=75,
+                            size=50,
                             face_color="yellow",
                             border_color="black",
                             scale=edit_layer.scale,
@@ -1854,7 +2064,10 @@ class RingsLayerEditorWidget(Container):
             
         # Do not update year labels while the user is drawing a lasso selection polygon
         # to avoid scenegraph race conditions during high-frequency mouse events.
-        if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
+        try:
+            if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
+                return
+        except (RuntimeError, Exception):
             return
 
         try:
@@ -1985,7 +2198,7 @@ class RingsLayerEditorWidget(Container):
                         "string": "{YEAR}",
                         "anchor": "upper_left",
                         "translation": [0, 0],
-                        "size": 8,
+                        "size": 14,
                         "color": "black",
                         "blending": "translucent",
                         "visible": True,
@@ -2064,7 +2277,7 @@ class RingsLayerEditorWidget(Container):
             "YEAR" not in rings_table.columns
             or "RBXY" not in rings_table.columns
         ):
-            show_info("No valid rings data found")
+            show_info("No valid ring data found")
             return
 
         # Sort by YEAR to ensure correct ordering
@@ -2074,7 +2287,7 @@ class RingsLayerEditorWidget(Container):
         matching = rings_table[rings_table["YEAR"] == selected_year]
         if matching.empty:
             show_info(
-                f"Year {selected_year-1} not found in rings table or does not have a valid end boundary"
+                f"Year {selected_year-1} not found in the rings table or has no valid end boundary"
             )
             return
 
@@ -2189,7 +2402,7 @@ class RingsLayerEditorWidget(Container):
             )
 
         if "Rings Modification" not in self._viewer.layers or not self._input_layer:
-            show_info("Editing session closed, rerun results discarded")
+            show_info("Editing session closed; results from model rerun discarded")
             return
 
         selected_year = self._rerun_selected_year

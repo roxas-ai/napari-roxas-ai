@@ -22,6 +22,7 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
@@ -382,6 +383,9 @@ class SingleSampleSegmentationWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "3A - Detect cells & rings (individual image)"
+        )
         self.settings = SettingsManager()
 
         # Ensure model weights are present before listing them below.

@@ -32,6 +32,7 @@ from napari_roxas_ai._reader._crossdating_reader import read_crossdating_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._writer._writer import (
     save_sample_annotated_image,
     update_metadata_file,
@@ -57,7 +58,7 @@ Image.MAX_IMAGE_PIXELS = None
 # The file list is at least this many rows high and otherwise grows with
 # its content, one row per file, up to MAX_VISIBLE_IMAGE_ROWS
 MIN_VISIBLE_IMAGE_ROWS = 5
-MAX_VISIBLE_IMAGE_ROWS = 10
+MAX_VISIBLE_IMAGE_ROWS = 7
 
 # Gap between a row's label and its box. Set explicitly because the style's
 # default depends on the widget pair (on macOS label-to-button is wider than
@@ -66,7 +67,7 @@ LABEL_SPACING = 10
 
 # Longest project directory shown on the button, longer paths are elided in the
 # middle (the full path is in the tooltip)
-MAX_PROJECT_DIRECTORY_CHARS = 35
+MAX_PROJECT_DIRECTORY_CHARS = 40
 
 # Label of the manual selection checkbox, which ends in a colon while the file
 # list below it is shown
@@ -125,6 +126,7 @@ def find_samples(directory: str) -> Dict[str, Dict[str, Optional[str]]]:
 class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
+    message = Signal(str)
 
     def __init__(
         self,
@@ -179,17 +181,17 @@ class Worker(QObject):
                     rings = rings or self._read_rings(files)
                     tasks.append(self._update_reference_plot(stem, rings))
 
-                print(
+                self.message.emit(
                     f"[Batch Measurements] [{file_idx}/{total}] {name}: {', '.join(tasks)}"
                 )
                 processed += 1
             except Exception as e:
-                print(
+                self.message.emit(
                     f"[Batch Measurements] [{file_idx}/{total}] Error processing {name}: {e}"
                 )
 
         if total > 0:
-            print(
+            self.message.emit(
                 f"[Batch Measurements] Completed {processed} of {total} file(s) successfully."
             )
 
@@ -510,6 +512,9 @@ class BatchSampleMeasurementsWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "9B - Batch measure & update"
+        )
 
         # The project directory is the input directory
         self.input_directory_path = settings.get("project_directory")
@@ -661,8 +666,6 @@ class BatchSampleMeasurementsWidget(Container):
             self.native.layout().setAlignment(
                 self._file_selection_container.native, Qt.AlignTop
             )
-            # Spare height goes below the widgets instead of stretching the controls
-            self.native.layout().addStretch()
 
         self._sync_update_checkboxes()
         self._refresh_file_list()
@@ -889,6 +892,7 @@ class BatchSampleMeasurementsWidget(Container):
 
         # Connect progress signal
         self.worker.progress.connect(self._update_progress)
+        self.worker.message.connect(show_info)
 
         # Disable the run button while processing
         self._run_analysis_button.enabled = False

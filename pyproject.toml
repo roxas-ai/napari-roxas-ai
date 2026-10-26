@@ -72,6 +72,9 @@ docs = [
     "mkdocstrings[python]",
 ]
 
+[project.scripts]
+napari-roxas = "napari_roxas_ai._launcher:main"
+
 [project.entry-points."napari.manifest"]
 napari-roxas-ai = "napari_roxas_ai:napari.yaml"
 

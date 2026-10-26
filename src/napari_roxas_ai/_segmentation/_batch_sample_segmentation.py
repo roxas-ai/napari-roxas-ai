@@ -23,6 +23,7 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file, read_scan_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
@@ -49,7 +50,7 @@ DEFAULT_RINGS_MODEL = "linear_rings_model.pth"
 # The file list is at least this many rows high and otherwise grows with
 # its content, one row per file, up to MAX_VISIBLE_IMAGE_ROWS
 MIN_VISIBLE_IMAGE_ROWS = 5
-MAX_VISIBLE_IMAGE_ROWS = 10
+MAX_VISIBLE_IMAGE_ROWS = 7
 
 # Gap between a row's label and its box. Set explicitly because the style's
 # default depends on the widget pair (on macOS label-to-button is wider than
@@ -58,7 +59,7 @@ LABEL_SPACING = 10
 
 # Longest project directory shown on the button, longer paths are elided in the
 # middle (the full path is in the tooltip)
-MAX_PROJECT_DIRECTORY_CHARS = 35
+MAX_PROJECT_DIRECTORY_CHARS = 40
 
 
 def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
@@ -83,6 +84,7 @@ class Worker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
     result_ready = Signal(object)
+    message = Signal(str)
 
     def __init__(
         self,
@@ -360,9 +362,9 @@ class Worker(QObject):
                 )
 
         if total_files > 0:
-            print(
-                f"[Batch Segmentation] Completed {processed} of {total_files} file(s) successfully."
-            )
+            summary = f"[Batch Segmentation] Completed {processed} of {total_files} file(s) successfully."
+            print(summary)
+            self.message.emit(summary)
 
         self.progress.emit(total, total)
         self.finished.emit()
@@ -373,6 +375,9 @@ class BatchSampleSegmentationWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "3B - Batch detect cells & rings"
+        )
 
         # Ensure model weights are present before listing them below.
         # (Moved out of import time; only downloads if the dirs are missing.)
@@ -575,8 +580,6 @@ class BatchSampleSegmentationWidget(Container):
             self.native.layout().setAlignment(
                 self._file_selection_container.native, Qt.AlignTop
             )
-            # Spare height goes below the widgets instead of stretching the controls
-            self.native.layout().addStretch()
 
         # Initialize visibility of model selection widgets, button state, and file list
         self._update_cells_model_visibility()
@@ -864,14 +867,14 @@ class BatchSampleSegmentationWidget(Container):
 
         # Connect progress signal
         self.worker.progress.connect(self._update_progress)
+        self.worker.message.connect(show_info)
 
         # Disable the run button while processing
         self._run_segmentation_button.enabled = False
 
-        # Restore run segmentation button and show message when finished
+        # Restore run segmentation button when finished
         def on_finished():
             self._run_segmentation_button.enabled = True
-            show_info("Segmentation complete")
 
         self.worker_thread.finished.connect(on_finished)
 

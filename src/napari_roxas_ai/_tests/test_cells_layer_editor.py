@@ -1,7 +1,16 @@
+from types import SimpleNamespace
+
 import numpy as np
 from napari.layers import Shapes, Labels
 
 from napari_roxas_ai._edition import CellsLayerEditorWidget
+from napari.components._viewer_mouse_bindings import dims_scroll
+
+from napari_roxas_ai._edition._cells_layer_editor import (
+    BRUSH_SHORTCUT_MODIFIER,
+    MAX_BRUSH_SIZE,
+    UNDO_HISTORY_LIMIT,
+)
 
 
 def test_cells_layer_editor_lasso_selection_and_deletion(make_napari_viewer, qtbot):
@@ -447,3 +456,276 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     # Apply -> button visible again
     widget._apply_cells_geometries()
     assert widget._save_all_layers_button.visible
+
+
+def _start_vector_editing(viewer, qtbot, data):
+    viewer.add_labels(data, name="sample.cells")
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edition_mode_combo.value = "Vector"
+    widget._edit_cells_geometries()
+    qtbot.wait_until(
+        lambda: "Cells Modification" in viewer.layers,
+        timeout=5000,
+    )
+    return widget, viewer.layers["Cells Modification"]
+
+
+def _start_raster_editing(viewer, data):
+    cells_layer = viewer.add_labels(data, name="sample.cells")
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edition_mode_combo.value = "Raster"
+    widget._edit_cells_geometries()
+    return widget, cells_layer, viewer.layers["Cells Modification"]
+
+
+def test_backspace_triggers_lasso_deletion(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    data[30:40, 30:40] = 1
+    widget, edit_layer = _start_vector_editing(viewer, qtbot, data)
+
+    widget._lasso_selection_checkbox.value = True
+    lasso_layer = viewer.layers["Lasso Selection"]
+    lasso_layer.data = [np.array([[0, 0], [0, 20], [20, 20], [20, 0]], dtype=np.float32)]
+
+    # Both Delete and Backspace (macOS) are bound to the lasso deletion
+    keymap = {str(key): func for key, func in viewer.keymap.items()}
+    assert "Delete" in keymap
+    assert "Backspace" in keymap
+    keymap["Backspace"](viewer)
+
+    assert len(edit_layer.data) == 1
+    assert not widget._lasso_selection_checkbox.value
+
+
+def test_undo_button_lifecycle_and_vector_undo(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    data[30:40, 30:40] = 1
+
+    widget = CellsLayerEditorWidget(viewer)
+    assert not widget._undo_button.visible
+
+    widget, edit_layer = _start_vector_editing(viewer, qtbot, data)
+    assert widget._undo_button.visible
+    assert not widget._undo_button.enabled  # nothing to undo yet
+    original_shapes = [np.array(d, copy=True) for d in edit_layer.data]
+
+    # Lasso deletion is a single undo step
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[0, 0], [0, 20], [20, 20], [20, 0]], dtype=np.float32)
+    ]
+    widget._execute_lasso_deletion()
+    assert len(edit_layer.data) == 1
+
+    # A newly drawn polygon is another undo step
+    edit_layer.add_polygons([np.array([[20, 20], [20, 25], [25, 25], [25, 20]])])
+    assert len(edit_layer.data) == 2
+    assert len(widget._undo_stack) == 2
+    assert widget._undo_button.enabled
+
+    # Undo restores the states in reverse order
+    widget._undo_last_change()
+    assert len(edit_layer.data) == 1
+    widget._undo_last_change()
+    assert len(edit_layer.data) == 2
+    assert all(np.array_equal(a, b) for a, b in zip(edit_layer.data, original_shapes))
+    assert not widget._undo_button.enabled
+
+    # The undo button is hidden and the history cleared after the edit session
+    widget._cancel_cells_geometries()
+    assert not widget._undo_button.visible
+    assert not widget._undo_stack
+    assert widget._undo_current is None
+
+
+def test_raster_undo_uses_labels_paint_history(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    widget, cells_layer, edit_layer = _start_raster_editing(viewer, data)
+
+    assert widget._undo_button.visible
+    assert not widget._undo_button.enabled
+
+    edit_layer.brush_size = 3
+    edit_layer.paint((30, 30), 1)
+    assert edit_layer.data[30, 30] == 1
+    assert widget._undo_button.enabled
+
+    widget._undo_last_change()
+    assert edit_layer.data[30, 30] == 0
+    assert not widget._undo_button.enabled
+
+    widget._apply_cells_geometries()
+    assert not widget._undo_button.visible
+    assert cells_layer.data[30, 30] == 0
+
+
+def test_overlapping_polygons_are_combined_on_apply(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((100, 100), dtype=np.uint8)
+    data[0:5, 0:5] = 1
+    widget, edit_layer = _start_vector_editing(viewer, qtbot, data)
+    cells_layer = viewer.layers["sample.cells"]
+
+    # Two overlapping polygons, overlapping in [30, 40] x [30, 40]
+    edit_layer.data = [
+        np.array([[10, 10], [10, 40], [40, 40], [40, 10]], dtype=np.float32),
+        np.array([[30, 30], [30, 60], [60, 60], [60, 30]], dtype=np.float32),
+    ]
+
+    widget._apply_cells_geometries()
+
+    # The overlapping area is preserved (union) instead of excluded (XOR)
+    assert np.all(cells_layer.data[31:40, 31:40] == 1)
+    assert np.all(cells_layer.data[15:25, 15:25] == 1)
+    assert np.all(cells_layer.data[45:55, 45:55] == 1)
+
+
+def test_ctrl_mouse_wheel_adjusts_brush_size(make_napari_viewer):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    widget, _, edit_layer = _start_raster_editing(viewer, data)
+
+    controls = viewer.window._qt_viewer.controls.widgets[edit_layer]
+    slider = controls._brush_size_slider_control.brush_size_slider
+    assert slider.maximum() == MAX_BRUSH_SIZE
+
+    def wheel(dy, modifiers=(BRUSH_SHORTCUT_MODIFIER,)):
+        event = SimpleNamespace(modifiers=modifiers, delta=(0, dy), handled=False)
+        widget._on_raster_mouse_wheel(edit_layer, event)
+        return event
+
+    edit_layer.mode = "paint"
+    edit_layer.brush_size = 10
+
+    # Without CTRL, the wheel does not change the brush size
+    assert not wheel(1, modifiers=()).handled
+    assert edit_layer.brush_size == 10
+
+    event = wheel(1)
+    assert event.handled
+    assert edit_layer.brush_size > 10
+
+    # The brush size is clamped between 1 and MAX_BRUSH_SIZE
+    for _ in range(100):
+        wheel(1)
+    assert edit_layer.brush_size == MAX_BRUSH_SIZE
+    assert slider.value() == MAX_BRUSH_SIZE
+    for _ in range(100):
+        wheel(-1)
+    assert edit_layer.brush_size == 1
+
+    # Small trackpad deltas accumulate
+    for _ in range(10):
+        wheel(0.1)
+    assert edit_layer.brush_size == 2
+
+    # Works with the eraser too, but not in other modes
+    edit_layer.mode = "erase"
+    wheel(1)
+    assert edit_layer.brush_size == 3
+    edit_layer.mode = "pan_zoom"
+    assert not wheel(1).handled
+    assert edit_layer.brush_size == 3
+
+
+def test_ctrl_double_click_toggles_eraser_and_brush(make_napari_viewer):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    widget, _, edit_layer = _start_raster_editing(viewer, data)
+    viewer.layers.selection.active = edit_layer
+
+    edit_layer.mode = "erase"
+    assert widget._on_raster_double_click in edit_layer.mouse_double_click_callbacks
+
+    # A double-click without CTRL keeps the eraser
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(), handled=False)
+    )
+    assert edit_layer.mode == "erase"
+
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), handled=False)
+    )
+    assert edit_layer.mode == "paint"
+
+    # And back from the brush to the eraser
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), handled=False)
+    )
+    assert edit_layer.mode == "erase"
+
+    # Other tools are not affected
+    edit_layer.mode = "fill"
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), handled=False)
+    )
+    assert edit_layer.mode == "fill"
+    edit_layer.mode = "paint"
+
+    # CTRL+clicks do not paint/erase, plain clicks still do
+    drag_callback = edit_layer.mouse_drag_callbacks[-1]
+    ctrl_event = SimpleNamespace(modifiers=(BRUSH_SHORTCUT_MODIFIER,), type="mouse_press")
+    gen = drag_callback(edit_layer, ctrl_event)
+    assert list(gen) == []
+
+
+def test_vector_undo_history_keeps_only_last_edits(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    data = np.zeros((200, 200), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    widget, edit_layer = _start_vector_editing(viewer, qtbot, data)
+
+    for i in range(UNDO_HISTORY_LIMIT + 5):
+        edit_layer.add_polygons([np.array([[20, i], [20, i + 2], [22, i + 2], [22, i]])])
+    assert len(edit_layer.data) == UNDO_HISTORY_LIMIT + 6
+
+    # The oldest edits are dropped from the history
+    assert len(widget._undo_stack) == UNDO_HISTORY_LIMIT
+    for _ in range(UNDO_HISTORY_LIMIT):
+        widget._undo_last_change()
+    assert len(edit_layer.data) == 6
+    assert not widget._undo_button.enabled
+
+
+def test_only_ctrl_triggers_raster_shortcuts(make_napari_viewer):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    widget, _, edit_layer = _start_raster_editing(viewer, data)
+
+    # The Cmd key on macOS ("Control") or the Windows key ("Meta") do not trigger the shortcuts
+    other_modifier = "Control" if BRUSH_SHORTCUT_MODIFIER == "Meta" else "Meta"
+    edit_layer.mode = "erase"
+    edit_layer.brush_size = 10
+    event = SimpleNamespace(modifiers=(other_modifier,), delta=(0, 1), handled=False)
+    widget._on_raster_mouse_wheel(edit_layer, event)
+    assert edit_layer.brush_size == 10
+    widget._on_raster_double_click(
+        edit_layer, SimpleNamespace(modifiers=(other_modifier,), handled=False)
+    )
+    assert edit_layer.mode == "erase"
+
+
+def test_dims_scroll_disabled_during_raster_editing(make_napari_viewer):
+    viewer = make_napari_viewer()
+    data = np.zeros((50, 50), dtype=np.uint8)
+    assert dims_scroll in viewer.mouse_wheel_callbacks
+
+    widget, _, _ = _start_raster_editing(viewer, data)
+    assert dims_scroll not in viewer.mouse_wheel_callbacks
+
+    widget._cancel_cells_geometries()
+    assert viewer.mouse_wheel_callbacks.count(dims_scroll) == 1
+
+    widget._edit_cells_geometries()
+    assert dims_scroll not in viewer.mouse_wheel_callbacks
+    widget._apply_cells_geometries()
+    assert viewer.mouse_wheel_callbacks.count(dims_scroll) == 1

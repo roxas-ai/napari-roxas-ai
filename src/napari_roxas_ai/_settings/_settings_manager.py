@@ -1,4 +1,5 @@
 import json
+import os
 import warnings
 import weakref
 from copy import deepcopy
@@ -25,6 +26,7 @@ SETTINGS_WRITE_ENCODING = "utf-8"
 #
 # Never mutate this dictionary; hand out deepcopy()s of it.
 DEFAULT_SETTINGS: Dict[str, Any] = {
+    "project_directory": None,  # Current project directory
     # Metadata settings with fields for UI
     "samples_metadata": {
         "fields": [
@@ -66,7 +68,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
                 "default": 2.267574,
                 "min": 0.001,
                 "max": 1000.0,
-                "step": 0.000001,
+                "step": 0.1,
                 "decimals": 6,
                 "required": True,
             },
@@ -150,8 +152,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "cells_edge_color": "blue",  # Default color for vector shapes visualization
         "cells_face_color": "cyan",  # Default color for vector shapes visualization (also used for cells edition in raster mode)
         "rings_tolerance": 5,  # Default tolerance in pixels for rings vectorization
-        "rings_edge_width": 5,  # Default line thickness in pixels for vector shapes visualization
-        "rings_edge_color": "red",  # Default color for vector shapes visualization
+        "rings_edge_width": 7,  # Default line thickness in pixels for vector shapes visualization
+        "rings_edge_color": "black",  # Default color for vector shapes visualization
         "rerun_interactive_edge_color": "lime",  # Default color for vector shapes visualization
     },
     "rasterization": {
@@ -181,7 +183,13 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "opposite_cwt_ratio_limit": 1.5,  # Max CWT ratio between opposite cell sides
         "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
     },
-    "project_directory": None,  # Current project directory
+    "annotated_image": {
+        "cell_opacity": 50,  # Opacity percentage of the cells overlay (0-100)
+        "cell_fill_color": "yellow",  # Fill color for cell lumina
+        "year_label_size": 20,  # Label size for calendar years as percentage of mean ring width (min 12 px)
+        "scale_factor": 1.0,  # Scale factor for resizing the annotated image (1.0 = original dimensions)
+        "quality": 75,  # JPEG quality (1-100) of the annotated image
+    },
 }
 
 
@@ -367,6 +375,22 @@ def upgrade_settings(stored: Dict[str, Any]) -> Dict[str, Any]:
     return merged
 
 
+def _is_accessible_directory(path: Any) -> bool:
+    """
+    Check whether `path` is an existing, accessible directory.
+
+    Safely handles PermissionError and OSError when inspecting directories
+    across user profiles on multi-user systems.
+    """
+    if not path:
+        return False
+    try:
+        p = Path(path).resolve()
+        return p.is_dir() and os.access(p, os.R_OK | os.X_OK)
+    except (PermissionError, OSError):
+        return False
+
+
 class SettingsManager:
     """
     Manages plugin settings, including loading, saving, and accessing settings.
@@ -466,6 +490,23 @@ class SettingsManager:
             return
 
         self._settings = upgrade_settings(stored)
+
+        # Validate project directory accessibility (e.g. multi-user PC profile changes or deleted paths)
+        project_dir = self._settings.get("project_directory")
+        if project_dir is not None and not _is_accessible_directory(project_dir):
+            message = (
+                f"Configured project directory '{project_dir}' is inaccessible or "
+                "does not exist. Resetting project directory to None."
+            )
+            print(f"[settings] {message}")
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+            try:
+                from napari.utils.notifications import show_warning
+
+                show_warning(message)
+            except Exception:
+                pass
+            self._settings["project_directory"] = None
 
         # Only touch the file when the upgrade actually changed something
         if self._settings != stored:
