@@ -32,8 +32,8 @@ flowchart LR
 ### Step 2: Run Deep Learning Detection
 1. In the docked sidebar, locate **3A - Detect cells & rings (individual image)**.
 2. Select the segmentation models:
-   - **Cells Model**: `linear_cells_model`
-   - **Rings Model**: `LinearRingModel_v3_iterative.pt`
+    - **Cells Model**: `linear_cells_model`
+    - **Rings Model**: `LinearRingModel_v3_iterative.pt`
 3. Click **Run Segmentation**. Deep-learning inference generates two new layers: `.cells` (cell lumen labels) and `.rings` (ring boundary labels).
 
 ![Screenshot: Automated DL detection result overlay](../assets/screenshots/tutorials/quickstart_02_dl_segmentation.png)
@@ -42,11 +42,11 @@ flowchart LR
 
 ### Step 3: Quick Visual Verification & Curation
 1. Navigate across the sample using single-key shortcuts:
-   - **Pan**: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or Arrow keys (or hold <kbd>Shift</kbd> for fast panning).
-   - **Zoom**: <kbd>Q</kbd> to zoom out, <kbd>E</kbd> to zoom in.
+    - **Pan**: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or Arrow keys (or hold <kbd>Shift</kbd> for fast panning).
+    - **Zoom**: <kbd>Q</kbd> to zoom out, <kbd>E</kbd> to zoom in.
 2. Expand **5 - Edit cells** or **6 - Edit rings** in the sidebar to make quick adjustments:
-   - In **Cell Editing (Raster Mode)**: Hold <kbd>Ctrl</kbd> + **Mouse Wheel** to dynamically resize the brush; hold <kbd>Ctrl</kbd> + **Double-Click** to toggle between brush and eraser. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo any mistake.
-   - In **Ring Editing**: Select a boundary and press <kbd>Ctrl</kbd> + Arrow keys to nudge it by 1 pixel (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys for 10 pixels). Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.
+    - In **Cell Editing (Raster Mode)**: Hold <kbd>Ctrl</kbd> + **Mouse Wheel** to dynamically resize the brush; hold <kbd>Ctrl</kbd> + **Double-Click** to toggle between brush and eraser. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo any mistake.
+    - In **Ring Editing**: Select a boundary and press <kbd>Ctrl</kbd> + Arrow keys to nudge it by 1 pixel (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys for 10 pixels). Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.
 
 ### Step 4: Extract Cell & Ring Measurements
 1. In the sidebar, scroll to **9A - Measure cells & rings (individual image)**.
@@ -81,9 +81,9 @@ flowchart TD
 1. Launch napari via `napari-roxas`.
 2. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to open the **Batch Operations Group**.
 3. In **1 - Prepare project images for analysis**:
-   - Select your project directory (or use **0 - Define project directory**).
-   - Enter physical resolution ($\mu\text{m}/\text{px}$), anatomy type (`conifer`), geometry (`linear`), and the outermost complete calendar year.
-   - *(Optional)* Click **Start Processing Crossdating Files** to import reference ring-width chronologies (`.rwl`, `.tuc`, or tabular `.txt`/`.csv`). Series names of up to 8 characters are parsed automatically.
+    - Select your project directory (or use **0 - Define project directory**).
+    - Enter physical resolution ($\mu\text{m}/\text{px}$), anatomy type (`conifer`), geometry (`linear`), and the outermost complete calendar year.
+    - *(Optional)* Click **Start Processing Crossdating Files** to import reference ring-width chronologies (`.rwl`, `.tuc`, or tabular `.txt`/`.csv`). Series names of up to 8 characters are parsed automatically.
 4. Click **Prepare Images**. The images are standardized to `<sample>.scan.<ext>` and initialized with `<sample>.metadata.json`.
 
 ![Screenshot: Image preparation metadata setup](../assets/screenshots/tutorials/std_01_image_preparation.png)
@@ -122,11 +122,11 @@ Refine cell lumen annotations using **5 - Edit cells** in the Manual Editing gro
 
 #### Editing Techniques
 1. **Separating Merged Lumens**:
-   - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the eraser, hold <kbd>Ctrl</kbd> + mouse wheel to size the brush to 5–10 px, and draw a dividing cut through the shared wall.
+    - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the eraser, hold <kbd>Ctrl</kbd> + mouse wheel to size the brush to 5–10 px, and draw a dividing cut through the shared wall.
 2. **Removing False Detections & Clearing Resin Canals**:
-   - In Vector mode, check **Lasso Select** and encircle unwanted objects (multiple loops union automatically). Press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to delete all enclosed cells simultaneously.
+    - In Vector mode, check **Lasso Select** and encircle unwanted objects (multiple loops union automatically). Press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to delete all enclosed cells simultaneously.
 3. **Restoring Overlooked Tracheids**:
-   - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the paint brush and fill faint or damaged cell walls.
+    - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the paint brush and fill faint or damaged cell walls.
 
 ![Screenshot: Lasso selection and multi-cell cleanup](../assets/screenshots/tutorials/std_05b_lasso_cleanup.png)
 
@@ -146,10 +146,10 @@ Open **6 - Edit rings** in the Manual Editing group.
 - **Fine Nudging**: Select one or more ring boundaries and press <kbd>Ctrl</kbd> + Arrow keys (1 px shift) or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys (10 px shift) to align boundaries perfectly along the terminal latewood tracheid row.
 - **Adding Missing Rings**: Draw a path across the wood cross-section using napari's path tool; ROXAS AI automatically completes the line horizontally to both image margins ($x=0$ to $x=\text{width}$) upon applying changes.
 - **Handling Wedging / Incomplete Rings**:
-  1. Select and **copy-paste** the existing boundary that shares the common portion of the ring boundary.
-  2. Enable **Lasso Select** and draw a lasso loop around the diverging section of the duplicated (topmost) ring.
-  3. Press <kbd>Delete</kbd> or <kbd>Backspace</kbd>. ROXAS AI's top-priority lasso logic deletes vertices **strictly from the topmost ring**, keeping the underlying shared boundary completely intact.
-  4. Use the path tool to extend and accurately trace the wedging branch.
+    1. Select and **copy-paste** the existing boundary that shares the common portion of the ring boundary.
+    2. Enable **Lasso Select** and draw a lasso loop around the diverging section of the duplicated (topmost) ring.
+    3. Press <kbd>Delete</kbd> or <kbd>Backspace</kbd>. ROXAS AI's top-priority lasso logic deletes vertices **strictly from the topmost ring**, keeping the underlying shared boundary completely intact.
+    4. Use the path tool to extend and accurately trace the wedging branch.
 - **Undo (<kbd>Ctrl</kbd> + <kbd>Z</kbd>)**: Reverts any drawing, nudging, affine transformation, or deletion (up to 50 undo steps).
 
 ---
@@ -163,13 +163,13 @@ Open **Plugins > ROXAS AI > 7 - Visual cross-dating** to verify ring counts and 
 *Figure 9: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
 
 1. **Inspect Standard View ($\pm 10$ Years)**:
-   - The plotter opens centered on the sample series with an overview buffer of $\pm 10$ years on each side.
+    - The plotter opens centered on the sample series with an overview buffer of $\pm 10$ years on each side.
 2. **Expand Year Range & Offset Slider**:
-   - To explore candidate shifts larger than $\pm 10$ years, widen the **Year Range** slider; this automatically expands the bounds of the **Offset** slider, allowing you to slide the sample across larger time spans.
+    - To explore candidate shifts larger than $\pm 10$ years, widen the **Year Range** slider; this automatically expands the bounds of the **Offset** slider, allowing you to slide the sample across larger time spans.
 3. **Auto-Offset Alignment**:
-   - Click **Find Best Overlap** to let ROXAS AI compute the best statistical correlation ($r$) and Gleichläufigkeit (GLK) alignment.
+    - Click **Find Best Overlap** to let ROXAS AI compute the best statistical correlation ($r$) and Gleichläufigkeit (GLK) alignment.
 4. **Confirm Dating**:
-   - Click **Apply Changes** to update the sample's outermost complete year metadata and shift ring years across the dataset.
+    - Click **Apply Changes** to update the sample's outermost complete year metadata and shift ring years across the dataset.
 
 ---
 
@@ -194,9 +194,9 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
 2. Click **Check Settings** to review or customize CWT thresholds or smoothing parameters.
 3. Click **Measure**.
 4. The measurement engine outputs comprehensive semicolon-delimited CSV tables:
-   - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Individual cell metrics (`CID`, `YEAR`, `LA`, `CWTRAD`, `CWTTAN`, `CWTALL`, `RTSR`).
-   - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring summary metrics (`YEAR`, `MRW`, `CNO`, `MLA`, `CD`, `CWTALL`).
-   - **`<sample>_annotated.jpg`**: Automatically refreshed overview image matching the final measurements.
+    - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Individual cell metrics (`CID`, `YEAR`, `LA`, `CWTRAD`, `CWTTAN`, `CWTALL`, `RTSR`).
+    - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring summary metrics (`YEAR`, `MRW`, `CNO`, `MLA`, `CD`, `CWTALL`).
+    - **`<sample>_annotated.jpg`**: Automatically refreshed overview image matching the final measurements.
 
 ![Screenshot: Final measurement tables and visual summary](../assets/screenshots/tutorials/std_07_measurement_summary.png)
 
@@ -232,8 +232,8 @@ flowchart TD
 ### Step 4: Automated Batch Measurement & File Synchronization
 1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to return to the **Batch Operations Group**.
 2. In **9B - Batch measure & update**:
-   - Check **Measure Cells** and **Measure Rings**.
-   - Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** to ensure that all numerical tables, annotated overview images (`_annotated.jpg`), and reference plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across all sample folders.
+    - Check **Measure Cells** and **Measure Rings**.
+    - Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** to ensure that all numerical tables, annotated overview images (`_annotated.jpg`), and reference plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across all sample folders.
 3. Click **Measure & Update**.
 
 ![Screenshot: Batch measurement completion](../assets/screenshots/tutorials/batch_03_done.png)

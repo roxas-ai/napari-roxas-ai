@@ -308,10 +308,10 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 ### How It Works
 - Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
 - Supports two distinct editing paradigms:
-  - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
-    - **Brush Size Adjustment**: Adjust brush diameter smoothly between 1 and 100 px using <kbd>Ctrl</kbd> + Mouse Wheel (or trackpad scroll). Dimension slider scrolling is suspended during resizing.
-    - **Tool Switching**: Quickly toggle between brush and eraser using <kbd>Ctrl</kbd> + Double-Click.
-  - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
+    - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
+        - **Brush Size Adjustment**: Adjust brush diameter smoothly between 1 and 100 px using <kbd>Ctrl</kbd> + Mouse Wheel (or trackpad scroll). Dimension slider scrolling is suspended during resizing.
+        - **Tool Switching**: Quickly toggle between brush and eraser using <kbd>Ctrl</kbd> + Double-Click.
+    - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
 - **Lasso Selection & Union (OR) Behavior**: In Vector editing mode, drawing lasso loops encloses cells. Multiple overlapping lasso polygons combine (union / OR logic) rather than toggling/canceling, allowing seamless regional selection.
 - **Undo Mechanism**: Supports a 50-step history stack (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) that snapshots polygon coordinates and shape types in Vector mode, and triggers napari's label brush history in Raster mode.
 - When applied, rasterizes vectors back to label masks, resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
@@ -355,24 +355,24 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 2. Displays real-time calendar year labels (`Rings Years` overlay) along the sample.
 3. Allows interactive vertex adjustments, insertion of missing boundaries, or deletion of false boundaries using napari shape tools.
 4. **Fine-Positioning & Bulk Movement**:
-
-   - **Fine Nudging (1 px)**: Press <kbd>Ctrl</kbd> + Arrow keys to nudge all selected boundary vertices by 1 pixel.
-   - **Fast Nudging (10 px)**: Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys to nudge all selected boundary vertices by 10 pixels.
-   - **Bulk Movement & Transformations**: Multiple boundaries can be selected, translated, rotated, or scaled simultaneously with full transform undo tracking.
+    - **Fine Nudging (1 px)**: Press <kbd>Ctrl</kbd> + Arrow keys to nudge all selected boundary vertices by 1 pixel.
+    - **Fast Nudging (10 px)**: Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys to nudge all selected boundary vertices by 10 pixels.
+    - **Bulk Movement**: Multiple boundaries can be selected simultaneously and moved manually or with nudging operations with full transform undo tracking.
+    - **Transformations**: The entire rings layer can be selected and moved manually or with nudging operations.
 5. **Lasso Selection Priority on Overlapping Rings**:
-   - When boundaries overlap or share coordinates, deleting vertices with the lasso tool selectively removes vertices strictly from the topmost ring boundary (highest shape index), leaving underlying boundaries intact.
+    - When boundaries overlap or share coordinates, deleting vertices with the lasso tool selectively removes vertices strictly from the topmost ring boundary (highest shape index), leaving underlying boundaries intact.
 6. **Adding Missing & Wedging/Incomplete Rings**:
-   - **Missing Rings**: Draw a polyline across or partially across the wood cross-section; upon applying changes, ROXAS AI automatically extends the boundary horizontally from edge to edge ($x=0$ to $x=\text{width}$).
-   - **Wedging / Incomplete Rings**:
-     1. Copy-paste the ring boundary that shares the common portion of the ring contour.
-     2. Use the lasso tool to delete the diverging/erroneous vertices from the top ring.
-     3. Extend the top ring by manually tracing the actual wedging trajectory.
+    - **Missing Rings**: Select a ring boundary with the feature selection tool and copy-paste it; the added ring boundary will be perfectly on top.
+    - **Wedging / Incomplete Rings**:
+        1. Copy-paste the ring boundary that shares the common portion of the ring contour.
+        2. Use the lasso tool to delete the diverging/erroneous vertices from the top ring.
+        3. Extend the top ring by manually tracing the actual wedging trajectory.
 7. **Undo Mechanism**:
-   - Full 50-step undo history (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) restoring boundary geometries, calendar year metadata, deleted vertex markers, and affine transform states.
+    - Full 50-step undo history (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) restoring boundary geometries, calendar year metadata, deleted vertex markers, and affine transform states.
 8. **Annotated Image Generation**:
-   - Configurable annotated overview scans (`<sample_name>_annotated.jpg`) overlaid with ring boundaries, year labels, and optional semi-transparent cell lumen overlays (`cell_opacity`, `cell_fill_color`, `year_label_size`, scale factor, JPEG quality).
+    - Configurable annotated overview scans (`<sample_name>_annotated.jpg`) overlaid with ring boundaries, year labels, and optional semi-transparent cell lumen overlays (`cell_opacity`, `cell_fill_color`, `year_label_size`, scale factor, JPEG quality).
 9. **Rerun Ring Segmentation**:
-   - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
+    - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
 10. **Customizable Tolerances & Colors**:
     - Polyline smoothing tolerances, line thickness, and boundary colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
 
@@ -421,16 +421,16 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 - Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** up to **`9,999`** (CE).
 - Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
 - **Year Range & Offset Slider Interaction**:
-  - The standard view automatically centers on the target ROXAS sample series with a default buffer of **$\pm 10$ years** on each side.
-  - To slide the sample series beyond this initial $\pm 10$ year window, adjust the **Year Range** slider to expand the visible time span. Expanding the Year Range slider automatically widens the allowable range of the **Offset** slider, allowing you to slide the series across decades or centuries.
+    - The standard view automatically centers on the target ROXAS sample series with a default buffer of **$\pm 10$ years** on each side.
+    - To slide the sample series beyond this initial $\pm 10$ year window, adjust the **Year Range** slider to expand the visible time span. Expanding the Year Range slider automatically widens the allowable range of the **Offset** slider, allowing you to slide the series across decades or centuries.
 - **Auto-Offset Alignment**:
-  - The **Find Best Overlap** feature scans offsets across the active time window to automatically maximize correlation ($r$) and sign agreement (GLK).
+    - The **Find Best Overlap** feature scans offsets across the active time window to automatically maximize correlation ($r$) and sign agreement (GLK).
 - **Uniform Scaling Across Reference Plots**:
-  - Reference plot figures are generated with a standardized vertical height of 800 pixels and a constant horizontal scale of **70 pixels per year** of overlap (`min(50 + (20 + overlap_years) * 70, 65000)`). This guarantees identical visual scale across different samples and chronologies.
+    - Reference plot figures are generated with a standardized vertical height of 800 pixels and a constant horizontal scale of **70 pixels per year** of overlap (`min(50 + (20 + overlap_years) * 70, 65000)`). This guarantees identical visual scale across different samples and chronologies.
 - **Reference Plot Creation**:
-  - Reference plot images (`<sample>_ReferenceSeries.jpg`) are generated and saved when clicking **Export Plot** or automatically during batch measurement runs in [9B - Batch Measure & Update](#9b-batch-measure-update).
+    - Reference plot images (`<sample>_ReferenceSeries.jpg`) are generated and saved when clicking **Export Plot** or automatically during batch measurement runs in [9B - Batch Measure & Update](#9b-batch-measure-update).
 - **Statistical Synchrony Metrics**:
-  - Computes **Correlation coefficient ($r$)**, **Gleichläufigkeit (GLK / % sign agreement)**, and **$t$-value / statistical significance** in real time.
+    - Computes **Correlation coefficient ($r$)**, **Gleichläufigkeit (GLK / % sign agreement)**, and **$t$-value / statistical significance** in real time.
 
 ### Cross-Dating Files Discovery & Folder Hierarchy Traversal
 
@@ -454,12 +454,12 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 ### Behavior When Multiple Cross-Dating Files Are Present
 
 - **Multiple Files in the Same Directory**:
-  - If two or more matching cross-dating files exist within the first directory where matches are found (e.g., `<project_root>/rings_series_site1.crossdating.txt` and `<project_root>/rings_series_site2.crossdating.txt`):
-    - All discovered cross-dating files are collected and populated into the **Crossdating File** dropdown combobox (`_crossdating_file_combo`).
-    - The widget automatically selects the first file in the list by default.
-    - Users can freely switch between files using the **Crossdating File** dropdown. Selecting a different file immediately re-reads the dataset, recalculates the series average, updates the **Reference Series** dropdown with all series columns from that file, and refreshes the plot.
+    - If two or more matching cross-dating files exist within the first directory where matches are found (e.g., `<project_root>/rings_series_site1.crossdating.txt` and `<project_root>/rings_series_site2.crossdating.txt`):
+        - All discovered cross-dating files are collected and populated into the **Crossdating File** dropdown combobox (`_crossdating_file_combo`).
+        - The widget automatically selects the first file in the list by default.
+        - Users can freely switch between files using the **Crossdating File** dropdown. Selecting a different file immediately re-reads the dataset, recalculates the series average, updates the **Reference Series** dropdown with all series columns from that file, and refreshes the plot.
 - **Files in Different Directory Levels**:
-  - Because traversal stops at the first directory containing matches, a cross-dating file located in a sample's local subfolder takes precedence over a cross-dating file located in parent or root directories.
+    - Because traversal stops at the first directory containing matches, a cross-dating file located in a sample's local subfolder takes precedence over a cross-dating file located in parent or root directories.
 
 ### Key Controls & Options
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
@@ -505,9 +505,9 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 ### How It Works
 - Combines the `.cells` lumen mask and `.rings` boundary geometry with spatial resolution metadata ($\mu\text{m}/\text{px}$).
 - Uses Continuous Wavelet Transform (CWT) and radial/tangential wall profiling to calculate:
-  - **Cell Lumen Metrics**: Lumen Area (`LA`), Hydraulic Diameter (`DH`), Theoretical Hydraulic Conductance (`KH`), Aspect Ratio (`ASP`).
-  - **Cell Wall Thickness (CWT)**: Radial (`CWTRAD`), Tangential (`CWTTAN`), Pith-side (`CWTPI`), Bark-side (`CWTBA`), Overall (`CWTALL`).
-  - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
+    - **Cell Lumen Metrics**: Lumen Area (`LA`), Hydraulic Diameter (`DH`), Theoretical Hydraulic Conductance (`KH`), Aspect Ratio (`ASP`).
+    - **Cell Wall Thickness (CWT)**: Radial (`CWTRAD`), Tangential (`CWTTAN`), Pith-side (`CWTPI`), Bark-side (`CWTBA`), Overall (`CWTALL`).
+    - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
 - Outputs semicolon-delimited CSV tables: `<sample_name>.cells_table.csv` and `<sample_name>.rings_table.csv` (file extensions and delimiter configurable in settings).
 - **Always Re-creates Annotated Image**: Re-creates and saves an updated annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years whenever measurements are performed, ensuring the annotated image remains strictly in line with the measurements.
 
@@ -535,8 +535,9 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 
 ### Linked Operations Logic (File Synchronization)
 To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchronization:
+
 - When **Measure Cells** or **Measure Rings** is checked, the update checkboxes for **Update Annotated Images** and **Update Crossdating Reference Files** are automatically locked **ON** (checked and disabled).
-  - *Reason*: Any recalculation of anatomical traits or ring boundaries changes the underlying metrics and years; locking the image and plot updates guarantees that measurement tables, annotated scan images, and crossdating plots remain 100% synchronized with the new measurements.
+- *Reason*: Any recalculation of anatomical traits or ring boundaries changes the underlying metrics and years; locking the image and plot updates guarantees that measurement tables, annotated scan images, and crossdating plots remain 100% synchronized with the new measurements.
 - When both measurement options are unchecked, the update checkboxes are unlocked, enabling standalone batch generation/updating of annotated images and reference plots across the project directory without re-running full measurements.
 
 ### Key Controls
@@ -544,10 +545,10 @@ To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchroni
 - **File Selection Mode**: Toggle between **Batch Process All Samples** and handpicking subsets (**Manually select files to process**).
 - **Reverse Selection**: Inverts current sample selections in the list.
 - **Operation Checkboxes**:
-  - **Measure Cells**: Extracts cell lumen and cell wall thickness metrics to `<sample>.cells_table.csv`.
-  - **Measure Rings**: Extracts ring-width and ring-level aggregate metrics to `<sample>.rings_table.csv`.
-  - **Update Annotated Images**: Generates/updates `<sample>_annotated.jpg` with ring boundaries, year labels, and cell overlays.
-  - **Update Crossdating Reference Files**: Generates/updates standardized `<sample>_ReferenceSeries.jpg` plots.
+    - **Measure Cells**: Extracts cell lumen and cell wall thickness metrics to `<sample>.cells_table.csv`.
+    - **Measure Rings**: Extracts ring-width and ring-level aggregate metrics to `<sample>.rings_table.csv`.
+    - **Update Annotated Images**: Generates/updates `<sample>_annotated.jpg` with ring boundaries, year labels, and cell overlays.
+    - **Update Crossdating Reference Files**: Generates/updates standardized `<sample>_ReferenceSeries.jpg` plots.
 - **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings via [ZZ - Settings](#zz-settings).
 - **Run Analysis Button**: Runs batch extraction and updates with real-time progress tracking.
 
