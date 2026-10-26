@@ -137,7 +137,7 @@ pip install napari-roxas-ai
    ```bash
    napari-roxas
    ```
-   This starts napari with the ROXAS AI shortcuts installed and the **Manual Editing** widget group docked. Plain `napari` works as well, the shortcuts then become available once a ROXAS AI widget is opened.
+   This starts napari with the ROXAS AI shortcuts installed and the **Manual Editing** widget group docked. Plain `napari` works as well, the shortcuts then become available once a ROXAS AI widget is opened (see [Shortcuts Reference](../reference/shortcuts.md)).
 2. **Open sample data:**
    - In the napari menu, navigate to `File > Open Sample > ROXAS AI`.
    - Three layers (**Image**, **Rings**, and **Cells**) will load into the viewer.
@@ -165,3 +165,23 @@ pip install napari-roxas-ai
 
 !!! warning "Important note"
     Do not install packages into the environment while napari or another Python process is actively running in it. Always perform package installations and updates from a dedicated terminal prompt before launching napari.
+
+---
+
+## Troubleshooting & Clean Reinstall
+
+### Settings Not Updating After an Upgrade
+When upgrading `napari-roxas-ai` over an older installation, your custom `settings.json` file is preserved on disk so user configurations are not lost during everyday use.
+
+- **Reset Defaults via UI**: Open napari, go to `Plugins > ROXAS AI > ZZ - Settings`, and click **Reset to defaults**.
+- **Complete Clean Reinstall**: If you need to perform a fresh reinstallation (e.g., to purge cached configurations or update from source):
+  1. Close napari and open your terminal with `conda activate roxas-ai`.
+  2. Uninstall the package:
+     ```bash
+     pip uninstall napari-roxas-ai -y
+     ```
+  3. Reinstall the package:
+     ```bash
+     pip install napari-roxas-ai
+     ```
+     *(Or `pip install .` when installing directly from a local repository).*

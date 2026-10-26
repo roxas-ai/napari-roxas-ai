@@ -70,3 +70,4 @@ nav:
   - Reference:
       - Technical Reference: reference/technical_reference.md
       - Segmentation Models: reference/segmentation_models.md
+      - Shortcuts: reference/shortcuts.md

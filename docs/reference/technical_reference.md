@@ -285,12 +285,29 @@ Defines the output format for tabular data:
 - **`separator`**: Column delimiter for output tables (default: `";"`).
 - **`index_column`**: Column identifier name (default: `"id"`).
 
-### 4. Visualization (Vectorization & Rasterization)
+### 4. Visualization (Vectorization & Rasterization) {: #4-visualization-vectorization-rasterization }
 
-Controls how data appears in the napari viewer:
+Controls geometric conversion algorithms, contour simplification tolerances, layer styling, and colormaps in the napari viewer:
 
-- **`vectorization`**: Controls polygon smoothing tolerances, edge widths, and colors for cells (`cells_edge_width`, `cells_edge_color`, `cells_face_color`, `cells_tolerance`) and rings (`rings_edge_width`, `rings_edge_color`, `rings_tolerance`, `rerun_interactive_edge_color`).
-- **`rasterization`**: Controls color sequences for adjacent rings (`rings_color_sequence`), uncomplete rings (`uncomplete_ring_value`, `uncomplete_ring_color`), and cell masks (`cells_color`).
+#### Vectorization Parameters (`vectorization`)
+Controls how raster label masks are converted into editable vector polygons and polylines:
+
+- **`cells_tolerance`**: Maximum geometric approximation tolerance in pixels for Douglas-Peucker cell contour simplification. Eliminates single-pixel staircase artefacts while preserving lumen fidelity. (*Default:* `1`)
+- **`cells_edge_width`**: Display line width (in pixels) of cell vector boundaries in the viewer. (*Default:* `5`)
+- **`cells_edge_color`**: Outline color for cell vector shapes. (*Default:* `"blue"`)
+- **`cells_face_color`**: Fill color for cell vector shapes. (*Default:* `"cyan"`)
+- **`rings_tolerance`**: Maximum approximation tolerance in pixels for Douglas-Peucker ring polyline smoothing. Set to `0` to disable simplification and retain raw pixel coordinates. (*Default:* `5`)
+- **`rings_edge_width`**: Display line thickness (in pixels) for ring boundary polylines. (*Default:* `7`)
+- **`rings_edge_color`**: Display color for active ring boundary polylines. (*Default:* `"black"`)
+- **`rerun_interactive_edge_color`**: Display color for newly detected boundaries generated during interactive AI re-runs. (*Default:* `"lime"`)
+
+#### Rasterization & Colormaps (`rasterization`)
+Controls how edited vector shapes are rasterized back onto integer label masks:
+
+- **`cells_color`**: Default colormap color for rasterized cell lumens. (*Default:* `"lime"`)
+- **`uncomplete_ring_value`**: Integer label assigned to the topmost uncompleted ring zone bordering the bark edge. (*Default:* `-1`)
+- **`uncomplete_ring_color`**: Display color assigned to the uncompleted ring zone. (*Default:* `"red"`)
+- **`rings_color_sequence`**: List of alternating colors assigned cyclically to successive annual rings (`["#8080ff", "#a8a8ff", "#d0d0ff", "#ffffff"]`).
 
 ### 5. Measurement Defaults (`measurements`)
 

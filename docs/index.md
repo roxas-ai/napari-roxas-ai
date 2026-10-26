@@ -23,4 +23,4 @@ Explore the sections below to get started:
 - **[Getting Started](getting_started/installation.md)**: How to install the plugin and run your first analysis.
 - **[User Guide](user_guide/widgets.md)**: Detailed information about the available widgets and tools.
 - **[Tutorials](tutorials/workflows.md)**: Step-by-step guides for specific tasks.
-- **[Reference](reference/technical_reference.md)**: Technical specifications, output variables, and [deep-learning segmentation models](reference/segmentation_models.md).
+- **[Reference](reference/technical_reference.md)**: Technical specifications, output variables, [deep-learning segmentation models](reference/segmentation_models.md), and [keyboard & mouse shortcuts](reference/shortcuts.md).
