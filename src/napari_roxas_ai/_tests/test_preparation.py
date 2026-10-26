@@ -253,7 +253,7 @@ class TestPreparationWidget:
         )
         assert list_native.height() == expected_7_height
 
-        # Test with 15 files: should be capped at MAX_VISIBLE_IMAGE_ROWS (10)
+        # Test with 15 files: should be capped at MAX_VISIBLE_IMAGE_ROWS (7)
         prep_widget.source_files = [
             str(project_dir / f"image_{i:02d}.jpg") for i in range(15)
         ]

@@ -28,9 +28,13 @@ conda activate roxas-ai
 # 2. Install napari-roxas-ai
 pip install napari-roxas-ai
 
-# 3. Launch napari
-napari
+# 3. Launch napari with ROXAS AI
+napari-roxas
 ```
+
+`napari-roxas` starts napari with the ROXAS AI shortcuts installed and the
+Manual Editing widget group docked. Plain `napari` works as well, the shortcuts
+then become available once a ROXAS AI widget is opened.
 
 > 💡 **Detailed Step-by-Step Installation Guides:**  
 > For complete, beginner-friendly instructions—including Miniforge/Miniconda setup for **Windows**, **macOS**, and **Linux**, as well as **GPU acceleration (CUDA / Apple Silicon MPS)** configuration—see the **[Getting Started & Installation Guide](https://roxas-ai.github.io/napari-roxas-ai/getting_started/installation/)**.

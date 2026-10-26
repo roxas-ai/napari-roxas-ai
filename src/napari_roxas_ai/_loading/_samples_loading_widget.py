@@ -27,6 +27,7 @@ from napari_roxas_ai.shortcuts import (
     install_wasd_shortcuts,
     has_shortcuts_applied,
     mark_shortcuts_applied,
+    prevent_duplicate_dock_if_already_present,
 )
 from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
 
@@ -40,7 +41,7 @@ settings = SettingsManager()
 # The image list is at least this many rows high and otherwise grows with
 # its content, one row per image, up to MAX_VISIBLE_IMAGE_ROWS
 MIN_VISIBLE_IMAGE_ROWS = 5
-MAX_VISIBLE_IMAGE_ROWS = 10
+MAX_VISIBLE_IMAGE_ROWS = 7
 
 # Gap between a row's label and its box. Set explicitly because the style's
 # default depends on the widget pair (on macOS label-to-button is wider than
@@ -49,7 +50,7 @@ LABEL_SPACING = 10
 
 # Longest project directory shown on the button, longer paths are elided in the
 # middle (the full path is in the tooltip)
-MAX_PROJECT_DIRECTORY_CHARS = 35
+MAX_PROJECT_DIRECTORY_CHARS = 40
 
 
 def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
@@ -176,6 +177,7 @@ class SamplesLoadingWidget(Container):
         # The rows bring their own labels, a label column would only indent them
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(self, viewer, "2/4 - Load image(s)")
         try:
             if not has_shortcuts_applied(viewer):
                 install_wasd_shortcuts(viewer)
@@ -217,7 +219,7 @@ class SamplesLoadingWidget(Container):
 
         # sample selection container
         self._samples_selection_container = Container(
-            widgets=[], labels=False, layout="vertical", visible=True
+            widgets=[], labels=False, layout="vertical"
         )
         self._samples_selection_container.margins = (0, 0, 0, 0)
         self._available_images_label = Label(value="Available Images:")
@@ -248,7 +250,7 @@ class SamplesLoadingWidget(Container):
 
         # Load selected sample button
         self._load_samples_button = PushButton(
-            text="Load Selected Image", visible=True
+            text="Load Selected Image"
         )
         self._load_samples_button.changed.connect(self._load_selected_samples)
         self._is_loading = False
@@ -267,8 +269,6 @@ class SamplesLoadingWidget(Container):
                 self._progress_bar,
             ]
         )
-        # Spare height goes below the widgets instead of stretching the list
-        self.native.layout().addStretch()
         self._refresh_samples_list()
 
         # --- BACKGROUND MONITORING INITIALIZATION ---
@@ -278,6 +278,11 @@ class SamplesLoadingWidget(Container):
         from qtpy.QtCore import QTimer
         def _init_rings_editor():
             try:
+                # If RingsLayerEditorWidget is already present in the sidebar (e.g. in a group),
+                # do not create a duplicate instance in the background.
+                from napari_roxas_ai.shortcuts import is_widget_already_present
+                if is_widget_already_present(self._viewer, RingsLayerEditorWidget):
+                    return
                 # Instantiate the widget. Even if not docked, it connects to viewer events
                 # to manage the 'Rings Years' layer. A reference is kept on the loader
                 # widget to prevent the editor from being garbage collected.

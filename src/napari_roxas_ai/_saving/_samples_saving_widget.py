@@ -151,14 +151,14 @@ class SamplesSavingWidget(Container):
         self._viewer = viewer
 
         self._save_selected_layers_button = PushButton(
-            text="Save Selected Layers", visible=True
+            text="Save Selected Layers"
         )
         self._save_selected_layers_button.changed.connect(
             lambda: self._save_layers_with_feedback(how="selected")
         )
 
         self._save_all_layers_button = PushButton(
-            text="Save All Layers", visible=True
+            text="Save All Layers"
         )
         self._save_all_layers_button.changed.connect(
             lambda: self._save_layers_with_feedback(how="all")

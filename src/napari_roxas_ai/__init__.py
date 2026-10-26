@@ -78,6 +78,11 @@ _LAZY_IMPORTS = {
     "SettingsWidget": "._settings._settings_widget",
     "write_multiple_layers": "._writer",
     "write_single_layer": "._writer",
+    "close_all_dock_widgets": ".shortcuts._shortcuts",
+    "load_manual_editing_group": ".shortcuts._shortcuts",
+    "load_batch_operations_group": ".shortcuts._shortcuts",
+    "is_widget_already_present": ".shortcuts._shortcuts",
+    "prevent_duplicate_dock_if_already_present": ".shortcuts._shortcuts",
 }
 
 __all__ = tuple(_LAZY_IMPORTS)

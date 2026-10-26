@@ -26,6 +26,7 @@ from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._saving import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
     unregister_layer_callback,
@@ -566,6 +567,17 @@ class RerunWorker(QObject):
 
 class RingsLayerEditorWidget(Container):
     @property
+    def _saving_widget(self) -> SamplesSavingWidget:
+        """Lazily initialize the background saving helper widget."""
+        if getattr(self, "_saving_widget_instance", None) is None:
+            self._saving_widget_instance = SamplesSavingWidget(self._viewer)
+        return self._saving_widget_instance
+
+    @_saving_widget.setter
+    def _saving_widget(self, value):
+        self._saving_widget_instance = value
+
+    @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
         """Get the single valid ring layer currently in the viewer."""
         valid_layers = self._get_valid_layers()
@@ -688,6 +700,7 @@ class RingsLayerEditorWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(labels=False)
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(self, viewer, "6 - Edit rings")
         self.settings = SettingsManager()
 
         self._layer_callback = None
@@ -745,8 +758,7 @@ class RingsLayerEditorWidget(Container):
         )
 
         self._last_year_update_button = PushButton(
-            text="Update Year",
-            visible=True,
+            text="Update Year"
         )
         self._last_year_update_button.changed.connect(self._update_layer_year)
 
@@ -781,7 +793,7 @@ class RingsLayerEditorWidget(Container):
         self._undo_button.changed.connect(self._undo_last_change)
 
         # Create a button to save all layers
-        self._saving_widget = SamplesSavingWidget(self._viewer)
+        self._saving_widget_instance = None
         self._save_all_layers_button = PushButton(text="Save All Layers")
         self._save_all_layers_button.changed.connect(self._save_all_layers)
 
@@ -2052,7 +2064,10 @@ class RingsLayerEditorWidget(Container):
             
         # Do not update year labels while the user is drawing a lasso selection polygon
         # to avoid scenegraph race conditions during high-frequency mouse events.
-        if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
+        try:
+            if hasattr(self, "_lasso_selection_checkbox") and self._lasso_selection_checkbox.value:
+                return
+        except (RuntimeError, Exception):
             return
 
         try:
@@ -2183,7 +2198,7 @@ class RingsLayerEditorWidget(Container):
                         "string": "{YEAR}",
                         "anchor": "upper_left",
                         "translation": [0, 0],
-                        "size": 8,
+                        "size": 14,
                         "color": "black",
                         "blending": "translucent",
                         "visible": True,

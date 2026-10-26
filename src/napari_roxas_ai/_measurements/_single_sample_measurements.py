@@ -13,6 +13,7 @@ from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QInputDialog
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
+from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from ._sample_measurer import SampleAnalyzer
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import (
@@ -79,6 +80,9 @@ class SingleSampleMeasurementsWidget(Container):
         self._spinner_timer.timeout.connect(self._update_spinner)
 
         self._viewer = viewer
+        prevent_duplicate_dock_if_already_present(
+            self, viewer, "9A - Measure cells & rings (individual image)"
+        )
         self._selected_sample = None
 
         # Cells measurement checkbox
