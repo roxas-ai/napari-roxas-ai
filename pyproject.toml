@@ -41,6 +41,8 @@ dependencies = [
     # NVIDIA GPUs reinstall from the matching PyTorch index, e.g. Blackwell
     # (RTX 50-series, sm_120) needs CUDA 12.8:
     #   pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+    # Intel GPUs (XPU, torch >= 2.5) use the xpu index instead:
+    #   pip install --index-url https://download.pytorch.org/whl/xpu "torch>=2.5,<2.9" "torchvision<0.24"
     # The torch/torchvision version pairs below must stay compatible
     # (e.g. torch 2.8 <-> torchvision 0.23).
     # Linux

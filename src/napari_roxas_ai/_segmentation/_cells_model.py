@@ -9,16 +9,14 @@ import skimage.measure as skm
 import torch
 import torchvision.transforms as transforms
 
+from .._utils._torch_device import select_torch_device
+
 
 class CellsSegmentationModel(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Use available_device as the source of truth for location
-        self.available_device = (
-            "cuda"
-            if torch.cuda.is_available()
-            else "mps" if torch.mps.is_available() else "cpu"
-        )
+        self.available_device = select_torch_device(try_to_use_gpu=True)
         # Call to() to move net, but avoid setting self.device directly if read-only
         self.net = smp.Unet(
             encoder_weights=None, classes=2, encoder_name="resnet50"

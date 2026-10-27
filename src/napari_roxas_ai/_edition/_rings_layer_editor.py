@@ -26,6 +26,7 @@ from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._saving import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai._utils._torch_device import select_torch_device
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
@@ -490,18 +491,11 @@ class RerunWorker(QObject):
         rings_model = PackageImporter(
             self.rings_model_weights_file
         ).load_pickle("LinearRingModel", "model.pkl")
-        rings_model.available_device = (
-            "cuda"
-            if torch.cuda.is_available()
-            and self.settings.get("processing.try_to_use_gpu")
-            else (
-                "mps"
-                if torch.mps.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else "cpu"
-            )
+        rings_model.available_device = select_torch_device(
+            self.settings.get("processing.try_to_use_gpu")
         )
         rings_model.to(device=rings_model.available_device)
+        print(f"Rings model running on: {rings_model.available_device}")
         # Synchronize internal device attribute for packaged models
         try:
             rings_model.device = rings_model.available_device
@@ -516,7 +510,7 @@ class RerunWorker(QObject):
         rings_model.use_autocast = bool(
             torch.amp.autocast_mode.is_autocast_available(device_obj.type)
             and self.settings.get("processing.try_to_use_gpu")
-            and (rings_model.available_device == "cuda" or rings_model.available_device == "mps")
+            and rings_model.available_device != "cpu"
         )
 
         # Perform inference, starting from the given boundary if the model supports it
