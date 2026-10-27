@@ -126,6 +126,9 @@ While ROXAS AI functions fully on CPU, enabling GPU acceleration significantly s
         ```
         *For a functional installation, `XPU available:` should output `True` and list your GPU device name. If it reports `False`, check the driver installation.*
 
+    !!! note "First run is slow"
+        On some Intel GPUs the first computation compiles the GPU kernels, which can take several minutes with no visible progress. The compiled kernels are cached, so later runs start within seconds.
+
 === "macOS (Apple Silicon & Intel)"
 
     - **Apple Silicon (M1/M2/M3/M4):**
