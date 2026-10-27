@@ -145,6 +145,7 @@ class Worker(QObject):
                 settings.get("processing.try_to_use_gpu")
             )
             self.cells_model.to(device=self.cells_model.available_device)
+            print(f"Cells model running on: {self.cells_model.available_device}")
             # Synchronize internal device attribute for models that use it in infer()
             try:
                 self.cells_model.device = self.cells_model.available_device
@@ -178,6 +179,7 @@ class Worker(QObject):
                 settings.get("processing.try_to_use_gpu")
             )
             self.rings_model.to(device=self.rings_model.available_device)
+            print(f"Rings model running on: {self.rings_model.available_device}")
             # Synchronize internal device attribute for packaged models
             try:
                 self.rings_model.device = self.rings_model.available_device

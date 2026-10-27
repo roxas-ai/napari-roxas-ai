@@ -495,6 +495,7 @@ class RerunWorker(QObject):
             self.settings.get("processing.try_to_use_gpu")
         )
         rings_model.to(device=rings_model.available_device)
+        print(f"Rings model running on: {rings_model.available_device}")
         # Synchronize internal device attribute for packaged models
         try:
             rings_model.device = rings_model.available_device
