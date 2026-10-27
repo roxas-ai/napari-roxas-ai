@@ -58,6 +58,10 @@ ROXAS AI runs on CPU by default. For large image datasets, GPU acceleration is s
   ```bash
   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
   ```
+- **Windows & Linux (Intel GPUs, experimental)**: Install the Intel GPU driver, then reinstall PyTorch with XPU support:
+  ```bash
+  pip install "torch>=2.5,<2.9" "torchvision<0.24" --index-url https://download.pytorch.org/whl/xpu
+  ```
 - **macOS (Apple Silicon M1/M2/M3/M4)**: Supported out-of-the-box via Metal Performance Shaders (MPS).
 - **Settings**: In napari, go to `Plugins > ROXAS AI > ZZ - Settings` -> `processing`, enable `try_to_use_gpu` and `try_to_use_autocast`, then click `Apply`.
 
