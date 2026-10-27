@@ -171,20 +171,10 @@ def apply_segmentation_results_to_viewer(
                     if len(df) > 0:
                         df.loc[df.index[0], "enabled"] = False
 
-                # If existing features already contain YEAR etc., preserve them and only update RBXY
-                if (
-                        getattr(rings_layer, "features", None) is not None
-                        and not rings_layer.features.empty
-                        and "YEAR" in rings_layer.features.columns
-                        and "RBXY" in df.columns
-                ):
-                    old_df = rings_layer.features.copy()
-                    n = min(len(old_df), len(df))
-                    old_df = old_df.iloc[:n].copy()
-                    old_df.loc[old_df.index[:n], "RBXY"] = df["RBXY"].iloc[:n].values
-                    rings_layer.features = old_df
-                else:
-                    rings_layer.features = df
+                # Replace existing features: the new boundaries (with the dummy
+                # top boundary) don't map row by row onto the old table, and
+                # YEAR / enabled are recomputed by update_rings_geometries
+                rings_layer.features = df
 
             # Ensure rings_layer.features exists before update_rings_geometries
             if getattr(rings_layer, "features", None) is None or rings_layer.features.empty:
