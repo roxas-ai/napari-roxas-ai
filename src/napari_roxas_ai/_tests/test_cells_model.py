@@ -38,3 +38,36 @@ def test_cells_segmentation_model():
     assert np.isin(output, (0, 1)).all(), "Output is not a binary label"
 
     print("CellsSegmentationModel test passed!")
+
+
+class _AllCellsNet(torch.nn.Module):
+    """Stub network predicting class 1 everywhere, to test tiling cheaply."""
+
+    def forward(self, x):
+        out = torch.zeros((x.shape[0], 2, x.shape[2], x.shape[3]))
+        out[:, 1] = 1
+        return out
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="Skip on macOS")
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (1376, 1376),  # padded size is a multiple of the stride
+        (800, 1600),  # image size is a multiple of the stride
+        (1477, 900),
+        (300, 2000),
+    ],
+)
+def test_cells_segmentation_model_tiling_covers_image(shape):
+
+    model = CellsSegmentationModel()
+    model.net = _AllCellsNet()
+    model.available_device = "cpu"
+    model.use_autocast = False
+
+    img = np.random.randint(0, 256, (*shape, 3), dtype=np.uint8)
+    labels = model.infer(img)
+
+    assert labels.shape == shape
+    assert (labels == 255).all(), "Some pixels were not covered by a patch"

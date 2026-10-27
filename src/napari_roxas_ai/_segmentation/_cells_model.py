@@ -68,9 +68,12 @@ class CellsSegmentationModel(pl.LightningModule):
         )
         labels_padded = np.zeros((img_padded.shape[0], img_padded.shape[1]))
 
-        # Process the image in chunks
-        for i in range(img_padded.shape[0] // stride + 1):
-            for j in range(img_padded.shape[1] // stride + 1):
+        # Process the image in chunks; each patch writes a stride-sized zone,
+        # so ceil(size / stride) patches cover the image without empty ones
+        n_rows = -(-img.shape[0] // stride)
+        n_cols = -(-img.shape[1] // stride)
+        for i in range(n_rows):
+            for j in range(n_cols):
                 x, dx, y, dy = (
                     stride * i,
                     stride * i + patch_size,
