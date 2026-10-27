@@ -27,6 +27,7 @@ from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 from .._utils._segmentation_postprocess import remove_border_touching_components
+from .._utils._torch_device import select_torch_device
 
 # NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
 # are intentionally imported lazily inside Worker.run() instead of at module level.
@@ -250,16 +251,8 @@ class Worker(QObject):
             # Set up cells model
             cells_model = CellsSegmentationModel()
             cells_model.load_weights(self.cells_model_weights_file)
-            cells_model.available_device = (
-                "cuda"
-                if torch.cuda.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else (
-                    "mps"
-                    if torch.mps.is_available()
-                    and self.settings.get("processing.try_to_use_gpu")
-                    else "cpu"
-                )
+            cells_model.available_device = select_torch_device(
+                self.settings.get("processing.try_to_use_gpu")
             )
             cells_model.to(device=cells_model.available_device)
             # Synchronize internal device attribute for models that use it in infer()
@@ -278,9 +271,7 @@ class Worker(QObject):
                     device_obj.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
-                and (
-                    cells_model.available_device == "cuda" or cells_model.available_device == "mps"
-                )
+                and cells_model.available_device != "cpu"
             )
 
             # Perform inference
@@ -306,16 +297,8 @@ class Worker(QObject):
             rings_model = PackageImporter(
                 self.rings_model_weights_file
             ).load_pickle("LinearRingModel", "model.pkl")
-            rings_model.available_device = (
-                "cuda"
-                if torch.cuda.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else (
-                    "mps"
-                    if torch.mps.is_available()
-                    and self.settings.get("processing.try_to_use_gpu")
-                    else "cpu"
-                )
+            rings_model.available_device = select_torch_device(
+                self.settings.get("processing.try_to_use_gpu")
             )
             rings_model.to(device=rings_model.available_device)
             # Synchronize internal device attribute for packaged models
@@ -334,9 +317,7 @@ class Worker(QObject):
                     device_obj.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
-                and (
-                    rings_model.available_device == "cuda" or rings_model.available_device == "mps"
-                )
+                and rings_model.available_device != "cpu"
             )
 
             # Perform inference
