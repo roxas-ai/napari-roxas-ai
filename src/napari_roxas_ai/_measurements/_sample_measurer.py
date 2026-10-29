@@ -96,19 +96,25 @@ class SampleAnalyzer:
         """Find lumen and cell wall contours."""
         # Find lumen contours
 
-        self.lumen_contours, _ = cv2.findContours(
+        contours, _ = cv2.findContours(
             self.cells_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
+        contour_data = []
+        for c in contours:
+            M = cv2.moments(c)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                contour_data.append((cy, cx, c, M))
+            else:
+                contour_data.append((float("inf"), float("inf"), c, M))
+
         # Sort contours by centroid (YPIX, XPIX) ascending so cell ID 0
         # starts at the image top-left, consistent with ring ordering.
-        def _centroid_key(contour):
-            M = cv2.moments(contour)
-            if M["m00"] != 0:
-                return (int(M["m01"] / M["m00"]), int(M["m10"] / M["m00"]))
-            return (float("inf"), float("inf"))
-
-        self.lumen_contours = sorted(self.lumen_contours, key=_centroid_key)
+        contour_data.sort(key=lambda item: (item[0], item[1]))
+        self.lumen_contours = [item[2] for item in contour_data]
+        self._lumen_moments = [item[3] for item in contour_data]
 
         # Find cell wall contours using distance transform
         _, comps = cv2.distanceTransformWithLabels(
@@ -126,9 +132,10 @@ class SampleAnalyzer:
 
     def _compute_cells_lumina(self) -> None:
         """Calculate lumen metrics and initialize cell entries."""
-        for i, contour in enumerate(self.lumen_contours):
+        for i, (contour, M) in enumerate(
+            zip(self.lumen_contours, self._lumen_moments)
+        ):
             cell = {"id": i}
-            M = cv2.moments(contour)
 
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
@@ -265,12 +272,13 @@ class SampleAnalyzer:
             if not np.isnan(data["centroid"]).any():
                 self.centroids_map[data["centroid"]] = cell_id
 
-        # Precompute distance transform
-        self.dist_transform = cv2.distanceTransform(
-            cv2.bitwise_not(self.cells_array).astype("uint8"),
-            cv2.DIST_L2,
-            cv2.DIST_MASK_PRECISE,
-        )
+        # Reuse precomputed distance transform from _find_cells_contours()
+        if self.dist_transform is None:
+            self.dist_transform = cv2.distanceTransform(
+                cv2.bitwise_not(self.cells_array).astype("uint8"),
+                cv2.DIST_L2,
+                cv2.DIST_MASK_PRECISE,
+            )
 
         for contour in self.cell_walls_contours:
             self._process_cell_wall_contour(contour)
@@ -621,18 +629,10 @@ class SampleAnalyzer:
         self._smooth_cells_array()
         self._find_cells_contours()
         self._compute_cells_lumina()
-
-        # Initial table creation
-        self._get_cells_table()
-
         self._compute_cell_walls()
-
-        # Sync updates from self.cells (from _compute_cell_walls) back to cells_table
-        self._get_cells_table()
-
         self._cluster_cells()
 
-        # Sync updates from self.cells (from _cluster_cells) back to cells_table
+        # Build table once with all cell and cluster data populated
         self._get_cells_table()
 
         # Compute lumen metrics (needs lumen_area, major_axis_px, etc. from _get_cells_table)
@@ -985,506 +985,87 @@ class SampleAnalyzer:
             disabled = self.rings_table["enabled"] == False
             self.rings_table.loc[disabled, ["RVGI", "RVSF", "RGSGV"]] = np.nan
 
-    def _compute_mean_cwtpi(self) -> None:
-        # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
-        self.rings_table["CWTPI"] = np.nan
+    def _compute_ring_aggregations(self) -> None:
+        """
+        Consolidated and vectorized computation of ring-level aggregations
+        from cell-level measurements:
+        CWTPI, CWTBA, CWTLE, CWTRI, CWTTAN, CWTRAD, CWTALL,
+        RTSR, CTSR, DHW, DHM, DRAD, DTAN, TB2, CWA, RWD.
+        """
+        agg_cols = [
+            "CWTPI", "CWTBA", "CWTLE", "CWTRI", "CWTTAN", "CWTRAD", "CWTALL",
+            "RTSR", "CTSR", "DHW", "DHM", "DRAD", "DTAN", "TB2", "CWA", "RWD",
+        ]
+        for col in agg_cols:
+            self.rings_table[col] = np.nan
 
-        if self.cells_table.empty:
+        if self.cells_table is None or self.cells_table.empty:
             return
+
         if "bot_ring_id" not in self.cells_table.columns:
             return
-        if "CWT_pith" not in self.cells_table.columns:
-            return
 
-        df = self.cells_table[["bot_ring_id", "CWT_pith"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_pith"])
-
+        df = self.cells_table.dropna(subset=["bot_ring_id"]).copy()
         if df.empty:
             return
 
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_pith"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTPI"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTPI"] = np.nan
-
-    def _compute_mean_cwtba(self) -> None:
-        # CWTBA = Mean thickness of outer (bark-facing) cell wall per ring [µm]. Uses cell-level CWT_bark and aggregates by bot_ring_id.
-        self.rings_table["CWTBA"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_bark" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_bark"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_bark"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_bark"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTBA"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTBA"] = np.nan
-
-    def _compute_mean_cwtle(self) -> None:
-        # CWTLE = Mean thickness of left cell wall (viewed from pith) per ring [µm]. Uses cell-level CWT_left and aggregates by bot_ring_id.
-        self.rings_table["CWTLE"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_left" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_left"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_left"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_left"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTLE"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTLE"] = np.nan
-
-    def _compute_mean_cwtri(self) -> None:
-        # CWTRI = Mean thickness of right cell wall (viewed from pith) per ring [µm]. Uses cell-level CWT_right and aggregates by bot_ring_id.
-        self.rings_table["CWTRI"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_right" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_right"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_right"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_right"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTRI"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTRI"] = np.nan
-
-    def _compute_mean_cwttan(self) -> None:
-        # CWTTAN = Mean thickness of tangential cell walls per ring [µm]. Uses cell-level CWTTAN and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWTTAN"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWTTAN" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWTTAN"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWTTAN"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWTTAN"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTTAN"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTTAN"] = np.nan
-
-    def _compute_mean_cwtrad(self) -> None:
-        # CWTRAD = Mean thickness of radial cell walls per ring [µm]. Uses cell-level CWTRAD and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWTRAD"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWTRAD" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWTRAD"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWTRAD"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWTRAD"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTRAD"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTRAD"] = np.nan
-
-    def _compute_mean_cwtall(self) -> None:
-        # CWTALL = Mean thickness of all cell walls per ring [µm]. Uses cell-level CWTALL and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWTALL"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWTALL" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWTALL"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWTALL"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWTALL"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTALL"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTALL"] = np.nan
-
-    def _compute_mean_rtsr(self) -> None:
-        # RTSR = Mean radial Thickness-to-span ratio per ring (Mork's index). Uses cell-level RTSR and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["RTSR"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "RTSR" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "RTSR"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "RTSR"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["RTSR"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "RTSR"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "RTSR"] = np.nan
-
-    def _compute_mean_ctsr(self) -> None:
-        # CTSR = Mean circular Thickness-to-span ratio per ring. Uses cell-level CTSR and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CTSR"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CTSR" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CTSR"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CTSR"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CTSR"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CTSR"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CTSR"] = np.nan
-
-    def _compute_mean_dh(self) -> None:
-        # DHW = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DHW"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "DH" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "DH"]].copy()
         df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
-        df["DH"] = pd.to_numeric(df["DH"], errors="coerce")
-        df = df.dropna(subset=["bot_ring_id", "DH"])
-
+        df = df.dropna(subset=["bot_ring_id"])
         if df.empty:
             return
 
-        # Keep only positive DH values
-        df = df[df["DH"] > 0]
-        if df.empty:
-            return
+        # Prepare hydraulic diameters for DHW and DHM
+        if "DH" in df.columns:
+            dh = pd.to_numeric(df["DH"], errors="coerce")
+            dh_pos = dh.where(dh > 0)
+            df["DH4"] = dh_pos ** 4
+            df["DH5"] = dh_pos ** 5
 
-        # group by ring id and compute hydraulically weighted diameter
-        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
-            if ring_id not in self.rings_table.index:
-                continue
+        mean_cols = [
+            "CWT_pith", "CWT_bark", "CWT_left", "CWT_right", "CWTTAN", "CWTRAD", "CWTALL",
+            "RTSR", "CTSR", "lumen_diam_rad", "lumen_diam_tang", "TB2", "CWA", "RWD",
+        ]
+        rename_map = {
+            "CWT_pith": "CWTPI",
+            "CWT_bark": "CWTBA",
+            "CWT_left": "CWTLE",
+            "CWT_right": "CWTRI",
+            "lumen_diam_rad": "DRAD",
+            "lumen_diam_tang": "DTAN",
+        }
 
-            dh = ring_df["DH"].values.astype(float)
-            denom = np.sum(dh ** 4)
-            if denom <= 0 or np.isnan(denom):
-                continue
+        grouped = df.groupby(df["bot_ring_id"].astype(int))
 
-            num = np.sum(dh ** 5)
-            self.rings_table.loc[ring_id, "DHW"] = float(num / denom)
+        # Compute standard column means
+        present_cols = [c for c in mean_cols if c in df.columns]
+        if present_cols:
+            agg_means = grouped[present_cols].mean().rename(columns=rename_map)
+            valid_rings = agg_means.index.intersection(self.rings_table.index)
+            if not valid_rings.empty:
+                for col in agg_means.columns:
+                    self.rings_table.loc[valid_rings, col] = agg_means.loc[valid_rings, col].values
 
-        # disabled rings -> NaN
+        # Vectorized DHW = sum(DH^5) / sum(DH^4)
+        if "DH5" in df.columns and "DH4" in df.columns:
+            dhw_num = grouped["DH5"].sum()
+            dhw_den = grouped["DH4"].sum()
+            dhw = (dhw_num / dhw_den).where(dhw_den > 0)
+            valid_rings = dhw.index.intersection(self.rings_table.index)
+            if not valid_rings.empty:
+                self.rings_table.loc[valid_rings, "DHW"] = dhw.loc[valid_rings].values
+
+        # Vectorized DHM = (mean(DH^4))^0.25
+        if "DH4" in df.columns:
+            dhm_mean4 = grouped["DH4"].mean()
+            dhm = (dhm_mean4 ** 0.25).where(dhm_mean4 > 0)
+            valid_rings = dhm.index.intersection(self.rings_table.index)
+            if not valid_rings.empty:
+                self.rings_table.loc[valid_rings, "DHM"] = dhm.loc[valid_rings].values
+
+        # Disabled rings -> NaN
         if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DHW"] = np.nan
-
-    def _compute_mean_dh2(self) -> None:
-        # DHM = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DHM"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "DH" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "DH"]].copy()
-        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
-        df["DH"] = pd.to_numeric(df["DH"], errors="coerce")
-        df = df.dropna(subset=["bot_ring_id", "DH"])
-
-        if df.empty:
-            return
-
-        # Keep only positive DH values
-        df = df[df["DH"] > 0]
-        if df.empty:
-            return
-
-        # group by ring id and compute DHM
-        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
-            if ring_id not in self.rings_table.index:
-                continue
-
-            dh = ring_df["DH"].values.astype(float)
-            n = dh.size
-            if n <= 0:
-                continue
-
-            mean_dh4 = np.sum(dh ** 4) / n
-            if mean_dh4 <= 0 or np.isnan(mean_dh4):
-                continue
-
-            self.rings_table.loc[ring_id, "DHM"] = float(mean_dh4 ** 0.25)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DHM"] = np.nan
-
-    def _compute_mean_drad(self) -> None:
-        # DRAD = Mean radial cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_rad and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DRAD"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "lumen_diam_rad" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "lumen_diam_rad"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "lumen_diam_rad"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["lumen_diam_rad"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "DRAD"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DRAD"] = np.nan
-
-    def _compute_mean_dtan(self) -> None:
-        # DTAN = Mean tangential cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_tang and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DTAN"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "lumen_diam_tang" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "lumen_diam_tang"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "lumen_diam_tang"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["lumen_diam_tang"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "DTAN"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DTAN"] = np.nan
-
-    def _compute_mean_tb2(self) -> None:
-        # TB2 = Mean cell wall reinforcement index (t/b)^2 per ring. Uses cell-level TB2 and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["TB2"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "TB2" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "TB2"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "TB2"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["TB2"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "TB2"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "TB2"] = np.nan
-
-    def _compute_mean_cwa(self) -> None:
-        # CWA = Mean cell wall area per ring [µm²]. Uses cell-level CWA and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWA"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWA" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWA"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWA"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWA"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWA"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWA"] = np.nan
-
-    def _compute_mean_rwd(self) -> None:
-        # RWD = Mean relative anatomical cell density per ring. Uses cell-level RWD and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["RWD"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "RWD" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "RWD"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "RWD"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["RWD"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "RWD"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "RWD"] = np.nan
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, agg_cols] = np.nan
 
     def _compute_cells_to_rings_distances(self):
         """Compute distances from cells to rings."""
@@ -1651,22 +1232,7 @@ class SampleAnalyzer:
         self._compute_kh_ring()
         self._compute_ks()
         self._compute_vessel_grouping_metrics()
-        self._compute_mean_cwtpi()
-        self._compute_mean_cwtba()
-        self._compute_mean_cwtle()
-        self._compute_mean_cwtri()
-        self._compute_mean_cwttan()
-        self._compute_mean_cwtrad()
-        self._compute_mean_cwtall()
-        self._compute_mean_rtsr()
-        self._compute_mean_ctsr()
-        self._compute_mean_dh()
-        self._compute_mean_dh2()
-        self._compute_mean_drad()
-        self._compute_mean_dtan()
-        self._compute_mean_tb2()
-        self._compute_mean_cwa()
-        self._compute_mean_rwd()
+        self._compute_ring_aggregations()
 
         return self.rings_table
 
