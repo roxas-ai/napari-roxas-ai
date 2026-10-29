@@ -719,10 +719,21 @@ class SampleAnalyzer:
             # bounds are (y, x) in tables, but fillPoly expects (x, y)
             bounds = np.flip(bounds, axis=1)
 
-            canvas = np.zeros((h, w), dtype=np.uint8)
-            cv2.fillPoly(canvas, [bounds], 1)
+            min_x = max(0, int(bounds[:, 0].min()))
+            max_x = min(w - 1, int(bounds[:, 0].max()))
+            min_y = max(0, int(bounds[:, 1].min()))
+            max_y = min(h - 1, int(bounds[:, 1].max()))
 
-            area_px = int(canvas.sum())
+            if min_x > max_x or min_y > max_y:
+                continue
+
+            crop_canvas = np.zeros((max_y - min_y + 1, max_x - min_x + 1), dtype=np.uint8)
+            local_bounds = bounds.copy()
+            local_bounds[:, 0] -= min_x
+            local_bounds[:, 1] -= min_y
+            cv2.fillPoly(crop_canvas, [local_bounds], 1)
+
+            area_px = int(crop_canvas.sum())
             # px² → µm²
             area_um2 = area_px / (self.pixels_per_um ** 2)
             # µm² → mm²
@@ -1069,12 +1080,23 @@ class SampleAnalyzer:
 
     def _compute_cells_to_rings_distances(self):
         """Compute distances from cells to rings."""
+        h, w = self.cells_array.shape[:2]
 
         # Create a map of cell centroids to their corresponding cell IDs
-        centroids_map = np.ones_like(self.cells_array).astype("int32") * -1
-        for i, centroid in enumerate(self.cells_table["centroid"]):
-            if not np.isnan(centroid).any():
-                centroids_map[centroid] = i
+        centroids_map = np.full((h, w), -1, dtype=np.int32)
+        centroids_all = np.array(self.cells_table["centroid"].tolist())
+        if centroids_all.size > 0:
+            if centroids_all.ndim == 1:
+                centroids_all = centroids_all.reshape(-1, 2)
+            valid = ~np.isnan(centroids_all).any(axis=1)
+            if valid.any():
+                valid_indices = np.where(valid)[0]
+                coords = centroids_all[valid].astype(int)
+                in_bounds = (
+                    (coords[:, 0] >= 0) & (coords[:, 0] < h) &
+                    (coords[:, 1] >= 0) & (coords[:, 1] < w)
+                )
+                centroids_map[coords[in_bounds, 0], coords[in_bounds, 1]] = valid_indices[in_bounds]
 
         # Initialize columns
         self.cells_table["bot_ring_id"] = np.nan
@@ -1094,14 +1116,30 @@ class SampleAnalyzer:
                 ),
                 axis=1,
             )
-            canvas = np.zeros_like(self.cells_array)
-            cv2.fillPoly(canvas, [bounds], 1)
 
-            ids = centroids_map[
-                np.where(
-                    np.logical_and(centroids_map >= 0, canvas.astype(bool))
-                )
-            ]
+            min_x = max(0, int(bounds[:, 0].min()))
+            max_x = min(w - 1, int(bounds[:, 0].max()))
+            min_y = max(0, int(bounds[:, 1].min()))
+            max_y = min(h - 1, int(bounds[:, 1].max()))
+
+            if min_x > max_x or min_y > max_y:
+                continue
+
+            y0 = max(0, min_y - 1)
+            y1 = min(h, max_y + 2)
+            x0 = min_x
+            x1 = max_x + 1
+
+            crop_canvas = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+            local_bounds = bounds.copy()
+            local_bounds[:, 0] -= x0
+            local_bounds[:, 1] -= y0
+            cv2.fillPoly(crop_canvas, [local_bounds], 1)
+
+            crop_centroids_map = centroids_map[y0:y1, x0:x1]
+            mask = (crop_centroids_map >= 0) & crop_canvas.astype(bool)
+            ids = crop_centroids_map[mask]
+
             if len(ids) == 0:
                 continue
 
@@ -1112,16 +1150,22 @@ class SampleAnalyzer:
             if centroids.ndim == 1:
                 centroids = centroids.reshape(-1, 2)
 
-            diff = np.diff(canvas.astype("int32"), axis=0)
+            crop_diff = np.diff(crop_canvas.astype("int32"), axis=0)
+
+            has_top = np.any(crop_diff > 0, axis=0)
+            crop_top = np.where(has_top, np.argmax(crop_diff > 0, axis=0) + y0, 0)
+
+            has_bot = np.any(crop_diff < 0, axis=0)
+            crop_bot = np.where(has_bot, np.argmax(crop_diff < 0, axis=0) + y0, 0)
+
+            local_x_coords = centroids[:, 1] - x0
 
             self.cells_table.loc[ids, "top_vert_dist"] = (
-                centroids[:, 0]
-                - np.argmax(diff > 0, axis=0)[centroids[:, 1]]
+                centroids[:, 0] - crop_top[local_x_coords]
             ) / self.pixels_per_um
 
             self.cells_table.loc[ids, "bot_vert_dist"] = (
-                np.argmax(diff < 0, axis=0)[centroids[:, 1]]
-                - centroids[:, 0]
+                crop_bot[local_x_coords] - centroids[:, 0]
             ) / self.pixels_per_um
 
         # --- Vectorized Angled Distances ---
