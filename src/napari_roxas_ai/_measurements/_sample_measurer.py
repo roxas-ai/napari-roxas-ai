@@ -52,9 +52,6 @@ class SampleAnalyzer:
 
         # Derived parameters
         self.pixels_per_um = float(config["pixels_per_um"])
-        self.cluster_dbl_cwt_px = (
-            config["cluster_dbl_cwt_threshold"] * self.pixels_per_um
-        )
         self.kernel = np.ones(
             (config["smoothing_kernel_size"], config["smoothing_kernel_size"])
         )
@@ -169,8 +166,8 @@ class SampleAnalyzer:
             else:
                 cell.update(
                     {
-                        "major_axis_px": np.nan,
-                        "minor_axis_px": np.nan,
+                        "major_axis_px": np.nan,  # semi-major axis length (px)
+                        "minor_axis_px": np.nan,  # semi-minor axis length (px)
                         "angle_major": np.nan,
                     }
                 )
@@ -180,23 +177,28 @@ class SampleAnalyzer:
     def _calculate_ellipse_metrics(
         self, contour: np.ndarray, cell: Dict
     ) -> None:
-        """Calculate ellipse-based metrics for lumen contours."""
+        """
+        Calculate ellipse-based metrics for lumen contours.
+
+        Note: cv2.fitEllipse returns full axis lengths (diameters: 2*a, 2*b).
+        These are divided by 2 to store semi-axis lengths (a = semi-major,
+        b = semi-minor) in 'major_axis_px' and 'minor_axis_px'.
+        """
         ellipse = cv2.fitEllipse(contour)
         center, axes, angle = ellipse
-        w, h = axes
+        w, h = axes  # w, h are full axis lengths (diameters) from cv2.fitEllipse
 
-        # TODO : Figure out what's up with the /2, and remove if appropriate
         if w >= h:
-            a, b = w / 2, h / 2
+            a, b = w / 2, h / 2  # semi-major and semi-minor axis lengths (px)
             angle_major = angle
         else:
-            a, b = h / 2, w / 2
+            a, b = h / 2, w / 2  # semi-major and semi-minor axis lengths (px)
             angle_major = angle + 90
 
         cell.update(
             {
-                "major_axis_px": a,
-                "minor_axis_px": b,
+                "major_axis_px": a,  # semi-major axis length (px)
+                "minor_axis_px": b,  # semi-minor axis length (px)
                 "angle_major": angle_major,
             }
         )
@@ -215,8 +217,9 @@ class SampleAnalyzer:
         if not all(col in df.columns for col in ["major_axis_px", "minor_axis_px", "angle_major"]):
             return
 
-        a_px = pd.to_numeric(df["major_axis_px"], errors="coerce")
-        b_px = pd.to_numeric(df["minor_axis_px"], errors="coerce")
+        # Note: 'major_axis_px' and 'minor_axis_px' store semi-axis lengths (half-axes) in pixels
+        a_px = pd.to_numeric(df["major_axis_px"], errors="coerce")  # semi-major axis (px)
+        b_px = pd.to_numeric(df["minor_axis_px"], errors="coerce")  # semi-minor axis (px)
         angle_major = pd.to_numeric(df["angle_major"], errors="coerce")
         la_um2 = pd.to_numeric(df.get("lumen_area"), errors="coerce")
 
@@ -225,14 +228,15 @@ class SampleAnalyzer:
         majax = (norm_angle - 90).abs()
         df["MAJAX"] = majax.where(majax <= 90, 180 - majax)
 
-        # 2. ASP: Aspect ratio a/b
+        # 2. ASP: Aspect ratio a/b (semi-major / semi-minor)
         df["ASP"] = (a_px / b_px).where(b_px > 0)
 
-        # 3. Diameters DRAD and DTAN
+        # 3. Diameters DRAD and DTAN (full diameters along radial and tangential directions)
         aoma_rad_deg = angle_major - self.radial_angle
         aoma_tang_deg = aoma_rad_deg + 90
 
         def _calc_diam(a, b, angle_deg):
+            """Calculate full ellipse diameter given semi-axes a, b and angle."""
             rad = np.deg2rad(angle_deg)
             denom = np.sqrt((b * np.cos(rad))**2 + (a * np.sin(rad))**2)
             return (2.0 * a * b / denom).where(denom > 0)
@@ -242,23 +246,23 @@ class SampleAnalyzer:
 
         # 4. DH: Hydraulic diameter for elliptical conduit (Lewis & Boose 1995)
         asp = (a_px / b_px).where(b_px > 0)
-        a_semi_um = np.sqrt(asp * la_um2 / np.pi)
-        b_semi_um = (la_um2 / (np.pi * a_semi_um)).where(a_semi_um > 0)
+        a_semi_um = np.sqrt(asp * la_um2 / np.pi)  # semi-major axis in µm
+        b_semi_um = (la_um2 / (np.pi * a_semi_um)).where(a_semi_um > 0)  # semi-minor axis in µm
 
-        a_um = 2 * a_semi_um
-        b_um = 2 * b_semi_um
+        a_um = 2 * a_semi_um  # full major axis in µm
+        b_um = 2 * b_semi_um  # full minor axis in µm
         a2, b2 = a_um**2, b_um**2
         df["DH"] = np.sqrt((2.0 * a2 * b2) / (a2 + b2)).where((a2 + b2) > 0)
 
         # 5. KH: Theoretical hydraulic conductance
         la_m2 = la_um2 * 1e-12
-        a_m = np.sqrt(asp * la_m2 / np.pi)
-        b_m = (la_m2 / (np.pi * a_m)).where(a_m > 0)
+        a_m = np.sqrt(asp * la_m2 / np.pi)  # semi-major axis in meters
+        b_m = (la_m2 / (np.pi * a_m)).where(a_m > 0)  # semi-minor axis in meters
 
-        # Eccentricity
+        # Eccentricity (computed using semi-axes)
         e2 = (a_m**2 - b_m**2) / (a_m**2).where(a_m > 0)
         e4 = e2**2
-        # Circumference C (Ramanujan approximation)
+        # Circumference C (Ramanujan approximation using semi-axes)
         C = np.pi * (3 * (a_m + b_m) - np.sqrt((3 * a_m + b_m) * (a_m + 3 * b_m)))
         # Mean hydraulic radius m = Area / Circumference
         m = la_m2 / C.where(C > 0)
@@ -418,7 +422,6 @@ class SampleAnalyzer:
             n_roll,
             axis=0,
         )
-        contour = np.roll(contour, n_roll, axis=0)
 
         # Now we compute the distances
         dist_crop = self.dist_transform[y : y + h, x : x + w]
@@ -500,7 +503,7 @@ class SampleAnalyzer:
             # Map each cell's cluster to its member list
             self.cells_table["NBRID"] = clusters.map(cluster_members)
 
-            # 3) Solitary cells → NBRID = NA
+            # Solitary cells → NBRID = NA
             solitary_mask = self.cells_table["NBRNO"] == 1
             self.cells_table.loc[solitary_mask, "NBRID"] = pd.NA
 
@@ -952,8 +955,6 @@ class SampleAnalyzer:
 
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
-
-        return self.rings_table
 
     def _compute_vessel_grouping_metrics(self) -> None:
         """
