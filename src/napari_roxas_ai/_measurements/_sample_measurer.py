@@ -123,12 +123,15 @@ class SampleAnalyzer:
             cv2.DIST_MASK_PRECISE,
             cv2.DIST_LABEL_CCOMP,
         )
+        self._comps = comps
 
-        # Extract cell wall contours
+        # Extract cell wall contours and their corresponding component labels
         self.cell_walls_contours = []
-        for shape, _ in features.shapes(comps):
+        self._cell_walls_labels = []
+        for shape, val in features.shapes(comps):
             coords = np.array(shape["coordinates"][0]).astype("int32")
             self.cell_walls_contours.append(np.expand_dims(coords, 1))
+            self._cell_walls_labels.append(int(val))
 
     def _compute_cells_lumina(self) -> None:
         """Calculate lumen metrics and initialize cell entries."""
@@ -266,11 +269,16 @@ class SampleAnalyzer:
 
     def _compute_cell_walls(self) -> None:
         """Calculate cell wall metrics."""
-        # Create centroids map for cell identification
+        # Create centroids map for cell identification and build label lookup
         self.centroids_map = np.full_like(self.cells_array, -1, dtype="int32")
+        label_to_cell = {}
         for cell_id, data in self.cells.items():
-            if not np.isnan(data["centroid"]).any():
-                self.centroids_map[data["centroid"]] = cell_id
+            centroid = data["centroid"]
+            if not np.isnan(centroid).any():
+                self.centroids_map[centroid] = cell_id
+                if hasattr(self, "_comps") and self._comps is not None:
+                    comp_val = int(self._comps[centroid])
+                    label_to_cell[comp_val] = cell_id
 
         # Reuse precomputed distance transform from _find_cells_contours()
         if self.dist_transform is None:
@@ -280,13 +288,29 @@ class SampleAnalyzer:
                 cv2.DIST_MASK_PRECISE,
             )
 
-        for contour in self.cell_walls_contours:
-            self._process_cell_wall_contour(contour)
+        labels = getattr(self, "_cell_walls_labels", None)
+        if labels is not None and len(labels) == len(self.cell_walls_contours):
+            for contour, label in zip(self.cell_walls_contours, labels):
+                cell_id = label_to_cell.get(label)
+                if cell_id is not None:
+                    centroid_xy = self.cells[cell_id]["centroid"][::-1]
+                    if cv2.pointPolygonTest(contour, centroid_xy, False) < 0:
+                        cell_id = None
+                if cell_id is None:
+                    cell_id = self._find_contained_cell(contour)
+                if cell_id is not None:
+                    self._process_cell_wall_contour(contour, cell_id)
+        else:
+            for contour in self.cell_walls_contours:
+                self._process_cell_wall_contour(contour)
 
-    def _process_cell_wall_contour(self, contour: np.ndarray) -> None:
+    def _process_cell_wall_contour(
+        self, contour: np.ndarray, cell_id: Optional[int] = None
+    ) -> None:
         """Process individual cell wall contour."""
-        # Find associated cell through centroid containment
-        cell_id = self._find_contained_cell(contour)
+        # Find associated cell through centroid containment if not provided
+        if cell_id is None:
+            cell_id = self._find_contained_cell(contour)
         if cell_id is None:
             return
 
@@ -304,7 +328,7 @@ class SampleAnalyzer:
         # Calculate wall thickness measurements
         self._measure_cell_wall_thickness(contour, cell_id)
 
-    def _find_contained_cell(self, contour: np.ndarray) -> int:
+    def _find_contained_cell(self, contour: np.ndarray) -> Optional[int]:
         """Find cell ID contained within the wall contour."""
         x, y, w, h = cv2.boundingRect(contour)
 
@@ -332,7 +356,7 @@ class SampleAnalyzer:
         w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
         # Create labeling canvas with edge markers to create distinct 0 zones for labelling
-        canvas = np.ones((h, w), dtype="uint8")
+        canvas = np.ones((h, w), dtype=np.uint8)
         canvas[0, w // 2] = 0  # Top center (pith)
         canvas[h // 2, 0] = 0  # Left center (left)
         canvas[-1, w // 2] = 0  # Bottom center (bark)
@@ -340,7 +364,7 @@ class SampleAnalyzer:
 
         # Compute distance transform labels
         _, labels = cv2.distanceTransformWithLabels(
-            canvas.astype("uint8"),
+            canvas,
             cv2.DIST_L2,
             cv2.DIST_MASK_PRECISE,
             cv2.DIST_LABEL_CCOMP,
@@ -351,14 +375,24 @@ class SampleAnalyzer:
 
         # Get precise cell wall contour pixels by drawing their filled contour and then finding contours again
         contour_points = contour.squeeze() - [x, y]
-        mask = np.zeros_like(labels).astype("uint8")
+        mask = np.zeros((h, w), dtype=np.uint8)
         drawing = cv2.drawContours(mask, [contour_points], 0, 1, -1)
         refined_contours, _ = cv2.findContours(
             drawing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
         )
 
+        if not refined_contours:
+            for name in label_map.values():
+                self.cells[cell_id][f"CWT_{name}"] = np.nan
+            return
+
         # Update the contours pixels coordinates and get corresponding labels. NB: pixel coordinates are given in the positive order (counter-clockwise)
         contour_points = refined_contours[0].squeeze()
+        if contour_points.ndim != 2 or len(contour_points) < 4:
+            for name in label_map.values():
+                self.cells[cell_id][f"CWT_{name}"] = np.nan
+            return
+
         contour_labels = labels[contour_points[:, 1], contour_points[:, 0]]
 
         # Just write nan if we can't find all walls or we have too many (may be error codes in the future)
@@ -377,11 +411,11 @@ class SampleAnalyzer:
             return
 
         # If one of the wall is split between the contour_pixels_ids' head and tail (aka if the value changes 4 times), we rearrange the tail by placing it before the head
-        n_roll = contour_labels.shape - value_changes[-1] - 1
+        n_roll = contour_labels.shape[0] - value_changes[-1] - 1
         contour_labels = np.roll(contour_labels, n_roll)
         contour_points = np.roll(
             contour_points,
-            contour_labels.shape - value_changes[-1] - 1,
+            n_roll,
             axis=0,
         )
         contour = np.roll(contour, n_roll, axis=0)
