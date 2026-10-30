@@ -197,6 +197,7 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 - **Cells Detection**: Predicts individual cell lumen instances using a U-Net architecture with a ResNet-50 backbone (Katzenmaier et al. 2023) and outputs a labeled mask layer (`<sample>.cells`).
 - **Rings Detection**: Detects continuous tree-ring boundaries using an iterative regression formulation based on Katzenmaier et al. (2025), sorts boundaries from bark to pith, enforces boundary continuity across the sample width, and constructs labeled annual ring bands (`<sample>.rings`).
 - Post-processes masks to eliminate edge artefacts (e.g., boundary-touching partial cells).
+- Writes the annotated overview image (`<sample_name>_annotated.jpg`) right after segmentation for an immediate quality check (cells only, rings only, or both), drawn from the scan and masks in memory. The new layers themselves are written with **Save All Layers**.
 
 ### Key Controls & Options
 - **Cell Segmentation Checkbox & Model Dropdown**: Checkbox to enable cell lumen detection, alongside a dropdown list to choose the trained cell model checkpoint (`.pth`). Unchecking disables cell detection and hides the model selection dropdown.
@@ -220,6 +221,7 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 - Iterates over all discovered sample scans in the project directory.
 - Applies the selected neural network models sequentially (see [Deep-Learning Segmentation Models](../reference/segmentation_models.md)).
 - Automatically saves segmentation masks (`.cells.png` and `.rings.tif`) directly to disk alongside updated `.metadata.json` files.
+- Writes the annotated overview image (`<sample_name>_annotated.jpg`) of every sample in all segmentation modes. When only cells are segmented, the cell lumina are overlaid on the scan without rings. This step is part of the progress bar.
 
 ### Key Controls
 - **Project Directory Selection**: Choose the target folder containing prepared samples (triggering the same global project directory selection dialog).
@@ -332,7 +334,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 
 ### Key Controls & Options
 - **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
-- **Update Year**: Updates the calendar year metadata and recalculates ring year labels in the viewer.
+- **Update Year**: Updates the calendar year metadata, recalculates ring year labels in the viewer, and redraws the annotated overview image (`<sample_name>_annotated.jpg`) with the new ring years.
 - **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
 - **Lasso Select**: Checkbox activating lasso-based vertex selection.
 - **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection.
@@ -419,7 +421,7 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 - **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.
 - **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows.
 - **Offset Slider**: Manually shifts sample dating by up to $-50$ to $+50$ years relative to the reference chronology.
-- **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, and records the new outermost year in sample metadata.
+- **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, records the new outermost year in sample metadata, and writes the reference plot together with an updated annotated overview image (`<sample_name>_annotated.jpg`).
 - **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `.jpg` image in the sample directory and records the validated reference series in `<sample_name>.metadata.json`.
 
 ---
@@ -435,14 +437,15 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 ### How It Works
 - Gathers data, layer parameters, and metadata from active napari layers.
 - Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif`.
-- Whenever a `.rings` layer is saved, also generates and writes an annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years, provided the original scan image exists.
+- Keeps track of unsaved changes: layers loaded from disk start out unmodified, and edits, year updates, cross-dating offsets and new segmentations mark them as modified.
+- Does not redraw the annotated overview image (`<sample_name>_annotated.jpg`), so that saving stays fast. The overview is updated at the workflow checkpoints instead: segmentation (3A/3B), **Update Year** (6), **Apply Changes** (7) and measurements (9A/9B).
 - Updates `<sample_name>.metadata.json` with updated ring counts, outermost year, and timestamps.
 - Operates in a non-blocking background worker thread.
 
 ### Key Controls
 - **Save Selected Layers**: Saves only the layers currently highlighted in the napari layer list.
-- **Save All Layers**: Saves all recognized ROXAS AI layers in the viewer.
-- **Progress Bar**: Shows disk write progress.
+- **Save All Layers**: Saves only the `.cells` and `.rings` layers with unsaved changes and reports what was written: "Saved cells layer.", "Saved rings layer." or "Saved cells and rings layers.". Without changes, nothing is written and "No unsaved changes in cells or rings layers." is shown.
+- **Progress Bar**: Shows disk write progress, scaled to the number of layers actually saved.
 
 ---
 

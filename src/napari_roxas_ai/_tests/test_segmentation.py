@@ -141,6 +141,42 @@ class TestSingleSampleSegmentation:
             )
             assert result == ("model1.pth", "model2.pth")
 
+    def test_add_result_layers_marks_dirty_and_writes_annotated_image(
+        self, make_napari_viewer
+    ):
+        """New segmentation layers are unsaved; the annotated image is drawn at once."""
+        from napari_roxas_ai._segmentation import _single_sample_segmentation
+        from napari_roxas_ai._segmentation._single_sample_segmentation import (
+            SingleSampleSegmentationWidget,
+        )
+
+        viewer = make_napari_viewer()
+        scan_layer = viewer.add_image(
+            create_test_image(),
+            name="sample_01.scan",
+            metadata={"sample_name": "sample_01", "sample_stem_path": "sample_01"},
+        )
+        dummy_self = MagicMock()
+        dummy_self._viewer = viewer
+        dummy_self.input_layer = scan_layer
+        dummy_self.settings = _single_sample_segmentation.SettingsManager()
+        dummy_self.cells_model_file = "cells_model.pth"
+        dummy_self.rings_model_file = None
+
+        results = {
+            "cells": {
+                "data": np.ones((100, 100), dtype=np.uint8),
+                "name": "sample_01.cells",
+            }
+        }
+        with patch.object(
+            _single_sample_segmentation, "save_layers_annotated_image"
+        ) as mock_annotate:
+            SingleSampleSegmentationWidget._add_result_layers(dummy_self, results)
+
+        assert viewer.layers["sample_01.cells"].metadata["_is_dirty"] is True
+        mock_annotate.assert_called_once_with(viewer.layers, "sample_01")
+
     def test_get_model_files_skips_hidden_files(self):
         """The download bookkeeping file (.asset_id) is not a model."""
         with patch(
@@ -497,6 +533,121 @@ class TestBatchSampleSegmentation:
             assert not widget._cells_model_weights_file.native.isHidden()
             assert widget._run_segmentation_button.enabled is True
 
+    def test_run_segmentation_picks_up_files_added_after_opening(self, tmp_path):
+        """Images prepared while the widget is open are found when running."""
+        from napari_roxas_ai._segmentation import _batch_sample_segmentation
+        from napari_roxas_ai._segmentation._batch_sample_segmentation import (
+            BatchSampleSegmentationWidget,
+        )
+
+        with patch.object(
+            _batch_sample_segmentation, "check_assets_and_download"
+        ), patch.object(
+            BatchSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("model1.pth", "model2.pth"),
+        ):
+            widget = BatchSampleSegmentationWidget(MagicMock())
+            widget._handpick_files_checkbox.value = False
+            widget.input_directory_path = str(tmp_path)
+            widget._refresh_file_list()
+            assert widget.source_files == []
+
+            # The project is prepared while the widget is open
+            scan = tmp_path / "sample1.scan.jpg"
+            scan.touch()
+
+            with patch.object(
+                _batch_sample_segmentation, "Worker"
+            ) as mock_worker, patch.object(
+                _batch_sample_segmentation, "QThread"
+            ), patch.object(
+                _batch_sample_segmentation, "show_warning"
+            ) as mock_warning:
+                widget._run_segmentation()
+
+            mock_warning.assert_not_called()
+            assert mock_worker.call_args.kwargs["scan_file_paths"] == [str(scan)]
+
+            # Ticking the manual selection lists it as well
+            scan2 = tmp_path / "sample2.scan.jpg"
+            scan2.touch()
+            widget._handpick_files_checkbox.value = True
+            assert set(widget._file_select_widget.choices) == {
+                "sample1.scan.jpg",
+                "sample2.scan.jpg",
+            }
+
+    def test_files_prepared_by_other_widgets_are_listed(self, tmp_path):
+        """Images prepared while the widget is open appear in the manual selection."""
+        from napari_roxas_ai._segmentation import _batch_sample_segmentation
+        from napari_roxas_ai._segmentation._batch_sample_segmentation import (
+            BatchSampleSegmentationWidget,
+        )
+        from napari_roxas_ai._utils._project_files_events import (
+            notify_project_files_changed,
+        )
+
+        (tmp_path / "sample1.scan.jpg").touch()
+        with patch.object(
+            _batch_sample_segmentation, "check_assets_and_download"
+        ), patch.object(
+            BatchSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("model1.pth", "model2.pth"),
+        ):
+            widget = BatchSampleSegmentationWidget(MagicMock())
+            widget.input_directory_path = str(tmp_path)
+            widget._refresh_file_list()
+            widget._file_select_widget.value = ["sample1.scan.jpg"]
+
+            (tmp_path / "sample2.scan.jpg").touch()
+            notify_project_files_changed(tmp_path)
+
+            assert set(widget._file_select_widget.choices) == {
+                "sample1.scan.jpg",
+                "sample2.scan.jpg",
+            }
+            # The manual selection is kept
+            assert widget._file_select_widget.value == ["sample1.scan.jpg"]
+
+            # Files of another project are ignored
+            (tmp_path / "sample3.scan.jpg").touch()
+            notify_project_files_changed(tmp_path / "other")
+            assert "sample3.scan.jpg" not in widget._file_select_widget.choices
+
+    def test_batch_segmentation_tells_the_listeners_when_done(self, tmp_path):
+        from napari_roxas_ai._segmentation import _batch_sample_segmentation
+        from napari_roxas_ai._segmentation._batch_sample_segmentation import (
+            BatchSampleSegmentationWidget,
+        )
+
+        (tmp_path / "sample1.scan.jpg").touch()
+        with patch.object(
+            _batch_sample_segmentation, "check_assets_and_download"
+        ), patch.object(
+            BatchSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("model1.pth", "model2.pth"),
+        ):
+            widget = BatchSampleSegmentationWidget(MagicMock())
+            widget._handpick_files_checkbox.value = False
+            widget.input_directory_path = str(tmp_path)
+
+            thread = MagicMock()
+            with patch.object(_batch_sample_segmentation, "Worker"), patch.object(
+                _batch_sample_segmentation, "QThread", return_value=thread
+            ), patch.object(
+                _batch_sample_segmentation, "notify_project_files_changed"
+            ) as notify:
+                widget._run_segmentation()
+                notify.assert_not_called()
+                # The run ends
+                for call in thread.finished.connect.call_args_list:
+                    call.args[0]()
+
+            notify.assert_called_once_with(str(tmp_path), source=widget)
+
     def test_batch_segmentation_widget_file_selection_and_filtering(self, tmp_path):
         """Test file list filtering, handpicking and reverse selection in BatchSampleSegmentationWidget."""
         from napari_roxas_ai._segmentation._batch_sample_segmentation import (
@@ -747,6 +898,60 @@ class TestBatchWorkerFunctionality:
                 worker.message.emit.assert_called_once_with(
                     "[Batch Segmentation] Completed 1 of 2 file(s) successfully."
                 )
+
+    def test_worker_run_cells_only_writes_annotated_image(
+        self, sample_image_dir, mock_cells_model
+    ):
+        """Cells-only runs also write the annotated image, as an extra progress step."""
+        scan_data = create_test_image()
+        with patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
+        ) as mock_settings, patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_scan_file",
+            return_value=(
+                scan_data,
+                {
+                    "metadata": {
+                        "sample_name": "sample_01",
+                        "sample_stem_path": "sample_01",
+                    },
+                    "scale": (1.0, 1.0),
+                },
+                "image",
+            ),
+        ), patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.write_single_layer"
+        ), patch(
+            "napari_roxas_ai._segmentation._batch_sample_segmentation.save_sample_annotated_image"
+        ) as mock_annotate:
+            mock_settings.get.side_effect = lambda key, default=None: {
+                "project_directory": str(sample_image_dir),
+                "samples_metadata.fields": [{"id": "rings_outmost_complete_year", "default": 2020}],
+            }.get(key, default)
+
+            with patch.object(BatchWorker, "__init__", return_value=None):
+                worker = BatchWorker(None, None, None, None, None)
+                worker.segment_cells = True
+                worker.segment_rings = False
+                worker.cells_model_weights_file = Path("/path/to/linear_cells_model.pth")
+                worker.rings_model_weights_file = None
+                worker.scan_file_paths = [str(sample_image_dir / "sample_01.scan.tif")]
+                worker.cells_model = mock_cells_model
+                worker.cells_content_ext = ".cells"
+                worker.progress = MagicMock()
+                worker.finished = MagicMock()
+                worker.message = MagicMock()
+
+                worker.run()
+
+        mock_annotate.assert_called_once()
+        args, kwargs = mock_annotate.call_args
+        assert args[0] == (sample_image_dir / "sample_01").resolve()
+        assert args[1].empty
+        assert kwargs["cells_data"] is not None
+        assert kwargs["scan_data"] is scan_data
+        # Cells and annotated image: two steps
+        assert worker.progress.emit.call_args_list[-1].args == (2, 2)
 
 
 if __name__ == "__main__":

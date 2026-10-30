@@ -21,6 +21,9 @@ from qtpy.QtWidgets import (
 )
 
 from napari_roxas_ai._settings._settings_manager import SettingsManager
+from napari_roxas_ai._utils._project_files_events import (
+    notify_project_files_changed,
+)
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from ._crossdating_handler import process_crossdating_files
@@ -601,6 +604,10 @@ class PreparationWidget(Container):
         """Handle the completion of processing."""
         # Reset UI
         self._update_ui_for_processing(False)
+
+        # Let the widgets listing the project files (3B, 9B) rescan them,
+        # also after a cancel: the files prepared until then are on disk
+        notify_project_files_changed(self.project_directory, source=self)
 
         # Show completion message if not canceled
         if not (self.worker and self.worker.should_stop):

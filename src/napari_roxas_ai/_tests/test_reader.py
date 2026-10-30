@@ -246,6 +246,8 @@ class TestReaderModule:
                 assert isinstance(data, np.ndarray)
                 assert "name" in add_kwargs
                 assert layer_type == "labels"
+                # Freshly loaded: nothing to save
+                assert add_kwargs["metadata"]["_is_dirty"] is False
 
     def test_read_rings_file(self, test_files, mock_settings):
         """Test read_rings_file function."""
@@ -291,6 +293,8 @@ class TestReaderModule:
                 assert "features" in add_kwargs
                 # Expect years to be synchronized with rings_outmost_complete_year (2020)
                 assert add_kwargs["features"]["YEAR"].tolist() == [2019, 2020]
+                # Freshly loaded: nothing to save
+                assert add_kwargs["metadata"]["_is_dirty"] is False
 
     def test_read_scan_file(self, test_files, mock_settings):
         """Test read_scan_file function."""

@@ -54,6 +54,36 @@ def widget(settings, tmp_path, qtbot):
 # --- Widget -----------------------------------------------------------------
 
 
+def test_files_written_by_other_widgets_are_listed(widget, tmp_path):
+    """Samples segmented while the widget is open appear without reopening it."""
+    from napari_roxas_ai._utils._project_files_events import (
+        notify_project_files_changed,
+    )
+
+    widget._handpick_files_checkbox.value = True
+    widget._file_select_widget.value = ["A"]
+    _touch_sample(tmp_path, "D")
+
+    notify_project_files_changed(tmp_path)
+
+    assert str(tmp_path / "D") in widget.samples
+    assert "D" in widget._file_select_widget.choices
+    # The manual selection is kept
+    assert widget._file_select_widget.value == ["A"]
+
+
+def test_files_written_to_another_project_are_ignored(widget, tmp_path):
+    from napari_roxas_ai._utils._project_files_events import (
+        notify_project_files_changed,
+    )
+
+    _touch_sample(tmp_path, "D")
+    notify_project_files_changed(tmp_path / "other")
+
+    assert str(tmp_path / "D") not in widget.samples
+
+
+
 def test_long_project_directory_is_elided_to_40_characters():
     path = "C:/Users/vonarx/Desktop/" + "x" * 60 + "/ROXAS AI"
     elided = module._elide_path(path)

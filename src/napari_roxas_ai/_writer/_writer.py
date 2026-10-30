@@ -183,86 +183,11 @@ def interpolate_row_at_col(coords_rc: Any, col_query: float) -> float:
     return float(pts[idx, 0])
 
 
-def save_annotated_scan_image(
-    scan_path: Optional[str] = None,
-    annotated_path: str = "",
-    rings_features: Optional[pd.DataFrame] = None,
-    cells_data: Optional[np.ndarray] = None,
-    scan_data: Optional[np.ndarray] = None,
-) -> None:
-    """Draw cells layer + ring polylines + YEAR labels onto scan image and save.
+def _draw_rings_and_years(img: np.ndarray, rings_features: pd.DataFrame) -> bool:
+    """Draw the ring polylines and their YEAR labels onto img (BGR, in place).
 
-    - Overlays cell lumina with configured opacity and fill color.
-    - Uses a single, constant font size for all rings.
-    - Font height is set based on configured year_label_size percentage of mean ring width (min 12 px).
-    - YEAR label is placed vertically centered between this ring and the next one.
-    - Ring separator lines are drawn black and thicker.
-    - Draws black text (no outline).
-    - Downscales the image according to configured scale_factor.
+    Returns True if at least one ring was labelled.
     """
-
-    if rings_features is None or rings_features.empty:
-        return
-    if "RBXY" not in rings_features.columns:
-        return
-
-    # Load or use in-memory scan image
-    if scan_data is not None and isinstance(scan_data, np.ndarray) and scan_data.size > 0:
-        img = scan_data.copy()
-    elif scan_path is not None and Path(scan_path).exists():
-        img = np.array(Image.open(scan_path))
-    else:
-        return
-
-    if img.ndim == 2:
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    elif img.shape[2] == 4:
-        img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
-    else:
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-
-    h, w = img.shape[:2]
-
-    # Blend cells layer if available
-    if cells_data is not None and isinstance(cells_data, np.ndarray) and cells_data.size > 0:
-        if cells_data.ndim == 3:
-            cells_mask = np.any(cells_data != 0, axis=-1)
-        else:
-            cells_mask = cells_data != 0
-
-        if cells_mask.shape[:2] != (h, w):
-            cells_mask = cv2.resize(
-                cells_mask.astype(np.uint8),
-                (w, h),
-                interpolation=cv2.INTER_NEAREST,
-            ).astype(bool)
-
-        if np.any(cells_mask):
-            raw_opacity = settings.get("annotated_image.cell_opacity", 50)
-            try:
-                cell_opacity = float(raw_opacity) / 100.0
-            except (ValueError, TypeError):
-                cell_opacity = 0.50
-            cell_opacity = max(0.0, min(1.0, cell_opacity))
-
-            fill_color = settings.get("annotated_image.cell_fill_color", "yellow")
-            r, g, b = _parse_color_rgb(fill_color)
-            color_bgr = np.array([b, g, r], dtype=np.uint8)
-
-            lut_3ch = np.zeros((1, 256, 3), dtype=np.uint8)
-            for c in range(3):
-                lut_3ch[0, :, c] = np.clip(
-                    np.round(
-                        np.arange(256) * (1.0 - cell_opacity) + color_bgr[c] * cell_opacity
-                    ),
-                    0,
-                    255,
-                ).astype(np.uint8)
-
-            blended = cv2.LUT(img, lut_3ch)
-            mask_u8 = cells_mask.astype(np.uint8) if cells_mask.dtype != np.uint8 else cells_mask
-            cv2.copyTo(blended, mask_u8, img)
-
     df = rings_features.copy()
     h, w = img.shape[:2]
 
@@ -273,7 +198,7 @@ def save_annotated_scan_image(
         df = df.sort_values("cells_above").reset_index(drop=True)
 
     if df.empty:
-        return
+        return False
 
     # Estimate mean ring width in pixels using consecutive cells_above differences
     mean_ring_width_px = 40.0  # fallback
@@ -389,7 +314,100 @@ def save_annotated_scan_image(
 
         did_draw = True
 
-    if not did_draw:
+    return did_draw
+
+
+def save_annotated_scan_image(
+    scan_path: Optional[str] = None,
+    annotated_path: str = "",
+    rings_features: Optional[pd.DataFrame] = None,
+    cells_data: Optional[np.ndarray] = None,
+    scan_data: Optional[np.ndarray] = None,
+) -> None:
+    """Draw cells layer + ring polylines + YEAR labels onto scan image and save.
+
+    - Overlays cell lumina with configured opacity and fill color.
+    - Without rings (empty or missing rings_features), only the cell lumina
+      are drawn onto the scan.
+    - Uses a single, constant font size for all rings.
+    - Font height is set based on configured year_label_size percentage of mean ring width (min 12 px).
+    - YEAR label is placed vertically centered between this ring and the next one.
+    - Ring separator lines are drawn black and thicker.
+    - Draws black text (no outline).
+    - Downscales the image according to configured scale_factor.
+    """
+
+    has_rings = (
+        rings_features is not None
+        and not rings_features.empty
+        and "RBXY" in rings_features.columns
+    )
+    has_cells = (
+        cells_data is not None
+        and isinstance(cells_data, np.ndarray)
+        and cells_data.size > 0
+    )
+    if not has_rings and not has_cells:
+        return
+
+    # Load or use in-memory scan image
+    if scan_data is not None and isinstance(scan_data, np.ndarray) and scan_data.size > 0:
+        img = scan_data.copy()
+    elif scan_path is not None and Path(scan_path).exists():
+        img = np.array(Image.open(scan_path))
+    else:
+        return
+
+    if img.ndim == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    elif img.shape[2] == 4:
+        img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+    else:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+    h, w = img.shape[:2]
+
+    # Blend cells layer if available
+    if has_cells:
+        if cells_data.ndim == 3:
+            cells_mask = np.any(cells_data != 0, axis=-1)
+        else:
+            cells_mask = cells_data != 0
+
+        if cells_mask.shape[:2] != (h, w):
+            cells_mask = cv2.resize(
+                cells_mask.astype(np.uint8),
+                (w, h),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(bool)
+
+        if np.any(cells_mask):
+            raw_opacity = settings.get("annotated_image.cell_opacity", 50)
+            try:
+                cell_opacity = float(raw_opacity) / 100.0
+            except (ValueError, TypeError):
+                cell_opacity = 0.50
+            cell_opacity = max(0.0, min(1.0, cell_opacity))
+
+            fill_color = settings.get("annotated_image.cell_fill_color", "yellow")
+            r, g, b = _parse_color_rgb(fill_color)
+            color_bgr = np.array([b, g, r], dtype=np.uint8)
+
+            lut_3ch = np.zeros((1, 256, 3), dtype=np.uint8)
+            for c in range(3):
+                lut_3ch[0, :, c] = np.clip(
+                    np.round(
+                        np.arange(256) * (1.0 - cell_opacity) + color_bgr[c] * cell_opacity
+                    ),
+                    0,
+                    255,
+                ).astype(np.uint8)
+
+            blended = cv2.LUT(img, lut_3ch)
+            mask_u8 = cells_mask.astype(np.uint8) if cells_mask.dtype != np.uint8 else cells_mask
+            cv2.copyTo(blended, mask_u8, img)
+
+    if has_rings and not _draw_rings_and_years(img, rings_features):
         return
 
     # Resize image if scale factor is configured and different from 1.0
@@ -792,6 +810,7 @@ def write_rings_file(
     data: Any,
     meta: dict,
     progress_callback: Optional[Callable[[float], None]] = None,
+    save_annotated: bool = True,
 ) -> list[str]:
     """Writes a rings file.
 
@@ -806,6 +825,9 @@ def write_rings_file(
         (excluding the `.data` layer attribute).
     progress_callback : callable, optional
         A callback receiving completion fraction (0.0 to 1.0) for this layer.
+    save_annotated : bool, optional
+        Whether to (re)draw the annotated scan image of the sample. Manual
+        saves skip it, as it is the slowest part of writing a rings layer.
 
     Returns
     -------
@@ -868,7 +890,7 @@ def write_rings_file(
         cb(0.6)
 
     # --- Save annotated scan image ---
-    if not meta["features"].empty:
+    if save_annotated and not meta["features"].empty:
         cells_data = (meta.get("metadata") or {}).get("cells_data")
         scan_data = (meta.get("metadata") or {}).get("scan_data")
         annotated_path = save_sample_annotated_image(
@@ -965,11 +987,75 @@ def save_sample_annotated_image(
         return None
 
 
+def save_layers_annotated_image(
+    layers: Sequence[Any], sample_stem_path: Optional[str]
+) -> Union[str, None]:
+    """
+    Draw the annotated scan image of a sample from its layers in the viewer.
+
+    The scan, cells and rings of the sample are taken from the in-memory
+    layers, so nothing has to be read from disk; the cells fall back to the
+    sample's cells file when no cells layer is loaded.
+
+    Parameters
+    ----------
+    layers : sequence of napari layers
+        The layers to look for the sample's scan, cells and rings layers in.
+    sample_stem_path : str
+        The sample stem, relative to the project directory (as stored in the
+        layers' metadata).
+
+    Returns
+    -------
+    str or None
+        The path to the annotated image, or None if it was not written.
+    """
+    if not isinstance(sample_stem_path, str) or not sample_stem_path.strip():
+        print("Annotated image export skipped: the sample stem path is unknown")
+        return None
+
+    sample_path = Path(sample_stem_path)
+    if not sample_path.is_absolute():
+        project_dir = settings.get("project_directory")
+        if not project_dir:
+            print("Annotated image export skipped: project_directory is not configured")
+            return None
+        sample_path = Path(project_dir) / sample_path
+
+    scan_ext = settings.get("file_extensions.scan_file_extension")[0]
+    cells_ext = settings.get("file_extensions.cells_file_extension")[0]
+    rings_ext = settings.get("file_extensions.rings_file_extension")[0]
+
+    scan_data = None
+    cells_data = None
+    rings_features = pd.DataFrame()
+    for layer in layers:
+        layer_meta = getattr(layer, "metadata", None) or {}
+        if layer_meta.get("sample_stem_path") != sample_stem_path:
+            continue
+        if layer.name.endswith(scan_ext):
+            scan_data = layer.data
+        elif layer.name.endswith(cells_ext):
+            cells_data = layer.data
+        elif layer.name.endswith(rings_ext):
+            features = getattr(layer, "features", None)
+            if features is not None:
+                rings_features = features
+
+    return save_sample_annotated_image(
+        sample_path,
+        rings_features,
+        cells_data=cells_data,
+        scan_data=scan_data,
+    )
+
+
 def write_single_layer(
     path: str,
     data: Any,
     meta: dict,
     progress_callback: Optional[Callable[[float], None]] = None,
+    save_annotated: bool = True,
 ) -> list[str]:
     """Writes a single image layer.
 
@@ -984,6 +1070,8 @@ def write_single_layer(
         (excluding the `.data` layer attribute).
     progress_callback : callable, optional
         A callback receiving completion fraction (0.0 to 1.0) for this layer.
+    save_annotated : bool, optional
+        Whether writing a rings layer also (re)draws the annotated scan image.
 
     Returns
     -------
@@ -1008,7 +1096,11 @@ def write_single_layer(
         )
     elif layer_name.endswith(rings_content_ext):
         written_file_paths += write_rings_file(
-            path, data, meta, progress_callback=progress_callback
+            path,
+            data,
+            meta,
+            progress_callback=progress_callback,
+            save_annotated=save_annotated,
         )
     else:
         return written_file_paths

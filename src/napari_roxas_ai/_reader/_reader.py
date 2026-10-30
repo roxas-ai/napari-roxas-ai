@@ -312,6 +312,8 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
         )
 
     add_kwargs["metadata"]["path"] = path
+    # Freshly loaded from disk: nothing to save until the layer is modified
+    add_kwargs["metadata"]["_is_dirty"] = False
 
     # Create a colormap for the cells
     colormap = make_binary_labels_colormap(create_random_color=False)
@@ -425,6 +427,8 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
         )
 
     add_kwargs["metadata"]["path"] = path
+    # Freshly loaded from disk: nothing to save until the layer is modified
+    add_kwargs["metadata"]["_is_dirty"] = False
     # Create a colormap for the rings
     unique_rings_raster_values = np.unique(data)
     colormap = make_rings_colormap(unique_rings_raster_values)
