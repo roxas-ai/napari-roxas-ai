@@ -45,7 +45,7 @@ def test_sample_analyzer_conifer_end_to_end(default_config):
 
     assert isinstance(cells_df, pd.DataFrame)
     assert isinstance(rings_df, pd.DataFrame)
-    assert len(cells_df) == 241
+    assert len(cells_df) == 243
     assert len(rings_df) == 3
 
     # Check key columns in cells_df
@@ -168,3 +168,37 @@ def test_cluster_cells_and_vessel_grouping_angiosperm(default_config):
     assert np.isclose(res.loc[0, "RVGI"], 1.5)
     assert np.isclose(res.loc[0, "RVSF"], 100.0 / 3.0)
     assert np.isclose(res.loc[0, "RGSGV"], 2.0)
+
+
+def test_small_object_filtering_and_thin_cell_preservation(default_config):
+    # Create an artificial binary mask:
+    # 1. Noise speck 2x2 (4 px, polygon area = 1) -> excluded (< 10)
+    # 2. Noise speck 3x3 (9 px, polygon area = 4) -> excluded (< 10)
+    # 3. Noise speck 4x4 (16 px, polygon area = 9) -> excluded (< 10)
+    # 4. Thin elongated latewood cell 2x15 (30 px, polygon area = 14) -> preserved (>= 10)
+    # 5. Normal cell 6x6 (36 px, polygon area = 25) -> preserved (>= 10)
+    mask = np.zeros((60, 100), dtype=np.uint8)
+    mask[5:7, 5:7] = 255          # 2x2
+    mask[15:18, 5:8] = 255        # 3x3
+    mask[25:29, 5:9] = 255        # 4x4
+    mask[40:42, 10:25] = 255      # 2x15 elongated cell
+    mask[20:26, 40:46] = 255      # 6x6 normal cell
+
+    config = default_config.copy()
+    config["smoothing_kernel_size"] = 1
+
+    analyzer = SampleAnalyzer(
+        config=config,
+        cells_array=mask.copy(),
+        rings_table=pd.DataFrame(),
+    )
+    cells_df = analyzer.analyze_cells()
+
+    # Exactly the 2 objects with polygon area >= 10 should be detected
+    assert len(cells_df) == 2
+    # Cleaned cells array should only retain the valid cells
+    assert analyzer.cells_array[5:7, 5:7].sum() == 0
+    assert analyzer.cells_array[15:18, 5:8].sum() == 0
+    assert analyzer.cells_array[25:29, 5:9].sum() == 0
+    assert analyzer.cells_array[40:42, 10:25].sum() > 0
+    assert analyzer.cells_array[20:26, 40:46].sum() > 0

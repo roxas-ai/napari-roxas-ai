@@ -52,9 +52,13 @@ class SampleAnalyzer:
 
         # Derived parameters
         self.pixels_per_um = float(config["pixels_per_um"])
-        self.kernel = np.ones(
-            (config["smoothing_kernel_size"], config["smoothing_kernel_size"])
-        )
+        self.smoothing_kernel_size = int(config.get("smoothing_kernel_size", 1))
+        if self.smoothing_kernel_size > 1:
+            self.kernel = np.ones(
+                (self.smoothing_kernel_size, self.smoothing_kernel_size)
+            )
+        else:
+            self.kernel = None
         self.relwidth_cwt_margin = (
             1 - config["relwidth_cwt_integration"]
         ) / 2
@@ -82,15 +86,15 @@ class SampleAnalyzer:
         value = self.config.get(key)
         return default if value is None else float(value)
 
-    # TODO: Check whether smoothing is necessary / desired after DL cell detection
     def _smooth_cells_array(self) -> None:
-        """Apply morphological smoothing"""
-        self.cells_array = cv2.dilate(
-            cv2.erode(self.cells_array, self.kernel), self.kernel
-        )
+        """Apply morphological smoothing if smoothing_kernel_size > 1."""
+        if self.kernel is not None and self.smoothing_kernel_size > 1:
+            self.cells_array = cv2.dilate(
+                cv2.erode(self.cells_array, self.kernel), self.kernel
+            )
 
     def _find_cells_contours(self) -> None:
-        """Find lumen and cell wall contours."""
+        """Find lumen and cell wall contours, filtering noise < 10 px."""
         # Find lumen contours
 
         contours, _ = cv2.findContours(
@@ -100,18 +104,26 @@ class SampleAnalyzer:
         contour_data = []
         for c in contours:
             M = cv2.moments(c)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-                contour_data.append((cy, cx, c, M))
-            else:
-                contour_data.append((float("inf"), float("inf"), c, M))
+            # Filter out objects smaller than 10 pixels
+            if M["m00"] < 10:
+                continue
+
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            contour_data.append((cy, cx, c, M))
 
         # Sort contours by centroid (YPIX, XPIX) ascending so cell ID 0
         # starts at the image top-left, consistent with ring ordering.
         contour_data.sort(key=lambda item: (item[0], item[1]))
         self.lumen_contours = [item[2] for item in contour_data]
         self._lumen_moments = [item[3] for item in contour_data]
+
+        # Reconstruct clean binary mask from valid smoothed contours
+        self.cells_array = np.zeros_like(self.cells_array)
+        if self.lumen_contours:
+            cv2.drawContours(
+                self.cells_array, self.lumen_contours, -1, 255, thickness=cv2.FILLED
+            )
 
         # Find cell wall contours using distance transform
         _, comps = cv2.distanceTransformWithLabels(
@@ -1330,7 +1342,7 @@ if __name__ == "__main__":
     CONFIG = {
         "pixels_per_um": 2.267574,
         "cluster_dbl_cwt_threshold": 3,  # µm
-        "smoothing_kernel_size": 5,
+        "smoothing_kernel_size": 1,
         "relwidth_cwt_integration": 0.75,
         "tangential_angle": 0,  # Assuming vertical orientation
         "lower_limit_cwt_iqr_multiplier": 1.5,

@@ -235,6 +235,11 @@ class Worker(QObject):
                 rings_add_kwargs["features"],
             )
             cells_table, rings_table = analyzer.analyze_sample()
+            if analyzer.cells_array is not None:
+                if cells_data.max() <= 1:
+                    cells_data = (analyzer.cells_array > 0).astype(cells_data.dtype)
+                else:
+                    cells_data = analyzer.cells_array.astype(cells_data.dtype)
 
             cells_add_kwargs["features"] = cells_table
             rings_add_kwargs["features"] = rings_table
@@ -278,6 +283,11 @@ class Worker(QObject):
                 pd.DataFrame(),
             )
             cells_table = analyzer.analyze_cells()
+            if analyzer.cells_array is not None:
+                if cells_data.max() <= 1:
+                    cells_data = (analyzer.cells_array > 0).astype(cells_data.dtype)
+                else:
+                    cells_data = analyzer.cells_array.astype(cells_data.dtype)
 
             cells_add_kwargs["features"] = cells_table
             cells_add_kwargs["metadata"][
