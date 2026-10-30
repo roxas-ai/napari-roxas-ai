@@ -494,11 +494,12 @@ class SampleAnalyzer:
             # Map cluster size to each cell
             self.cells_table["NBRNO"] = clusters.map(cluster_sizes)
 
-            cluster_members = (
-                self.cells_table
-                .groupby("cluster")
-                .apply(lambda df: df.index.tolist())
-            )
+            cluster_members = {
+                cluster_id: list(indices)
+                for cluster_id, indices in self.cells_table.groupby(
+                    "cluster"
+                ).groups.items()
+            }
 
             # Map each cell's cluster to its member list
             self.cells_table["NBRID"] = clusters.map(cluster_members)
