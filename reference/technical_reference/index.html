@@ -1,0 +1,2350 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for the napari-roxas-ai plugin.">
+      
+      
+        <meta name="author" content="The WSL Dendrosciences Group">
+      
+      
+        <link rel="canonical" href="https://roxas-ai.github.io/napari-roxas-ai/reference/technical_reference/">
+      
+      
+        <link rel="prev" href="../../tutorials/workflows/">
+      
+      
+        <link rel="next" href="../segmentation_models/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Technical Reference - ROXAS AI</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ROXAS AI" class="md-header__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ROXAS AI
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Technical Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting_started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user_guide/widgets/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/workflows/" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ROXAS AI" class="md-nav__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    ROXAS AI
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user_guide/widgets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Widgets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#image-orientation-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image Orientation Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Formats
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#spatial-image-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial &amp; Image Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-metadata-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data &amp; Metadata Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-variables-acronyms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Variables (Acronyms)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Output Variables (Acronyms)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#missing-values-error-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Missing Values &amp; Error Codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ring-level-output-rings_tablecsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ring-Level Output (.rings_table.csv)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cell-level-output-cells_tablecsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell-Level Output (.cells_table.csv)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#theoretical-hydraulic-conductance-kh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theoretical Hydraulic Conductance (KH)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#morks-index-radial-thickness-to-span-ratio-rtsr-figure-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mork's Index (Radial Thickness-to-Span Ratio, RTSR, Figure 1)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cell-wall-reinforcement-index-tb2-figure-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Wall Reinforcement Index (TB2, Figure 2)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cell-wall-thickness-cwt-quality-control-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Wall Thickness (CWT) Quality Control &amp; Filtering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cell Wall Thickness (CWT) Quality Control &amp; Filtering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-wall-definitions-measurement-integration-figure-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Wall Definitions &amp; Measurement Integration (Figure 3)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Wall Definitions &amp; Measurement Integration (Figure 3)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cell-wall-identification-algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Wall Identification Algorithm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wall-sectors-aggregated-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wall Sectors &amp; Aggregated Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-global-iqr-distribution-filter-tukeys-fences-figure-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-opposite-wall-ratio-filter-figure-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Opposite Wall Ratio Filter (Figure 5)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-adjacent-wall-ratio-filter-figure-6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Adjacent Wall Ratio Filter (Figure 6)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-metadata-file-metadatajson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Metadata File (.metadata.json)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Metadata File (.metadata.json)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-sample-project-information" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Sample &amp; Project Information
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-imaging-spatial-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Imaging &amp; Spatial Metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-processing-traceability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Processing &amp; Traceability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-analysis-parameters-quality-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Analysis Parameters &amp; Quality Control
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-settings-settingsjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Global Settings (settings.json)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Global Settings (settings.json)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-file-extensions-file_extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. File Extensions (file_extensions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-processing-gpu-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Processing &amp; GPU (processing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-tables-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Tables (tables)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-visualization-vectorization-rasterization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Visualization (Vectorization &amp; Rasterization)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-measurement-defaults-measurements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Measurement Defaults (measurements)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-annotated-image-project-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Annotated Image &amp; Project Directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-metadata-field-definitions-samples_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Metadata Field Definitions (samples_metadata)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmentation_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmentation Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#image-orientation-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image Orientation Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Formats
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#spatial-image-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial &amp; Image Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-metadata-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data &amp; Metadata Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-variables-acronyms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Variables (Acronyms)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Output Variables (Acronyms)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#missing-values-error-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Missing Values &amp; Error Codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ring-level-output-rings_tablecsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ring-Level Output (.rings_table.csv)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cell-level-output-cells_tablecsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell-Level Output (.cells_table.csv)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#theoretical-hydraulic-conductance-kh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theoretical Hydraulic Conductance (KH)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#morks-index-radial-thickness-to-span-ratio-rtsr-figure-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mork's Index (Radial Thickness-to-Span Ratio, RTSR, Figure 1)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cell-wall-reinforcement-index-tb2-figure-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Wall Reinforcement Index (TB2, Figure 2)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cell-wall-thickness-cwt-quality-control-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Wall Thickness (CWT) Quality Control &amp; Filtering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cell Wall Thickness (CWT) Quality Control &amp; Filtering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-wall-definitions-measurement-integration-figure-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Wall Definitions &amp; Measurement Integration (Figure 3)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Wall Definitions &amp; Measurement Integration (Figure 3)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cell-wall-identification-algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Wall Identification Algorithm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wall-sectors-aggregated-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wall Sectors &amp; Aggregated Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-global-iqr-distribution-filter-tukeys-fences-figure-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-opposite-wall-ratio-filter-figure-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Opposite Wall Ratio Filter (Figure 5)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-adjacent-wall-ratio-filter-figure-6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Adjacent Wall Ratio Filter (Figure 6)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-metadata-file-metadatajson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Metadata File (.metadata.json)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Metadata File (.metadata.json)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-sample-project-information" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Sample &amp; Project Information
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-imaging-spatial-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Imaging &amp; Spatial Metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-processing-traceability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Processing &amp; Traceability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-analysis-parameters-quality-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Analysis Parameters &amp; Quality Control
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-settings-settingsjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Global Settings (settings.json)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Global Settings (settings.json)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-file-extensions-file_extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. File Extensions (file_extensions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-processing-gpu-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Processing &amp; GPU (processing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-tables-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Tables (tables)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-visualization-vectorization-rasterization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Visualization (Vectorization &amp; Rasterization)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-measurement-defaults-measurements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Measurement Defaults (measurements)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-annotated-image-project-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Annotated Image &amp; Project Directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-metadata-field-definitions-samples_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Metadata Field Definitions (samples_metadata)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h1>
+<p>Technical details about the files created by ROXAS AI and the numeric output variables.</p>
+<h2 id="image-orientation-requirements">Image Orientation Requirements<a class="headerlink" href="#image-orientation-requirements" title="Permanent link">&para;</a></h2>
+<p>Linear input images have to be oriented with +/- horizontal rings and the bark side at the bottom.</p>
+<h2 id="file-formats">File Formats<a class="headerlink" href="#file-formats" title="Permanent link">&para;</a></h2>
+<p>ROXAS AI uses a standardized naming convention to organize analysis data. For a sample named <code>sample_01</code>, the following files are typically generated:</p>
+<h3 id="spatial-image-files">Spatial &amp; Image Files<a class="headerlink" href="#spatial-image-files" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>.scan.jpg</code> / <code>.scan.tif</code></strong> etc.: The original high-resolution scan of the wood sample; supported image formats: <strong>JPG</strong>, <strong>JPEG</strong>, <strong>TIFF</strong>, <strong>TIF</strong>, <strong>PNG</strong>, <strong>BMP</strong>, <strong>JP2</strong>.</li>
+<li><strong><code>.cells.png</code></strong>: A label image produced by the deep-learning cell segmentation model (<a href="../segmentation_models/">Segmentation Models</a>) where each pixel value corresponds to a unique cell ID (CID).</li>
+<li><strong><code>.rings.tif</code></strong>: A label image (or vector-like representation) produced by the deep-learning ring boundary segmentation model (<a href="../segmentation_models/">Segmentation Models</a>) containing the identified tree-ring boundaries.</li>
+<li><strong><code>_annotated.jpg</code></strong>: A visualization of the scan with ring boundaries and year labels overlaid for quick review. This file is automatically generated after segmentation (3A/3B), after updating the outermost ring year (6), after applying a cross-dating offset (7) and with every measurement (9A/9B). Manual saves (<strong>Save All Layers</strong>) do not redraw it.</li>
+<li><strong><code>.ReferenceSeries.jpg</code></strong>: (Optional) A visual representation of the reference chronologies used during cross-dating.</li>
+</ul>
+<h3 id="data-metadata-files">Data &amp; Metadata Files<a class="headerlink" href="#data-metadata-files" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>.metadata.json</code></strong>: A comprehensive JSON file containing sample information, imaging parameters, and all processing thresholds required to reproduce the analysis.</li>
+<li><strong><code>.cells_table.csv</code></strong>: A CSV file (semicolon-delimited by default, configurable in settings) containing measurements for every individual cell.</li>
+<li><strong><code>.rings_table.csv</code></strong>: A CSV file (semicolon-delimited by default, configurable in settings) containing aggregated measurements for each tree ring.</li>
+</ul>
+<hr />
+<h2 id="output-variables-acronyms">Output Variables (Acronyms)<a class="headerlink" href="#output-variables-acronyms" title="Permanent link">&para;</a></h2>
+<p>The output tables (<code>.cells_table.csv</code> and <code>.rings_table.csv</code>) use standardized acronyms. Most measurements are provided in <strong>micrometers (<span class="arithmatex">\(\mu\text{m}\)</span>)</strong> or <strong>square micrometers (<span class="arithmatex">\(\mu\text{m}^2\)</span>)</strong>.</p>
+<h3 id="missing-values-error-codes">Missing Values &amp; Error Codes<a class="headerlink" href="#missing-values-error-codes" title="Permanent link">&para;</a></h3>
+<p>Missing values or empty fields are left <strong>blank (NA)</strong> in the CSV output to ensure compatibility with modern data analysis tools like R and Python.</p>
+<h3 id="ring-level-output-rings_tablecsv">Ring-Level Output (<code>.rings_table.csv</code>)<a class="headerlink" href="#ring-level-output-rings_tablecsv" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Acronym</th>
+<th style="text-align: left;">Description</th>
+<th style="text-align: left;">Unit</th>
+<th style="text-align: left;">Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>ID</code></td>
+<td style="text-align: left;">Sample ID</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Unique identifier for the sample.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>YEAR</code></td>
+<td style="text-align: left;">Ring Affiliation</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Calendar year of the tree ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RA</code></td>
+<td style="text-align: left;">Ring Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\text{mm}^2\)</span></td>
+<td style="text-align: left;">Area of the analyzed ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>MRW</code></td>
+<td style="text-align: left;">Mean Ring Width</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Corrected for inclined ring boundaries.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CNO</code></td>
+<td style="text-align: left;">Number of Cells</td>
+<td style="text-align: left;">count</td>
+<td style="text-align: left;">Total cells in the tree ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CD</code></td>
+<td style="text-align: left;">Cell Density</td>
+<td style="text-align: left;">no./<span class="arithmatex">\(\text{mm}^2\)</span></td>
+<td style="text-align: left;">Number of cells per <span class="arithmatex">\(\text{mm}^2\)</span>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CTA</code></td>
+<td style="text-align: left;">Cumulative Transsectional Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\text{mm}^2\)</span></td>
+<td style="text-align: left;">Cumulative area of all counted cells.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RCTA</code></td>
+<td style="text-align: left;">Conductive Area Percentage</td>
+<td style="text-align: left;">%</td>
+<td style="text-align: left;"><code>CTA</code> / <code>RA</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>MLA</code></td>
+<td style="text-align: left;">Mean Lumen Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}^2\)</span></td>
+<td style="text-align: left;">Mean cell lumen area in the ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>MINLA</code></td>
+<td style="text-align: left;">Minimum Lumen Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}^2\)</span></td>
+<td style="text-align: left;">Minimum cell lumen area in the ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>MAXLA</code></td>
+<td style="text-align: left;">Maximum Lumen Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}^2\)</span></td>
+<td style="text-align: left;">Maximum cell lumen area in the ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>KH</code></td>
+<td style="text-align: left;">Hydraulic Conductance</td>
+<td style="text-align: left;"><span class="arithmatex">\(\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}\)</span></td>
+<td style="text-align: left;">Theoretical (Poiseuille) adjusted for elliptical tubes.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>KS</code></td>
+<td style="text-align: left;">Specific Hydraulic Conductivity</td>
+<td style="text-align: left;"><span class="arithmatex">\(\text{m}^2\,\text{s}^{-1}\,\text{MPa}^{-1}\)</span></td>
+<td style="text-align: left;"><code>KH</code> / <code>RA</code> (assuming tube length of 1m).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RVGI</code></td>
+<td style="text-align: left;">Vessel Grouping Index</td>
+<td style="text-align: left;">index</td>
+<td style="text-align: left;">Mean cells per group (Carlquist 2001).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RVSF</code></td>
+<td style="text-align: left;">Vessel Solitary Fraction</td>
+<td style="text-align: left;">%</td>
+<td style="text-align: left;">Fraction of solitary cells vs all cells.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RGSGV</code></td>
+<td style="text-align: left;">Group Size of Grouped Cells</td>
+<td style="text-align: left;">index</td>
+<td style="text-align: left;">Mean size of non-solitary cell groups.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>AOIAR</code></td>
+<td style="text-align: left;">Area of Interest (Ring)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\text{mm}^2\)</span></td>
+<td style="text-align: left;">Area of interest within the ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RAOIAR</code></td>
+<td style="text-align: left;">Relative Area of Interest</td>
+<td style="text-align: left;">%</td>
+<td style="text-align: left;">Percentage of ring area covered by area of interest.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTPI</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Pith</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Inner wall facing towards the pith.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTBA</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Bark</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Outer wall facing towards the bark.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTLE</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Left</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Measured with bark at the bottom.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTRI</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Right</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Measured with bark at the bottom.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTTAN</code></td>
+<td style="text-align: left;">Tangential Wall Thickness</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean of pith and bark sides: (<code>[CWTPI+CWTBA]/2</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTRAD</code></td>
+<td style="text-align: left;">Radial Wall Thickness</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean of left and right sides: (<code>[CWTLE+CWTRI]/2</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTALL</code></td>
+<td style="text-align: left;">Overall Wall Thickness</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean of all sides: (<code>[CWTRAD+CWTTAN]/2</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RTSR</code></td>
+<td style="text-align: left;">Radial Thickness-to-Span Ratio</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Mork's index; ratio between 4x <code>CWTTAN</code> and radial diameter (Denne 1989).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CTSR</code></td>
+<td style="text-align: left;">Circular Thickness-to-Span Ratio</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Ratio between 4x <code>CWTALL</code> and area-equivalent circle diameter.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DHW</code></td>
+<td style="text-align: left;">Hydraulic Diameter (W)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean per ring (Kolb &amp; Sperry 1999).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DHM</code></td>
+<td style="text-align: left;">Hydraulic Diameter (M)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean per ring (Tyree &amp; Zimmermann 2002).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DRAD</code></td>
+<td style="text-align: left;">Mean Radial Diameter</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Measured bark-to-pith, corrected for inclination.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DTAN</code></td>
+<td style="text-align: left;">Mean Tangential Diameter</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Measured tangentially to pith, corrected for inclination.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>TB2</code></td>
+<td style="text-align: left;">Reinforcement Index <span class="arithmatex">\((t/b)^2\)</span></td>
+<td style="text-align: left;">index</td>
+<td style="text-align: left;">Hacke et al. 2001; uses the smaller of rad/tan values.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWA</code></td>
+<td style="text-align: left;">Cell Wall Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}^2\)</span></td>
+<td style="text-align: left;">Mean per ring; may include pit artefacts.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RWD</code></td>
+<td style="text-align: left;">Relative Anatomical Density</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Mean of <code>CWA</code> / (<code>CWA</code> + <code>LA</code>) per ring.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RBXY</code></td>
+<td style="text-align: left;">Ring Boundary Coordinates</td>
+<td style="text-align: left;">pixels</td>
+<td style="text-align: left;">Coordinate string defining the ring boundary.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>cells_above</code></td>
+<td style="text-align: left;">Cells Above Boundary</td>
+<td style="text-align: left;">count</td>
+<td style="text-align: left;">Number of cells located above the ring boundary.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>enabled</code></td>
+<td style="text-align: left;">Ring Enabled Status</td>
+<td style="text-align: left;">boolean</td>
+<td style="text-align: left;">Flag indicating whether the ring is enabled/valid.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="cell-level-output-cells_tablecsv">Cell-Level Output (<code>.cells_table.csv</code>)<a class="headerlink" href="#cell-level-output-cells_tablecsv" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Acronym</th>
+<th style="text-align: left;">Description</th>
+<th style="text-align: left;">Unit</th>
+<th style="text-align: left;">Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>ID</code></td>
+<td style="text-align: left;">Sample ID</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Unique identifier for the sample.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CID</code></td>
+<td style="text-align: left;">Cell ID</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Unique cell identifier within the sample.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>YEAR</code></td>
+<td style="text-align: left;">Ring Affiliation</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Calendar year of cell formation.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>LA</code></td>
+<td style="text-align: left;">Cell Lumen Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}^2\)</span></td>
+<td style="text-align: left;">-</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>XPIX</code></td>
+<td style="text-align: left;">X-Coordinate</td>
+<td style="text-align: left;">pixels</td>
+<td style="text-align: left;">Center of cell (0/0 is top-left corner).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>YPIX</code></td>
+<td style="text-align: left;">Y-Coordinate</td>
+<td style="text-align: left;">pixels</td>
+<td style="text-align: left;">Center of cell (0/0 is top-left corner).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RADDISTR</code></td>
+<td style="text-align: left;">Radial Distance (Ring)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Distance of cell center from inner ring boundary.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RRADDISTR</code></td>
+<td style="text-align: left;">Relative Radial Position</td>
+<td style="text-align: left;">%</td>
+<td style="text-align: left;">0.00 (proximal boundary) to 99.99 (distal boundary).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>NBRNO</code></td>
+<td style="text-align: left;">Neighbor Number</td>
+<td style="text-align: left;">count</td>
+<td style="text-align: left;">Number of cells in the group this cell belongs to.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>NBRID</code></td>
+<td style="text-align: left;">Neighbor IDs</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">IDs of all cells in the same group (blank if solitary).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>ASP</code></td>
+<td style="text-align: left;">Aspect Ratio</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Major axis / minor axis of equivalent ellipse.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>MAJAX</code></td>
+<td style="text-align: left;">Major Axis Deviation</td>
+<td style="text-align: left;">degrees</td>
+<td style="text-align: left;">Angular deviation from line towards X/Y origin.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>KH</code></td>
+<td style="text-align: left;">Hydraulic Conductance</td>
+<td style="text-align: left;"><span class="arithmatex">\(\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}\)</span></td>
+<td style="text-align: left;">Theoretical conductance per cell.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>AOI</code></td>
+<td style="text-align: left;">Area of Interest</td>
+<td style="text-align: left;">boolean</td>
+<td style="text-align: left;">Flag indicating whether the cell lies within the area of interest.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTPI</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Pith</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Facing towards the pith.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTBA</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Bark</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Facing towards the bark.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTLE</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Left</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Measured with bark at bottom.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTRI</code></td>
+<td style="text-align: left;">Cell Wall Thickness - Right</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Measured with bark at bottom.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTTAN</code></td>
+<td style="text-align: left;">Tangential Wall Thickness</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean of (<code>[CWTPI+CWTBA]/2</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTRAD</code></td>
+<td style="text-align: left;">Radial Wall Thickness</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean of (<code>[CWTLE+CWTRI]/2</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWTALL</code></td>
+<td style="text-align: left;">Overall Wall Thickness</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Mean of (<code>[CWTRAD+CWTTAN]/2</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RTSR</code></td>
+<td style="text-align: left;">Radial Thickness-to-Span Ratio</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Mork's index per cell (Denne 1989).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CTSR</code></td>
+<td style="text-align: left;">Circular Thickness-to-Span Ratio</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Circular ratio per cell.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DH</code></td>
+<td style="text-align: left;">Hydraulic Diameter</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Corrected for elliptical shape (Lewis &amp; Boose 1995).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DRAD</code></td>
+<td style="text-align: left;">Radial Diameter</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Bark-to-pith direction, corrected for inclination.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>DTAN</code></td>
+<td style="text-align: left;">Tangential Diameter</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}\)</span></td>
+<td style="text-align: left;">Tangential to pith, corrected for inclination.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>TB2</code></td>
+<td style="text-align: left;">Reinforcement Index <span class="arithmatex">\((t/b)^2\)</span></td>
+<td style="text-align: left;">index</td>
+<td style="text-align: left;">Cell wall reinforcement index (t/b)^2 (Hacke et al. 2001).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>CWA</code></td>
+<td style="text-align: left;">Cell Wall Area</td>
+<td style="text-align: left;"><span class="arithmatex">\(\mu\text{m}^2\)</span></td>
+<td style="text-align: left;">Wall area per cell; may include pit artefacts.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RWD</code></td>
+<td style="text-align: left;">Relative Anatomical Density</td>
+<td style="text-align: left;">ratio</td>
+<td style="text-align: left;">Cell-level <code>CWA</code> / (<code>CWA</code> + <code>LA</code>).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="theoretical-hydraulic-conductance-kh">Theoretical Hydraulic Conductance (<code>KH</code>)<a class="headerlink" href="#theoretical-hydraulic-conductance-kh" title="Permanent link">&para;</a></h2>
+<p>The theoretical hydraulic conductance is approximated by Poiseuille's law and adjusted for elliptical tubes (Nonweiler 1975):</p>
+<div class="arithmatex">\[ \text{KH} = \frac{\text{LA} \cdot m^2}{\nu \cdot k} \]</div>
+<p>Where:
+- <code>LA</code>: Lumen area (<span class="arithmatex">\(\text{m}^2\)</span>)
+- <span class="arithmatex">\(\nu\)</span>: Viscosity of water (<span class="arithmatex">\(1.002 \cdot 10^{-3}\,\text{Pa}\cdot\text{s}\)</span> at 20°C)
+- <span class="arithmatex">\(m\)</span>: Mean hydraulic radius (<span class="arithmatex">\(\pi ab / C\)</span>)
+- <span class="arithmatex">\(k\)</span>: Geometry coefficient (<span class="arithmatex">\(4 / (1 + \sqrt{1 - e^4})\)</span>)
+- <span class="arithmatex">\(e\)</span>: Eccentricity of the ellipse</p>
+<hr />
+<h2 id="morks-index-radial-thickness-to-span-ratio-rtsr-figure-1">Mork's Index (Radial Thickness-to-Span Ratio, <code>RTSR</code>, Figure 1)<a class="headerlink" href="#morks-index-radial-thickness-to-span-ratio-rtsr-figure-1" title="Permanent link">&para;</a></h2>
+<p>Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):</p>
+<p><img alt="Mork's Index Scheme" src="../../assets/mork_index.png" width="450" /></p>
+<p><em>Figure 1: Definition of Mork's index based on tangential cell wall thickness and radial lumen diameter.</em></p>
+<p>A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness (4x <code>CWTTAN</code>) and its radial lumen width (<code>DRAD</code>) is larger than 1.</p>
+<hr />
+<h2 id="cell-wall-reinforcement-index-tb2-figure-2">Cell Wall Reinforcement Index (<code>TB2</code>, Figure 2)<a class="headerlink" href="#cell-wall-reinforcement-index-tb2-figure-2" title="Permanent link">&para;</a></h2>
+<p>The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):</p>
+<p><img alt="Cell Wall Reinforcement Scheme" src="../../assets/cell_wall_reinforcement.png" width="450" /></p>
+<p><em>Figure 2: Definition of the cell wall reinforcement index <span class="arithmatex">\((t/b)^2\)</span>.</em></p>
+<p>The index is calculated as <span class="arithmatex">\((t/b)^2\)</span>, where <span class="arithmatex">\(t\)</span> is the thickness of the shared double cell wall and <span class="arithmatex">\(b\)</span> is the internal lumen diameter span across the corresponding orientation, taking the minimum of radial and tangential ratios.</p>
+<hr />
+<h2 id="cell-wall-thickness-cwt-quality-control-filtering">Cell Wall Thickness (<code>CWT</code>) Quality Control &amp; Filtering<a class="headerlink" href="#cell-wall-thickness-cwt-quality-control-filtering" title="Permanent link">&para;</a></h2>
+<p>To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automated multi-stage quality control filters to all raw cell wall thickness measurements.</p>
+<h3 id="1-wall-definitions-measurement-integration-figure-3">1. Wall Definitions &amp; Measurement Integration (Figure 3)<a class="headerlink" href="#1-wall-definitions-measurement-integration-figure-3" title="Permanent link">&para;</a></h3>
+<p><img alt="Wall Definitions and Measurement Integration" src="../../assets/cwt_measurements_definitions.png" width="80%" /></p>
+<p><em>Figure 3: Definition of tangential and radial wall orientations and the central measurement integration span.</em></p>
+<h4 id="cell-wall-identification-algorithm">Cell Wall Identification Algorithm<a class="headerlink" href="#cell-wall-identification-algorithm" title="Permanent link">&para;</a></h4>
+<p>To measure the cell wall thickness of individual cells from segmented lumen masks, ROXAS AI uses an automated Euclidean distance and watershed-based approach:</p>
+<ol>
+<li><strong>Lumen Boundaries &amp; Euclidean Distance Mask:</strong> Based on the segmented cell lumina, an inverted binary mask is created where background and cell walls are foreground pixels. A Euclidean distance transform is calculated across this mask, computing the exact spatial distance of every wall pixel to the nearest cell lumen boundary.</li>
+<li><strong>Watershed Mask &amp; Middle Lamella Approximation:</strong> A watershed segmentation algorithm is computed between adjacent cell lumina to detect the contact boundary (the watershed line) between neighboring tracheids. Following Prendin et al. (2017), the exact position of the middle lamella separating two adjacent cells cannot be resolved directly from optical lumen contours alone; it is therefore geometrically approximated by assuming that each wall of two adjacent sharing cells has equal thickness (i.e., the middle lamella is located equidistant between the two lumina along the watershed ridge).</li>
+<li><strong>Lateral Integration:</strong> For each of the four anatomical wall sectors (<code>CWTPI</code>, <code>CWTBA</code>, <code>CWTLE</code>, <code>CWTRI</code>), distance values are sampled along the watershed line. To avoid geometric distortion at rounded cell corners, measurements are laterally integrated over the central portion of the wall (defined by <code>relwidth_cwt_integration</code>, default: 75%).</li>
+</ol>
+<h4 id="wall-sectors-aggregated-metrics">Wall Sectors &amp; Aggregated Metrics<a class="headerlink" href="#wall-sectors-aggregated-metrics" title="Permanent link">&para;</a></h4>
+<p>For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:</p>
+<ul>
+<li><strong>Tangential walls:</strong> <code>CWTPI</code> (pith-facing, top) and <code>CWTBA</code> (bark-facing, bottom).</li>
+<li><strong>Radial walls:</strong> <code>CWTLE</code> (left) and <code>CWTRI</code> (right).</li>
+<li><strong>Integration span:</strong> Wall thicknesses are integrated over the central span of each wall segment (defined by <code>relwidth_cwt_integration</code>, default: 75%) to avoid corner-rounding biases.</li>
+<li><strong>Aggregated metrics:</strong><ul>
+<li>Tangential mean: <code>CWTTAN</code> = (<code>CWTPI</code> + <code>CWTBA</code>) / 2; or any of the two if the other <strong>NA</strong></li>
+<li>Radial mean: <code>CWTRAD</code> = (<code>CWTLE</code> + <code>CWTRI</code>) / 2; or any of the two if the other <strong>NA</strong></li>
+<li>Overall mean: <code>CWTALL</code> = (<code>CWTTAN</code> + <code>CWTRAD</code>) / 2; or any of the two if the other <strong>NA</strong></li>
+</ul>
+</li>
+</ul>
+<h3 id="2-global-iqr-distribution-filter-tukeys-fences-figure-4">2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)<a class="headerlink" href="#2-global-iqr-distribution-filter-tukeys-fences-figure-4" title="Permanent link">&para;</a></h3>
+<p><img alt="Global IQR Distribution Filter" src="../../assets/cwt_iqr_filter.png" width="80%" /></p>
+<p><em>Figure 4: Global IQR outlier filtering based on lower and upper Tukey's fences.</em></p>
+<p>To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls (<code>CWTPI</code>, <code>CWTBA</code>) and radial walls (<code>CWTLE</code>, <code>CWTRI</code>), based on the Interquartile Range (<span class="arithmatex">\(\text{IQR} = Q_3 - Q_1\)</span>):</p>
+<ul>
+<li><strong>Lower Limit:</strong> <span class="arithmatex">\(\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})\)</span> (controlled by <code>lower_limit_cwt_iqr_multiplier</code>)</li>
+<li><strong>Upper Limit:</strong> <span class="arithmatex">\(Q_3 + 3.0 \cdot \text{IQR}\)</span> (controlled by <code>upper_limit_cwt_iqr_multiplier</code>)</li>
+<li>Values falling outside <strong>Lower Limit:</strong> or <strong>Upper Limit:</strong> are set to <strong>blank (NA)</strong>.</li>
+</ul>
+<h3 id="3-opposite-wall-ratio-filter-figure-5">3. Opposite Wall Ratio Filter (Figure 5)<a class="headerlink" href="#3-opposite-wall-ratio-filter-figure-5" title="Permanent link">&para;</a></h3>
+<p><img alt="Opposite Wall Ratio Filter" src="../../assets/cwt_opposite_wall_ration_filter.png" width="80%" /></p>
+<p><em>Figure 5: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.</em></p>
+<p>In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different cell type (such as wood ray cells) or an intercellular gap.</p>
+<ul>
+<li><strong>Rule:</strong> If the thickness of one wall exceeds <code>opposite_cwt_ratio_limit</code> <span class="arithmatex">\(\cdot\)</span> opposing wall thickness (default threshold: 1.5), the inflated side is excluded (<strong>NA</strong>), while the valid opposing side is retained.</li>
+<li><strong>Anatomical and technical context:</strong> Because the distance-to-watershed algorithm assumes equal double-wall thickness between adjacent detected lumina (Prendin et al. 2017), unsegmented or narrower intervening structures like uniseriate wood ray parenchyma cells are not recognized as independent tracheid lumina. Consequently, the Euclidean distance measured across the entire ray gap between two tracheid files is assigned as a single inflated tracheid wall (<code>CWTRI</code> in Figure 5). The filter identifies this asymmetric inflation relative to the normal opposing wall (<code>CWTLE</code>), discarding the artifactual <code>CWTRI</code> measurement while preserving <code>CWTLE</code>.</li>
+</ul>
+<h3 id="4-adjacent-wall-ratio-filter-figure-6">4. Adjacent Wall Ratio Filter (Figure 6)<a class="headerlink" href="#4-adjacent-wall-ratio-filter-figure-6" title="Permanent link">&para;</a></h3>
+<p><img alt="Adjacent Wall Ratio Filter" src="../../assets/cwt_adjacent_wall_ratio_filter.png" width="80%" /></p>
+<p><em>Figure 6: Adjacent wall ratio filter detecting and discarding local segmentation anomalies.</em></p>
+<p>Protects against severe local segmentation anomalies (e.g., pit aperture artifacts, small pollutions, tracheids sandwiched between two rays) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.</p>
+<ul>
+<li><strong>Rule:</strong> If an individual tangential wall thickness exceeds <code>adjacent_cwt_ratio_limit</code> (default threshold: 3.0), the distorted tangential wall is set to <strong>NA</strong> (and vice versa for radial walls!).</li>
+</ul>
+<hr />
+<h2 id="the-metadata-file-metadatajson">The Metadata File (<code>.metadata.json</code>)<a class="headerlink" href="#the-metadata-file-metadatajson" title="Permanent link">&para;</a></h2>
+<p>The metadata file ensures traceability and reproducibility of your analysis. It stores four main categories of information:</p>
+<h3 id="1-sample-project-information">1. Sample &amp; Project Information<a class="headerlink" href="#1-sample-project-information" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>sample_name</code></strong>: The unique identifier for the wood sample.</li>
+<li><strong><code>sample_stem_path</code></strong>: The relative path of the sample within the project directory.</li>
+<li><strong><code>sample_type</code></strong>: The type of wood (i.e., <code>conifer</code> or <code>angiosperm</code>; note that the <code>angiosperm</code> analysis is not implemented yet).</li>
+<li><strong><code>meas_geometry</code></strong>: The measurement layout (i.e., <code>linear</code> or <code>circular</code>; note that the <code>circular</code> analysis is not implemented yet).</li>
+<li><strong><code>rings_outmost_complete_year</code></strong>: The calendar year assigned to the most recent complete tree ring.</li>
+<li><strong><code>reference_series</code></strong>: The cross-dating reference series used (or <code>NA</code> if none).</li>
+</ul>
+<h3 id="2-imaging-spatial-metadata">2. Imaging &amp; Spatial Metadata<a class="headerlink" href="#2-imaging-spatial-metadata" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>spatial_resolution</code></strong>: The conversion factor from pixels to micrometers (<span class="arithmatex">\(\text{px}/\mu\text{m}\)</span>). This is critical for all subsequent physical measurements.</li>
+<li><strong><code>scan_size</code></strong>: The dimensions of the original image in pixels (Height, Width).</li>
+<li><strong><code>scan_info</code></strong>: Detailed technical info about the image, including the detected <strong>DPI</strong> (Dots Per Inch).</li>
+<li><strong><code>scan_exif</code></strong>: Metadata extracted directly from the image file (e.g., software used for scanning, capture date).</li>
+</ul>
+<h3 id="3-processing-traceability">3. Processing &amp; Traceability<a class="headerlink" href="#3-processing-traceability" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>sw_version</code></strong>: The exact version of ROXAS AI used for the analysis.</li>
+<li><strong><code>meas_by</code></strong>: The username or system identifier that ran the measurement analysis.</li>
+<li><strong><code>cells_segmentation_model</code></strong> &amp; <strong><code>rings_segmentation_model</code></strong>: The specific AI model filenames (<code>.pth</code> / <code>.pt</code>) used for detection.</li>
+<li><strong><code>meas_created_at</code></strong>: A timestamp of when the final measurement table was generated.</li>
+</ul>
+<h3 id="4-analysis-parameters-quality-control">4. Analysis Parameters &amp; Quality Control<a class="headerlink" href="#4-analysis-parameters-quality-control" title="Permanent link">&para;</a></h3>
+<p>These parameters define how cell walls are measured and how clusters are handled:</p>
+<ul>
+<li><strong><code>cluster_dbl_cwt_threshold</code></strong>: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.</li>
+<li><strong><code>relwidth_cwt_integration</code></strong>: The relative width along the cell wall used for integrating thickness measurements.</li>
+<li><strong><code>lower_limit_cwt_iqr_multiplier</code></strong>: Multiplier for the lower Tukey's fence (<span class="arithmatex">\(Q_1 - k \cdot \text{IQR}\)</span>) in cell wall thickness outlier detection.</li>
+<li><strong><code>upper_limit_cwt_iqr_multiplier</code></strong>: Multiplier for the upper Tukey's fence (<span class="arithmatex">\(Q_3 + k \cdot \text{IQR}\)</span>) in cell wall thickness outlier detection.</li>
+<li><strong><code>opposite_cwt_ratio_limit</code></strong>: Quality control factor comparing wall thickness on opposite sides of a cell.</li>
+<li><strong><code>adjacent_cwt_ratio_limit</code></strong>: Quality control factor comparing wall thickness on adjacent sides of a cell.</li>
+</ul>
+<hr />
+<h2 id="global-settings-settingsjson">Global Settings (<code>settings.json</code>)<a class="headerlink" href="#global-settings-settingsjson" title="Permanent link">&para;</a></h2>
+<p>While the <code>.metadata.json</code> is unique to each sample, the <code>settings.json</code> file stores your global preferences and plugin configurations. </p>
+<p><strong>Important</strong>: One of the core goals of ROXAS AI is to be accessible. Unlike classical systems, <strong>no expert knowledge is required</strong> to configure these settings. For most users, the default values are optimized for professional results and do not need to be changed.</p>
+<p>The settings are organized into several logical blocks:</p>
+<h3 id="1-file-extensions-file_extensions">1. File Extensions (<code>file_extensions</code>)<a class="headerlink" href="#1-file-extensions-file_extensions" title="Permanent link">&para;</a></h3>
+<p>Defines how ROXAS AI recognizes and names files:</p>
+<ul>
+<li><strong><code>scan_file_extension</code></strong>: <code>[".scan", ".jpg"]</code></li>
+<li><strong><code>cells_file_extension</code></strong>: <code>[".cells", ".png"]</code></li>
+<li><strong><code>cells_table_file_extension</code></strong>: <code>[".cells_table", ".csv"]</code></li>
+<li><strong><code>rings_file_extension</code></strong>: <code>[".rings", ".tif"]</code></li>
+<li><strong><code>rings_table_file_extension</code></strong>: <code>[".rings_table", ".csv"]</code></li>
+<li><strong><code>metadata_file_extension</code></strong>: <code>[".metadata", ".json"]</code></li>
+<li><strong><code>crossdating_file_extension</code></strong>: <code>[".crossdating", ".txt"]</code></li>
+<li><strong><code>roxas_file_extensions</code></strong>: List of managed ROXAS file suffixes (<code>[".scan", ".cells", ".rings", ".metadata"]</code>).</li>
+<li><strong><code>image_file_extensions</code></strong>: Supported image formats (<code>[".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"]</code>).</li>
+<li><strong><code>text_file_extensions</code></strong>: Supported text and table formats (<code>[".rwl", ".tuc", ".txt", ".csv", ".tsv"]</code>).</li>
+</ul>
+<h3 id="2-processing-gpu-processing">2. Processing &amp; GPU (<code>processing</code>)<a class="headerlink" href="#2-processing-gpu-processing" title="Permanent link">&para;</a></h3>
+<p>Allows configuring hardware acceleration and memory optimization:</p>
+<ul>
+<li><strong><code>try_to_use_gpu</code></strong>: Set to <code>true</code> to enable GPU acceleration if a compatible CUDA-enabled graphics card is available.</li>
+<li><strong><code>try_to_use_autocast</code></strong>: Set to <code>true</code> for mixed precision acceleration during deep learning inference.</li>
+</ul>
+<h3 id="3-tables-tables">3. Tables (<code>tables</code>)<a class="headerlink" href="#3-tables-tables" title="Permanent link">&para;</a></h3>
+<p>Defines the output format for tabular data:</p>
+<ul>
+<li><strong><code>separator</code></strong>: Column delimiter for output tables (default: <code>";"</code>).</li>
+<li><strong><code>index_column</code></strong>: Column identifier name (default: <code>"id"</code>).</li>
+</ul>
+<h3 id="4-visualization-vectorization-rasterization">4. Visualization (Vectorization &amp; Rasterization)<a class="headerlink" href="#4-visualization-vectorization-rasterization" title="Permanent link">&para;</a></h3>
+<p>Controls how data appears in the napari viewer:</p>
+<ul>
+<li><strong><code>vectorization</code></strong>: Controls polygon smoothing tolerances, edge widths, and colors for cells (<code>cells_edge_width</code>, <code>cells_edge_color</code>, <code>cells_face_color</code>, <code>cells_tolerance</code>) and rings (<code>rings_edge_width</code>, <code>rings_edge_color</code>, <code>rings_tolerance</code>, <code>rerun_interactive_edge_color</code>).</li>
+<li><strong><code>rasterization</code></strong>: Controls color sequences for adjacent rings (<code>rings_color_sequence</code>), uncomplete rings (<code>uncomplete_ring_value</code>, <code>uncomplete_ring_color</code>), and cell masks (<code>cells_color</code>).</li>
+</ul>
+<h3 id="5-measurement-defaults-measurements">5. Measurement Defaults (<code>measurements</code>)<a class="headerlink" href="#5-measurement-defaults-measurements" title="Permanent link">&para;</a></h3>
+<p>Contains default parameters for anatomical analysis, used to populate metadata for new samples:</p>
+<ul>
+<li><strong><code>cluster_dbl_cwt_threshold</code></strong>: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.</li>
+<li><strong><code>cells_smoothing_kernel_size</code></strong>: Size of the kernel used for smoothing cell boundaries.</li>
+<li><strong><code>relwidth_cwt_integration</code></strong>: The relative width along the cell wall used for thickness calculations.</li>
+<li><strong><code>cells_tangential_angle</code></strong>: Default angle for tangential orientation.</li>
+<li><strong><code>lower_limit_cwt_iqr_multiplier</code></strong>: Multiplier for the lower Tukey's fence (<span class="arithmatex">\(Q_1 - k \cdot \text{IQR}\)</span>) in cell wall thickness outlier detection.</li>
+<li><strong><code>upper_limit_cwt_iqr_multiplier</code></strong>: Multiplier for the upper Tukey's fence (<span class="arithmatex">\(Q_3 + k \cdot \text{IQR}\)</span>) in cell wall thickness outlier detection.</li>
+<li><strong><code>opposite_cwt_ratio_limit</code></strong>: Quality control factor comparing wall thickness on opposite sides of a cell.</li>
+<li><strong><code>adjacent_cwt_ratio_limit</code></strong>: Quality control factor comparing wall thickness on adjacent sides of a cell.</li>
+</ul>
+<h3 id="6-annotated-image-project-directory">6. Annotated Image &amp; Project Directory<a class="headerlink" href="#6-annotated-image-project-directory" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>project_directory</code></strong>: Path to the currently active project working directory.</li>
+<li><strong><code>annotated_image</code></strong>: Configuration for saved annotated verification images (<code>_annotated.jpg</code>), including cell overlay opacity (<code>cell_opacity</code>), fill color (<code>cell_fill_color</code>), year label font size (<code>year_label_size</code>), downscaling factor (<code>scale_factor</code>), and JPEG quality and compression settings (<code>quality</code>, <code>optimize</code>, <code>progressive</code>).</li>
+</ul>
+<h3 id="7-metadata-field-definitions-samples_metadata">7. Metadata Field Definitions (<code>samples_metadata</code>)<a class="headerlink" href="#7-metadata-field-definitions-samples_metadata" title="Permanent link">&para;</a></h3>
+<p>Defines the structure, validation rules, and widget types for the input forms in the plugin:</p>
+<ul>
+<li><strong><code>sample_name</code></strong>: Text input for the unique sample identifier.</li>
+<li><strong><code>sample_type</code></strong>: Dropdown selection for wood type (<code>conifer</code>, <code>angiosperm</code>).</li>
+<li><strong><code>meas_geometry</code></strong>: Dropdown selection for measurement layout (<code>linear</code>, <code>circular</code>).</li>
+<li><strong><code>spatial_resolution</code></strong>: Numeric input for spatial resolution in <span class="arithmatex">\(\text{px}/\mu\text{m}\)</span>.</li>
+<li><strong><code>rings_outmost_complete_year</code></strong>: Integer input for the calendar year of the outermost complete ring.</li>
+</ul>
+<hr />
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Carlquist 2001</strong>: Carlquist, S. (2001). <em>Comparative Wood Anatomy: Systematic, Ecological, and Evolutionary Aspects of Dicotyledon Wood</em>. Springer-Verlag.</li>
+<li><strong>Denne 1989</strong>: Denne, M. P. (1989). Definition of latewood according to Mork (1928). <em>IAWA Bulletin</em>, 10:59–62.</li>
+<li><strong>Hacke et al. 2001</strong>: Hacke, U. G., Sperry, J. S., Pockman, W. T., Davis, S. D., &amp; McCulloh, K. A. (2001). Trends in wood density and structure are linked to prevention of xylem cavitation by negative pressure. <em>Oecologia</em>, 126(4), 457–461.</li>
+<li><strong>Kolb &amp; Sperry 1999</strong>: Kolb, K. J., &amp; Sperry, J. S. (1999). Differences in drought adaptation between subspecies of sagebrush: <em>Artemisia tridentata</em>. <em>Ecology</em>, 80(7), 2373–2384.</li>
+<li><strong>Lewis &amp; Boose 1995</strong>: Lewis, A. M., &amp; Boose, E. R. (1995). Estimating volume flow rates through xylem conduits. <em>American Journal of Botany</em>, 82(9), 1112–1116.</li>
+<li><strong>Nonweiler 1975</strong>: Nonweiler, T. R. F. (1975). <em>Computational Mathematics: An Introduction to Numerical Approximation</em>. Ellis Horwood.</li>
+<li><strong>Prendin et al. 2017</strong>: Prendin, A. L., Petit, G., Carrer, M., Fonti, P., Björklund, J., &amp; von Arx, G. (2017). New research perspectives from a novel approach to quantify tracheid wall thickness. <em>Tree Physiology</em>, 37(7), 976–983. https://doi.org/10.1093/treephys/tpx037</li>
+<li><strong>Tyree &amp; Zimmermann 2002</strong>: Tyree, M. T., &amp; Zimmermann, M. H. (2002). <em>Xylem Structure and the Ascent of Sap</em>. Springer-Verlag.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
