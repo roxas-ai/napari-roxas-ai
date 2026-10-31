@@ -43,6 +43,10 @@ from .._utils._metadata_keys import (
     NO_REFERENCE_SERIES,
     SAMPLE_METADATA_PREFIXES,
 )
+from .._utils._project_files_events import (
+    add_project_files_listener,
+    is_same_directory,
+)
 from .._utils._version_utils import (
     get_measurement_operator,
     get_software_version,
@@ -555,6 +559,10 @@ class BatchSampleMeasurementsWidget(Container):
         settings.add_listener(
             "project_directory", self._on_project_directory_changed
         )
+        # Follow the files other widgets write to the project (preparation,
+        # batch segmentation), the list is otherwise only read when the
+        # widget opens
+        add_project_files_listener(self._on_project_files_changed)
 
         # Measurement checkboxes
         self._measure_cells_checkbox = CheckBox(
@@ -736,6 +744,24 @@ class BatchSampleMeasurementsWidget(Container):
                 self._update_reference_checkbox,
             )
         )
+
+    def _on_project_files_changed(self, directory):
+        """Rescan the sample list after another widget wrote files to the project."""
+        if not is_same_directory(directory, self.input_directory_path):
+            return
+
+        # Keep a manual selection, as far as the samples are still listed
+        selection = []
+        if self._handpick_files_checkbox.value:
+            selection = list(self._file_select_widget.value)
+
+        self._refresh_file_list()
+
+        if selection and self.samples:
+            choices = self._file_select_widget.choices
+            self._file_select_widget.value = [
+                name for name in selection if name in choices
+            ]
 
     def _refresh_file_list(self):
         """Refresh the list of samples from the project directory."""

@@ -26,6 +26,8 @@ from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._saving import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
+from napari_roxas_ai._utils._torch_device import select_torch_device
+from napari_roxas_ai._writer._writer import save_layers_annotated_image
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from napari_roxas_ai._utils._callback_manager import (
     register_layer_callback,
@@ -490,18 +492,11 @@ class RerunWorker(QObject):
         rings_model = PackageImporter(
             self.rings_model_weights_file
         ).load_pickle("LinearRingModel", "model.pkl")
-        rings_model.available_device = (
-            "cuda"
-            if torch.cuda.is_available()
-            and self.settings.get("processing.try_to_use_gpu")
-            else (
-                "mps"
-                if torch.mps.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else "cpu"
-            )
+        rings_model.available_device = select_torch_device(
+            self.settings.get("processing.try_to_use_gpu")
         )
         rings_model.to(device=rings_model.available_device)
+        print(f"Rings model running on: {rings_model.available_device}")
         # Synchronize internal device attribute for packaged models
         try:
             rings_model.device = rings_model.available_device
@@ -516,7 +511,7 @@ class RerunWorker(QObject):
         rings_model.use_autocast = bool(
             torch.amp.autocast_mode.is_autocast_available(device_obj.type)
             and self.settings.get("processing.try_to_use_gpu")
-            and (rings_model.available_device == "cuda" or rings_model.available_device == "mps")
+            and rings_model.available_device != "cpu"
         )
 
         # Perform inference, starting from the given boundary if the model supports it
@@ -958,21 +953,17 @@ class RingsLayerEditorWidget(Container):
         """Save all layers using the saving widget logic with progress bar."""
         self._save_all_layers_button.enabled = False
         self._edit_rings_geometries_button.enabled = False
-        # Drop references to a previous (already finished) save run
-        self._saving_widget.worker = None
-        self._saving_widget.worker_thread = None
         self._saving_widget._save_layers(how="all")
-        worker = getattr(self._saving_widget, "worker", None)
-        worker_thread = getattr(self._saving_widget, "worker_thread", None)
+        worker = self._saving_widget.worker
+        worker_thread = self._saving_widget.worker_thread
         if worker is None or worker_thread is None:
-            # Nothing to save: the saving widget did not start a worker
+            # Nothing to save (the saving widget reported it): no worker was started
             self._save_all_layers_button.enabled = True
             self._edit_rings_geometries_button.enabled = True
-            show_info("No rings or cells layers to save")
+            self._progress_bar.visible = False
             return
 
-        n_layers = len(worker.layers)
-
+        self._progress_bar.value = 0
         worker.progress.connect(self._update_progress)
         worker_thread.finished.connect(
             lambda: setattr(self._save_all_layers_button, "enabled", True)
@@ -982,9 +973,6 @@ class RingsLayerEditorWidget(Container):
         )
         worker_thread.finished.connect(
             lambda: setattr(self._progress_bar, "visible", False)
-        )
-        worker_thread.finished.connect(
-            lambda: show_info(f"{n_layers} layer(s) saved successfully")
         )
 
     def _update_progress(self, current: int, total: int) -> None:
@@ -1354,11 +1342,17 @@ class RingsLayerEditorWidget(Container):
                 layer.data = new_rings_raster
                 layer.features = new_rings_table
                 layer.colormap = new_colormap
+                layer.metadata["_is_dirty"] = True
 
             # Manually trigger events after the update is complete and consistent
             layer.events.metadata()
             layer.events.features()
             layer.events.data()
+
+            # Redraw the annotated image with the new ring years
+            save_layers_annotated_image(
+                self._viewer.layers, layer.metadata.get("sample_stem_path")
+            )
             show_info(f"Year successfully updated to {new_outmost_year}")
 
     def _edit_rings_geometries(self) -> None:
@@ -1707,6 +1701,7 @@ class RingsLayerEditorWidget(Container):
                 input_layer.data = new_rings_raster
                 input_layer.features = new_rings_table
                 input_layer.colormap = new_colormap
+                input_layer.metadata["_is_dirty"] = True
 
             # UI Update (outside pause)
             self._set_ui_editing_mode(False)

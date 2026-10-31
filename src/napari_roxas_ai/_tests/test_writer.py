@@ -758,6 +758,119 @@ class TestWriterModule:
         assert annotated_path.exists()
         assert not (temp_dir / "sample_mem_scan.scan.jpg").exists()
 
+    def test_save_annotated_scan_image_cells_only(self, temp_dir):
+        """Without rings, save_annotated_scan_image draws only the cell lumina."""
+        from PIL import Image
+
+        annotated_path = temp_dir / "sample_cells_only_annotated.jpg"
+        scan_arr = np.full((100, 100, 3), 255, dtype=np.uint8)
+        cells_data = np.zeros((100, 100), dtype=np.uint8)
+        cells_data[30:70, 30:70] = 1
+
+        save_annotated_scan_image(
+            annotated_path=str(annotated_path),
+            rings_features=pd.DataFrame(),
+            cells_data=cells_data,
+            scan_data=scan_arr,
+        )
+
+        assert annotated_path.exists()
+        with Image.open(annotated_path) as img:
+            arr = np.array(img)
+            # Cell lumina are tinted, the rest of the scan is untouched
+            center = arr[50, 50]
+            assert center[2] < center[0] or center[2] < center[1]
+            assert (arr[5, 5] > 240).all()
+
+    def test_save_annotated_scan_image_without_rings_and_cells(self, temp_dir):
+        """Nothing to draw: no annotated image is written."""
+        annotated_path = temp_dir / "sample_empty_annotated.jpg"
+
+        save_annotated_scan_image(
+            annotated_path=str(annotated_path),
+            rings_features=pd.DataFrame(),
+            scan_data=np.full((100, 100, 3), 255, dtype=np.uint8),
+        )
+
+        assert not annotated_path.exists()
+
+    def test_write_rings_file_can_skip_the_annotated_image(self, temp_dir):
+        """save_annotated=False writes the rings files but no annotated image."""
+        from napari_roxas_ai._writer._writer import write_rings_file
+
+        sample_stem = temp_dir / "sample_skip"
+        meta = {
+            "name": "sample_skip.rings",
+            "features": pd.DataFrame({
+                "YEAR": [2022],
+                "RBXY": [[[50, 0], [50, 99]]],
+                "cells_above": [5000],
+            }),
+            "metadata": {
+                "sample_name": "sample_skip",
+                "scan_data": np.full((100, 100, 3), 200, dtype=np.uint8),
+            },
+        }
+
+        written = write_rings_file(
+            str(sample_stem),
+            np.zeros((100, 100), dtype=np.uint8),
+            meta,
+            save_annotated=False,
+        )
+
+        annotated_path = temp_dir / "sample_skip_annotated.jpg"
+        assert str(annotated_path) not in written
+        assert not annotated_path.exists()
+
+    def test_save_layers_annotated_image_uses_the_sample_layers(self, temp_dir):
+        """The scan, cells and rings of the sample are taken from the layers."""
+        from types import SimpleNamespace
+
+        from napari_roxas_ai._writer import _writer
+
+        stem = "sub/sample_layers"
+        scan = np.full((100, 100, 3), 200, dtype=np.uint8)
+        cells = np.ones((100, 100), dtype=np.uint8)
+        rings_features = pd.DataFrame({"YEAR": [2022], "RBXY": [[[50, 0], [50, 99]]]})
+        other_sample = {"sample_stem_path": "sub/other"}
+        layers = [
+            SimpleNamespace(name="sample_layers.scan", data=scan, metadata={"sample_stem_path": stem}),
+            SimpleNamespace(name="sample_layers.cells", data=cells, metadata={"sample_stem_path": stem}),
+            SimpleNamespace(
+                name="sample_layers.rings",
+                data=None,
+                features=rings_features,
+                metadata={"sample_stem_path": stem},
+            ),
+            SimpleNamespace(name="other.cells", data=np.zeros((5, 5)), metadata=other_sample),
+        ]
+
+        original_get = _writer.settings.get
+        with patch.object(
+            _writer.settings,
+            "get",
+            side_effect=lambda key, default=None: (
+                str(temp_dir) if key == "project_directory" else original_get(key)
+            ),
+        ), patch.object(_writer, "save_sample_annotated_image") as save:
+            _writer.save_layers_annotated_image(layers, stem)
+
+        save.assert_called_once()
+        args, kwargs = save.call_args
+        assert args[0] == temp_dir / stem
+        assert args[1] is rings_features
+        assert kwargs["cells_data"] is cells
+        assert kwargs["scan_data"] is scan
+
+    def test_save_layers_annotated_image_without_stem(self):
+        """Without a sample stem, nothing is written."""
+        from napari_roxas_ai._writer import _writer
+
+        with patch.object(_writer, "save_sample_annotated_image") as save:
+            assert _writer.save_layers_annotated_image([], None) is None
+        save.assert_not_called()
+
     def test_save_image_rescaling(self, temp_dir):
         """Test save_image rescaling behavior for binary, uniform, and arbitrary arrays."""
         from napari_roxas_ai._writer._writer import save_image

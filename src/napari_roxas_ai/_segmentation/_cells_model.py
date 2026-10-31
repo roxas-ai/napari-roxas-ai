@@ -9,16 +9,14 @@ import skimage.measure as skm
 import torch
 import torchvision.transforms as transforms
 
+from .._utils._torch_device import select_torch_device
+
 
 class CellsSegmentationModel(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Use available_device as the source of truth for location
-        self.available_device = (
-            "cuda"
-            if torch.cuda.is_available()
-            else "mps" if torch.mps.is_available() else "cpu"
-        )
+        self.available_device = select_torch_device(try_to_use_gpu=True)
         # Call to() to move net, but avoid setting self.device directly if read-only
         self.net = smp.Unet(
             encoder_weights=None, classes=2, encoder_name="resnet50"
@@ -68,9 +66,12 @@ class CellsSegmentationModel(pl.LightningModule):
         )
         labels_padded = np.zeros((img_padded.shape[0], img_padded.shape[1]))
 
-        # Process the image in chunks
-        for i in range(img_padded.shape[0] // stride + 1):
-            for j in range(img_padded.shape[1] // stride + 1):
+        # Process the image in chunks; each patch writes a stride-sized zone,
+        # so ceil(size / stride) patches cover the image without empty ones
+        n_rows = -(-img.shape[0] // stride)
+        n_cols = -(-img.shape[1] // stride)
+        for i in range(n_rows):
+            for j in range(n_cols):
                 x, dx, y, dy = (
                     stride * i,
                     stride * i + patch_size,

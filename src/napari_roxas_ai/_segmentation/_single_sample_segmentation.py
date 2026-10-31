@@ -22,11 +22,13 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
+from napari_roxas_ai._writer._writer import save_layers_annotated_image
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
 from .._utils._segmentation_postprocess import remove_border_touching_components
+from .._utils._torch_device import select_torch_device
 
 # NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
 # are intentionally imported lazily inside Worker.run() instead of at module level.
@@ -97,6 +99,8 @@ def apply_segmentation_results_to_viewer(
             )
 
         cells_layer.scale = input_scale
+        # New segmentation, not yet written to disk
+        cells_layer.metadata["_is_dirty"] = True
 
     # --- RINGS ---
     if "rings" in results:
@@ -147,6 +151,8 @@ def apply_segmentation_results_to_viewer(
             )
 
         rings_layer.scale = input_scale
+        # New segmentation, not yet written to disk
+        rings_layer.metadata["_is_dirty"] = True
 
         # Apply / merge features
         new_df = rings.get("features", None)
@@ -171,20 +177,10 @@ def apply_segmentation_results_to_viewer(
                     if len(df) > 0:
                         df.loc[df.index[0], "enabled"] = False
 
-                # If existing features already contain YEAR etc., preserve them and only update RBXY
-                if (
-                        getattr(rings_layer, "features", None) is not None
-                        and not rings_layer.features.empty
-                        and "YEAR" in rings_layer.features.columns
-                        and "RBXY" in df.columns
-                ):
-                    old_df = rings_layer.features.copy()
-                    n = min(len(old_df), len(df))
-                    old_df = old_df.iloc[:n].copy()
-                    old_df.loc[old_df.index[:n], "RBXY"] = df["RBXY"].iloc[:n].values
-                    rings_layer.features = old_df
-                else:
-                    rings_layer.features = df
+                # Replace existing features: the new boundaries (with the dummy
+                # top boundary) don't map row by row onto the old table, and
+                # YEAR / enabled are recomputed by update_rings_geometries
+                rings_layer.features = df
 
             # Ensure rings_layer.features exists before update_rings_geometries
             if getattr(rings_layer, "features", None) is None or rings_layer.features.empty:
@@ -250,18 +246,11 @@ class Worker(QObject):
             # Set up cells model
             cells_model = CellsSegmentationModel()
             cells_model.load_weights(self.cells_model_weights_file)
-            cells_model.available_device = (
-                "cuda"
-                if torch.cuda.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else (
-                    "mps"
-                    if torch.mps.is_available()
-                    and self.settings.get("processing.try_to_use_gpu")
-                    else "cpu"
-                )
+            cells_model.available_device = select_torch_device(
+                self.settings.get("processing.try_to_use_gpu")
             )
             cells_model.to(device=cells_model.available_device)
+            print(f"Cells model running on: {cells_model.available_device}")
             # Synchronize internal device attribute for models that use it in infer()
             try:
                 cells_model.device = cells_model.available_device
@@ -278,9 +267,7 @@ class Worker(QObject):
                     device_obj.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
-                and (
-                    cells_model.available_device == "cuda" or cells_model.available_device == "mps"
-                )
+                and cells_model.available_device != "cpu"
             )
 
             # Perform inference
@@ -306,18 +293,11 @@ class Worker(QObject):
             rings_model = PackageImporter(
                 self.rings_model_weights_file
             ).load_pickle("LinearRingModel", "model.pkl")
-            rings_model.available_device = (
-                "cuda"
-                if torch.cuda.is_available()
-                and self.settings.get("processing.try_to_use_gpu")
-                else (
-                    "mps"
-                    if torch.mps.is_available()
-                    and self.settings.get("processing.try_to_use_gpu")
-                    else "cpu"
-                )
+            rings_model.available_device = select_torch_device(
+                self.settings.get("processing.try_to_use_gpu")
             )
             rings_model.to(device=rings_model.available_device)
+            print(f"Rings model running on: {rings_model.available_device}")
             # Synchronize internal device attribute for packaged models
             try:
                 rings_model.device = rings_model.available_device
@@ -334,9 +314,7 @@ class Worker(QObject):
                     device_obj.type
                 )
                 and self.settings.get("processing.try_to_use_gpu")
-                and (
-                    rings_model.available_device == "cuda" or rings_model.available_device == "mps"
-                )
+                and rings_model.available_device != "cpu"
             )
 
             # Perform inference
@@ -668,4 +646,8 @@ class SingleSampleSegmentationWidget(Container):
             cells_model_file=self.cells_model_file,
             rings_model_file=self.rings_model_file,
         )
+
+        # Write the annotated image for an immediate check of the segmentation,
+        # drawn from the scan and masks in memory
+        save_layers_annotated_image(self._viewer.layers, stem)
 

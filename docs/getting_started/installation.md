@@ -101,6 +101,34 @@ While ROXAS AI functions fully on CPU, enabling GPU acceleration significantly s
 
     *(For supported AMD GPUs on Linux, consult the [PyTorch ROCm installation guide](https://pytorch.org/get-started/locally/)).*
 
+=== "Windows & Linux (Intel GPUs)"
+
+    !!! warning "Experimental"
+        Intel GPU (XPU) support in PyTorch is still a prototype. It covers Intel Arc A- and B-Series graphics cards and Intel Core Ultra processors with integrated Arc graphics on Windows 11 and Ubuntu. See the [PyTorch Intel GPU guide](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html) for the full list.
+
+    1. **Install the Intel GPU driver:**
+        Follow Intel's driver installation guide linked in the PyTorch Intel GPU guide above. No separate oneAPI installation is needed.
+
+    2. **Install XPU-enabled PyTorch:**
+        ```bash
+        pip install "torch>=2.5,<2.9" "torchvision<0.24" \
+          --index-url https://download.pytorch.org/whl/xpu
+        ```
+        *The version limits keep PyTorch inside the range ROXAS AI supports, so installing ROXAS AI afterwards does not replace it with a CPU-only build.*
+
+    3. **Verify XPU availability:**
+        ```python
+        python -c "
+        import torch
+        print('XPU available:', torch.xpu.is_available())
+        print('GPU:', torch.xpu.get_device_name(0) if torch.xpu.is_available() else 'None')
+        "
+        ```
+        *For a functional installation, `XPU available:` should output `True` and list your GPU device name. If it reports `False`, check the driver installation.*
+
+    !!! note "First run is slow"
+        On some Intel GPUs the first computation compiles the GPU kernels, which can take several minutes with no visible progress. The compiled kernels are cached, so later runs start within seconds.
+
 === "macOS (Apple Silicon & Intel)"
 
     - **Apple Silicon (M1/M2/M3/M4):**

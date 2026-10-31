@@ -1,6 +1,6 @@
 # User Guide: Widgets & Tools
 
-**ROXAS AI** provides a modular suite of tools integrated directly into the [napari](https://napari.org) viewing platform. It is engineered to guide wood cross-section images through the entire Quantitative Wood Anatomy (QWA) pipeline—from raw image standardization to deep-learning segmentation, interactive manual curation, visual cross-dating, and trait measurement.
+**ROXAS AI** provides a modular suite of widgets within the napari environment designed to take your wood cross-section images through the entire Quantitative Wood Anatomy (QWA) pipeline—from raw anatomical image to deep-learning segmentation, interactive manual curation, visual cross-dating, and measurement of anatomical traits.
 
 Widgets are accessible via the napari **Plugins > ROXAS AI** menu and are numbered according to their typical execution sequence.
 
@@ -378,7 +378,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 
 ### Key Controls & Options
 - **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
-- **Update Year**: Updates the calendar year metadata and recalculates ring year labels in the viewer.
+- **Update Year**: Updates the calendar year metadata, recalculates ring year labels in the viewer, and redraws the annotated overview image (`<sample_name>_annotated.jpg`) with the new ring years.
 - **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
 - **Lasso Select**: Checkbox activating lasso-based vertex selection.
 - **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection (deleting from the topmost boundary when layers overlap).
@@ -483,14 +483,15 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 ### How It Works
 - Gathers data, layer parameters, and metadata from active napari layers.
 - Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif`.
-- Whenever a `.rings` layer is saved, also generates and writes an annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years, provided the original scan image exists.
+- Keeps track of unsaved changes: layers loaded from disk start out unmodified, and edits, year updates, cross-dating offsets and new segmentations mark them as modified.
+- Does not redraw the annotated overview image (`<sample_name>_annotated.jpg`), so that saving stays fast. The overview is updated at the workflow checkpoints instead: segmentation (3A/3B), **Update Year** (6), **Apply Changes** (7) and measurements (9A/9B).
 - Updates `<sample_name>.metadata.json` with updated ring counts, outermost year, and timestamps.
 - Operates in a non-blocking background worker thread.
 
 ### Key Controls
 - **Save Selected Layers**: Saves only the layers currently highlighted in the napari layer list.
-- **Save All Layers**: Saves all recognized ROXAS AI layers in the viewer (cell mask `.cells.png`, ring mask `.rings.tif`, updated `<sample_name>.metadata.json`, and an annotated overview image `<sample_name>_annotated.jpg`).
-- **Progress Bar**: Shows disk write progress.
+- **Save All Layers**: Saves only the `.cells` and `.rings` layers with unsaved changes and reports what was written: "Saved cells layer.", "Saved rings layer." or "Saved cells and rings layers.". Without changes, nothing is written and "No unsaved changes in cells or rings layers." is shown.
+- **Progress Bar**: Shows disk write progress, scaled to the number of layers actually saved.
 
 ---
 
