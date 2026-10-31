@@ -45,7 +45,7 @@ def test_sample_analyzer_conifer_end_to_end(default_config):
 
     assert isinstance(cells_df, pd.DataFrame)
     assert isinstance(rings_df, pd.DataFrame)
-    assert len(cells_df) == 243
+    assert len(cells_df) == 244
     assert len(rings_df) == 3
 
     # Check key columns in cells_df
@@ -171,18 +171,26 @@ def test_cluster_cells_and_vessel_grouping_angiosperm(default_config):
 
 
 def test_small_object_filtering_and_thin_cell_preservation(default_config):
-    # Create an artificial binary mask:
-    # 1. Noise speck 2x2 (4 px, polygon area = 1) -> excluded (< 10)
-    # 2. Noise speck 3x3 (9 px, polygon area = 4) -> excluded (< 10)
-    # 3. Noise speck 4x4 (16 px, polygon area = 9) -> excluded (< 10)
-    # 4. Thin elongated latewood cell 2x15 (30 px, polygon area = 14) -> preserved (>= 10)
-    # 5. Normal cell 6x6 (36 px, polygon area = 25) -> preserved (>= 10)
-    mask = np.zeros((60, 100), dtype=np.uint8)
-    mask[5:7, 5:7] = 255          # 2x2
-    mask[15:18, 5:8] = 255        # 3x3
-    mask[25:29, 5:9] = 255        # 4x4
-    mask[40:42, 10:25] = 255      # 2x15 elongated cell
-    mask[20:26, 40:46] = 255      # 6x6 normal cell
+    # Test shape-aware filtering rule:
+    # Exclude if area < 12 or (area <= 16 and max_dim < 10)
+    #
+    # 1. Noise speck 2x2 (4 px) -> excluded (area < 12)
+    # 2. Noise speck 3x3 (9 px) -> excluded (area < 12)
+    # 3. 1x10 line (10 px, max_dim=10) -> excluded (area < 12)
+    # 4. 2x6 bar (12 px, max_dim=6) -> excluded (area <= 16 and max_dim < 10)
+    # 5. Noise speck 4x4 (16 px, max_dim=4) -> excluded (area <= 16 and max_dim < 10)
+    # 6. Flat 1x12 line (12 px, max_dim=12) -> preserved (area >= 12 and max_dim >= 10)
+    # 7. Thin elongated cell 2x15 (30 px) -> preserved (area > 16)
+    # 8. Normal cell 6x6 (36 px) -> preserved (area > 16)
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    mask[5:7, 5:7] = 255          # 2x2 (4 px)
+    mask[15:18, 5:8] = 255        # 3x3 (9 px)
+    mask[25:26, 5:15] = 255       # 1x10 (10 px)
+    mask[30:32, 5:11] = 255       # 2x6 (12 px, max_dim=6)
+    mask[35:39, 5:9] = 255        # 4x4 (16 px, max_dim=4)
+    mask[45:46, 5:17] = 255       # 1x12 (12 px, max_dim=12) -> preserved
+    mask[55:57, 10:25] = 255      # 2x15 (30 px) -> preserved
+    mask[65:71, 10:16] = 255      # 6x6 (36 px) -> preserved
 
     config = default_config.copy()
     config["smoothing_kernel_size"] = 1
@@ -194,11 +202,14 @@ def test_small_object_filtering_and_thin_cell_preservation(default_config):
     )
     cells_df = analyzer.analyze_cells()
 
-    # Exactly the 2 objects with polygon area >= 10 should be detected
-    assert len(cells_df) == 2
+    # Exactly the 3 valid objects should be detected
+    assert len(cells_df) == 3
     # Cleaned cells array should only retain the valid cells
     assert analyzer.cells_array[5:7, 5:7].sum() == 0
     assert analyzer.cells_array[15:18, 5:8].sum() == 0
-    assert analyzer.cells_array[25:29, 5:9].sum() == 0
-    assert analyzer.cells_array[40:42, 10:25].sum() > 0
-    assert analyzer.cells_array[20:26, 40:46].sum() > 0
+    assert analyzer.cells_array[25:26, 5:15].sum() == 0
+    assert analyzer.cells_array[30:32, 5:11].sum() == 0
+    assert analyzer.cells_array[35:39, 5:9].sum() == 0
+    assert analyzer.cells_array[45:46, 5:17].sum() > 0
+    assert analyzer.cells_array[55:57, 10:25].sum() > 0
+    assert analyzer.cells_array[65:71, 10:16].sum() > 0

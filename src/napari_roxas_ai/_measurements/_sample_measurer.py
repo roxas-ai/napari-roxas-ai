@@ -94,9 +94,22 @@ class SampleAnalyzer:
             )
 
     def _find_cells_contours(self) -> None:
-        """Find lumen and cell wall contours, filtering noise < 10 px."""
-        # Find lumen contours
+        """Find lumen and cell wall contours, filtering noise."""
+        # Filter small noise and compact blobs using connected components
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            self.cells_array, connectivity=8
+        )
 
+        for label in range(1, num_labels):
+            area = stats[label, cv2.CC_STAT_AREA]
+            max_dim = max(
+                stats[label, cv2.CC_STAT_WIDTH],
+                stats[label, cv2.CC_STAT_HEIGHT],
+            )
+            if area < 12 or (area <= 16 and max_dim < 10):
+                self.cells_array[labels == label] = 0
+
+        # Find lumen contours
         contours, _ = cv2.findContours(
             self.cells_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
@@ -104,12 +117,17 @@ class SampleAnalyzer:
         contour_data = []
         for c in contours:
             M = cv2.moments(c)
-            # Filter out objects smaller than 10 pixels
-            if M["m00"] < 10:
-                continue
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+            else:
+                c_pts = c.squeeze()
+                if c_pts.ndim == 1:
+                    cx, cy = int(c_pts[0]), int(c_pts[1])
+                else:
+                    cx = int(np.mean(c_pts[:, 0]))
+                    cy = int(np.mean(c_pts[:, 1]))
 
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
             contour_data.append((cy, cx, c, M))
 
         # Sort contours by centroid (YPIX, XPIX) ascending so cell ID 0
