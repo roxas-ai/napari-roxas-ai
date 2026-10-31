@@ -52,12 +52,13 @@ class SampleAnalyzer:
 
         # Derived parameters
         self.pixels_per_um = float(config["pixels_per_um"])
-        self.cluster_dbl_cwt_px = (
-            config["cluster_dbl_cwt_threshold"] * self.pixels_per_um
-        )
-        self.kernel = np.ones(
-            (config["smoothing_kernel_size"], config["smoothing_kernel_size"])
-        )
+        self.smoothing_kernel_size = int(config.get("smoothing_kernel_size", 1))
+        if self.smoothing_kernel_size > 1:
+            self.kernel = np.ones(
+                (self.smoothing_kernel_size, self.smoothing_kernel_size)
+            )
+        else:
+            self.kernel = None
         self.relwidth_cwt_margin = (
             1 - config["relwidth_cwt_integration"]
         ) / 2
@@ -85,30 +86,44 @@ class SampleAnalyzer:
         value = self.config.get(key)
         return default if value is None else float(value)
 
-    # TODO: Check whether smoothing is necessary / desired after DL cell detection
     def _smooth_cells_array(self) -> None:
-        """Apply morphological smoothing"""
-        self.cells_array = cv2.dilate(
-            cv2.erode(self.cells_array, self.kernel), self.kernel
-        )
+        """Apply morphological smoothing if smoothing_kernel_size > 1."""
+        if self.kernel is not None and self.smoothing_kernel_size > 1:
+            self.cells_array = cv2.dilate(
+                cv2.erode(self.cells_array, self.kernel), self.kernel
+            )
 
     def _find_cells_contours(self) -> None:
-        """Find lumen and cell wall contours."""
+        """Find lumen and cell wall contours, filtering noise < 10 px."""
         # Find lumen contours
 
-        self.lumen_contours, _ = cv2.findContours(
+        contours, _ = cv2.findContours(
             self.cells_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
+        contour_data = []
+        for c in contours:
+            M = cv2.moments(c)
+            # Filter out objects smaller than 10 pixels
+            if M["m00"] < 10:
+                continue
+
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            contour_data.append((cy, cx, c, M))
+
         # Sort contours by centroid (YPIX, XPIX) ascending so cell ID 0
         # starts at the image top-left, consistent with ring ordering.
-        def _centroid_key(contour):
-            M = cv2.moments(contour)
-            if M["m00"] != 0:
-                return (int(M["m01"] / M["m00"]), int(M["m10"] / M["m00"]))
-            return (float("inf"), float("inf"))
+        contour_data.sort(key=lambda item: (item[0], item[1]))
+        self.lumen_contours = [item[2] for item in contour_data]
+        self._lumen_moments = [item[3] for item in contour_data]
 
-        self.lumen_contours = sorted(self.lumen_contours, key=_centroid_key)
+        # Reconstruct clean binary mask from valid smoothed contours
+        self.cells_array = np.zeros_like(self.cells_array)
+        if self.lumen_contours:
+            cv2.drawContours(
+                self.cells_array, self.lumen_contours, -1, 255, thickness=cv2.FILLED
+            )
 
         # Find cell wall contours using distance transform
         _, comps = cv2.distanceTransformWithLabels(
@@ -117,18 +132,22 @@ class SampleAnalyzer:
             cv2.DIST_MASK_PRECISE,
             cv2.DIST_LABEL_CCOMP,
         )
+        self._comps = comps
 
-        # Extract cell wall contours
+        # Extract cell wall contours and their corresponding component labels
         self.cell_walls_contours = []
-        for shape, _ in features.shapes(comps):
+        self._cell_walls_labels = []
+        for shape, val in features.shapes(comps):
             coords = np.array(shape["coordinates"][0]).astype("int32")
             self.cell_walls_contours.append(np.expand_dims(coords, 1))
+            self._cell_walls_labels.append(int(val))
 
     def _compute_cells_lumina(self) -> None:
         """Calculate lumen metrics and initialize cell entries."""
-        for i, contour in enumerate(self.lumen_contours):
+        for i, (contour, M) in enumerate(
+            zip(self.lumen_contours, self._lumen_moments)
+        ):
             cell = {"id": i}
-            M = cv2.moments(contour)
 
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
@@ -159,8 +178,8 @@ class SampleAnalyzer:
             else:
                 cell.update(
                     {
-                        "major_axis_px": np.nan,
-                        "minor_axis_px": np.nan,
+                        "major_axis_px": np.nan,  # semi-major axis length (px)
+                        "minor_axis_px": np.nan,  # semi-minor axis length (px)
                         "angle_major": np.nan,
                     }
                 )
@@ -170,23 +189,28 @@ class SampleAnalyzer:
     def _calculate_ellipse_metrics(
         self, contour: np.ndarray, cell: Dict
     ) -> None:
-        """Calculate ellipse-based metrics for lumen contours."""
+        """
+        Calculate ellipse-based metrics for lumen contours.
+
+        Note: cv2.fitEllipse returns full axis lengths (diameters: 2*a, 2*b).
+        These are divided by 2 to store semi-axis lengths (a = semi-major,
+        b = semi-minor) in 'major_axis_px' and 'minor_axis_px'.
+        """
         ellipse = cv2.fitEllipse(contour)
         center, axes, angle = ellipse
-        w, h = axes
+        w, h = axes  # w, h are full axis lengths (diameters) from cv2.fitEllipse
 
-        # TODO : Figure out what's up with the /2, and remove if appropriate
         if w >= h:
-            a, b = w / 2, h / 2
+            a, b = w / 2, h / 2  # semi-major and semi-minor axis lengths (px)
             angle_major = angle
         else:
-            a, b = h / 2, w / 2
+            a, b = h / 2, w / 2  # semi-major and semi-minor axis lengths (px)
             angle_major = angle + 90
 
         cell.update(
             {
-                "major_axis_px": a,
-                "minor_axis_px": b,
+                "major_axis_px": a,  # semi-major axis length (px)
+                "minor_axis_px": b,  # semi-minor axis length (px)
                 "angle_major": angle_major,
             }
         )
@@ -205,8 +229,9 @@ class SampleAnalyzer:
         if not all(col in df.columns for col in ["major_axis_px", "minor_axis_px", "angle_major"]):
             return
 
-        a_px = pd.to_numeric(df["major_axis_px"], errors="coerce")
-        b_px = pd.to_numeric(df["minor_axis_px"], errors="coerce")
+        # Note: 'major_axis_px' and 'minor_axis_px' store semi-axis lengths (half-axes) in pixels
+        a_px = pd.to_numeric(df["major_axis_px"], errors="coerce")  # semi-major axis (px)
+        b_px = pd.to_numeric(df["minor_axis_px"], errors="coerce")  # semi-minor axis (px)
         angle_major = pd.to_numeric(df["angle_major"], errors="coerce")
         la_um2 = pd.to_numeric(df.get("lumen_area"), errors="coerce")
 
@@ -215,14 +240,15 @@ class SampleAnalyzer:
         majax = (norm_angle - 90).abs()
         df["MAJAX"] = majax.where(majax <= 90, 180 - majax)
 
-        # 2. ASP: Aspect ratio a/b
+        # 2. ASP: Aspect ratio a/b (semi-major / semi-minor)
         df["ASP"] = (a_px / b_px).where(b_px > 0)
 
-        # 3. Diameters DRAD and DTAN
+        # 3. Diameters DRAD and DTAN (full diameters along radial and tangential directions)
         aoma_rad_deg = angle_major - self.radial_angle
         aoma_tang_deg = aoma_rad_deg + 90
 
         def _calc_diam(a, b, angle_deg):
+            """Calculate full ellipse diameter given semi-axes a, b and angle."""
             rad = np.deg2rad(angle_deg)
             denom = np.sqrt((b * np.cos(rad))**2 + (a * np.sin(rad))**2)
             return (2.0 * a * b / denom).where(denom > 0)
@@ -232,23 +258,23 @@ class SampleAnalyzer:
 
         # 4. DH: Hydraulic diameter for elliptical conduit (Lewis & Boose 1995)
         asp = (a_px / b_px).where(b_px > 0)
-        a_semi_um = np.sqrt(asp * la_um2 / np.pi)
-        b_semi_um = (la_um2 / (np.pi * a_semi_um)).where(a_semi_um > 0)
+        a_semi_um = np.sqrt(asp * la_um2 / np.pi)  # semi-major axis in µm
+        b_semi_um = (la_um2 / (np.pi * a_semi_um)).where(a_semi_um > 0)  # semi-minor axis in µm
 
-        a_um = 2 * a_semi_um
-        b_um = 2 * b_semi_um
+        a_um = 2 * a_semi_um  # full major axis in µm
+        b_um = 2 * b_semi_um  # full minor axis in µm
         a2, b2 = a_um**2, b_um**2
         df["DH"] = np.sqrt((2.0 * a2 * b2) / (a2 + b2)).where((a2 + b2) > 0)
 
         # 5. KH: Theoretical hydraulic conductance
         la_m2 = la_um2 * 1e-12
-        a_m = np.sqrt(asp * la_m2 / np.pi)
-        b_m = (la_m2 / (np.pi * a_m)).where(a_m > 0)
+        a_m = np.sqrt(asp * la_m2 / np.pi)  # semi-major axis in meters
+        b_m = (la_m2 / (np.pi * a_m)).where(a_m > 0)  # semi-minor axis in meters
 
-        # Eccentricity
+        # Eccentricity (computed using semi-axes)
         e2 = (a_m**2 - b_m**2) / (a_m**2).where(a_m > 0)
         e4 = e2**2
-        # Circumference C (Ramanujan approximation)
+        # Circumference C (Ramanujan approximation using semi-axes)
         C = np.pi * (3 * (a_m + b_m) - np.sqrt((3 * a_m + b_m) * (a_m + 3 * b_m)))
         # Mean hydraulic radius m = Area / Circumference
         m = la_m2 / C.where(C > 0)
@@ -259,26 +285,48 @@ class SampleAnalyzer:
 
     def _compute_cell_walls(self) -> None:
         """Calculate cell wall metrics."""
-        # Create centroids map for cell identification
+        # Create centroids map for cell identification and build label lookup
         self.centroids_map = np.full_like(self.cells_array, -1, dtype="int32")
+        label_to_cell = {}
         for cell_id, data in self.cells.items():
-            if not np.isnan(data["centroid"]).any():
-                self.centroids_map[data["centroid"]] = cell_id
+            centroid = data["centroid"]
+            if not np.isnan(centroid).any():
+                self.centroids_map[centroid] = cell_id
+                if hasattr(self, "_comps") and self._comps is not None:
+                    comp_val = int(self._comps[centroid])
+                    label_to_cell[comp_val] = cell_id
 
-        # Precompute distance transform
-        self.dist_transform = cv2.distanceTransform(
-            cv2.bitwise_not(self.cells_array).astype("uint8"),
-            cv2.DIST_L2,
-            cv2.DIST_MASK_PRECISE,
-        )
+        # Reuse precomputed distance transform from _find_cells_contours()
+        if self.dist_transform is None:
+            self.dist_transform = cv2.distanceTransform(
+                cv2.bitwise_not(self.cells_array).astype("uint8"),
+                cv2.DIST_L2,
+                cv2.DIST_MASK_PRECISE,
+            )
 
-        for contour in self.cell_walls_contours:
-            self._process_cell_wall_contour(contour)
+        labels = getattr(self, "_cell_walls_labels", None)
+        if labels is not None and len(labels) == len(self.cell_walls_contours):
+            for contour, label in zip(self.cell_walls_contours, labels):
+                cell_id = label_to_cell.get(label)
+                if cell_id is not None:
+                    centroid_xy = self.cells[cell_id]["centroid"][::-1]
+                    if cv2.pointPolygonTest(contour, centroid_xy, False) < 0:
+                        cell_id = None
+                if cell_id is None:
+                    cell_id = self._find_contained_cell(contour)
+                if cell_id is not None:
+                    self._process_cell_wall_contour(contour, cell_id)
+        else:
+            for contour in self.cell_walls_contours:
+                self._process_cell_wall_contour(contour)
 
-    def _process_cell_wall_contour(self, contour: np.ndarray) -> None:
+    def _process_cell_wall_contour(
+        self, contour: np.ndarray, cell_id: Optional[int] = None
+    ) -> None:
         """Process individual cell wall contour."""
-        # Find associated cell through centroid containment
-        cell_id = self._find_contained_cell(contour)
+        # Find associated cell through centroid containment if not provided
+        if cell_id is None:
+            cell_id = self._find_contained_cell(contour)
         if cell_id is None:
             return
 
@@ -296,7 +344,7 @@ class SampleAnalyzer:
         # Calculate wall thickness measurements
         self._measure_cell_wall_thickness(contour, cell_id)
 
-    def _find_contained_cell(self, contour: np.ndarray) -> int:
+    def _find_contained_cell(self, contour: np.ndarray) -> Optional[int]:
         """Find cell ID contained within the wall contour."""
         x, y, w, h = cv2.boundingRect(contour)
 
@@ -324,7 +372,7 @@ class SampleAnalyzer:
         w = w - 1 if (x + w) > self.cells_array.shape[1] else w
 
         # Create labeling canvas with edge markers to create distinct 0 zones for labelling
-        canvas = np.ones((h, w), dtype="uint8")
+        canvas = np.ones((h, w), dtype=np.uint8)
         canvas[0, w // 2] = 0  # Top center (pith)
         canvas[h // 2, 0] = 0  # Left center (left)
         canvas[-1, w // 2] = 0  # Bottom center (bark)
@@ -332,7 +380,7 @@ class SampleAnalyzer:
 
         # Compute distance transform labels
         _, labels = cv2.distanceTransformWithLabels(
-            canvas.astype("uint8"),
+            canvas,
             cv2.DIST_L2,
             cv2.DIST_MASK_PRECISE,
             cv2.DIST_LABEL_CCOMP,
@@ -343,14 +391,24 @@ class SampleAnalyzer:
 
         # Get precise cell wall contour pixels by drawing their filled contour and then finding contours again
         contour_points = contour.squeeze() - [x, y]
-        mask = np.zeros_like(labels).astype("uint8")
+        mask = np.zeros((h, w), dtype=np.uint8)
         drawing = cv2.drawContours(mask, [contour_points], 0, 1, -1)
         refined_contours, _ = cv2.findContours(
             drawing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
         )
 
+        if not refined_contours:
+            for name in label_map.values():
+                self.cells[cell_id][f"CWT_{name}"] = np.nan
+            return
+
         # Update the contours pixels coordinates and get corresponding labels. NB: pixel coordinates are given in the positive order (counter-clockwise)
         contour_points = refined_contours[0].squeeze()
+        if contour_points.ndim != 2 or len(contour_points) < 4:
+            for name in label_map.values():
+                self.cells[cell_id][f"CWT_{name}"] = np.nan
+            return
+
         contour_labels = labels[contour_points[:, 1], contour_points[:, 0]]
 
         # Just write nan if we can't find all walls or we have too many (may be error codes in the future)
@@ -369,14 +427,13 @@ class SampleAnalyzer:
             return
 
         # If one of the wall is split between the contour_pixels_ids' head and tail (aka if the value changes 4 times), we rearrange the tail by placing it before the head
-        n_roll = contour_labels.shape - value_changes[-1] - 1
+        n_roll = contour_labels.shape[0] - value_changes[-1] - 1
         contour_labels = np.roll(contour_labels, n_roll)
         contour_points = np.roll(
             contour_points,
-            contour_labels.shape - value_changes[-1] - 1,
+            n_roll,
             axis=0,
         )
-        contour = np.roll(contour, n_roll, axis=0)
 
         # Now we compute the distances
         dist_crop = self.dist_transform[y : y + h, x : x + w]
@@ -449,16 +506,17 @@ class SampleAnalyzer:
             # Map cluster size to each cell
             self.cells_table["NBRNO"] = clusters.map(cluster_sizes)
 
-            cluster_members = (
-                self.cells_table
-                .groupby("cluster")
-                .apply(lambda df: df.index.tolist())
-            )
+            cluster_members = {
+                cluster_id: list(indices)
+                for cluster_id, indices in self.cells_table.groupby(
+                    "cluster"
+                ).groups.items()
+            }
 
             # Map each cell's cluster to its member list
             self.cells_table["NBRID"] = clusters.map(cluster_members)
 
-            # 3) Solitary cells → NBRID = NA
+            # Solitary cells → NBRID = NA
             solitary_mask = self.cells_table["NBRNO"] == 1
             self.cells_table.loc[solitary_mask, "NBRID"] = pd.NA
 
@@ -621,18 +679,10 @@ class SampleAnalyzer:
         self._smooth_cells_array()
         self._find_cells_contours()
         self._compute_cells_lumina()
-
-        # Initial table creation
-        self._get_cells_table()
-
         self._compute_cell_walls()
-
-        # Sync updates from self.cells (from _compute_cell_walls) back to cells_table
-        self._get_cells_table()
-
         self._cluster_cells()
 
-        # Sync updates from self.cells (from _cluster_cells) back to cells_table
+        # Build table once with all cell and cluster data populated
         self._get_cells_table()
 
         # Compute lumen metrics (needs lumen_area, major_axis_px, etc. from _get_cells_table)
@@ -719,10 +769,21 @@ class SampleAnalyzer:
             # bounds are (y, x) in tables, but fillPoly expects (x, y)
             bounds = np.flip(bounds, axis=1)
 
-            canvas = np.zeros((h, w), dtype=np.uint8)
-            cv2.fillPoly(canvas, [bounds], 1)
+            min_x = max(0, int(bounds[:, 0].min()))
+            max_x = min(w - 1, int(bounds[:, 0].max()))
+            min_y = max(0, int(bounds[:, 1].min()))
+            max_y = min(h - 1, int(bounds[:, 1].max()))
 
-            area_px = int(canvas.sum())
+            if min_x > max_x or min_y > max_y:
+                continue
+
+            crop_canvas = np.zeros((max_y - min_y + 1, max_x - min_x + 1), dtype=np.uint8)
+            local_bounds = bounds.copy()
+            local_bounds[:, 0] -= min_x
+            local_bounds[:, 1] -= min_y
+            cv2.fillPoly(crop_canvas, [local_bounds], 1)
+
+            area_px = int(crop_canvas.sum())
             # px² → µm²
             area_um2 = area_px / (self.pixels_per_um ** 2)
             # µm² → mm²
@@ -908,8 +969,6 @@ class SampleAnalyzer:
         if "enabled" in self.rings_table.columns:
             self.rings_table.loc[~self.rings_table["enabled"], "KS"] = np.nan
 
-        return self.rings_table
-
     def _compute_vessel_grouping_metrics(self) -> None:
         """
         Compute vessel grouping metrics per ring:
@@ -985,515 +1044,107 @@ class SampleAnalyzer:
             disabled = self.rings_table["enabled"] == False
             self.rings_table.loc[disabled, ["RVGI", "RVSF", "RGSGV"]] = np.nan
 
-    def _compute_mean_cwtpi(self) -> None:
-        # CWTPI = Mean thickness of inner (pith-facing) cell wall per ring [µm]. Uses cell-level CWT_pith and aggregates by bot_ring_id.
-        self.rings_table["CWTPI"] = np.nan
+    def _compute_ring_aggregations(self) -> None:
+        """
+        Consolidated and vectorized computation of ring-level aggregations
+        from cell-level measurements:
+        CWTPI, CWTBA, CWTLE, CWTRI, CWTTAN, CWTRAD, CWTALL,
+        RTSR, CTSR, DHW, DHM, DRAD, DTAN, TB2, CWA, RWD.
+        """
+        agg_cols = [
+            "CWTPI", "CWTBA", "CWTLE", "CWTRI", "CWTTAN", "CWTRAD", "CWTALL",
+            "RTSR", "CTSR", "DHW", "DHM", "DRAD", "DTAN", "TB2", "CWA", "RWD",
+        ]
+        for col in agg_cols:
+            self.rings_table[col] = np.nan
 
-        if self.cells_table.empty:
+        if self.cells_table is None or self.cells_table.empty:
             return
+
         if "bot_ring_id" not in self.cells_table.columns:
             return
-        if "CWT_pith" not in self.cells_table.columns:
-            return
 
-        df = self.cells_table[["bot_ring_id", "CWT_pith"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_pith"])
-
+        df = self.cells_table.dropna(subset=["bot_ring_id"]).copy()
         if df.empty:
             return
 
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_pith"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTPI"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTPI"] = np.nan
-
-    def _compute_mean_cwtba(self) -> None:
-        # CWTBA = Mean thickness of outer (bark-facing) cell wall per ring [µm]. Uses cell-level CWT_bark and aggregates by bot_ring_id.
-        self.rings_table["CWTBA"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_bark" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_bark"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_bark"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_bark"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTBA"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTBA"] = np.nan
-
-    def _compute_mean_cwtle(self) -> None:
-        # CWTLE = Mean thickness of left cell wall (viewed from pith) per ring [µm]. Uses cell-level CWT_left and aggregates by bot_ring_id.
-        self.rings_table["CWTLE"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_left" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_left"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_left"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_left"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTLE"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTLE"] = np.nan
-
-    def _compute_mean_cwtri(self) -> None:
-        # CWTRI = Mean thickness of right cell wall (viewed from pith) per ring [µm]. Uses cell-level CWT_right and aggregates by bot_ring_id.
-        self.rings_table["CWTRI"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWT_right" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWT_right"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWT_right"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWT_right"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTRI"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTRI"] = np.nan
-
-    def _compute_mean_cwttan(self) -> None:
-        # CWTTAN = Mean thickness of tangential cell walls per ring [µm]. Uses cell-level CWTTAN and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWTTAN"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWTTAN" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWTTAN"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWTTAN"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWTTAN"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTTAN"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTTAN"] = np.nan
-
-    def _compute_mean_cwtrad(self) -> None:
-        # CWTRAD = Mean thickness of radial cell walls per ring [µm]. Uses cell-level CWTRAD and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWTRAD"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWTRAD" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWTRAD"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWTRAD"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWTRAD"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTRAD"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTRAD"] = np.nan
-
-    def _compute_mean_cwtall(self) -> None:
-        # CWTALL = Mean thickness of all cell walls per ring [µm]. Uses cell-level CWTALL and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWTALL"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWTALL" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWTALL"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWTALL"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWTALL"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWTALL"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWTALL"] = np.nan
-
-    def _compute_mean_rtsr(self) -> None:
-        # RTSR = Mean radial Thickness-to-span ratio per ring (Mork's index). Uses cell-level RTSR and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["RTSR"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "RTSR" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "RTSR"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "RTSR"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["RTSR"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "RTSR"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "RTSR"] = np.nan
-
-    def _compute_mean_ctsr(self) -> None:
-        # CTSR = Mean circular Thickness-to-span ratio per ring. Uses cell-level CTSR and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CTSR"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CTSR" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CTSR"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CTSR"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CTSR"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CTSR"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CTSR"] = np.nan
-
-    def _compute_mean_dh(self) -> None:
-        # DHW = hydraulically weighted mean diameter per ring: sum(DH^5) / sum(DH^4). Uses cell-level DH and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DHW"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "DH" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "DH"]].copy()
         df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
-        df["DH"] = pd.to_numeric(df["DH"], errors="coerce")
-        df = df.dropna(subset=["bot_ring_id", "DH"])
-
+        df = df.dropna(subset=["bot_ring_id"])
         if df.empty:
             return
 
-        # Keep only positive DH values
-        df = df[df["DH"] > 0]
-        if df.empty:
-            return
+        # Prepare hydraulic diameters for DHW and DHM
+        if "DH" in df.columns:
+            dh = pd.to_numeric(df["DH"], errors="coerce")
+            dh_pos = dh.where(dh > 0)
+            df["DH4"] = dh_pos ** 4
+            df["DH5"] = dh_pos ** 5
 
-        # group by ring id and compute hydraulically weighted diameter
-        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
-            if ring_id not in self.rings_table.index:
-                continue
+        mean_cols = [
+            "CWT_pith", "CWT_bark", "CWT_left", "CWT_right", "CWTTAN", "CWTRAD", "CWTALL",
+            "RTSR", "CTSR", "lumen_diam_rad", "lumen_diam_tang", "TB2", "CWA", "RWD",
+        ]
+        rename_map = {
+            "CWT_pith": "CWTPI",
+            "CWT_bark": "CWTBA",
+            "CWT_left": "CWTLE",
+            "CWT_right": "CWTRI",
+            "lumen_diam_rad": "DRAD",
+            "lumen_diam_tang": "DTAN",
+        }
 
-            dh = ring_df["DH"].values.astype(float)
-            denom = np.sum(dh ** 4)
-            if denom <= 0 or np.isnan(denom):
-                continue
+        grouped = df.groupby(df["bot_ring_id"].astype(int))
 
-            num = np.sum(dh ** 5)
-            self.rings_table.loc[ring_id, "DHW"] = float(num / denom)
+        # Compute standard column means
+        present_cols = [c for c in mean_cols if c in df.columns]
+        if present_cols:
+            agg_means = grouped[present_cols].mean().rename(columns=rename_map)
+            valid_rings = agg_means.index.intersection(self.rings_table.index)
+            if not valid_rings.empty:
+                for col in agg_means.columns:
+                    self.rings_table.loc[valid_rings, col] = agg_means.loc[valid_rings, col].values
 
-        # disabled rings -> NaN
+        # Vectorized DHW = sum(DH^5) / sum(DH^4)
+        if "DH5" in df.columns and "DH4" in df.columns:
+            dhw_num = grouped["DH5"].sum()
+            dhw_den = grouped["DH4"].sum()
+            dhw = (dhw_num / dhw_den).where(dhw_den > 0)
+            valid_rings = dhw.index.intersection(self.rings_table.index)
+            if not valid_rings.empty:
+                self.rings_table.loc[valid_rings, "DHW"] = dhw.loc[valid_rings].values
+
+        # Vectorized DHM = (mean(DH^4))^0.25
+        if "DH4" in df.columns:
+            dhm_mean4 = grouped["DH4"].mean()
+            dhm = (dhm_mean4 ** 0.25).where(dhm_mean4 > 0)
+            valid_rings = dhm.index.intersection(self.rings_table.index)
+            if not valid_rings.empty:
+                self.rings_table.loc[valid_rings, "DHM"] = dhm.loc[valid_rings].values
+
+        # Disabled rings -> NaN
         if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DHW"] = np.nan
-
-    def _compute_mean_dh2(self) -> None:
-        # DHM = mean hydraulic diameter per ring: (sum(DH^4) / N)^0.25. Uses cell-level DH and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DHM"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "DH" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "DH"]].copy()
-        df["bot_ring_id"] = pd.to_numeric(df["bot_ring_id"], errors="coerce")
-        df["DH"] = pd.to_numeric(df["DH"], errors="coerce")
-        df = df.dropna(subset=["bot_ring_id", "DH"])
-
-        if df.empty:
-            return
-
-        # Keep only positive DH values
-        df = df[df["DH"] > 0]
-        if df.empty:
-            return
-
-        # group by ring id and compute DHM
-        for ring_id, ring_df in df.groupby(df["bot_ring_id"].astype(int)):
-            if ring_id not in self.rings_table.index:
-                continue
-
-            dh = ring_df["DH"].values.astype(float)
-            n = dh.size
-            if n <= 0:
-                continue
-
-            mean_dh4 = np.sum(dh ** 4) / n
-            if mean_dh4 <= 0 or np.isnan(mean_dh4):
-                continue
-
-            self.rings_table.loc[ring_id, "DHM"] = float(mean_dh4 ** 0.25)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DHM"] = np.nan
-
-    def _compute_mean_drad(self) -> None:
-        # DRAD = Mean radial cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_rad and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DRAD"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "lumen_diam_rad" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "lumen_diam_rad"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "lumen_diam_rad"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["lumen_diam_rad"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "DRAD"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DRAD"] = np.nan
-
-    def _compute_mean_dtan(self) -> None:
-        # DTAN = Mean tangential cell lumen diameter per ring [µm]. Uses cell-level lumen_diam_tang and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["DTAN"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "lumen_diam_tang" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "lumen_diam_tang"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "lumen_diam_tang"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["lumen_diam_tang"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "DTAN"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "DTAN"] = np.nan
-
-    def _compute_mean_tb2(self) -> None:
-        # TB2 = Mean cell wall reinforcement index (t/b)^2 per ring. Uses cell-level TB2 and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["TB2"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "TB2" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "TB2"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "TB2"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["TB2"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "TB2"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "TB2"] = np.nan
-
-    def _compute_mean_cwa(self) -> None:
-        # CWA = Mean cell wall area per ring [µm²]. Uses cell-level CWA and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["CWA"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "CWA" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "CWA"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "CWA"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["CWA"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "CWA"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "CWA"] = np.nan
-
-    def _compute_mean_rwd(self) -> None:
-        # RWD = Mean relative anatomical cell density per ring. Uses cell-level RWD and aggregates by bot_ring_id.
-        if self.rings_table is None or self.rings_table.empty:
-            return
-        self.rings_table["RWD"] = np.nan
-
-        if self.cells_table.empty:
-            return
-        if "bot_ring_id" not in self.cells_table.columns:
-            return
-        if "RWD" not in self.cells_table.columns:
-            return
-
-        df = self.cells_table[["bot_ring_id", "RWD"]].copy()
-        df = df.dropna(subset=["bot_ring_id", "RWD"])
-
-        if df.empty:
-            return
-
-        # group by ring id and compute mean
-        ring_mean = df.groupby(df["bot_ring_id"].astype(int))["RWD"].mean()
-
-        for ring_id, val in ring_mean.items():
-            if ring_id in self.rings_table.index:
-                self.rings_table.loc[ring_id, "RWD"] = float(val)
-
-        # disabled rings -> NaN
-        if "enabled" in self.rings_table.columns:
-            self.rings_table.loc[~self.rings_table["enabled"], "RWD"] = np.nan
+            disabled = self.rings_table["enabled"] == False
+            self.rings_table.loc[disabled, agg_cols] = np.nan
 
     def _compute_cells_to_rings_distances(self):
         """Compute distances from cells to rings."""
+        h, w = self.cells_array.shape[:2]
 
         # Create a map of cell centroids to their corresponding cell IDs
-        centroids_map = np.ones_like(self.cells_array).astype("int32") * -1
-        for i, centroid in enumerate(self.cells_table["centroid"]):
-            if not np.isnan(centroid).any():
-                centroids_map[centroid] = i
+        centroids_map = np.full((h, w), -1, dtype=np.int32)
+        centroids_all = np.array(self.cells_table["centroid"].tolist())
+        if centroids_all.size > 0:
+            if centroids_all.ndim == 1:
+                centroids_all = centroids_all.reshape(-1, 2)
+            valid = ~np.isnan(centroids_all).any(axis=1)
+            if valid.any():
+                valid_indices = np.where(valid)[0]
+                coords = centroids_all[valid].astype(int)
+                in_bounds = (
+                    (coords[:, 0] >= 0) & (coords[:, 0] < h) &
+                    (coords[:, 1] >= 0) & (coords[:, 1] < w)
+                )
+                centroids_map[coords[in_bounds, 0], coords[in_bounds, 1]] = valid_indices[in_bounds]
 
         # Initialize columns
         self.cells_table["bot_ring_id"] = np.nan
@@ -1513,14 +1164,30 @@ class SampleAnalyzer:
                 ),
                 axis=1,
             )
-            canvas = np.zeros_like(self.cells_array)
-            cv2.fillPoly(canvas, [bounds], 1)
 
-            ids = centroids_map[
-                np.where(
-                    np.logical_and(centroids_map >= 0, canvas.astype(bool))
-                )
-            ]
+            min_x = max(0, int(bounds[:, 0].min()))
+            max_x = min(w - 1, int(bounds[:, 0].max()))
+            min_y = max(0, int(bounds[:, 1].min()))
+            max_y = min(h - 1, int(bounds[:, 1].max()))
+
+            if min_x > max_x or min_y > max_y:
+                continue
+
+            y0 = max(0, min_y - 1)
+            y1 = min(h, max_y + 2)
+            x0 = min_x
+            x1 = max_x + 1
+
+            crop_canvas = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+            local_bounds = bounds.copy()
+            local_bounds[:, 0] -= x0
+            local_bounds[:, 1] -= y0
+            cv2.fillPoly(crop_canvas, [local_bounds], 1)
+
+            crop_centroids_map = centroids_map[y0:y1, x0:x1]
+            mask = (crop_centroids_map >= 0) & crop_canvas.astype(bool)
+            ids = crop_centroids_map[mask]
+
             if len(ids) == 0:
                 continue
 
@@ -1531,16 +1198,22 @@ class SampleAnalyzer:
             if centroids.ndim == 1:
                 centroids = centroids.reshape(-1, 2)
 
-            diff = np.diff(canvas.astype("int32"), axis=0)
+            crop_diff = np.diff(crop_canvas.astype("int32"), axis=0)
+
+            has_top = np.any(crop_diff > 0, axis=0)
+            crop_top = np.where(has_top, np.argmax(crop_diff > 0, axis=0) + y0, 0)
+
+            has_bot = np.any(crop_diff < 0, axis=0)
+            crop_bot = np.where(has_bot, np.argmax(crop_diff < 0, axis=0) + y0, 0)
+
+            local_x_coords = centroids[:, 1] - x0
 
             self.cells_table.loc[ids, "top_vert_dist"] = (
-                centroids[:, 0]
-                - np.argmax(diff > 0, axis=0)[centroids[:, 1]]
+                centroids[:, 0] - crop_top[local_x_coords]
             ) / self.pixels_per_um
 
             self.cells_table.loc[ids, "bot_vert_dist"] = (
-                np.argmax(diff < 0, axis=0)[centroids[:, 1]]
-                - centroids[:, 0]
+                crop_bot[local_x_coords] - centroids[:, 0]
             ) / self.pixels_per_um
 
         # --- Vectorized Angled Distances ---
@@ -1651,22 +1324,7 @@ class SampleAnalyzer:
         self._compute_kh_ring()
         self._compute_ks()
         self._compute_vessel_grouping_metrics()
-        self._compute_mean_cwtpi()
-        self._compute_mean_cwtba()
-        self._compute_mean_cwtle()
-        self._compute_mean_cwtri()
-        self._compute_mean_cwttan()
-        self._compute_mean_cwtrad()
-        self._compute_mean_cwtall()
-        self._compute_mean_rtsr()
-        self._compute_mean_ctsr()
-        self._compute_mean_dh()
-        self._compute_mean_dh2()
-        self._compute_mean_drad()
-        self._compute_mean_dtan()
-        self._compute_mean_tb2()
-        self._compute_mean_cwa()
-        self._compute_mean_rwd()
+        self._compute_ring_aggregations()
 
         return self.rings_table
 
@@ -1684,7 +1342,7 @@ if __name__ == "__main__":
     CONFIG = {
         "pixels_per_um": 2.267574,
         "cluster_dbl_cwt_threshold": 3,  # µm
-        "smoothing_kernel_size": 5,
+        "smoothing_kernel_size": 1,
         "relwidth_cwt_integration": 0.75,
         "tangential_angle": 0,  # Assuming vertical orientation
         "lower_limit_cwt_iqr_multiplier": 1.5,
