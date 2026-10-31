@@ -104,12 +104,21 @@ def test_applying_changes_records_reference_series(sample, monkeypatch):
         lambda rings_table, last_year, image_shape: (None, "new_raster", "new_cmap"),
     )
     monkeypatch.setattr(plotter, "_sync_rings_editor_year", lambda: None)
+    plotter._viewer = SimpleNamespace(layers=[layer])
+    annotated_calls = []
+    monkeypatch.setattr(
+        "napari_roxas_ai._crossdating._cross_dating_plotter.save_layers_annotated_image",
+        lambda layers, stem: annotated_calls.append((layers, stem)),
+    )
 
     plotter._apply_offset_to_layer()
 
     assert _stored(path)["reference_series"] == "RAL16A"
     assert layer.metadata["reference_series"] == "RAL16A"
     assert len(plotter.saved_calls) == 1
+    # Applying the offset redraws the annotated image and leaves the layer to be saved
+    assert annotated_calls == [([layer], layer.metadata.get("sample_stem_path"))]
+    assert layer.metadata["_is_dirty"] is True
 
 
 def test_a_failed_export_records_nothing(sample):
