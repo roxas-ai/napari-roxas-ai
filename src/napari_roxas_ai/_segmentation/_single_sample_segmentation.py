@@ -22,6 +22,7 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
+from napari_roxas_ai._writer._writer import save_layers_annotated_image
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
@@ -98,6 +99,8 @@ def apply_segmentation_results_to_viewer(
             )
 
         cells_layer.scale = input_scale
+        # New segmentation, not yet written to disk
+        cells_layer.metadata["_is_dirty"] = True
 
     # --- RINGS ---
     if "rings" in results:
@@ -148,6 +151,8 @@ def apply_segmentation_results_to_viewer(
             )
 
         rings_layer.scale = input_scale
+        # New segmentation, not yet written to disk
+        rings_layer.metadata["_is_dirty"] = True
 
         # Apply / merge features
         new_df = rings.get("features", None)
@@ -641,4 +646,8 @@ class SingleSampleSegmentationWidget(Container):
             cells_model_file=self.cells_model_file,
             rings_model_file=self.rings_model_file,
         )
+
+        # Write the annotated image for an immediate check of the segmentation,
+        # drawn from the scan and masks in memory
+        save_layers_annotated_image(self._viewer.layers, stem)
 

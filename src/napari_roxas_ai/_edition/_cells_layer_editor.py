@@ -628,24 +628,29 @@ class CellsLayerEditorWidget(Container):
         self._edition_mode_combo.enabled = False
         self._edition_mode_row.enabled = False
         self._saving_widget._save_layers(how="all")
-        if hasattr(self._saving_widget, "worker") and self._saving_widget.worker is not None:
-            self._saving_widget.worker.progress.connect(self._update_progress)
-        if hasattr(self._saving_widget, "worker_thread") and self._saving_widget.worker_thread is not None:
-            self._saving_widget.worker_thread.finished.connect(
-                lambda: setattr(self._save_all_layers_button, "enabled", True)
+        if self._saving_widget.worker is None or self._saving_widget.worker_thread is None:
+            # Nothing to save (the saving widget reported it): no worker was started
+            self._save_all_layers_button.enabled = True
+            self._edit_cells_geometries_button.enabled = True
+            self._edition_mode_combo.enabled = True
+            self._edition_mode_row.enabled = True
+            self._progress_bar.visible = False
+            return
+        self._progress_bar.value = 0
+        self._saving_widget.worker.progress.connect(self._update_progress)
+        worker_thread = self._saving_widget.worker_thread
+        for button in (
+            self._save_all_layers_button,
+            self._edit_cells_geometries_button,
+            self._edition_mode_combo,
+            self._edition_mode_row,
+        ):
+            worker_thread.finished.connect(
+                lambda button=button: setattr(button, "enabled", True)
             )
-            self._saving_widget.worker_thread.finished.connect(
-                lambda: setattr(self._edit_cells_geometries_button, "enabled", True)
-            )
-            self._saving_widget.worker_thread.finished.connect(
-                lambda: setattr(self._edition_mode_combo, "enabled", True)
-            )
-            self._saving_widget.worker_thread.finished.connect(
-                lambda: setattr(self._edition_mode_row, "enabled", True)
-            )
-            self._saving_widget.worker_thread.finished.connect(
-                lambda: setattr(self._progress_bar, "visible", False)
-            )
+        worker_thread.finished.connect(
+            lambda: setattr(self._progress_bar, "visible", False)
+        )
 
     def _update_progress(self, current: int, total: int) -> None:
         """Update the progress bar."""
@@ -864,6 +869,7 @@ class CellsLayerEditorWidget(Container):
         # Update the cells layer with the new geometries
         self.input_layer.data = new_cells_raster
         self.input_layer.features = pd.DataFrame()
+        self.input_layer.metadata["_is_dirty"] = True
 
         # Reset the button visibility
         self._edition_mode_combo.visible = True

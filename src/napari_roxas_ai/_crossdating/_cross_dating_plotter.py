@@ -37,7 +37,10 @@ from napari_roxas_ai._utils._callback_manager import (
     unregister_layer_callback,
 )
 from napari_roxas_ai._utils._metadata_keys import NO_REFERENCE_SERIES
-from napari_roxas_ai._writer._writer import update_metadata_file
+from napari_roxas_ai._writer._writer import (
+    save_layers_annotated_image,
+    update_metadata_file,
+)
 
 if TYPE_CHECKING:
     import napari
@@ -1814,6 +1817,7 @@ class CrossDatingPlotterWidget(Container):
         input_layer.data = new_rings_raster
         input_layer.features = new_rings_table
         input_layer.colormap = new_colormap
+        input_layer.metadata["_is_dirty"] = True
 
         # Re-establish x-range to +/- 10 years of the now shifted ROXAS series
         if n > 0:
@@ -1835,6 +1839,11 @@ class CrossDatingPlotterWidget(Container):
 
         # Save reference plot upon applying changes
         self._export_plot()
+
+        # Redraw the annotated image with the shifted ring years
+        save_layers_annotated_image(
+            self._viewer.layers, input_layer.metadata.get("sample_stem_path")
+        )
 
     def _sync_rings_editor_year(self):
         """Find the RingsLayerEditorWidget and update its year spinbox."""

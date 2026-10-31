@@ -287,12 +287,16 @@ def test_save_all_layers_without_layers_reenables_buttons(
     widget = RingsLayerEditorWidget(viewer)
 
     messages = []
-    monkeypatch.setattr(_rings_layer_editor, "show_info", messages.append)
+    monkeypatch.setattr(
+        "napari_roxas_ai._saving._samples_saving_widget.show_info",
+        messages.append,
+    )
 
     widget._save_all_layers()
 
     assert widget._save_all_layers_button.enabled
     assert widget._edit_rings_geometries_button.enabled
+    assert not widget._progress_bar.visible
     assert messages == ["No rings or cells layers to save"]
 
 
@@ -381,7 +385,7 @@ def test_save_all_layers_shows_hint_when_completed(
     written = []
     monkeypatch.setattr(
         "napari_roxas_ai._saving._samples_saving_widget.write_single_layer",
-        lambda path, data, kwargs: written.append(path),
+        lambda path, data, kwargs, **options: written.append(path),
     )
     from napari_roxas_ai._saving import _samples_saving_widget
 
@@ -395,7 +399,7 @@ def test_save_all_layers_shows_hint_when_completed(
         ),
     )
     messages = []
-    monkeypatch.setattr(_rings_layer_editor, "show_info", messages.append)
+    monkeypatch.setattr(_samples_saving_widget, "show_info", messages.append)
 
     widget._save_all_layers()
     qtbot.wait_until(
@@ -403,7 +407,35 @@ def test_save_all_layers_shows_hint_when_completed(
     )
 
     assert len(written) == 1
-    assert messages == ["1 layer(s) saved successfully"]
+    assert messages == ["Saved rings layer."]
+
+    # Saved: nothing left to save
+    widget._save_all_layers()
+    assert len(written) == 1
+    assert messages == ["Saved rings layer.", "No unsaved changes in cells or rings layers."]
+
+
+def test_update_layer_year_redraws_annotated_image_and_marks_dirty(
+    make_napari_viewer, models_path, monkeypatch
+):
+    viewer = make_napari_viewer()
+    layer = _add_rings_layer(viewer)
+    layer.metadata["sample_stem_path"] = "sample"
+    layer.metadata["_is_dirty"] = False
+    widget = RingsLayerEditorWidget(viewer)
+
+    annotated_calls = []
+    monkeypatch.setattr(
+        _rings_layer_editor,
+        "save_layers_annotated_image",
+        lambda layers, stem: annotated_calls.append((layers, stem)),
+    )
+
+    widget._last_year_spinbox.value = 2010
+    widget._update_layer_year()
+
+    assert layer.metadata["_is_dirty"] is True
+    assert annotated_calls == [(viewer.layers, "sample")]
 
 
 @pytest.fixture

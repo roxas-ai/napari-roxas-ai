@@ -404,6 +404,8 @@ class SingleSampleMeasurementsWidget(Container):
                     "features": cells_table,
                 },
             )
+            # Written with the measurements: nothing left to save
+            self._cells_input_layer.metadata["_is_dirty"] = False
             show_info(f"Cells exported to: {cells_path}")
 
         # ---------------------------
@@ -444,6 +446,8 @@ class SingleSampleMeasurementsWidget(Container):
                     "features": rings_table,
                 },
             )
+            # Written with the measurements: nothing left to save
+            self._rings_input_layer.metadata["_is_dirty"] = False
             show_info(f"Rings exported to: {rings_path}")
 
         # ---------------------------

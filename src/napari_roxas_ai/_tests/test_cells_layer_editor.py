@@ -1,3 +1,4 @@
+from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 import numpy as np
@@ -410,10 +411,13 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert widget._edition_mode_row.enabled
 
     saved_how = None
+    worker_thread = MagicMock()
 
     def fake_save_layers(how):
         nonlocal saved_how
         saved_how = how
+        widget._saving_widget.worker = MagicMock()
+        widget._saving_widget.worker_thread = worker_thread
 
     monkeypatch.setattr(widget._saving_widget, "_save_layers", fake_save_layers)
     widget._save_all_layers_button.native.click()
@@ -423,11 +427,14 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert not widget._edition_mode_combo.enabled
     assert not widget._edition_mode_row.enabled
 
-    # Simulate worker completion if worker_thread exists
-    widget._save_all_layers_button.enabled = True
-    widget._edit_cells_geometries_button.enabled = True
-    widget._edition_mode_combo.enabled = True
-    widget._edition_mode_row.enabled = True
+    # Simulate worker completion: the controls are enabled again
+    for call in worker_thread.finished.connect.call_args_list:
+        call.args[0]()
+    assert widget._save_all_layers_button.enabled
+    assert widget._edit_cells_geometries_button.enabled
+    assert widget._edition_mode_combo.enabled
+    assert widget._edition_mode_row.enabled
+    assert not widget._progress_bar.visible
 
     # Progress bar updates
     widget._update_progress(1, 2)

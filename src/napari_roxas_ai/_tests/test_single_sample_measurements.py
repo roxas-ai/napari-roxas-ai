@@ -82,6 +82,7 @@ def test_single_sample_measurements_add_result_layers_exports_annotated_image(
             "sample_name": "sample_1",
             "spatial_resolution": 1.0,
             "sample_type": "conifer",
+            "_is_dirty": True,
         },
     )
     widget._rings_input_layer = rings_layer
@@ -111,6 +112,8 @@ def test_single_sample_measurements_add_result_layers_exports_annotated_image(
         call_kwargs = mock_save_annotated.call_args[1]
         assert call_kwargs["scan_path"] == str(scan_file)
         assert call_kwargs["annotated_path"] == str(tmp_path / "sample_1_annotated.jpg")
+        # Written with the measurements: nothing left to save
+        assert rings_layer.metadata["_is_dirty"] is False
 
 
 def test_single_sample_measurements_add_result_layers_skips_annotated_if_rings_missing(

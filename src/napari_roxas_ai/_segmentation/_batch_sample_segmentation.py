@@ -23,11 +23,17 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._reader import get_metadata_from_file, read_scan_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._writer import write_single_layer
+from napari_roxas_ai._writer._writer import save_sample_annotated_image
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from ._single_sample_segmentation import apply_segmentation_results_to_viewer
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
+from .._utils._project_files_events import (
+    add_project_files_listener,
+    is_same_directory,
+    notify_project_files_changed,
+)
 from .._utils._segmentation_postprocess import remove_border_touching_components
 from .._utils._torch_device import select_torch_device
 
@@ -208,6 +214,18 @@ class Worker(QObject):
             if self.input_directory_path:
                 fix_sample_stem_paths_in_project(self.input_directory_path)
 
+    @staticmethod
+    def _sample_path(scan_file_path: str, sample_metadata: dict) -> Path:
+        """The sample stem (directory / sample name) the outputs are written to."""
+        stem = sample_metadata.get("sample_stem_path")
+        if isinstance(stem, str) and stem.strip():
+            project_dir = Path(settings.get("project_directory")).resolve()
+            return (project_dir / stem).resolve()  # stem is stored relative
+        sample_name = sample_metadata.get("sample_name")
+        if not isinstance(sample_name, str) or not sample_name.strip():
+            sample_name = Path(Path(scan_file_path).stem).stem
+        return Path(scan_file_path).parent / sample_name
+
     def run(self):
         # Heavy ML imports are deferred to run time (see module note).
         import torch
@@ -215,7 +233,8 @@ class Worker(QObject):
         # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
         torch.set_num_threads(1)
 
-        factor = int(self.segment_cells) + int(self.segment_rings)
+        # One step per segmentation, plus one for the annotated image
+        factor = int(self.segment_cells) + int(self.segment_rings) + 1
         total = len(self.scan_file_paths) * factor
         total_files = len(self.scan_file_paths)
         i = 0
@@ -238,6 +257,9 @@ class Worker(QObject):
                     if isinstance(k, str)
                     and k.startswith(SAMPLE_METADATA_PREFIXES)
                 }
+
+                cells_data = None
+                rings_features = pd.DataFrame()
 
                 # Process cells if requested
                 if self.segment_cells:
@@ -323,7 +345,25 @@ class Worker(QObject):
                         },
                     }
 
-                    write_single_layer(path=scan_file_path, data=rings_raster, meta=rings_add_kwargs)
+                    # The annotated image is drawn below, once for all modes
+                    write_single_layer(
+                        path=scan_file_path,
+                        data=rings_raster,
+                        meta=rings_add_kwargs,
+                        save_annotated=False,
+                    )
+                    rings_features = new_rings_table
+
+                # Annotated image: cells and rings (if any) drawn onto the scan.
+                # Without new cells, the cells file on disk (if any) is used.
+                self.progress.emit(i, total)
+                i += 1
+                save_sample_annotated_image(
+                    self._sample_path(scan_file_path, sample_metadata),
+                    rings_features,
+                    cells_data=cells_data,
+                    scan_data=scan_data,
+                )
 
                 tasks = []
                 if self.segment_cells and self.cells_model_weights_file:
@@ -405,6 +445,9 @@ class BatchSampleSegmentationWidget(Container):
         settings.add_listener(
             "project_directory", self._on_project_directory_changed
         )
+        # Follow the files other widgets write to the project (preparation),
+        # the list is otherwise only read when the widget opens
+        add_project_files_listener(self._on_project_files_changed)
 
         # Process already processed files checkbox
         self._process_processed_checkbox = CheckBox(
@@ -585,6 +628,26 @@ class BatchSampleSegmentationWidget(Container):
         self._update_project_dialog_button()
         self._refresh_file_list()
 
+    def _on_project_files_changed(self, directory):
+        """Rescan the file list after another widget wrote files to the project."""
+        if not is_same_directory(directory, self.input_directory_path):
+            return
+
+        # Keep a manual selection, as far as the files are still listed
+        selection = []
+        if self._handpick_files_checkbox.value and hasattr(
+            self, "_file_select_widget"
+        ):
+            selection = list(self._file_select_widget.value)
+
+        self._refresh_file_list()
+
+        if selection and self.source_files:
+            choices = self._file_select_widget.choices
+            self._file_select_widget.value = [
+                name for name in selection if name in choices
+            ]
+
     def _refresh_file_list(self):
         """Refresh the list of scan files from the project directory."""
         self.selected_files = []
@@ -700,7 +763,8 @@ class BatchSampleSegmentationWidget(Container):
     def _toggle_file_selection(self):
         """Toggle the file selection interface."""
         if self._handpick_files_checkbox.value:
-            self._update_file_selection_widget()
+            # Rescan the project directory, it may have changed on disk
+            self._refresh_file_list()
         else:
             self._file_selection_container.visible = False
             self._reverse_selection_button.visible = False
@@ -822,6 +886,12 @@ class BatchSampleSegmentationWidget(Container):
                 )
                 return
 
+        # The project directory may have changed on disk since the list was
+        # built (e.g. images prepared while this widget was open). A manual
+        # selection is kept as it is, refreshing would clear it.
+        if not self._handpick_files_checkbox.value:
+            self._refresh_file_list()
+
         # Check if files are available to process
         target_files = self._get_selected_file_paths()
         if not target_files:
@@ -856,6 +926,8 @@ class BatchSampleSegmentationWidget(Container):
         # Restore run segmentation button when finished
         def on_finished():
             self._run_segmentation_button.enabled = True
+            # Let the widgets listing the project files (9B) rescan them
+            notify_project_files_changed(self.input_directory_path, source=self)
 
         self.worker_thread.finished.connect(on_finished)
 
