@@ -258,6 +258,12 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 - **Rings Detection**: Detects continuous tree-ring boundaries using an iterative regression formulation based on Katzenmaier et al. (2025), sorts boundaries from bark to pith, enforces boundary continuity across the sample width, and constructs labeled annual ring bands (`<sample>.rings`).
 - Post-processes masks to eliminate edge artefacts (e.g., boundary-touching partial cells).
 
+### Files and Layers Saved
+- **In-Memory Layers Created / Updated**: Adds or updates the `<sample>.cells` layer (Labels), `<sample>.rings` layer (Labels), and `Rings Years` text overlay layer in the active napari viewer.
+- **Annotated Overview Image**: Automatically generates and saves the `<sample>_annotated.jpg` overview scan in the sample directory, overlaid with detected ring boundaries and calendar year labels (and optional semi-transparent cell overlays).
+- **Metadata**: Updates `<sample>.metadata.json` with detected ring count (`rings_count`) and outermost complete year (`rings_outmost_complete_year`).
+- *Note on Label Files on Disk*: The raw segmentation label rasters (`.cells.png` and `.rings.tif`) are held in memory as viewer layers ready for manual inspection/editing; they are persisted to disk when clicking **Save All Layers** (or via [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)).
+
 ### Key Controls & Options
 - **Cell Segmentation Checkbox & Model Dropdown**: Checkbox to enable cell lumen detection, alongside a dropdown list to choose the trained cell model checkpoint (`.pth`). Unchecking disables cell detection and hides the model selection dropdown.
 - **Ring Segmentation Checkbox & Model Dropdown**: Checkbox to enable tree-ring boundary detection, alongside a dropdown list to choose the trained ring model checkpoint (`.pth`). Unchecking disables ring detection and hides the model selection dropdown.
@@ -280,6 +286,12 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 - Iterates over all discovered sample scans in the project directory.
 - Applies the selected neural network models sequentially (see [Deep-Learning Segmentation Models](../reference/segmentation_models.md)).
 - Automatically saves segmentation masks (`.cells.png` and `.rings.tif`) directly to disk alongside updated `.metadata.json` files.
+
+### Files and Layers Saved
+- **Cell Masks (`<sample>.cells.png`)**: Saved directly to disk when cell segmentation is enabled.
+- **Ring Masks (`<sample>.rings.tif`)**: Saved directly to disk when ring segmentation is enabled.
+- **Annotated Overview Images (`<sample>_annotated.jpg`)**: Automatically created or updated on disk with ring boundaries and year labels when ring segmentation is run.
+- **Metadata (`<sample>.metadata.json`)**: Updated on disk with ring count (`rings_count`) and outermost complete year (`rings_outmost_complete_year`).
 
 ### Key Controls
 - **Project Directory Selection**: Choose the target folder containing prepared samples (triggering the same global project directory selection dialog).
@@ -314,8 +326,12 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
     - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
 - **Lasso Selection & Union (OR) Behavior**: In Vector editing mode, drawing lasso loops encloses cells. Multiple overlapping lasso polygons combine (union / OR logic) rather than toggling/canceling, allowing seamless regional selection.
 - **Undo Mechanism**: Supports a 50-step history stack (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) that snapshots polygon coordinates and shape types in Vector mode, and triggers napari's label brush history in Raster mode.
-- When applied, rasterizes vectors back to label masks, resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
+- When applied, rasterizes vectors back to label masks, marks the `.cells` layer as modified (triggering unsaved change tracking), resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
 - **Customizable Tolerances & Colors**: Polygon smoothing tolerances, line widths, and display colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
+
+### Files and Layers Saved
+- **In-Memory Modifications**: Changes made using Vector or Raster tools are committed to the in-memory `<sample>.cells` layer upon clicking **Apply Cell Changes**.
+- **Saving to Disk**: Clicking **Save All Layers** (or using [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)) writes the updated `<sample>.cells.png` raster directly to disk and updates `<sample>.metadata.json`. Manual saving does not redraw `<sample>_annotated.jpg` (keeping saves fast); the annotated image is automatically updated at major workflow checkpoints (segmentation, year updates, cross-dating, measurements).
 
 ### Key Controls & Options
 - **Editing Mode**: Switch between `Vector` and `Raster` editing modes.
@@ -375,6 +391,12 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
     - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
 10. **Customizable Tolerances & Colors**:
     - Polyline smoothing tolerances, line thickness, and boundary colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
+
+### Files and Layers Saved
+- **In-Memory Modifications**: Adding, deleting, or nudging ring boundaries updates the `<sample>.rings` labels layer and `Rings Years` text overlay upon clicking **Apply Ring Changes**, marking the `.rings` layer as modified.
+- **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-drawn and saved directly to disk whenever **Update Year** is clicked, reflecting the new ring year labels and boundary positions.
+- **Ring Table Synchronization (`<sample>.rings_table.csv`)**: When ring changes or year updates are applied, existing ring tables are updated to keep ring numbers and years consistent.
+- **Saving to Disk**: Clicking **Save All Layers** (or using [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)) writes the updated `<sample>.rings.tif` mask and `<sample>.metadata.json` (outermost year `rings_outmost_complete_year`, ring count `rings_count`) to disk. Manual saves do not redraw `<sample>_annotated.jpg` to keep saving instantaneous.
 
 ### Key Controls & Options
 - **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
@@ -461,6 +483,13 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 - **Files in Different Directory Levels**:
     - Because traversal stops at the first directory containing matches, a cross-dating file located in a sample's local subfolder takes precedence over a cross-dating file located in parent or root directories.
 
+### Files and Layers Saved
+- **In-Memory Modifications**: Clicking **Apply Changes** updates the year labels on the `Rings Years` text overlay, shifts `.rings` label indices, and marks the `.rings` layer as modified with the new outermost year.
+- **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-generated and saved to disk with updated ring calendar year labels upon clicking **Apply Changes**.
+- **Reference Series Plot (`<sample>_ReferenceSeries.jpg`)**: Generated and saved to disk when clicking **Apply Changes** or **Export Plot** (or automatically during batch measurement updates via [9B - Batch Measure & Update](#9b-batch-measure-update)), plotting sample mean ring width (`MRW`) against the selected reference chronology.
+- **Metadata (`<sample>.metadata.json`)**: Updated with the validated outermost year (`rings_outmost_complete_year`) and the selected reference series column (`reference_series`). The cross-dating file path itself is not stored, enabling portable directory hierarchies.
+- **Ring Table Synchronization (`<sample>.rings_table.csv`)**: If measurement tables already exist on disk, their `YEAR` column is automatically updated to reflect the new dating.
+
 ### Key Controls & Options
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
@@ -482,15 +511,27 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 
 ### How It Works
 - Gathers data, layer parameters, and metadata from active napari layers.
-- Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif`.
-- Keeps track of unsaved changes: layers loaded from disk start out unmodified, and edits, year updates, cross-dating offsets and new segmentations mark them as modified.
-- Does not redraw the annotated overview image (`<sample_name>_annotated.jpg`), so that saving stays fast. The overview is updated at the workflow checkpoints instead: segmentation (3A/3B), **Update Year** (6), **Apply Changes** (7) and measurements (9A/9B).
+- Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif` to disk.
+- **Unsaved Changes Tracking**: Layers loaded from disk start out unmodified. Manual edits (vector/raster cell modifications, adding/moving/deleting rings, changing outermost ring year, applying cross-dating offsets) and freshly run AI segmentations mark the corresponding layers as modified (`layer.metadata["is_modified"] = True`).
+- **Targeted Saving**: **Save All Layers** checks which layers have unsaved edits and saves only those modified layers to disk, skipping unmodified files.
+- **Explicit Save Status Notifications**: Reports exactly what was written:
+    - `"Saved cells layer."` (when only `.cells` was modified)
+    - `"Saved rings layer."` (when only `.rings` was modified)
+    - `"Saved cells and rings layers."` (when both were modified)
+    - `"No unsaved changes in cells or rings layers."` (when no changes were pending)
+- **Fast Saving Decoupled from Overview Rendering**: Manual layer saving does **not** redraw the annotated overview image (`<sample_name>_annotated.jpg`), ensuring saves complete in milliseconds without disk or CPU overhead. The annotated overview image is automatically regenerated at key workflow checkpoints instead: AI segmentation (3A/3B), **Update Year** (6), **Apply Changes** in cross-dating (7), and trait measurement (9A/9B).
 - Updates `<sample_name>.metadata.json` with updated ring counts, outermost year, and timestamps.
 - Operates in a non-blocking background worker thread.
 
+### Files and Layers Saved
+- **Cell Masks (`<sample>.cells.png`)**: Written to disk if `.cells` has unsaved changes.
+- **Ring Masks (`<sample>.rings.tif`)**: Written to disk if `.rings` has unsaved changes.
+- **Metadata (`<sample>.metadata.json`)**: Synchronized with layer metadata parameters (outermost ring year `rings_outmost_complete_year`, ring count `rings_count`, layer timestamps).
+- *Overview Image Note*: `<sample>_annotated.jpg` is **not** overwritten on manual save, keeping layer saving instantaneous.
+
 ### Key Controls
 - **Save Selected Layers**: Saves only the layers currently highlighted in the napari layer list.
-- **Save All Layers**: Saves only the `.cells` and `.rings` layers with unsaved changes and reports what was written: "Saved cells layer.", "Saved rings layer." or "Saved cells and rings layers.". Without changes, nothing is written and "No unsaved changes in cells or rings layers." is shown.
+- **Save All Layers**: Saves only the `.cells` and `.rings` layers with unsaved changes and reports what was written ("Saved cells layer.", "Saved rings layer.", or "Saved cells and rings layers."). Without changes, nothing is written and "No unsaved changes in cells or rings layers." is shown.
 - **Progress Bar**: Shows disk write progress, scaled to the number of layers actually saved.
 
 ---
@@ -511,6 +552,12 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
     - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
 - Outputs semicolon-delimited CSV tables: `<sample_name>.cells_table.csv` and `<sample_name>.rings_table.csv` (file extensions and delimiter configurable in settings).
 - **Always Re-creates Annotated Image**: Re-creates and saves an updated annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years whenever measurements are performed, ensuring the annotated image remains strictly in line with the measurements.
+
+### Files and Layers Saved
+- **Cell Measurement Table (`<sample>.cells_table.csv`)**: Saved directly to disk with comprehensive lumen and cell wall thickness metrics per detected cell instance (when **Measure Cells** is enabled).
+- **Ring Measurement Table (`<sample>.rings_table.csv`)**: Saved directly to disk with ring-width and ring-level aggregate anatomical traits per calendar year (when **Measure Rings** is enabled).
+- **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-generated and saved to disk with synchronized ring boundaries, calendar years, and cell lumen overlays.
+- **Layer Feature Tables**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive inspection of properties directly within napari.
 
 ### Key Controls
 - **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
@@ -533,6 +580,17 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 - Computes cell-level and ring-level measurement tables in batch mode.
 - Writes `<sample>.cells_table.csv` and `<sample>.rings_table.csv` directly to each sample folder.
 - Generates or updates annotated overview scans (`<sample>_annotated.jpg`) and cross-dating reference plots (`<sample>_ReferenceSeries.jpg`).
+- **How Reference Plot Updates Work**: When generating `<sample>_ReferenceSeries.jpg`, ROXAS AI extracts the sample's measured mean ring width (`MRW`) series from `<sample>.rings_table.csv` (or calculates it from the `.rings` mask). It discovers available cross-dating files in the directory hierarchy by searching strictly upwards from the sample folder for files matching the configured cross-dating file extension (e.g., `*.crossdating.txt`). To determine which reference series to plot against:
+    - If a specific reference series was previously saved in `<sample>.metadata.json` (`reference_series`), and that column exists in one of the discovered cross-dating files, it uses that stored reference series.
+    - If no reference series is stored (or `reference_series` is `"NA"` or no longer present in the files), ROXAS AI automatically searches the series columns of the discovered cross-dating files for the best name match with the sample name.
+    - If a matching reference series is identified, the plot is rendered and `<sample>.metadata.json` is updated with the selected `reference_series`. If no cross-dating files or matching series are found, reference plot creation is safely skipped.
+
+### Files and Layers Saved
+- **Cell Measurement Tables (`<sample>.cells_table.csv`)**: Saved to disk for each processed sample when **Measure Cells** is enabled.
+- **Ring Measurement Tables (`<sample>.rings_table.csv`)**: Saved to disk for each processed sample when **Measure Rings** is enabled.
+- **Annotated Overview Images (`<sample>_annotated.jpg`)**: Saved or updated on disk for each sample when **Update Annotated Images** is active (or locked on during measurements).
+- **Reference Series Plots (`<sample>_ReferenceSeries.jpg`)**: Saved or updated on disk for each sample when **Update Crossdating Reference Files** is active (or locked on during measurements), plotting sample MRW curves against their validated reference chronologies.
+- **Metadata (`<sample>.metadata.json`)**: Synchronized with updated analysis timestamps and measurement parameters.
 
 ### Linked Operations Logic (File Synchronization)
 To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchronization:
