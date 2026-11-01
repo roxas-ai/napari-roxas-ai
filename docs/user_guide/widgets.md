@@ -126,7 +126,9 @@ The **Prepare Project Images** widget standardizes anatomical images and externa
 ### How It Works
 1. Scans the selected project directory (and subdirectories) for supported image formats (`.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`, `.bmp`, `.jp2`).
 2. Opens an interactive **Metadata Dialog** for each sample to capture physical dimensions, spatial resolution ($\mu\text{m}/\text{px}$), sample type (e.g., `conifer`), measurement geometry (`linear`), and the outermost complete calendar year.
-3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` and creates a synchronized `<sample_name>.metadata.json`.
+    - **Apply to All Remaining Samples**: The metadata prompt provides an **Apply to all remaining samples** checkbox. Enabling this applies the current metadata choices across all remaining samples in the batch without prompting again.
+    - **ROXAS Classic Migration / Output Loading**: If a sample folder contains legacy ROXAS Classic output files, the dialog displays **Load Cells from ROXAS output** (which imports vessel segmentation masks from `_Vessels.scl` / `.scl`) and **Load Rings from ROXAS output** (which reconstructs ring boundaries, years, and label maps from `_ringtraces.txt` / `_ringtraces.csv`). This allows instant migration of existing ROXAS projects into ROXAS AI layers (`.cells.png` and `.rings.tif`) without re-running AI segmentation.
+3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` (safely handling cross-device moves and case-insensitive filesystem renames) and creates a synchronized `<sample_name>.metadata.json`.
 4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
 
 ![Screenshot: Metadata Dialog](../assets/user_guide/01_metadata_dialog.png)
@@ -228,14 +230,16 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 
 ### How It Works
 - Queries the project directory for prepared sample stems.
+- **Automatic Project Stem Path Repair**: When opening a project directory that has been moved, renamed, or transferred from another computer/OS, ROXAS AI automatically repairs all `sample_stem_path` references in metadata to match the current filesystem location.
 - **Real-Time Directory Synchronization**: Changes to the project directory are automatically synchronized and updated across all widgets in real-time.
 - **Single-Image Workflow Enforcement**: Only one sample image can be loaded in the napari viewer at a time. Attempting to load another image prompts the user to first close the currently active image.
 - Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata) and automatically loads any available associated `.rings` and `.cells` layers.
+- **Automatic Ring Year Overlay Initialization**: Background tracking monitors loaded layers so that calendar year labels (`Rings Years` text overlay) appear automatically in the viewer even if the ring editor widget is not docked.
 - Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).
 
 ### Key Controls
 - **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
-- **Available Images List**: Displays discovered sample scans in the current project directory. **Double-clicking** any sample entry immediately loads that image into the viewer along with its available associated rings and cells layers (identical to selecting the file and clicking **Load Selected Image**).
+- **Available Images List**: Displays discovered sample scans in the current project directory. The list height dynamically adapts between 5 and 7 visible rows based on content. **Double-clicking** any sample entry immediately loads that image into the viewer along with its available associated rings and cells layers (identical to selecting the file and clicking **Load Selected Image**).
 - **Load Selected Image**: Loads the currently selected sample file (along with available associated rings and cells layers) into the viewer.
 - **Progress Bar**: Displays sample loading progress.
 
@@ -442,15 +446,19 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 - Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.
 - Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** up to **`9,999`** (CE).
 - Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
+- **Floating Presentation & Sizing Grip**: Opens automatically as a floating window centered on the active screen with a 100 px margin and a prominent diagonal sizing grip, allowing flexible side-by-side positioning with the napari viewer.
 - **Year Range & Offset Slider Interaction**:
     - The standard view automatically centers on the target ROXAS sample series with a default buffer of **$\pm 10$ years** on each side.
     - To slide the sample series beyond this initial $\pm 10$ year window, adjust the **Year Range** slider to expand the visible time span. Expanding the Year Range slider automatically widens the allowable range of the **Offset** slider, allowing you to slide the series across decades or centuries.
-- **Auto-Offset Alignment**:
+    - Both the **Year Range** (X-axis) and **Width Range** (Y-axis) sliders use split handle labels (lower bound below the bar, upper bound above) to prevent label overlap when handles are close together.
+- **Auto-Offset Alignment & Candidate Selection**:
     - The **Find Best Overlap** feature scans offsets across the active time window to automatically maximize correlation ($r$) and sign agreement (GLK).
+    - **Use Mean Checkbox**: When checked, aligns the sample against the overall mean of all reference series in the file rather than a single individual column.
+    - **Interactive Candidate Alignment Buttons**: In addition to applying the top-ranked alignment, ROXAS AI generates interactive buttons for alternative candidate alignments with their year spans and statistical scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any candidate button instantly shifts the plot to that dating and updates the button to allow swapping back.
 - **Uniform Scaling Across Reference Plots**:
     - Reference plot figures are generated with a standardized vertical height of 800 pixels and a constant horizontal scale of **70 pixels per year** of overlap (`min(50 + (20 + overlap_years) * 70, 65000)`). This guarantees identical visual scale across different samples and chronologies.
 - **Reference Plot Creation**:
-    - Reference plot images (`<sample>_ReferenceSeries.jpg`) are generated and saved when clicking **Export Plot** or automatically during batch measurement runs in [9B - Batch Measure & Update](#9b-batch-measure-update).
+    - Reference plot images (`<sample>_ReferenceSeries.jpg`) are generated and saved when clicking **Export Plot**, clicking **Apply Changes**, or automatically during batch measurement runs in [9B - Batch Measure & Update](#9b-batch-measure-update).
 - **Statistical Synchrony Metrics**:
     - Computes **Correlation coefficient ($r$)**, **Gleichläufigkeit (GLK / % sign agreement)**, and **$t$-value / statistical significance** in real time.
 
@@ -493,11 +501,13 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 ### Key Controls & Options
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
-- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.
-- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows.
+- **Use Mean Checkbox**: Toggles whether auto-alignment computes the best overlap against the composite average of all columns in the cross-dating file instead of the selected reference series column.
+- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation and sign agreement (GLK), generating candidate alignment buttons.
+- **Candidate Alignment Buttons**: Interactive buttons created below the alignment row displaying the top alternative alignment year spans and scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any button shifts the plot to that dating and swaps previous alignment data for easy toggling.
+- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows, using split handle labels to avoid label overlap.
 - **Offset Slider**: Manually shifts sample dating relative to the reference chronology. Expanding the Year Range slider broadens the available offset adjustment window.
-- **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, and records the new outermost year in sample metadata (`rings_outmost_complete_year`).
-- **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `.jpg` image in the sample directory and records the validated reference series in `<sample_name>.metadata.json`.
+- **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, records the new outermost year in sample metadata (`rings_outmost_complete_year`), synchronizes `.rings_table.csv`, regenerates `<sample>_annotated.jpg`, and exports `<sample>_ReferenceSeries.jpg`.
+- **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `<sample>_ReferenceSeries.jpg` image in the sample directory and records the validated reference series in `<sample>.metadata.json`.
 
 ---
 
@@ -561,8 +571,8 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 
 ### Key Controls
 - **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
-- **Check Settings Button**: Launches the Settings window (see [ZZ - Settings](#zz-settings)) as a floating widget that appears maximized with a comfortable margin on top of napari, automatically scrolling to and focusing on the measurement parameters.
-- **Measure Button**: Launches analysis in a background worker, writes measurement tables and the updated annotated image, and attaches measurements to layer properties for interactive table inspection.
+- **Check Settings Button**: Launches the Settings window (see [ZZ - Settings](#zz-settings)) as a floating widget that appears maximized with a comfortable margin on top of napari, automatically expanding and scrolling to the measurement parameters.
+- **Measure Button**: Launches analysis in a background worker with an animated processing spinner (`Processing | / - \`), writes measurement tables and the updated annotated image, cleans non-measured edge artefacts from the cell mask, attaches measurements to layer properties for interactive table inspection, and marks layers as saved (`_is_dirty = False`).
 
 ---
 
@@ -576,6 +586,7 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 
 ### How It Works
 - Discovers all matched pairs of `.cells` and `.rings` files in the project directory.
+- **Real-Time Dynamic Sync**: Listens to project directory and project file changes so that samples generated by earlier steps (such as preparation or batch segmentation) appear immediately in the file list without closing or reopening the widget.
 - Reads image scale and configuration from each sample's `.metadata.json`.
 - Computes cell-level and ring-level measurement tables in batch mode.
 - Writes `<sample>.cells_table.csv` and `<sample>.rings_table.csv` directly to each sample folder.
@@ -588,28 +599,28 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 ### Files and Layers Saved
 - **Cell Measurement Tables (`<sample>.cells_table.csv`)**: Saved to disk for each processed sample when **Measure Cells** is enabled.
 - **Ring Measurement Tables (`<sample>.rings_table.csv`)**: Saved to disk for each processed sample when **Measure Rings** is enabled.
-- **Annotated Overview Images (`<sample>_annotated.jpg`)**: Saved or updated on disk for each sample when **Update Annotated Images** is active (or locked on during measurements).
+- **Annotated Overview Images (`<sample>_annotated.jpg`)**: Saved or updated on disk for each sample when **Update Annotated image** is active (or locked on during measurements).
 - **Reference Series Plots (`<sample>_ReferenceSeries.jpg`)**: Saved or updated on disk for each sample when **Update Crossdating Reference Files** is active (or locked on during measurements), plotting sample MRW curves against their validated reference chronologies.
 - **Metadata (`<sample>.metadata.json`)**: Synchronized with updated analysis timestamps and measurement parameters.
 
 ### Linked Operations Logic (File Synchronization)
 To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchronization:
 
-- When **Measure Cells** or **Measure Rings** is checked, the update checkboxes for **Update Annotated Images** and **Update Crossdating Reference Files** are automatically locked **ON** (checked and disabled).
+- When **Measure Cells** or **Measure Rings** is checked, the update checkboxes for **Update Annotated image** and **Update Crossdating Reference Files** are automatically locked **ON** (checked and disabled).
 - *Reason*: Any recalculation of anatomical traits or ring boundaries changes the underlying metrics and years; locking the image and plot updates guarantees that measurement tables, annotated scan images, and crossdating plots remain 100% synchronized with the new measurements.
 - When both measurement options are unchecked, the update checkboxes are unlocked, enabling standalone batch generation/updating of annotated images and reference plots across the project directory without re-running full measurements.
 
 ### Key Controls
-- **Project Directory**: Path to project directory containing segmented samples (selecting or changing the directory here triggers the same global project directory selection dialog).
-- **File Selection Mode**: Toggle between **Batch Process All Samples** and handpicking subsets (**Manually select files to process**).
+- **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
+- **File Selection Mode**: Toggle between processing all samples and handpicking subsets (**Select individual files:**).
 - **Reverse Selection**: Inverts current sample selections in the list.
 - **Operation Checkboxes**:
     - **Measure Cells**: Extracts cell lumen and cell wall thickness metrics to `<sample>.cells_table.csv`.
     - **Measure Rings**: Extracts ring-width and ring-level aggregate metrics to `<sample>.rings_table.csv`.
-    - **Update Annotated Images**: Generates/updates `<sample>_annotated.jpg` with ring boundaries, year labels, and cell overlays.
+    - **Update Annotated image**: Generates/updates `<sample>_annotated.jpg` with ring boundaries, year labels, and cell overlays.
     - **Update Crossdating Reference Files**: Generates/updates standardized `<sample>_ReferenceSeries.jpg` plots.
-- **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings via [ZZ - Settings](#zz-settings).
-- **Run Analysis Button**: Runs batch extraction and updates with real-time progress tracking.
+- **Check Settings Button**: Opens the floating Settings window focused directly on the measurement parameters.
+- **Measure & Update Button**: Runs batch extraction and updates with real-time progress bar tracking.
 
 ---
 
@@ -624,13 +635,16 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 ### How It Works
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
 - Prevents syntax errors, invalid datatypes, or formatting corruption.
-- Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.
+- **Floating Presentation & Sizing Grip**: Opens automatically as a floating window centered on the active screen with comfortable 50 px vertical margins and a prominent diagonal sizing grip.
+- **Live Search & Filter**: Instant multi-term search filtering finds matching setting entries across all categories (e.g., typing `"gpu"` finds `try_to_use_gpu`, `"cells color"` finds `rasterization.cells_color`), displaying the count of matching items and offering a clear button.
+- **Expand All / Collapse All**: Toggles the expansion state of all setting categories at once.
+- **Immediate Application Without Restart**: Applying changes writes `settings.json` to disk and immediately notifies all active widgets and listeners in the running session.
 
 ### Key Settings Categories
 1. **File Extensions**:
-    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, and tables.
+    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, cross-dating chronologies, and tables.
 2. **Hardware & Processing**:
-    - `try_to_use_gpu`: Toggle CUDA / GPU acceleration for deep-learning segmentation.
+    - `try_to_use_gpu`: Toggle CUDA / MPS / GPU acceleration for deep-learning segmentation.
     - Worker thread and batch settings.
 3. **Visualization & Vectorization**:
     - Default colormaps for cell lumen layers.
@@ -638,9 +652,17 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
     - Display line widths and point sizes.
     - Annotated image parameters (`cell_opacity`, `cell_fill_color`, `year_label_size`).
 4. **Measurement Defaults**:
-    - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
+    - Default CWT integration widths, smoothing kernel sizes, IQR outlier rejection multipliers, and cluster thresholds.
 5. **Metadata Schema**:
     - Default metadata prompts and fields presented during sample preparation.
+
+### Key Controls
+- **Search Bar**: Live filter box matching any part of setting names or paths across categories.
+- **Expand all / Collapse all**: Expands or collapses all category groups.
+- **Apply**: Persists all settings to disk and applies them immediately across the running session.
+- **Reload from file**: Discards unapplied UI changes and reloads current settings from `settings.json`.
+- **Open settings.json**: Opens the raw configuration file in the system default text editor.
+- **Reset to defaults**: Resets all settings to the factory default configuration (with confirmation prompt).
 
 ### Troubleshooting: Settings Not Updating After an App Upgrade
 
