@@ -119,10 +119,6 @@ On multi-user systems, shared network drives, or when folders are moved or delet
 
 The **Prepare Project Images** widget standardizes anatomical images and external cross-dating files into the structured file naming conventions and data structures required by ROXAS AI.
 
-![Screenshot: Sample Preparation Widget](../assets/user_guide/01_preparation_widget.png)
-
-*Figure 2: Sample preparation widget interface.*
-
 ### How It Works
 1. Scans the selected project directory (and subdirectories) for supported image formats (`.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`, `.bmp`, `.jp2`).
 2. Opens an interactive **Metadata Dialog** for each sample to capture physical dimensions, spatial resolution ($\mu\text{m}/\text{px}$), sample type (e.g., `conifer`), measurement geometry (`linear`), and the outermost complete calendar year.
@@ -131,17 +127,9 @@ The **Prepare Project Images** widget standardizes anatomical images and externa
 3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` (safely handling cross-device moves and case-insensitive filesystem renames) and creates a synchronized `<sample_name>.metadata.json`.
 4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
 
-![Screenshot: Metadata Dialog](../assets/user_guide/01_metadata_dialog.png)
-
-*Figure 3: Interactive metadata prompt dialog during image preparation.*
-
 ### Cross-Dating Text Files Processing
 
 The **Start Processing Crossdating Files** action allows you to import and compile one or more external tree-ring width (TRW) measurement files or master reference chronologies into a single synchronized project cross-dating file.
-
-![Screenshot: Crossdating Selection Dialog](../assets/user_guide/01_crossdating_selection_dialog.png)
-
-*Figure 4: Dialog for selecting cross-dating files and setting unit scaling.*
 
 #### Supported Input File Formats
 The cross-dating parser automatically recognizes and parses several standard dendrochronological and tabular formats:
@@ -282,10 +270,6 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 !!! info "Automatic Background Model Downloads"
     If segmentation model weights are not present locally, they are automatically downloaded in the background when needed and cached for future runs.
 
-![Screenshot: Batch Segmentation Widget](../assets/user_guide/03b_batch_segmentation_widget.png)
-
-*Figure 7: Batch segmentation widget.*
-
 ### How It Works
 - Iterates over all discovered sample scans in the project directory.
 - Applies the selected neural network models sequentially (see [Deep-Learning Segmentation Models](../reference/segmentation_models.md)).
@@ -365,10 +349,6 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 
 !!! info "Automatic Background Model Downloads"
     Opening this widget checks for missing ring segmentation model weights (required for the **Rerun Ring Segmentation** feature) and downloads them automatically in the background without blocking the interface. Once downloaded, models are cached locally for subsequent use.
-
-![Screenshot: Rings Layer Editor Widget](../assets/user_guide/06_rings_layer_editor.png)
-
-*Figure 9: Rings layer editor with interactive shapes and year labels.*
 
 ### How It Works
 1. Converts the raster ring mask into continuous polyline shapes representing each ring boundary.
@@ -579,10 +559,6 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 ## 9B - Batch Measure & Update
 
 The **Batch Sample Measurements Widget** runs high-throughput anatomical trait extraction, annotated image generation, and reference plot synchronization across all samples in a project folder.
-
-![Screenshot: Batch Measurements Widget](../assets/user_guide/09b_batch_measurements_widget.png)
-
-*Figure 13: Batch measurements widget.*
 
 ### How It Works
 - Discovers all matched pairs of `.cells` and `.rings` files in the project directory.

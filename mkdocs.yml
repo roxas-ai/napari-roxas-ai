@@ -1,6 +1,6 @@
 site_name: ROXAS AI
 site_url: https://roxas-ai.github.io/napari-roxas-ai/
-site_description: Documentation for the napari-roxas-ai plugin.
+site_description: Comprehensive documentation for ROXAS AI (napari-roxas-ai), an open-source deep-learning quantitative wood anatomy (QWA) and dendrochronology analysis toolkit for napari.
 site_author: The WSL Dendrosciences Group
 
 repo_name: roxas-ai/napari-roxas-ai
