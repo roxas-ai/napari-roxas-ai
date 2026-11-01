@@ -6,7 +6,7 @@ Step-by-step guides for quantitative wood anatomy (QWA) and dendrochronological 
 
 ## 1. Quickstart: 5-Minute Single Sample Walkthrough
 
-This fast-track walkthrough guides you from raw image to measured anatomical traits using the bundled conifer sample and the **Manual Editing** workflow group.
+This fast-track walkthrough guides you from raw anatomical image to measured cellular and tree-ring traits using the bundled conifer sample and the **Manual Editing Group** (`Ctrl+Shift+M`).
 
 ```mermaid
 flowchart LR
@@ -17,61 +17,83 @@ flowchart LR
 ```
 
 ### Step 1: Launch ROXAS AI & Open Built-in Sample Data
-1. Open your terminal / conda prompt with the `roxas-ai` environment active and start the application:
+
+1. Open your terminal or conda prompt with the `roxas-ai` environment active and start the application:
    ```bash
    napari-roxas
    ```
-   *This opens napari with navigation shortcuts active and the **Manual Editing Group** docked in the right sidebar.*
+   *This starts napari, registers viewport navigation shortcuts (<kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>), and docks the **Manual Editing Group** in the right sidebar.*
 2. Navigate to the top menu: **File > Open Sample > ROXAS AI > Conifer Sample Data**.
-3. ROXAS AI loads the conifer cross-section scan along with pre-configured spatial metadata ($\mu\text{m}/\text{px}$).
+3. ROXAS AI loads the conifer cross-section scan along with pre-configured spatial metadata ($\text{px}/\mu\text{m}$).
 
-![Screenshot: Built-in sample loaded in napari](../assets/tutorials/quickstart_01_loaded_sample.png)
+![Screenshot: Built-in sample loaded in napari](../assets/user_guide/02_samples_loading_widget.png)
 
 *Figure 1: Conifer sample dataset loaded into the napari viewer.*
 
+---
+
 ### Step 2: Run Deep Learning Detection
+
 1. In the docked sidebar, locate **3A - Detect cells & rings (individual image)**.
-2. Select the segmentation models:
-    - **Cells Model**: `linear_cells_model`
-    - **Rings Model**: `LinearRingModel_v3_iterative.pt`
-3. Click **Run Segmentation**. Deep-learning inference generates two new layers: `.cells` (cell lumen labels) and `.rings` (ring boundary labels).
+2. Select the deep-learning models:
+    - **Cells Model**: `linear_cells_model` (ResNet-50 U-Net architecture)
+    - **Rings Model**: `LinearRingModel_v3_iterative.pt` (Iterative boundary regression)
+3. Click **Run Segmentation**.
+   
+   !!! info "Automatic Model Weights Download"
+       If you are running segmentation for the first time, ROXAS AI automatically downloads pre-trained model weights in the background and caches them locally for all subsequent runs.
 
-![Screenshot: Automated DL detection result overlay](../assets/tutorials/quickstart_02_dl_segmentation.png)
+4. Deep-learning inference generates two interactive napari layers:
+    - **`.cells`**: Labeled cell lumen instances (displayed with individual color labels).
+    - **`.rings`**: Labeled annual tree-ring bands and boundary polylines.
 
-*Figure 2: Automated cell lumen and tree-ring boundary segmentation overlay.*
+![Screenshot: Automated DL detection result](../assets/user_guide/03a_single_segmentation_widget.png)
+
+*Figure 2: Automated cell lumen and tree-ring boundary segmentation layers.*
+
+---
 
 ### Step 3: Quick Visual Verification & Curation
+
 1. Navigate across the sample using single-key shortcuts:
-    - **Pan**: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or Arrow keys (or hold <kbd>Shift</kbd> for fast panning).
-    - **Zoom**: <kbd>Q</kbd> to zoom out, <kbd>E</kbd> to zoom in.
+    - **Pan**: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or Arrow keys (hold <kbd>Shift</kbd> for fast panning at 400 px/step).
+    - **Zoom**: <kbd>Q</kbd> to zoom out, <kbd>E</kbd> to zoom in ($0.25\times$ zoom step).
 2. Expand **5 - Edit cells** or **6 - Edit rings** in the sidebar to make quick adjustments:
-    - In **Cell Editing (Raster Mode)**: Hold <kbd>Ctrl</kbd> + **Mouse Wheel** to dynamically resize the brush; hold <kbd>Ctrl</kbd> + **Double-Click** to toggle between brush and eraser. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo any mistake.
-    - In **Ring Editing**: Select a boundary and press <kbd>Ctrl</kbd> + Arrow keys to nudge it by 1 pixel (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys for 10 pixels). Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.
+    - **Cell Editing (Raster Mode)**: Hold <kbd>Ctrl</kbd> + **Mouse Wheel** to dynamically resize the brush (1–100 px); hold <kbd>Ctrl</kbd> + **Double-Click** to toggle between brush and eraser. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo any stroke.
+    - **Ring Editing**: Select a boundary and press <kbd>Ctrl</kbd> + Arrow keys to nudge it by 1 pixel (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys for 10 pixels). Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.
+
+---
 
 ### Step 4: Extract Cell & Ring Measurements
+
 1. In the sidebar, scroll to **9A - Measure cells & rings (individual image)**.
-2. *(Optional)* Click **Check Settings** to review measurement parameters in the floating settings window.
-3. Click **Measure**.
-4. Measurement output tables (`.cells_table.csv` and `.rings_table.csv`) and an updated overview image (`_annotated.jpg`) are generated in the project folder with comprehensive anatomical metrics (lumen area, cell wall thickness, Mork's index, ring widths).
+2. Verify that **Measure Cells** and **Measure Rings** are checked.
+3. *(Optional)* Click **Check Settings** to review or customize CWT thresholds and measurement parameters in the floating settings window.
+4. Click **Measure**.
+5. The measurement engine outputs comprehensive semicolon-delimited CSV tables and an updated overview image in the project directory:
+    - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Lumen Area (`LA`), Cell Wall Thickness (`CWTALL`, `CWTRAD`, `CWTTAN`), Mork's Index (`RTSR`), Theoretical Hydraulic Conductance (`KH`), and Hydraulic Diameter (`DH`).
+    - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Mean Ring Width (`MRW`), Cell Count (`CNO`), Mean Lumen Area (`MLA`), Cell Density (`CD`), and Relative Anatomical Density (`RWD`).
+    - **`<sample>_annotated.jpg`**: High-resolution scan automatically regenerated with overlaid ring boundaries, calendar year labels, and cell lumen highlights.
+    - **Layer Feature Tables**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive trait inspection directly inside napari.
 
-![Screenshot: Extracted anatomical measurement tables](../assets/tutorials/quickstart_03_measurements_done.png)
+![Screenshot: Extracted anatomical measurement tables](../assets/user_guide/09a_single_measurements_widget.png)
 
-*Figure 3: Measurement completion with generated tabular files.*
+*Figure 3: Single sample measurement interface and extracted output tables.*
 
 ---
 
 ## 2. Standard Workflow: Tree-Ring & Cell Anatomy Time Series
 
-This comprehensive protocol describes the standard workflow for generating publication-quality dendroclimatic and wood anatomical time series from raw microsections or surface scans.
+This comprehensive protocol describes the standard end-to-end workflow for generating publication-quality dendroclimatic and wood anatomical time series from raw microsections or surface scans.
 
 ```mermaid
 flowchart TD
-    P1["Step 1: Project Setup & Image Preparation (Widget 1 / Ctrl+Shift+B)"] --> P2["Step 2: Automated Cell & Ring Detection (Widget 3A / Ctrl+Shift+M)"]
+    P1["Step 1: Project Setup & Image Preparation (Widget 1 / Ctrl+Shift+B)"] --> P2["Step 2: Loading & Automated Segmentation (Widgets 2/4 & 3A / Ctrl+Shift+M)"]
     P2 --> P3["Step 3: High-Accuracy Lumen & Cell Wall Editing (Widget 5)"]
-    P3 --> P4["Step 4: Tree-Ring Boundary Curation (Widget 6)"]
+    P3 --> P4["Step 4: Tree-Ring Editing & Boundary Curation (Widget 6)"]
     P4 --> P5["Step 5: Visual Cross-Dating (Widget 7)"]
-    P5 --> P6["Step 6: Save Annotations & Overview (Widget 8 / Save All Layers)"]
-    P6 --> P7["Step 7: Trait Extraction (Widget 9A)"]
+    P5 --> P6["Step 6: Save Annotations & Metadata (Widget 8 / Save All Layers)"]
+    P6 --> P7["Step 7: Trait Extraction & Chronology Export (Widget 9A)"]
 ```
 
 ---
@@ -82,26 +104,22 @@ flowchart TD
 2. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to open the **Batch Operations Group**.
 3. In **1 - Prepare project images for analysis**:
     - Select your project directory (or use **0 - Define project directory**).
-    - Enter physical resolution ($\mu\text{m}/\text{px}$), anatomy type (`conifer`), geometry (`linear`), and the outermost complete calendar year.
+    - Enter physical spatial resolution ($\text{px}/\mu\text{m}$ or $\mu\text{m}/\text{px}$), anatomy type (`conifer`), geometry (`linear`), and the outermost complete calendar year.
     - *(Optional)* Click **Start Processing Crossdating Files** to import reference ring-width chronologies (`.rwl`, `.tuc`, or tabular `.txt`/`.csv`). Series names of up to 8 characters are parsed automatically.
-4. Click **Prepare Images**. The images are standardized to `<sample>.scan.<ext>` and initialized with `<sample>.metadata.json`.
-
-![Screenshot: Image preparation metadata setup](../assets/tutorials/std_01_image_preparation.png)
-
-*Figure 4: Setting spatial resolution and calendar dating parameters in the image preparation dialog.*
+4. Click **Prepare Images**. The images are standardized to `<sample>.scan.<ext>`, initialized with `<sample>.metadata.json`, and parsed reference chronologies saved to `rings_series.crossdating.txt`.
 
 ---
 
 ### Step 2: Loading & Automated Segmentation
 
-1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> to open the **Manual Editing Group**.
-2. In **2/4 - Load image(s)**, select your prepared sample from the dropdown.
+1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> to switch to the **Manual Editing Group**.
+2. In **2/4 - Load image(s)**, select your prepared sample from the dropdown (or double-click to load). Single-image enforcement ensures clean memory management.
 3. In **3A - Detect cells & rings (individual image)**, select the neural network models and click **Run Segmentation**.
-4. Both cell lumen masks and ring boundary contours will populate as interactive napari layers.
+4. Both cell lumen masks (`.cells`) and ring boundary contours (`.rings`) will populate as interactive napari layers.
 
-![Screenshot: Loaded segmentation layers](../assets/tutorials/std_02_segmentation_layers.png)
+![Screenshot: Loaded segmentation layers](../assets/user_guide/03a_single_segmentation_widget.png)
 
-*Figure 5: Automated cell and ring predictions visualized in napari.*
+*Figure 4: Automated cell and ring predictions visualized in napari.*
 
 ---
 
@@ -109,67 +127,72 @@ flowchart TD
 
 Refine cell lumen annotations using **5 - Edit cells** in the Manual Editing group.
 
-![Screenshot: Cell layer editor tools](../assets/tutorials/std_05_cell_editor_tools.png)
+![Screenshot: Cell layer editor raster mode](../assets/user_guide/05_cells_layer_editor_raster.png)
 
-*Figure 6: Cell layer editor displaying raster brush/eraser controls and vector polygon conversion.*
+*Figure 5: Cell layer editor displaying raster brush/eraser controls and vector polygon conversion.*
 
 #### Raster vs. Vector Editing Modes
 
-| Mode | Best Used For | Tooling & Mechanics | Shortcuts |
+| Mode | Best Used For | Tooling & Mechanics | Dedicated Shortcuts |
 | :--- | :--- | :--- | :--- |
-| **Raster Mode** | Rapid mask cleaning, separating merged cells, filling voids | Pixel brush, eraser, paint bucket directly on label mask. | <kbd>Ctrl</kbd> + Wheel (Brush size: 1–100 px), <kbd>Ctrl</kbd> + Double-Click (Switch brush/eraser), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo). |
-| **Vector Mode** | High-precision boundary adjustments, polygon vertex editing, batch lasso deletion | Polygon contour representation with vertex manipulation and Lasso Delete. | <kbd>Delete</kbd> / <kbd>Backspace</kbd> (Delete lasso selection), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo up to 50 operations). |
+| **Raster Mode** | Rapid mask cleaning, separating merged cells, filling voids | Pixel brush, eraser, and paint bucket operating directly on the integer label raster. | <kbd>Ctrl</kbd> + Wheel (Brush size: 1–100 px)<br><kbd>Ctrl</kbd> + Double-Click (Switch brush/eraser)<br><kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo stroke) |
+| **Vector Mode** | High-precision boundary adjustments, polygon vertex editing, batch lasso deletion | Interactive polygon contours with vertex dragging, shape addition, and Lasso Delete. | <kbd>Delete</kbd> / <kbd>Backspace</kbd> (Delete lasso selection)<br><kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo up to 50 operations) |
 
-#### Editing Techniques
+#### Core Editing Techniques
 1. **Separating Merged Lumens**:
-    - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the eraser, hold <kbd>Ctrl</kbd> + mouse wheel to size the brush to 5–10 px, and draw a dividing cut through the shared wall.
-2. **Removing False Detections & Clearing Resin Canals**:
-    - In Vector mode, check **Lasso Select** and encircle unwanted objects (multiple loops union automatically). Press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to delete all enclosed cells simultaneously.
+    - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the eraser, hold <kbd>Ctrl</kbd> + mouse wheel to size the brush to 3–8 px, and draw a dividing cut through the shared wall.
+2. **Batch-Removing False Detections & Clearing Resin Ducts**:
+    - In Vector mode, check **Lasso Select** and encircle unwanted objects (multiple lasso loops union automatically). Press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to delete all enclosed cells simultaneously.
 3. **Restoring Overlooked Tracheids**:
-    - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the paint brush and fill faint or damaged cell walls.
+    - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the paint brush and fill faint or damaged cell lumens.
+4. **Undo History**:
+    - Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> at any time to revert changes (supporting up to 50 undo steps).
 
-![Screenshot: Lasso selection and multi-cell cleanup](../assets/tutorials/std_05b_lasso_cleanup.png)
+![Screenshot: Lasso selection and multi-cell cleanup](../assets/user_guide/05_cells_layer_editor_vector_lasso.png)
 
-*Figure 7: Using lasso selection to batch-remove resin canal cells and preparation artifacts.*
+*Figure 6: Using lasso selection in vector mode to batch-remove resin canal cells and preparation artifacts.*
 
 ---
 
 ### Step 4: Tree-Ring Editing & Boundary Curation
 
-Open **6 - Edit rings** in the Manual Editing group.
-
-![Screenshot: Tree-ring boundary editing widget](../assets/tutorials/std_03_ring_editing_overview.png)
-
-*Figure 8: Ring layer editor interface with polyline modification tools.*
+Expand **6 - Edit rings** in the Manual Editing group.
 
 #### Boundary Curation, Nudging & Wedging Rings
-- **Fine Nudging**: Select one or more ring boundaries and press <kbd>Ctrl</kbd> + Arrow keys (1 px shift) or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys (10 px shift) to align boundaries perfectly along the terminal latewood tracheid row.
+- **Fine & Fast Nudging**: Select one or more ring boundaries and press <kbd>Ctrl</kbd> + Arrow keys (1 px shift) or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys (10 px shift) to align boundaries perfectly along the terminal latewood tracheid row.
 - **Adding Missing Rings**: Draw a path across the wood cross-section using napari's path tool; ROXAS AI automatically completes the line horizontally to both image margins ($x=0$ to $x=\text{width}$) upon applying changes.
 - **Handling Wedging / Incomplete Rings**:
     1. Select and **copy-paste** the existing boundary that shares the common portion of the ring boundary.
     2. Enable **Lasso Select** and draw a lasso loop around the diverging section of the duplicated (topmost) ring.
     3. Press <kbd>Delete</kbd> or <kbd>Backspace</kbd>. ROXAS AI's top-priority lasso logic deletes vertices **strictly from the topmost ring**, keeping the underlying shared boundary completely intact.
     4. Use the path tool to extend and accurately trace the wedging branch.
+- **Re-running AI Ring Segmentation Below Corrected Ring**: Select a verified ring boundary and trigger a model re-run to re-segment all rings below that year without disturbing validated boundaries above.
+- **Updating Outermost Calendar Year**: Adjust the outermost year in the widget and click **Update Year** (supports calendar years from `-100,000` to `9,999`).
 - **Undo (<kbd>Ctrl</kbd> + <kbd>Z</kbd>)**: Reverts any drawing, nudging, affine transformation, or deletion (up to 50 undo steps).
 
 ---
 
 ### Step 5: Visual Cross-Dating & Ring Synchronization
 
-Open **Plugins > ROXAS AI > 7 - Visual cross-dating** to verify ring counts and calendar year assignments against master chronologies.
+Open **Plugins > ROXAS AI > 7 - Visual crossdating** to verify ring counts and calendar year assignments against master chronologies.
 
-![Screenshot: Visual cross-dating interface](../assets/tutorials/std_04_crossdating_plotter.png)
+![Screenshot: Visual cross-dating interface](../assets/user_guide/07_cross_dating_plotter.png)
 
-*Figure 9: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
+*Figure 7: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
 
-1. **Inspect Standard View ($\pm 10$ Years)**:
+1. **Automatic File Discovery & Upward Traversal**:
+    - The plotter searches strictly upwards from the sample folder through parent project directories to auto-discover all available `.crossdating.txt` files.
+2. **Reference Series Selection**:
+    - Select reference series from the dropdown (or use the site composite curve with **Use Mean**). ROXAS AI automatically prioritizes series names matching the sample stem.
+3. **Inspect Standard View ($\pm 10$ Years)**:
     - The plotter opens centered on the sample series with an overview buffer of $\pm 10$ years on each side.
-2. **Expand Year Range & Offset Slider**:
+4. **Expand Year Range & Offset Slider**:
     - To explore candidate shifts larger than $\pm 10$ years, widen the **Year Range** slider; this automatically expands the bounds of the **Offset** slider, allowing you to slide the sample across larger time spans.
-3. **Auto-Offset Alignment**:
-    - Click **Find Best Overlap** to let ROXAS AI compute the best statistical correlation ($r$) and Gleichläufigkeit (GLK) alignment.
-4. **Confirm Dating**:
-    - Click **Apply Changes** to update the sample's outermost complete year metadata and shift ring years across the dataset.
+5. **Auto-Offset Alignment**:
+    - Click **Find Best Overlap** to let ROXAS AI compute candidate alignments ranked by statistical correlation ($r$), Gleichläufigkeit (GLK), and $t$-value. Interactive candidate alignment buttons allow instantaneous toggling between suggested shifts.
+6. **Confirm Dating & Export Plot**:
+    - Click **Apply Changes** to update the sample's outermost complete year metadata, shift ring years across `.rings` and `.rings_table.csv`, and regenerate `<sample>_annotated.jpg`.
+    - Click **Export Plot** to save a publication-ready `<sample>_ReferenceSeries.jpg` image (rendered with a standardized 70 px/year aspect ratio) in the sample directory.
 
 ---
 
@@ -177,65 +200,89 @@ Open **Plugins > ROXAS AI > 7 - Visual cross-dating** to verify ring counts and 
 
 Click **Save All Layers** inside the active editor or open **8 - Save cells & rings editing**.
 
-- Saves `.cells.png` (cell label mask).
-- Saves `.rings.tif` (ring label mask).
-- Saves `<sample>_annotated.jpg` (high-resolution scan overlaid with ring boundaries, calendar years, and cell lumen highlights).
-- Saves `<sample>.metadata.json` (synchronized metadata record with updated ring counts, outermost year, and timestamps).
+- **Modified-Layer Tracking**: Checks which layers have pending changes (`layer.metadata["is_modified"] = True`) and saves only modified files to disk:
+    - `.cells.png` (8-bit or 16-bit label mask).
+    - `.rings.tif` (16-bit TIFF label mask).
+    - `.metadata.json` (synchronized metadata record with updated ring counts, outermost year, and timestamps).
+- **Explicit Save Status Notifications**: Displays clear feedback: `"Saved cells layer."`, `"Saved rings layer."`, `"Saved cells and rings layers."`, or `"No unsaved changes in cells or rings layers."`.
+- **Fast Decoupled Saving**: Manual layer saving does **not** redraw the annotated overview image, ensuring saves complete in milliseconds without disk or CPU overhead. The overview image is automatically re-rendered at key workflow checkpoints (AI segmentation, Year updates, Cross-dating application, and Trait measurement).
 
-![Screenshot: Save editing dialog](../assets/tutorials/std_06_save_layers.png)
+![Screenshot: Save editing dialog](../assets/user_guide/08_samples_saving_widget.png)
 
-*Figure 10: Saving finalized annotation layers to disk.*
+*Figure 8: Saving finalized annotation layers to disk.*
 
 ---
 
 ### Step 7: Anatomical Traits Extraction & Chronology Export
 
 1. In the Manual Editing group, scroll to **9A - Measure cells & rings (individual image)**.
-2. Click **Check Settings** to review or customize CWT thresholds or smoothing parameters.
-3. Click **Measure**.
-4. The measurement engine outputs comprehensive semicolon-delimited CSV tables:
-    - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Individual cell metrics (`CID`, `YEAR`, `LA`, `CWTRAD`, `CWTTAN`, `CWTALL`, `RTSR`).
-    - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring summary metrics (`YEAR`, `MRW`, `CNO`, `MLA`, `CD`, `CWTALL`).
-    - **`<sample>_annotated.jpg`**: Automatically refreshed overview image matching the final measurements.
+2. Check **Measure Cells** and/or **Measure Rings**.
+3. *(Optional)* Click **Check Settings** to review or customize CWT thresholds, smoothing kernels, or Tukey's fence parameters.
+4. Click **Measure**.
+5. The measurement engine computes anatomical traits via CWT and wall profiling, cleans non-measured edge artefacts, attaches measurements to layer properties for interactive table inspection, and outputs comprehensive semicolon-delimited CSV tables:
+    - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Individual cell metrics (`CID`, `YEAR`, `LA`, `CWTRAD`, `CWTTAN`, `CWTALL`, `RTSR`, `KH`, `DH`).
+    - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring summary metrics (`YEAR`, `MRW`, `CNO`, `MLA`, `CD`, `CWTALL`, `RWD`, `RCTA`).
+    - **`<sample>_annotated.jpg`**: Automatically regenerated and saved with synchronized ring boundaries, calendar years, and cell lumen highlights matching the final measurements.
 
-![Screenshot: Final measurement tables and visual summary](../assets/tutorials/std_07_measurement_summary.png)
+![Screenshot: Final measurement tables and visual summary](../assets/user_guide/09a_single_measurements_widget.png)
 
-*Figure 11: Measurement summary and exported tabular time series.*
+*Figure 9: Single sample measurement interface and exported tabular time series.*
 
 ---
 
 ## 3. Production Workflow: Batch Processing Multi-Sample Studies
 
-When analyzing dozens or hundreds of wood sections, ROXAS AI provides an automated batch processing pipeline to maximize efficiency and maintain file synchronization.
+When analyzing dozens or hundreds of wood sections, ROXAS AI provides an automated batch processing pipeline to maximize throughput while guaranteeing complete file synchronization across all sample folders.
 
 ```mermaid
 flowchart TD
     B1["1. Batch Preparation (Widget 1 / Ctrl+Shift+B)"] --> B2["2. Batch AI Detection (Widget 3B)"]
-    B2 --> B3["3. Targeted Manual Editing (Group Ctrl+Shift+M)"]
+    B2 --> B3["3. Targeted Quality Control (Group Ctrl+Shift+M)"]
     B3 --> B4["4. Batch Measure & Synchronize (Widget 9B)"]
 ```
 
+---
+
 ### Step 1: Batch Preparation & Standardization
-1. Organize raw scans into your project folder.
-2. Launch `napari-roxas` and press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> for the **Batch Operations Group**.
-3. In **1 - Prepare project images for analysis**, batch-assign spatial resolution and metadata across all matching images.
+
+1. Organize raw cross-section scans into your project folder.
+2. Launch `napari-roxas` and press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to open the **Batch Operations Group**.
+3. In **1 - Prepare project images for analysis**:
+    - Select your project directory (or use **0 - Define project directory**).
+    - Batch-assign physical spatial resolution ($\text{px}/\mu\text{m}$), sample type, and geometry across all matching images.
+    - Import reference cross-dating chronologies if available.
+4. Click **Prepare Images** to standardize filenames (`<sample>.scan.<ext>`) and initialize `<sample>.metadata.json` across the entire dataset.
+
+---
 
 ### Step 2: Batch Cell & Ring Segmentation
+
 1. In the same batch container, scroll to **3B - Batch detect cells & rings**.
-2. Select your project directory (or handpick files with **Manually select files to process**).
-3. Select models and click **Run Batch Segmentation**. The queue processes all samples in the background, creating `.cells.png` and `.rings.tif` masks.
+2. **Real-Time Dynamic Sync**: The widget automatically listens to the project directory so all newly prepared samples appear immediately in the file list.
+3. Select your deep-learning models (`linear_cells_model` and `LinearRingModel_v3_iterative.pt`).
+4. Click **Run Batch Segmentation**.
+5. The multi-threaded background queue processes each sample sequentially, creating `<sample>.cells.png` and `<sample>.rings.tif` masks without loading full-resolution images into memory.
+
+---
 
 ### Step 3: Targeted Quality Control
+
 1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> to switch to the **Manual Editing Group**.
-2. Use **2/4 - Load image(s)** to iterate through samples and perform targeted curation in **5 - Edit cells**, **6 - Edit rings**, and **7 - Visual cross-dating**.
+2. In **2/4 - Load image(s)**, iterate through samples to inspect automated predictions.
+3. Perform targeted curation as needed:
+    - **5 - Edit cells**: Use Vector Lasso Select (<kbd>Delete</kbd>) to batch-remove resin canal cells or preparation defects.
+    - **6 - Edit rings**: Nudge boundaries (<kbd>Ctrl</kbd>+Arrows), add missing rings, or curate wedging rings.
+    - **7 - Visual cross-dating**: Verify ring counts and synchronize calendar dating against master chronologies.
+4. Click **Save All Layers** (or use **8 - Save cells & rings editing**) to persist curated layers.
+
+---
 
 ### Step 4: Automated Batch Measurement & File Synchronization
+
 1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to return to the **Batch Operations Group**.
 2. In **9B - Batch measure & update**:
     - Check **Measure Cells** and **Measure Rings**.
-    - Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** to ensure that all numerical tables, annotated overview images (`_annotated.jpg`), and reference plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across all sample folders.
+    - **Linked Operations Locking**: Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** whenever measurements are active. This guarantees that all numerical CSV tables, annotated overview images (`_annotated.jpg`), and reference cross-dating plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across every sample folder in the project.
+    - **Reference Plot Auto-Generation**: ROXAS AI automatically searches upwards through the directory tree for cross-dating files and matches sample stems to reference chronologies (or uses the validated `reference_series` in metadata).
 3. Click **Measure & Update**.
-
-![Screenshot: Batch measurement completion](../assets/tutorials/batch_03_done.png)
-
-*Figure 12: Batch measurement extraction and synchronized output generation across multiple sample folders.*
+4. The batch engine executes across all samples, writing `.cells_table.csv`, `.rings_table.csv`, `_annotated.jpg`, and `_ReferenceSeries.jpg` directly to each sample folder.
