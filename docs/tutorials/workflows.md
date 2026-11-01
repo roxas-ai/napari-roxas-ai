@@ -25,7 +25,7 @@ flowchart LR
 2. Navigate to the top menu: **File > Open Sample > ROXAS AI > Conifer Sample Data**.
 3. ROXAS AI loads the conifer cross-section scan along with pre-configured spatial metadata ($\mu\text{m}/\text{px}$).
 
-![Screenshot: Built-in sample loaded in napari](../assets/screenshots/tutorials/quickstart_01_loaded_sample.png)
+![Screenshot: Built-in sample loaded in napari](../assets/tutorials/quickstart_01_loaded_sample.png)
 
 *Figure 1: Conifer sample dataset loaded into the napari viewer.*
 
@@ -36,7 +36,7 @@ flowchart LR
     - **Rings Model**: `LinearRingModel_v3_iterative.pt`
 3. Click **Run Segmentation**. Deep-learning inference generates two new layers: `.cells` (cell lumen labels) and `.rings` (ring boundary labels).
 
-![Screenshot: Automated DL detection result overlay](../assets/screenshots/tutorials/quickstart_02_dl_segmentation.png)
+![Screenshot: Automated DL detection result overlay](../assets/tutorials/quickstart_02_dl_segmentation.png)
 
 *Figure 2: Automated cell lumen and tree-ring boundary segmentation overlay.*
 
@@ -54,7 +54,7 @@ flowchart LR
 3. Click **Measure**.
 4. Measurement output tables (`.cells_table.csv` and `.rings_table.csv`) and an updated overview image (`_annotated.jpg`) are generated in the project folder with comprehensive anatomical metrics (lumen area, cell wall thickness, Mork's index, ring widths).
 
-![Screenshot: Extracted anatomical measurement tables](../assets/screenshots/tutorials/quickstart_03_measurements_done.png)
+![Screenshot: Extracted anatomical measurement tables](../assets/tutorials/quickstart_03_measurements_done.png)
 
 *Figure 3: Measurement completion with generated tabular files.*
 
@@ -86,7 +86,7 @@ flowchart TD
     - *(Optional)* Click **Start Processing Crossdating Files** to import reference ring-width chronologies (`.rwl`, `.tuc`, or tabular `.txt`/`.csv`). Series names of up to 8 characters are parsed automatically.
 4. Click **Prepare Images**. The images are standardized to `<sample>.scan.<ext>` and initialized with `<sample>.metadata.json`.
 
-![Screenshot: Image preparation metadata setup](../assets/screenshots/tutorials/std_01_image_preparation.png)
+![Screenshot: Image preparation metadata setup](../assets/tutorials/std_01_image_preparation.png)
 
 *Figure 4: Setting spatial resolution and calendar dating parameters in the image preparation dialog.*
 
@@ -99,7 +99,7 @@ flowchart TD
 3. In **3A - Detect cells & rings (individual image)**, select the neural network models and click **Run Segmentation**.
 4. Both cell lumen masks and ring boundary contours will populate as interactive napari layers.
 
-![Screenshot: Loaded segmentation layers](../assets/screenshots/tutorials/std_02_segmentation_layers.png)
+![Screenshot: Loaded segmentation layers](../assets/tutorials/std_02_segmentation_layers.png)
 
 *Figure 5: Automated cell and ring predictions visualized in napari.*
 
@@ -109,7 +109,7 @@ flowchart TD
 
 Refine cell lumen annotations using **5 - Edit cells** in the Manual Editing group.
 
-![Screenshot: Cell layer editor tools](../assets/screenshots/tutorials/std_05_cell_editor_tools.png)
+![Screenshot: Cell layer editor tools](../assets/tutorials/std_05_cell_editor_tools.png)
 
 *Figure 6: Cell layer editor displaying raster brush/eraser controls and vector polygon conversion.*
 
@@ -128,7 +128,7 @@ Refine cell lumen annotations using **5 - Edit cells** in the Manual Editing gro
 3. **Restoring Overlooked Tracheids**:
     - In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the paint brush and fill faint or damaged cell walls.
 
-![Screenshot: Lasso selection and multi-cell cleanup](../assets/screenshots/tutorials/std_05b_lasso_cleanup.png)
+![Screenshot: Lasso selection and multi-cell cleanup](../assets/tutorials/std_05b_lasso_cleanup.png)
 
 *Figure 7: Using lasso selection to batch-remove resin canal cells and preparation artifacts.*
 
@@ -138,7 +138,7 @@ Refine cell lumen annotations using **5 - Edit cells** in the Manual Editing gro
 
 Open **6 - Edit rings** in the Manual Editing group.
 
-![Screenshot: Tree-ring boundary editing widget](../assets/screenshots/tutorials/std_03_ring_editing_overview.png)
+![Screenshot: Tree-ring boundary editing widget](../assets/tutorials/std_03_ring_editing_overview.png)
 
 *Figure 8: Ring layer editor interface with polyline modification tools.*
 
@@ -158,7 +158,7 @@ Open **6 - Edit rings** in the Manual Editing group.
 
 Open **Plugins > ROXAS AI > 7 - Visual cross-dating** to verify ring counts and calendar year assignments against master chronologies.
 
-![Screenshot: Visual cross-dating interface](../assets/screenshots/tutorials/std_04_crossdating_plotter.png)
+![Screenshot: Visual cross-dating interface](../assets/tutorials/std_04_crossdating_plotter.png)
 
 *Figure 9: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
 
@@ -182,7 +182,7 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
 - Saves `<sample>_annotated.jpg` (high-resolution scan overlaid with ring boundaries, calendar years, and cell lumen highlights).
 - Saves `<sample>.metadata.json` (synchronized metadata record with updated ring counts, outermost year, and timestamps).
 
-![Screenshot: Save editing dialog](../assets/screenshots/tutorials/std_06_save_layers.png)
+![Screenshot: Save editing dialog](../assets/tutorials/std_06_save_layers.png)
 
 *Figure 10: Saving finalized annotation layers to disk.*
 
@@ -198,7 +198,7 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
     - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring summary metrics (`YEAR`, `MRW`, `CNO`, `MLA`, `CD`, `CWTALL`).
     - **`<sample>_annotated.jpg`**: Automatically refreshed overview image matching the final measurements.
 
-![Screenshot: Final measurement tables and visual summary](../assets/screenshots/tutorials/std_07_measurement_summary.png)
+![Screenshot: Final measurement tables and visual summary](../assets/tutorials/std_07_measurement_summary.png)
 
 *Figure 11: Measurement summary and exported tabular time series.*
 
@@ -236,6 +236,6 @@ flowchart TD
     - Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** to ensure that all numerical tables, annotated overview images (`_annotated.jpg`), and reference plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across all sample folders.
 3. Click **Measure & Update**.
 
-![Screenshot: Batch measurement completion](../assets/screenshots/tutorials/batch_03_done.png)
+![Screenshot: Batch measurement completion](../assets/tutorials/batch_03_done.png)
 
 *Figure 12: Batch measurement extraction and synchronized output generation across multiple sample folders.*

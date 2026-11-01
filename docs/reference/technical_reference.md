@@ -129,7 +129,7 @@ Where:
 
 Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
 
-![Mork's Index Scheme](../assets/mork_index.png){ width="450" }
+![Mork's Index Scheme](../assets/reference/mork_index.png){ width="450" }
 
 *Figure 1: Definition of Mork's index based on tangential cell wall thickness and radial lumen diameter.*
 
@@ -141,7 +141,7 @@ A tracheid is classified as latewood when the ratio between twice the double tan
 
 The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
 
-![Cell Wall Reinforcement Scheme](../assets/cell_wall_reinforcement.png){ width="450" }
+![Cell Wall Reinforcement Scheme](../assets/reference/cell_wall_reinforcement.png){ width="450" }
 
 *Figure 2: Definition of the cell wall reinforcement index $(t/b)^2$.*
 
@@ -155,7 +155,7 @@ To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automa
 
 ### 1. Wall Definitions & Measurement Integration (Figure 3)
 
-![Wall Definitions and Measurement Integration](../assets/cwt_measurements_definitions.png){ width="80%" }
+![Wall Definitions and Measurement Integration](../assets/reference/cwt_measurements_definitions.png){ width="80%" }
 
 *Figure 3: Definition of tangential and radial wall orientations and the central measurement integration span.*
 
@@ -179,7 +179,7 @@ For each conifer tracheid, cell walls are measured across four distinct anatomic
 
 ### 2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)
 
-![Global IQR Distribution Filter](../assets/cwt_iqr_filter.png){ width="80%" }
+![Global IQR Distribution Filter](../assets/reference/cwt_iqr_filter.png){ width="80%" }
 
 *Figure 4: Global IQR outlier filtering based on lower and upper Tukey's fences.*
 
@@ -191,7 +191,7 @@ To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, 
 
 ### 3. Opposite Wall Ratio Filter (Figure 5)
 
-![Opposite Wall Ratio Filter](../assets/cwt_opposite_wall_ration_filter.png){ width="80%" }
+![Opposite Wall Ratio Filter](../assets/reference/cwt_opposite_wall_ration_filter.png){ width="80%" }
 
 *Figure 5: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.*
 
@@ -202,7 +202,7 @@ In conifer xylem, opposing walls of a single tracheid have comparable thicknesse
 
 ### 4. Adjacent Wall Ratio Filter (Figure 6)
 
-![Adjacent Wall Ratio Filter](../assets/cwt_adjacent_wall_ratio_filter.png){ width="80%" }
+![Adjacent Wall Ratio Filter](../assets/reference/cwt_adjacent_wall_ratio_filter.png){ width="80%" }
 
 *Figure 6: Adjacent wall ratio filter detecting and discarding local segmentation anomalies.*
 

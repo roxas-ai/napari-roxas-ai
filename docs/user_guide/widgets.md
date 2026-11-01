@@ -97,7 +97,7 @@ For a complete reference of all available keyboard and mouse shortcuts, see the 
 
 The **Define Project Directory** widget configures the root folder where your sample images, metadata, and analysis tables reside.
 
-![Screenshot: Project Directory Selector](../assets/screenshots/user_guide/00_define_project_directory.png)
+![Screenshot: Project Directory Selector](../assets/user_guide/00_define_project_directory.png)
 
 *Figure 1: Project directory selection dialog.*
 
@@ -119,7 +119,7 @@ On multi-user systems, shared network drives, or when folders are moved or delet
 
 The **Prepare Project Images** widget standardizes anatomical images and external cross-dating files into the structured file naming conventions and data structures required by ROXAS AI.
 
-![Screenshot: Sample Preparation Widget](../assets/screenshots/user_guide/01_preparation_widget.png)
+![Screenshot: Sample Preparation Widget](../assets/user_guide/01_preparation_widget.png)
 
 *Figure 2: Sample preparation widget interface.*
 
@@ -129,7 +129,7 @@ The **Prepare Project Images** widget standardizes anatomical images and externa
 3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` and creates a synchronized `<sample_name>.metadata.json`.
 4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
 
-![Screenshot: Metadata Dialog](../assets/screenshots/user_guide/01_metadata_dialog.png)
+![Screenshot: Metadata Dialog](../assets/user_guide/01_metadata_dialog.png)
 
 *Figure 3: Interactive metadata prompt dialog during image preparation.*
 
@@ -137,7 +137,7 @@ The **Prepare Project Images** widget standardizes anatomical images and externa
 
 The **Start Processing Crossdating Files** action allows you to import and compile one or more external tree-ring width (TRW) measurement files or master reference chronologies into a single synchronized project cross-dating file.
 
-![Screenshot: Crossdating Selection Dialog](../assets/screenshots/user_guide/01_crossdating_selection_dialog.png)
+![Screenshot: Crossdating Selection Dialog](../assets/user_guide/01_crossdating_selection_dialog.png)
 
 *Figure 4: Dialog for selecting cross-dating files and setting unit scaling.*
 
@@ -222,7 +222,7 @@ The compiled series is saved in the project directory as `<prefix><crossdating_f
 
 The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labels (`.cells`), and tree-ring labels (`.rings`) into napari with standardized colormaps, scaling, and navigation shortcuts.
 
-![Screenshot: Samples Loading Widget](../assets/screenshots/user_guide/02_samples_loading_widget.png)
+![Screenshot: Samples Loading Widget](../assets/user_guide/02_samples_loading_widget.png)
 
 *Figure 5: Samples loading widget interface.*
 
@@ -248,7 +248,7 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 !!! info "Automatic Background Model Downloads"
     Pre-trained neural network models (`.pth` / `.pt` weights) are downloaded automatically in the background if they are missing. Once downloaded, models are cached locally for all subsequent operations.
 
-![Screenshot: Single Sample Segmentation Widget](../assets/screenshots/user_guide/03a_single_segmentation_widget.png)
+![Screenshot: Single Sample Segmentation Widget](../assets/user_guide/03a_single_segmentation_widget.png)
 
 *Figure 6: Single sample AI segmentation interface.*
 
@@ -272,7 +272,7 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 !!! info "Automatic Background Model Downloads"
     If segmentation model weights are not present locally, they are automatically downloaded in the background when needed and cached for future runs.
 
-![Screenshot: Batch Segmentation Widget](../assets/screenshots/user_guide/03b_batch_segmentation_widget.png)
+![Screenshot: Batch Segmentation Widget](../assets/user_guide/03b_batch_segmentation_widget.png)
 
 *Figure 7: Batch segmentation widget.*
 
@@ -295,13 +295,13 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 
 The **Cells Layer Editor Widget** provides interactive manual editing tools to correct, split, merge, add, or erase cell lumen detections.
 
-![Screenshot: Cells Layer Editor Widget - Startup](../assets/screenshots/user_guide/05_cells_layer_editor_startup.png)
+![Screenshot: Cells Layer Editor Widget - Startup](../assets/user_guide/05_cells_layer_editor_startup.png)
 
-![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/screenshots/user_guide/05_cells_layer_editor_vector_startup.png)
+![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/user_guide/05_cells_layer_editor_vector_startup.png)
 
-![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/screenshots/user_guide/05_cells_layer_editor_vector_lasso.png)
+![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/user_guide/05_cells_layer_editor_vector_lasso.png)
 
-![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/screenshots/user_guide/05_cells_layer_editor_raster.png)
+![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/user_guide/05_cells_layer_editor_raster.png)
 
 *Figure 8: Cells layer editor widget in its four states (from top to bottom): (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
 
@@ -346,7 +346,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 !!! info "Automatic Background Model Downloads"
     Opening this widget checks for missing ring segmentation model weights (required for the **Rerun Ring Segmentation** feature) and downloads them automatically in the background without blocking the interface. Once downloaded, models are cached locally for subsequent use.
 
-![Screenshot: Rings Layer Editor Widget](../assets/screenshots/user_guide/06_rings_layer_editor.png)
+![Screenshot: Rings Layer Editor Widget](../assets/user_guide/06_rings_layer_editor.png)
 
 *Figure 9: Rings layer editor with interactive shapes and year labels.*
 
@@ -411,7 +411,7 @@ For a complete summary of all shortcuts across the application, see the [Shortcu
 
 The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series derived from detected rings with master reference chronologies in an interactive plotting environment.
 
-![Screenshot: Cross-Dating Plotter Widget](../assets/screenshots/user_guide/07_cross_dating_plotter.png)
+![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter.png)
 
 *Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
 
@@ -476,7 +476,7 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 
 The **Samples Saving Widget** writes modified cell masks, ring boundaries, and updated sample metadata from napari back to their respective files on disk.
 
-![Screenshot: Samples Saving Widget](../assets/screenshots/user_guide/08_samples_saving_widget.png)
+![Screenshot: Samples Saving Widget](../assets/user_guide/08_samples_saving_widget.png)
 
 *Figure 11: Samples saving widget.*
 
@@ -499,7 +499,7 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 
 The **Single Sample Measurements Widget** computes the full suite of Quantitative Wood Anatomy (QWA) metrics for the sample currently loaded in napari.
 
-![Screenshot: Single Sample Measurements Widget](../assets/screenshots/user_guide/09a_single_measurements_widget.png)
+![Screenshot: Single Sample Measurements Widget](../assets/user_guide/09a_single_measurements_widget.png)
 
 *Figure 12: Single sample measurements interface.*
 
@@ -523,7 +523,7 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 
 The **Batch Sample Measurements Widget** runs high-throughput anatomical trait extraction, annotated image generation, and reference plot synchronization across all samples in a project folder.
 
-![Screenshot: Batch Measurements Widget](../assets/screenshots/user_guide/09b_batch_measurements_widget.png)
+![Screenshot: Batch Measurements Widget](../assets/user_guide/09b_batch_measurements_widget.png)
 
 *Figure 13: Batch measurements widget.*
 
@@ -559,7 +559,7 @@ To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchroni
 
 The **Settings Widget** is a visual preferences manager that allows adjusting global defaults, file extensions, visualization parameters, and hardware settings without manual editing of JSON files.
 
-![Screenshot: Settings Manager Widget](../assets/screenshots/user_guide/zz_settings_widget.png)
+![Screenshot: Settings Manager Widget](../assets/user_guide/zz_settings_widget.png)
 
 *Figure 14: Global settings manager widget with collapsible categories.*
 
