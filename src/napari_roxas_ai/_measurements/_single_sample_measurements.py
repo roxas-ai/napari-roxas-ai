@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 class Worker(QObject):
     finished = Signal()
-    result_ready = Signal(object, object)
+    result_ready = Signal(object, object, object)
 
     def __init__(
         self,
@@ -54,16 +54,19 @@ class Worker(QObject):
         self.measurement = measurement
 
     def run(self):
+        cleaned_cells_array = None
         if self.measurement == "both":
             cells_table, rings_table = self.analyzer.analyze_sample()
+            cleaned_cells_array = self.analyzer.cells_array
         elif self.measurement == "cells":
             cells_table = self.analyzer.analyze_cells()
+            cleaned_cells_array = self.analyzer.cells_array
             rings_table = pd.DataFrame()
         elif self.measurement == "rings":
             cells_table = pd.DataFrame()
             rings_table = self.analyzer.analyze_rings()
         # Emit results to be added as layers
-        self.result_ready.emit(cells_table, rings_table)
+        self.result_ready.emit(cells_table, rings_table, cleaned_cells_array)
 
         self.finished.emit()
 
@@ -345,7 +348,7 @@ class SingleSampleMeasurementsWidget(Container):
         self.worker_thread.start()
 
 
-    def _add_result_layers(self, cells_table, rings_table):
+    def _add_result_layers(self, cells_table, rings_table, cleaned_cells_array=None):
 
         project_dir = Path(settings.get("project_directory"))
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -362,6 +365,16 @@ class SingleSampleMeasurementsWidget(Container):
         if not cells_table.empty:
             print("[Cells] Updating layer features...")
             self._cells_input_layer.features = cells_table
+            if cleaned_cells_array is not None and hasattr(self._cells_input_layer, "data"):
+                if self._cells_input_layer.data.dtype == bool:
+                    self._cells_input_layer.data = cleaned_cells_array > 0
+                elif np.issubdtype(self._cells_input_layer.data.dtype, np.integer):
+                    if self._cells_input_layer.data.max() <= 1:
+                        self._cells_input_layer.data = (cleaned_cells_array > 0).astype(self._cells_input_layer.data.dtype)
+                    else:
+                        self._cells_input_layer.data = cleaned_cells_array.astype(self._cells_input_layer.data.dtype)
+                else:
+                    self._cells_input_layer.data = (cleaned_cells_array > 0).astype(self._cells_input_layer.data.dtype)
             self._cells_input_layer.metadata["meas_created_at"] = (
                 meas_created_at
             )

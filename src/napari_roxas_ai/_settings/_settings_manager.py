@@ -175,7 +175,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     "measurements": {
         "cluster_dbl_cwt_threshold": 3.0,  # Default cluster DBL/CWT threshold in µm
-        "cells_smoothing_kernel_size": 5,  # Default smoothing kernel size (1 to disable)
+        "cells_smoothing_kernel_size": 1,  # Default smoothing kernel size (1 to disable)
         "relwidth_cwt_integration": 0.75,  # Default wall fraction for thickness measurement
         "cells_tangential_angle": 0.0,  # Default sample angle in degrees (clockwise)
         "lower_limit_cwt_iqr_multiplier": 1.5,  # IQR multiplier for the lower CWT outlier fence
