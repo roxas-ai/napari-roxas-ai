@@ -57,9 +57,9 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 | `CWTBA` | Cell Wall Thickness - Bark | $\mu\text{m}$ | Outer wall facing towards the bark. |
 | `CWTLE` | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at the bottom. |
 | `CWTRI` | Cell Wall Thickness - Right | $\mu\text{m}$ | Measured with bark at the bottom. |
-| `CWTTAN` | Tangential Wall Thickness | $\mu\text{m}$ | Mean of pith and bark sides: (`[CWTPI+CWTBA]/2`). |
-| `CWTRAD` | Radial Wall Thickness | $\mu\text{m}$ | Mean of left and right sides: (`[CWTLE+CWTRI]/2`). |
-| `CWTALL` | Overall Wall Thickness | $\mu\text{m}$ | Mean of all sides: (`[CWTRAD+CWTTAN]/2`). |
+| `CWTTAN` | Tangential Wall Thickness | $\mu\text{m}$ | Mean of pith and bark sides: (`[CWTPI+CWTBA]/2`; or single valid side if one is NA). |
+| `CWTRAD` | Radial Wall Thickness | $\mu\text{m}$ | Mean of left and right sides: (`[CWTLE+CWTRI]/2`; or single valid side if one is NA). |
+| `CWTALL` | Overall Wall Thickness | $\mu\text{m}$ | Mean of all sides: (`[CWTRAD+CWTTAN]/2`; or single valid side if one is NA). |
 | `RTSR` | Radial Thickness-to-Span Ratio | ratio | Mork's index; ratio between 4x `CWTTAN` and radial diameter (Denne 1989). |
 | `CTSR` | Circular Thickness-to-Span Ratio | ratio | Ratio between 4x `CWTALL` and area-equivalent circle diameter. |
 | `DHW` | Hydraulic Diameter (W) | $\mu\text{m}$ | Mean per ring (Kolb & Sperry 1999). |
@@ -86,7 +86,7 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 | `XPIX` | X-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
 | `YPIX` | Y-Coordinate | pixels | Center of cell (0/0 is top-left corner). |
 | `RADDISTR` | Radial Distance (Ring) | $\mu\text{m}$ | Distance of cell center from inner ring boundary. |
-| `RRADDISTR` | Relative Radial Position | % | 0.00 (proximal boundary) to 99.99 (distal boundary). |
+| `RRADDISTR` | Relative Radial Position | % | 0.00 (proximal boundary) to 100.00 (distal boundary). |
 | `NBRNO` | Neighbor Number | count | Number of cells in the group this cell belongs to. |
 | `NBRID` | Neighbor IDs | - | IDs of all cells in the same group (blank if solitary). |
 | `ASP` | Aspect Ratio | ratio | Major axis / minor axis of equivalent ellipse. |
@@ -97,9 +97,9 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 | `CWTBA` | Cell Wall Thickness - Bark | $\mu\text{m}$ | Facing towards the bark. |
 | `CWTLE` | Cell Wall Thickness - Left | $\mu\text{m}$ | Measured with bark at bottom. |
 | `CWTRI` | Cell Wall Thickness - Right | $\mu\text{m}$ | Measured with bark at bottom. |
-| `CWTTAN` | Tangential Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTPI+CWTBA]/2`). |
-| `CWTRAD` | Radial Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTLE+CWTRI]/2`). |
-| `CWTALL` | Overall Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTRAD+CWTTAN]/2`). |
+| `CWTTAN` | Tangential Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTPI+CWTBA]/2`; or single valid side if one is NA). |
+| `CWTRAD` | Radial Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTLE+CWTRI]/2`; or single valid side if one is NA). |
+| `CWTALL` | Overall Wall Thickness | $\mu\text{m}$ | Mean of (`[CWTRAD+CWTTAN]/2`; or single valid side if one is NA). |
 | `RTSR` | Radial Thickness-to-Span Ratio | ratio | Mork's index per cell (Denne 1989). |
 | `CTSR` | Circular Thickness-to-Span Ratio | ratio | Circular ratio per cell. |
 | `DH` | Hydraulic Diameter | $\mu\text{m}$ | Corrected for elliptical shape (Lewis & Boose 1995). |
@@ -112,20 +112,63 @@ Missing values or empty fields are left **blank (NA)** in the CSV output to ensu
 ---
 
 ## Theoretical Hydraulic Conductance (`KH`)
-The theoretical hydraulic conductance is approximated by Poiseuille's law and adjusted for elliptical tubes (Nonweiler 1975):
 
-$$ \text{KH} = \frac{\text{LA} \cdot m^2}{\nu \cdot k} $$
+Theoretical hydraulic conductance is approximated using Poiseuille's law adjusted for elliptical tubes (Nonweiler 1975):
+
+$$ \text{KH} = \frac{\text{LA}_{\text{m}^2} \cdot m^2}{\nu \cdot k} $$
 
 Where:
-- `LA`: Lumen area ($\text{m}^2$)
-- $\nu$: Viscosity of water ($1.002 \cdot 10^{-3}\,\text{Pa}\cdot\text{s}$ at 20°C)
-- $m$: Mean hydraulic radius ($\pi ab / C$)
-- $k$: Geometry coefficient ($4 / (1 + \sqrt{1 - e^4})$)
-- $e$: Eccentricity of the ellipse
+
+- $\text{LA}_{\text{m}^2}$: Cell lumen area converted to square meters ($\text{LA}_{\text{m}^2} = \text{LA} \cdot 10^{-12}\,\text{m}^2$).
+- $m$: Mean hydraulic radius defined as lumen area divided by ellipse circumference ($m = \text{LA}_{\text{m}^2} / C$, in meters). The circumference $C$ is computed using Ramanujan's formula: $C \approx \pi \left[ 3(a + b) - \sqrt{(3a + b)(a + 3b)} \right]$, where $a = \sqrt{\text{ASP} \cdot \text{LA}_{\text{m}^2} / \pi}$ is the semi-major axis and $b = \text{LA}_{\text{m}^2} / (\pi a)$ is the semi-minor axis in meters.
+- $k$: Geometric form factor for elliptical cross-sections (Nonweiler 1975): $k = \frac{4}{1 + \sqrt{1 - e^4}}$, where $e = \sqrt{\frac{a^2 - b^2}{a^2}}$ is the elliptical eccentricity ($e \in [0, 1)$).
+- $\nu$: Dynamic viscosity of water at 20°C ($1.002 \cdot 10^{-9}\,\text{MPa}\cdot\text{s}$, equivalent to $1.002 \cdot 10^{-3}\,\text{Pa}\cdot\text{s}$).
+
+For ring-level summaries, `KH` is calculated as the sum of all individual cell conductances in that annual ring:
+
+$$ \text{KH}_{\text{ring}} = \sum_{i=1}^{\text{CNO}} \text{KH}_i $$
 
 ---
 
-## Mork's Index (Radial Thickness-to-Span Ratio, `RTSR`, Figure 1)
+## Specific Hydraulic Conductivity (`KS`)
+
+Specific hydraulic conductivity normalizes the ring's theoretical conductance by the total cross-sectional ring area `RA` (assuming a reference conduit length of 1 meter):
+
+$$ \text{KS} = \frac{\text{KH}_{\text{ring}}}{\text{RA}_{\text{m}^2}} = \frac{\text{KH}_{\text{ring}}}{\text{RA} \cdot 10^{-6}} $$
+
+Where:
+
+- $\text{KH}_{\text{ring}}$: Cumulative theoretical conductance ($\text{m}^4\,\text{s}^{-1}\,\text{MPa}^{-1}$).
+- `RA`: Analyzed ring area in $\text{mm}^2$ (converted to $\text{m}^2$ via $10^{-6}$).
+- Output unit: $\text{m}^2\,\text{s}^{-1}\,\text{MPa}^{-1}$.
+
+---
+
+## Conduit & Ring Hydraulic Diameters (`DH`, `DHW`, `DHM`)
+
+### Cell-Level Hydraulic Diameter (`DH`)
+
+For an elliptical lumen, the hydraulic diameter is calculated following Lewis & Boose (1995):
+
+$$ \text{DH} = \sqrt{\frac{2 \cdot a_{\mu\text{m}}^2 \cdot b_{\mu\text{m}}^2}{a_{\mu\text{m}}^2 + b_{\mu\text{m}}^2}} $$
+
+Where $a_{\mu\text{m}} = 2 \cdot a_{\text{semi}}$ and $b_{\mu\text{m}} = 2 \cdot b_{\text{semi}}$ are the full major and minor axis diameters of the lumen in micrometers ($\mu\text{m}$).
+
+### Ring-Level Weighted Hydraulic Diameter (`DHW`)
+
+The conductively weighted mean hydraulic diameter per tree ring emphasizes hydraulically dominant conduits (Sperry et al. 1994; Kolb & Sperry 1999):
+
+$$ \text{DHW} = \frac{\sum_{i=1}^N \text{DH}_i^5}{\sum_{i=1}^N \text{DH}_i^4} $$
+
+### Ring-Level Mean Hydraulic Diameter (`DHM`)
+
+The mean conduit diameter corresponding to the average Hagen-Poiseuille fourth-power conductance (Tyree & Zimmermann 2002):
+
+$$ \text{DHM} = \left( \frac{1}{N} \sum_{i=1}^N \text{DH}_i^4 \right)^{1/4} $$
+
+---
+
+## Mork's Index (`RTSR`) and Circular Ratio (`CTSR`, Figure 1)
 
 Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
 
@@ -133,19 +176,79 @@ Mork's index distinguishes earlywood from latewood tracheids based on the ratio 
 
 *Figure 1: Definition of Mork's index based on tangential cell wall thickness and radial lumen diameter.*
 
-A tracheid is classified as latewood when the ratio between twice the double tangential cell wall thickness (4x `CWTTAN`) and its radial lumen width (`DRAD`) is larger than 1.
+Mathematically, Mork's radial thickness-to-span ratio (`RTSR`) is defined as:
+
+$$ \text{RTSR} = \frac{4 \cdot \text{CWTTAN}}{\text{DRAD}} = \frac{2 \cdot (\text{CWTPI} + \text{CWTBA})}{\text{DRAD}} $$
+
+A conifer tracheid is classified as latewood when `RTSR` $\ge 1$ (i.e., when twice the double tangential cell wall thickness equals or exceeds the radial lumen diameter).
+
+Similarly, the circular thickness-to-span ratio (`CTSR`) relates overall wall thickness to the diameter of an area-equivalent circle ($d_{\text{circ}} = 2\sqrt{\text{LA}/\pi}$):
+
+$$ \text{CTSR} = \frac{4 \cdot \text{CWTALL}}{2\sqrt{\text{LA} / \pi}} $$
 
 ---
 
 ## Cell Wall Reinforcement Index (`TB2`, Figure 2)
 
-The cell wall reinforcement index estimates conduit resistance against cell wall collapse under negative hydraulic pressure (Hacke et al. 2001):
+The cell wall reinforcement index estimates conduit resistance against cell wall collapse (implosion) induced by negative xylem pressure (Hacke et al. 2001):
 
 ![Cell Wall Reinforcement Scheme](../assets/reference/cell_wall_reinforcement.png){ width="450" }
 
 *Figure 2: Definition of the cell wall reinforcement index $(t/b)^2$.*
 
-The index is calculated as $(t/b)^2$, where $t$ is the thickness of the shared double cell wall and $b$ is the internal lumen diameter span across the corresponding orientation, taking the minimum of radial and tangential ratios.
+The index evaluates the double wall thickness ($t = 2 \cdot \text{CWT}$) relative to the internal lumen span ($b = \text{Diameter}$) independently for radial and tangential orientations:
+
+$$ (t/b)_{\text{rad}}^2 = \left( \frac{2 \cdot \text{CWTRAD}}{\text{DRAD}} \right)^2 = \left( \frac{\text{CWTLE} + \text{CWTRI}}{\text{DRAD}} \right)^2 $$
+
+$$ (t/b)_{\text{tan}}^2 = \left( \frac{2 \cdot \text{CWTTAN}}{\text{DTAN}} \right)^2 = \left( \frac{\text{CWTPI} + \text{CWTBA}}{\text{DTAN}} \right)^2 $$
+
+Because mechanical buckling occurs along the weaker orientation, the final index is taken as the minimum:
+
+$$ \text{TB2} = \min\left( (t/b)_{\text{rad}}^2, \, (t/b)_{\text{tan}}^2 \right) $$
+
+---
+
+## Relative Anatomical Density (`RWD`) and Cell Wall Area (`CWA`)
+
+Cell wall area (`CWA`) and relative anatomical density (`RWD`) quantify the proportion of wood volume occupied by cell wall material:
+
+- **Cell Wall Area (`CWA`, $\mu\text{m}^2$):** Area of the cell wall envelope surrounding the lumen: $\text{CWA} = \text{CA} - \text{LA}$, where `CA` is total cross-sectional cell area (lumen plus cell wall) and `LA` is lumen area. `CWA` is computed only when all four base wall measurements (`CWTPI`, `CWTBA`, `CWTLE`, `CWTRI`) are valid and `CA` > `LA`.
+- **Relative Anatomical Density (`RWD`, ratio $[0, 1]$):** Fractional cell wall volume: $\text{RWD} = \frac{\text{CWA}}{\text{CA}} = \frac{\text{CWA}}{\text{CWA} + \text{LA}}$.
+
+---
+
+## Relative Radial Position in Ring (`RRADDISTR`)
+
+`RRADDISTR` defines the relative positioning of each cell along the radial formation trajectory within its annual growth ring:
+
+$$ \text{RRADDISTR} = 100 \cdot \frac{d_{\text{top}}}{d_{\text{top}} + d_{\text{bot}}} $$
+
+Where:
+
+- $d_{\text{top}}$ (`RADDISTR`): Distance ($\mu\text{m}$) from the proximal (pith-side / upper) ring boundary to the cell centroid along the local radial trajectory.
+- $d_{\text{bot}}$: Distance ($\mu\text{m}$) from the cell centroid to the distal (bark-side / lower) ring boundary along the local radial trajectory.
+- Local ring width is the total distance between proximal and distal boundaries passing through the cell centroid along the radial trajectory ($d_{\text{top}} + d_{\text{bot}}$).
+- Values range from $0.00\%$ (cell centered directly on the proximal ring boundary) to $100.00\%$ (cell centered on the distal ring boundary).
+
+### Accounting for Ring Boundary Inclination
+
+In wood cross-sections, annual ring boundaries are rarely strictly horizontal. ROXAS AI accounts for boundary inclination:
+
+1. **Vertical Distances:** First, the vertical distances along the pixel column of the cell centroid from the proximal ($d_{\text{top, vert}}$) and distal ($d_{\text{bot, vert}}$) ring boundaries are determined from the rasterized ring boundary polygons.
+2. **Handling Differing Boundary Inclination Angles:** If the proximal (top) boundary and distal (bottom) boundary have different inclination angles ($\theta_{\text{top}}$ and $\theta_{\text{bot}}$), ROXAS AI calculates the mean inclination angle for the cell: $\theta_{\text{avg}} = \frac{\theta_{\text{top}} + \theta_{\text{bot}}}{2}$.
+3. **Angled Distance Correction:** The radial distances orthogonal to the local ring orientation are then obtained by projecting the vertical distances along the mean inclination: $d_{\text{top}} = d_{\text{top, vert}} \cdot \cos(\theta_{\text{avg}})$ and $d_{\text{bot}} = d_{\text{bot, vert}} \cdot \cos(\theta_{\text{avg}})$. This ensures that both absolute radial distance (`RADDISTR` = $d_{\text{top}}$) and relative radial position (`RRADDISTR`) remain geometrically accurate even across tapered, wedging, or non-parallel tree rings.
+
+---
+
+## Vessel Grouping Metrics (`RVGI`, `RVSF`, `RGSGV`)
+
+For angiosperm xylem containing vessel clusters (Carlquist 2001), grouping statistics describe hydraulic redundancy and xylem topology:
+
+- **Vessel Grouping Index (`RVGI`, ratio):** Average number of vessels per grouping unit (solitary vessels count as a group of 1): $\text{RVGI} = \frac{N_{\text{total vessels}}}{N_{\text{groups}}}$.
+- **Vessel Solitary Fraction (`RVSF`, %):** Percentage of solitary vessels relative to all vessels: $\text{RVSF} = 100 \cdot \frac{N_{\text{solitary vessels}}}{N_{\text{total vessels}}}$.
+- **Mean Group Size of Grouped Vessels (`RGSGV`, index):** Mean number of vessels per cluster considering only non-solitary groups ($\text{size} > 1$).
+
+*(Note: For conifer tracheid samples, vessel grouping metrics are not applicable and are populated with **NA**).*
 
 ---
 
