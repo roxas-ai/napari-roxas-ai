@@ -218,6 +218,47 @@ def test_lasso_deletion_multiple_non_overlapping_boundaries(
     )
 
 
+def test_lasso_deletion_clears_interaction_state_and_allows_direct_editing(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # 5-vertex polyline
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [12.0, 10.0], [14.0, 20.0], [16.0, 30.0], [18.0, 40.0]])
+    ]
+    edit_layer.mode = "direct"
+    # Simulate selection of vertex 4 (last vertex)
+    edit_layer._selected_vertex = 4
+    edit_layer._value = (0, 4)
+
+    # Lasso over vertices 3 and 4
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[15.0, 25.0], [15.0, 45.0], [20.0, 45.0], [20.0, 25.0]], dtype=float)
+    ]
+    widget._execute_lasso_deletion()
+
+    # Verify vertices were reduced from 5 to 3
+    assert len(edit_layer.data[0]) == 3
+    # Verify interaction states were sanitized
+    assert edit_layer._selected_vertex is None
+    assert edit_layer._value == (None, None)
+    assert edit_layer.selected_data == set()
+    assert len(edit_layer._mouse_drag_gen) == 0
+
+    # Test adding a new vertex onto the edited layer in direct mode does not raise IndexError
+    edit_layer.mode = "direct"
+    edit_layer.selected_data = {0}
+    edit_layer.add([np.array([[30.0, 0.0], [30.0, 50.0]])], shape_type="path")
+    assert len(edit_layer.data) == 2
+
+
 def test_undo_restores_user_edits_in_reverse_order(
     make_napari_viewer, models_path
 ):

@@ -1114,7 +1114,13 @@ class RingsLayerEditorWidget(Container):
         snapshot = self._undo_stack.pop()
         self._undo_recording_paused = True
         try:
+            if hasattr(layer, "_mouse_drag_gen"):
+                layer._mouse_drag_gen.clear()
             layer.selected_data = set()
+            layer._selected_vertex = None
+            layer._value = (None, None)
+            layer._is_moving = False
+            layer._drag_box = None
             layer.data = list(zip(snapshot["data"], snapshot["shape_type"]))
             if snapshot["data"]:
                 layer.edge_color = snapshot["edge_color"]
@@ -1774,6 +1780,13 @@ class RingsLayerEditorWidget(Container):
             if "Rings Modification" in self._viewer.layers:
                 try:
                     edit_layer = self._viewer.layers["Rings Modification"]
+                    if hasattr(edit_layer, "_mouse_drag_gen"):
+                        edit_layer._mouse_drag_gen.clear()
+                    edit_layer.selected_data = set()
+                    edit_layer._selected_vertex = None
+                    edit_layer._value = (None, None)
+                    edit_layer._is_moving = False
+                    edit_layer._drag_box = None
                     self._viewer.layers.selection.active = edit_layer
                     edit_layer.mode = "direct"
                 except (ValueError, KeyError, IndexError):
@@ -1930,7 +1943,7 @@ class RingsLayerEditorWidget(Container):
                         points_layer = self._viewer.add_points(
                             points,
                             name="Selected Vertices",
-                            size=50,
+                            size=30,
                             face_color="yellow",
                             border_color="black",
                             scale=edit_layer.scale,
@@ -2001,6 +2014,15 @@ class RingsLayerEditorWidget(Container):
 
         if changed:
             try:
+                # Sanitize shapes interaction state before modifying data
+                if hasattr(edit_layer, "_mouse_drag_gen"):
+                    edit_layer._mouse_drag_gen.clear()
+                edit_layer.selected_data = set()
+                edit_layer._selected_vertex = None
+                edit_layer._value = (None, None)
+                edit_layer._is_moving = False
+                edit_layer._drag_box = None
+
                 # Update layer data and features atomically to maintain synchronization
                 edit_layer.data = new_data
                 edit_layer.features = pd.DataFrame(new_features_dict)

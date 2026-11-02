@@ -287,9 +287,16 @@ class CellsLayerEditorWidget(Container):
             if "Cells Modification" in self._viewer.layers:
                 try:
                     edit_layer = self._viewer.layers["Cells Modification"]
-                    self._viewer.layers.selection.active = edit_layer
                     if isinstance(edit_layer, napari.layers.Shapes):
+                        if hasattr(edit_layer, "_mouse_drag_gen"):
+                            edit_layer._mouse_drag_gen.clear()
+                        edit_layer.selected_data = set()
+                        edit_layer._selected_vertex = None
+                        edit_layer._value = (None, None)
+                        edit_layer._is_moving = False
+                        edit_layer._drag_box = None
                         edit_layer.mode = "direct"
+                    self._viewer.layers.selection.active = edit_layer
                 except (ValueError, KeyError, IndexError):
                     pass
             self._delete_lasso_cells_button.visible = False
@@ -397,7 +404,15 @@ class CellsLayerEditorWidget(Container):
 
                 remaining_shapes.append(cell_shape)
 
+            if hasattr(edit_layer, "_mouse_drag_gen"):
+                edit_layer._mouse_drag_gen.clear()
+            edit_layer.selected_data = set()
+            edit_layer._selected_vertex = None
+            edit_layer._value = (None, None)
+            edit_layer._is_moving = False
+            edit_layer._drag_box = None
             edit_layer.data = remaining_shapes
+            edit_layer.refresh()
             if deleted_count > 0:
                 show_info(f"Deleted {deleted_count} cell(s)")
             else:
@@ -504,7 +519,13 @@ class CellsLayerEditorWidget(Container):
         snapshot = self._undo_stack.pop()
         self._undo_recording_paused = True
         try:
+            if hasattr(layer, "_mouse_drag_gen"):
+                layer._mouse_drag_gen.clear()
             layer.selected_data = set()
+            layer._selected_vertex = None
+            layer._value = (None, None)
+            layer._is_moving = False
+            layer._drag_box = None
             layer.data = list(zip(snapshot["data"], snapshot["shape_type"]))
             layer.refresh()
         finally:
