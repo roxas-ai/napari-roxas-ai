@@ -1144,12 +1144,29 @@ class RingsLayerEditorWidget(Container):
 
     def _nudge_selected_rings(self, dy: float, dx: float) -> None:
         """
-        Nudge the entirety of all currently selected ring boundaries by (dy, dx).
+        Nudge the entirety of all currently selected ring boundaries by (dy, dx),
+        or nudge the entire layer affine transform when in transform mode.
         """
         if not self._is_editing:
             return
         layer = self._get_edit_layer()
-        if layer is None or not layer.selected_data:
+        if layer is None:
+            return
+
+        if str(getattr(layer, "mode", "")) == "transform":
+            scale = np.array(
+                getattr(layer, "scale", [1.0, 1.0])[-2:], dtype=float
+            )
+            delta_world = np.array([dy * scale[0], dx * scale[1]], dtype=float)
+            if hasattr(layer, "affine") and layer.affine is not None:
+                from napari.utils.transforms import Affine
+
+                new_matrix = np.array(layer.affine.affine_matrix, copy=True)
+                new_matrix[:-1, -1] += delta_world
+                layer.affine = Affine(affine_matrix=new_matrix)
+            return
+
+        if not layer.selected_data:
             return
 
         selected_indices = set(layer.selected_data)

@@ -734,3 +734,70 @@ def test_nudge_multiple_selected_rings(
     assert np.allclose(edit_layer.data[0], orig_shape_0)
     assert np.allclose(edit_layer.data[1], orig_shape_1)
     assert not widget._undo_button.enabled
+
+
+def test_nudge_in_transform_mode(
+    make_napari_viewer, qtbot, models_path
+):
+    from napari.utils.transforms import Affine
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    initial_translate = np.array(edit_layer.affine.translate, copy=True)
+
+    # Switch to transform mode
+    edit_layer.mode = "transform"
+
+    # Nudge fine (+1 px Y) -> Control-Down
+    widget._nudge_selected_rings(1.0, 0.0)
+    assert np.allclose(
+        edit_layer.affine.translate, initial_translate + [1.0, 0.0]
+    )
+
+    # Nudge fast (+10 px X) -> Control-Shift-Right
+    widget._nudge_selected_rings(0.0, 10.0)
+    assert np.allclose(
+        edit_layer.affine.translate, initial_translate + [1.0, 10.0]
+    )
+
+    # Wait for the affine debounce timer (250 ms) to trigger undo recording
+    qtbot.wait(300)
+    assert widget._undo_button.enabled
+
+    # Undo restores affine translation
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.affine.translate, initial_translate)
+    assert not widget._undo_button.enabled
+
+
+def test_nudge_in_transform_mode_and_apply(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    original_coords = [np.array(d, copy=True) for d in edit_layer.data]
+
+    # Switch to transform mode and nudge by 5 pixels in Y
+    edit_layer.mode = "transform"
+    widget._nudge_selected_rings(5.0, 0.0)
+
+    widget._apply_rings_geometries()
+
+    rings_layer = viewer.layers["sample.rings"]
+    applied_rbxy = rings_layer.features["RBXY"].tolist()
+
+    assert len(applied_rbxy) == len(original_coords)
+    for orig, applied in zip(original_coords, applied_rbxy):
+        applied_arr = np.array(applied)
+        # Verify 5 pixel shift in Y
+        assert np.all(applied_arr[:, 0] >= 5.0)
