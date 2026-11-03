@@ -675,6 +675,21 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
 
+        self._update_edit_button_state()
+
+    def _update_edit_button_state(self, *args) -> None:
+        """Update the enabled state and tooltip of the Edit Rings button."""
+        if self._is_editing or "Rings Modification" in self._viewer.layers:
+            return
+        if "Cells Modification" in self._viewer.layers:
+            self._edit_rings_geometries_button.enabled = False
+            self._edit_rings_geometries_button.tooltip = (
+                "Please apply or cancel active cell edits before editing rings."
+            )
+        else:
+            self._edit_rings_geometries_button.enabled = True
+            self._edit_rings_geometries_button.tooltip = None
+
     def _update_rerun_separator_style(self, *args) -> None:
         """Update separator styling to match the active napari theme."""
         if hasattr(self, "_rerun_separator") and hasattr(
@@ -943,6 +958,7 @@ class RingsLayerEditorWidget(Container):
 
         # --- INITIALIZATION ---
         self._connect_layer_callback()
+        self._update_edit_button_state()
         # Ensure 'Rings Years' layer is initialized if a rings layer already exists.
         # A small delay ensures that napari has finished its initial layer setup.
         # Use a slightly longer delay and immediate follow-up to ensure visibility.
@@ -968,9 +984,7 @@ class RingsLayerEditorWidget(Container):
         worker_thread.finished.connect(
             lambda: setattr(self._save_all_layers_button, "enabled", True)
         )
-        worker_thread.finished.connect(
-            lambda: setattr(self._edit_rings_geometries_button, "enabled", True)
-        )
+        worker_thread.finished.connect(self._update_edit_button_state)
         worker_thread.finished.connect(
             lambda: setattr(self._progress_bar, "visible", False)
         )
@@ -1231,6 +1245,8 @@ class RingsLayerEditorWidget(Container):
             if getattr(event.value, "name", "") == "Rings Years":
                 return
 
+        self._update_edit_button_state()
+
         # Always trigger years update when layer list changes
         self._years_update_timer.start(50)
 
@@ -1357,6 +1373,10 @@ class RingsLayerEditorWidget(Container):
 
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
+        if "Cells Modification" in self._viewer.layers:
+            show_warning("Please apply or cancel active cell edits before editing rings.")
+            return
+
         # Get the selected input layer
         input_layer = self._input_layer
         
