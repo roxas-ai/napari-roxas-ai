@@ -290,6 +290,124 @@ def test_lasso_deletion_rearranges_coordinates_left_to_right(
     assert remaining_shape[-1][1] == 40.0
 
 
+def test_vertex_removal_and_middle_insertion_maintains_local_proximity(
+    make_napari_viewer, qtbot, models_path
+):
+    import napari.layers.shapes._shapes_mouse_bindings as smb
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # Initialize a 5-vertex boundary from left (x=0) to right (x=40)
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [12.0, 10.0], [14.0, 20.0], [16.0, 30.0], [18.0, 40.0]])
+    ]
+    edit_layer.selected_data = {0}
+    edit_layer._scale_factor = 1.0
+
+    class DummyEvent:
+        def __init__(self, pos):
+            self.position = pos
+            self.pos = pos
+
+    # 1. Delete terminal vertex at right tail (x=40.0) using vertex_remove
+    edit_layer.mode = "vertex_remove"
+    smb.vertex_remove(edit_layer, DummyEvent((18.0, 40.0)))
+    assert len(edit_layer.data[0]) == 4
+    assert edit_layer.data[0][-1][1] == 30.0
+
+    # 2. Add a new vertex in the middle at (y=15.0, x=15.0) using vertex_insert mode
+    edit_layer.mode = "vertex_insert"
+    for cb in edit_layer.mouse_drag_callbacks:
+        cb(edit_layer, DummyEvent((15.0, 15.0)))
+
+    # Verify 5 vertices, inserted locally between x=10.0 and x=20.0 (not at tail)
+    shape = edit_layer.data[0]
+    assert len(shape) == 5
+    assert shape[2][1] == 15.0
+    assert shape[3][1] == 20.0
+    assert shape[4][1] == 30.0
+
+    # 3. Test drawing a path that loops backward in X does not raise TypeError
+    edit_layer.mode = "add_path"
+    edit_layer.add(
+        [np.array([[50.0, 10.0], [50.0, 50.0], [50.0, 20.0], [50.0, 80.0]])],
+        shape_type="path",
+    )
+    assert len(edit_layer.data) == 2
+
+    # 4. Test undo restores state before insertion
+    widget._undo_last_change()
+    widget._undo_last_change()
+    assert len(edit_layer.data[0]) == 4
+    assert edit_layer.data[0][-1][1] == 30.0
+
+    # 5. Test undo restores state before terminal deletion (5 vertices, right tail x=40.0)
+    widget._undo_last_change()
+    assert len(edit_layer.data[0]) == 5
+    assert edit_layer.data[0][-1][1] == 40.0
+
+
+def test_mode_switching_restores_direct_and_add_path_behaviors(
+    make_napari_viewer, qtbot, models_path
+):
+    import napari.layers.shapes._shapes_mouse_bindings as smb
+    from napari.layers.shapes._shapes_mouse_bindings import select as napari_select
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [10.0, 50.0], [10.0, 100.0]]),
+        np.array([[30.0, 0.0], [30.0, 50.0], [30.0, 100.0]]),
+    ]
+    edit_layer.selected_data = {0}
+
+    class DummyEvent:
+        def __init__(self, pos):
+            self.position = pos
+            self.pos = pos
+
+    # 1. In vertex_insert mode, insert vertex in shape 0
+    edit_layer.mode = "vertex_insert"
+    assert edit_layer.mouse_drag_callbacks[0] == widget._custom_vertex_insert
+    for cb in edit_layer.mouse_drag_callbacks:
+        cb(edit_layer, DummyEvent((10.0, 25.0)))
+    assert len(edit_layer.data[0]) == 4
+
+    # 2. Switch to direct mode: callback should be napari's select, NOT custom_vertex_insert
+    edit_layer.mode = "direct"
+    assert edit_layer.mouse_drag_callbacks[0] == napari_select
+    assert widget._custom_vertex_insert not in edit_layer.mouse_drag_callbacks
+
+    # 3. Switch to add_path mode: callback should NOT be custom_vertex_insert
+    edit_layer.mode = "add_path"
+    assert widget._custom_vertex_insert not in edit_layer.mouse_drag_callbacks
+    # Add a new path: should create a new separate shape
+    edit_layer.add(
+        [np.array([[50.0, 0.0], [50.0, 50.0], [50.0, 100.0]])],
+        shape_type="path",
+    )
+    assert len(edit_layer.data) == 3
+    assert len(edit_layer.data[0]) == 4  # shape 0 was not modified
+    assert len(edit_layer.data[1]) == 3  # shape 1 was not modified
+    assert len(edit_layer.data[2]) == 3  # new shape added
+
+    # 4. Switch to vertex_remove mode and remove vertex from shape 1
+    edit_layer.mode = "vertex_remove"
+    edit_layer.selected_data = {1}
+    smb.vertex_remove(edit_layer, DummyEvent((30.0, 100.0)))
+    assert len(edit_layer.data[1]) == 2
+
+
 def test_undo_restores_user_edits_in_reverse_order(
     make_napari_viewer, models_path
 ):
