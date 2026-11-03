@@ -1470,7 +1470,7 @@ class RingsLayerEditorWidget(Container):
             if approx.ndim != 2 or approx.shape[0] < 2:
                 continue
 
-            simplified_boundary_lines.append(approx.tolist())
+            simplified_boundary_lines.append(rearrange_coordinates(approx.tolist()))
             keep_rows.append(i)
 
         # Ensure features rows match the number of shapes
@@ -2019,8 +2019,9 @@ class RingsLayerEditorWidget(Container):
 
                 updated_shape = [p for j, p in enumerate(shape_list) if j not in indices_to_delete]
                 
-                # Keep only paths with at least 2 vertices
+                # Keep only paths with at least 2 vertices and ensure left-to-right orientation
                 if len(updated_shape) >= 2:
+                    updated_shape = rearrange_coordinates(updated_shape)
                     new_data.append(np.array(updated_shape))
                     for k in new_features_dict:
                         new_features_dict[k].append(edit_layer.features[k][i])

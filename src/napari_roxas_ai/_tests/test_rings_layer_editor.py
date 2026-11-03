@@ -259,6 +259,37 @@ def test_lasso_deletion_clears_interaction_state_and_allows_direct_editing(
     assert len(edit_layer.data) == 2
 
 
+def test_lasso_deletion_rearranges_coordinates_left_to_right(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # Path with reversed/right-to-left orientation (x descending: 40.0 down to 0.0)
+    edit_layer.data = [
+        np.array([[18.0, 40.0], [16.0, 30.0], [14.0, 20.0], [12.0, 10.0], [10.0, 0.0]])
+    ]
+    edit_layer.mode = "direct"
+
+    # Lasso over the left-side vertices (x=0, x=10)
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[8.0, -5.0], [8.0, 15.0], [15.0, 15.0], [15.0, -5.0]], dtype=float)
+    ]
+    widget._execute_lasso_deletion()
+
+    # Remaining vertices should be rearranged from left to right (x ascending)
+    remaining_shape = edit_layer.data[0]
+    assert len(remaining_shape) == 3
+    assert remaining_shape[0][1] < remaining_shape[-1][1]
+    assert remaining_shape[0][1] == 20.0
+    assert remaining_shape[-1][1] == 40.0
+
+
 def test_undo_restores_user_edits_in_reverse_order(
     make_napari_viewer, models_path
 ):
