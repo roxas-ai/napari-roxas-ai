@@ -8,6 +8,7 @@ from napari_roxas_ai._edition._rings_layer_editor import (
     DEFAULT_RINGS_MODEL,
     UNDO_HISTORY_LIMIT,
     RingsLayerEditorWidget,
+    rearrange_coordinates,
 )
 
 
@@ -950,3 +951,27 @@ def test_nudge_in_transform_mode_and_apply(
         applied_arr = np.array(applied)
         # Verify 5 pixel shift in Y
         assert np.all(applied_arr[:, 0] >= 5.0)
+
+
+def test_rearrange_coordinates():
+    # Test None and empty/short sequences
+    assert rearrange_coordinates(None) is None
+    assert rearrange_coordinates([]) == []
+    assert rearrange_coordinates([[1.0, 2.0]]) == [[1.0, 2.0]]
+
+    # Test Python list
+    coords_list = [[10.0, 50.0], [20.0, 10.0]]
+    result_list = rearrange_coordinates(coords_list)
+    assert result_list == [[20.0, 10.0], [10.0, 50.0]]
+
+    # Test NumPy array (must not raise ValueError: ambiguous truth value)
+    coords_arr = np.array([[10.0, 50.0], [15.0, 30.0], [20.0, 10.0]])
+    result_arr = rearrange_coordinates(coords_arr)
+    assert np.array_equal(
+        result_arr, np.array([[20.0, 10.0], [15.0, 30.0], [10.0, 50.0]])
+    )
+
+    # Test NumPy array already sorted left-to-right
+    coords_arr_sorted = np.array([[10.0, 10.0], [15.0, 30.0], [20.0, 50.0]])
+    result_sorted = rearrange_coordinates(coords_arr_sorted)
+    assert np.array_equal(result_sorted, coords_arr_sorted)

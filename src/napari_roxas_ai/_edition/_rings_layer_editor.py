@@ -74,7 +74,7 @@ def rearrange_coordinates(coords: list) -> list:
     Returns:
         list: Rearranged coordinates.
     """
-    if not coords or len(coords) < 2:
+    if coords is None or len(coords) < 2:
         return coords
 
     if coords[0][1] > coords[-1][1]:
