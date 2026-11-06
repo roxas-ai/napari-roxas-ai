@@ -1163,3 +1163,61 @@ def test_project_directory_changed_elsewhere_is_shown_and_kept_on_apply(
 
     widget._apply()
     assert SettingsManager().get("project_directory") == "C:/Projects/Other"
+
+
+def test_cwt_visualization_defaults():
+    manager = SettingsManager()
+    assert manager.get("cwt_visualization.enabled") is True
+    assert manager.get("cwt_visualization.sample_interval") == 250
+    assert manager.get("cwt_visualization.included_color") == "black"
+    assert manager.get("cwt_visualization.excluded_color") == "red"
+    assert manager.get("cwt_visualization.edge_width") == 2.0
+
+
+def test_cwt_visualization_widget_controls(widget, settings_file):
+    from qtpy.QtWidgets import QCheckBox, QDoubleSpinBox, QLineEdit, QSpinBox
+
+    enabled_cb = _editor_for(widget, "cwt_visualization", "enabled")
+    assert isinstance(enabled_cb, QCheckBox)
+    assert enabled_cb.isChecked() is True
+
+    interval_sb = _editor_for(widget, "cwt_visualization", "sample_interval")
+    assert isinstance(interval_sb, QSpinBox)
+    assert interval_sb.minimum() == 1
+    assert interval_sb.maximum() == 10000
+    assert interval_sb.singleStep() == 50
+    assert interval_sb.value() == 250
+
+    edge_width_dsb = _editor_for(widget, "cwt_visualization", "edge_width")
+    assert isinstance(edge_width_dsb, QDoubleSpinBox)
+    assert edge_width_dsb.minimum() == pytest.approx(0.5)
+    assert edge_width_dsb.maximum() == pytest.approx(10.0)
+    assert edge_width_dsb.singleStep() == pytest.approx(0.5)
+    assert edge_width_dsb.value() == pytest.approx(2.0)
+
+    inc_color_le = _editor_for(widget, "cwt_visualization", "included_color")
+    assert isinstance(inc_color_le, QLineEdit)
+    assert inc_color_le.text() == "black"
+
+    exc_color_le = _editor_for(widget, "cwt_visualization", "excluded_color")
+    assert isinstance(exc_color_le, QLineEdit)
+    assert exc_color_le.text() == "red"
+
+    # Test editing values and applying
+    enabled_cb.setChecked(False)
+    interval_sb.setValue(500)
+    edge_width_dsb.setValue(3.5)
+    inc_color_le.setText("gray")
+    exc_color_le.setText("orange")
+
+    widget._apply()
+
+    manager = SettingsManager()
+    assert manager.get("cwt_visualization.enabled") is False
+    assert manager.get("cwt_visualization.sample_interval") == 500
+    assert manager.get("cwt_visualization.edge_width") == pytest.approx(3.5)
+    assert manager.get("cwt_visualization.included_color") == "gray"
+    assert manager.get("cwt_visualization.excluded_color") == "orange"
+
+    # Verify focus_section for cwt_visualization
+    assert widget.focus_section("cwt_visualization") is True

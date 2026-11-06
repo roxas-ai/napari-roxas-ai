@@ -183,6 +183,13 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "opposite_cwt_ratio_limit": 1.5,  # Max CWT ratio between opposite cell sides
         "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
     },
+    "cwt_visualization": {
+        "enabled": True,  # Enable CWT circle visualization
+        "sample_interval": 250,  # Sample interval (every N-th cell)
+        "included_color": "black",  # Color for included CWT measurements
+        "excluded_color": "red",  # Color for excluded CWT measurements
+        "edge_width": 2.0,  # Circle edge width in pixels
+    },
     "annotated_image": {
         "cell_opacity": 50,  # Opacity percentage of the cells overlay (0-100)
         "cell_fill_color": "yellow",  # Fill color for cell lumina
@@ -364,6 +371,11 @@ def upgrade_settings(stored: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(merged.get("samples_metadata"), dict):
         merged["samples_metadata"] = deepcopy(
             DEFAULT_SETTINGS["samples_metadata"]
+        )
+
+    if not isinstance(merged.get("cwt_visualization"), dict):
+        merged["cwt_visualization"] = deepcopy(
+            DEFAULT_SETTINGS["cwt_visualization"]
         )
 
     # The field list is a list of dicts and needs to be merged by field id
