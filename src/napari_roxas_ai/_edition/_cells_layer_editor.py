@@ -16,7 +16,7 @@ from magicgui.widgets import (
 from napari.components._viewer_mouse_bindings import dims_scroll
 from napari.layers.base._base_constants import ActionType
 from napari.qt.threading import thread_worker
-from napari.utils.notifications import show_info
+from napari.utils.notifications import show_info, show_warning
 from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
@@ -216,6 +216,23 @@ class CellsLayerEditorWidget(Container):
                 self._undo_button,
             ]
         )
+
+        self._viewer.layers.events.inserted.connect(self._update_edit_button_state)
+        self._viewer.layers.events.removed.connect(self._update_edit_button_state)
+        self._update_edit_button_state()
+
+    def _update_edit_button_state(self, *args) -> None:
+        """Update the enabled state and tooltip of the Edit Cells button."""
+        if "Cells Modification" in self._viewer.layers:
+            return
+        if "Rings Modification" in self._viewer.layers:
+            self._edit_cells_geometries_button.enabled = False
+            self._edit_cells_geometries_button.tooltip = (
+                "Please apply or cancel active ring edits before editing cells."
+            )
+        else:
+            self._edit_cells_geometries_button.enabled = True
+            self._edit_cells_geometries_button.tooltip = None
 
     def _get_valid_layers(self, widget=None):
         """Get layers that are both Labels type and match the cells file extension."""
@@ -669,6 +686,7 @@ class CellsLayerEditorWidget(Container):
             worker_thread.finished.connect(
                 lambda button=button: setattr(button, "enabled", True)
             )
+        worker_thread.finished.connect(self._update_edit_button_state)
         worker_thread.finished.connect(
             lambda: setattr(self._progress_bar, "visible", False)
         )
@@ -682,6 +700,10 @@ class CellsLayerEditorWidget(Container):
 
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis / vectorization."""
+        if "Rings Modification" in self._viewer.layers:
+            show_warning("Please apply or cancel active ring edits before editing cells.")
+            return
+
         # Get the selected input layer
         input_layer = self._input_layer
         if not input_layer:
