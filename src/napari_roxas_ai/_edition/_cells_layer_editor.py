@@ -16,7 +16,7 @@ from magicgui.widgets import (
 from napari.components._viewer_mouse_bindings import dims_scroll
 from napari.layers.base._base_constants import ActionType
 from napari.qt.threading import thread_worker
-from napari.utils.notifications import show_info
+from napari.utils.notifications import show_info, show_warning
 from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
@@ -217,6 +217,23 @@ class CellsLayerEditorWidget(Container):
             ]
         )
 
+        self._viewer.layers.events.inserted.connect(self._update_edit_button_state)
+        self._viewer.layers.events.removed.connect(self._update_edit_button_state)
+        self._update_edit_button_state()
+
+    def _update_edit_button_state(self, *args) -> None:
+        """Update the enabled state and tooltip of the Edit Cells button."""
+        if "Cells Modification" in self._viewer.layers:
+            return
+        if "Rings Modification" in self._viewer.layers:
+            self._edit_cells_geometries_button.enabled = False
+            self._edit_cells_geometries_button.tooltip = (
+                "Please apply or cancel active ring edits before editing cells."
+            )
+        else:
+            self._edit_cells_geometries_button.enabled = True
+            self._edit_cells_geometries_button.tooltip = None
+
     def _get_valid_layers(self, widget=None):
         """Get layers that are both Labels type and match the cells file extension."""
         cells_extension = settings.get("file_extensions.cells_file_extension")[
@@ -287,9 +304,16 @@ class CellsLayerEditorWidget(Container):
             if "Cells Modification" in self._viewer.layers:
                 try:
                     edit_layer = self._viewer.layers["Cells Modification"]
-                    self._viewer.layers.selection.active = edit_layer
                     if isinstance(edit_layer, napari.layers.Shapes):
+                        if hasattr(edit_layer, "_mouse_drag_gen"):
+                            edit_layer._mouse_drag_gen.clear()
+                        edit_layer.selected_data = set()
+                        edit_layer._selected_vertex = None
+                        edit_layer._value = (None, None)
+                        edit_layer._is_moving = False
+                        edit_layer._drag_box = None
                         edit_layer.mode = "direct"
+                    self._viewer.layers.selection.active = edit_layer
                 except (ValueError, KeyError, IndexError):
                     pass
             self._delete_lasso_cells_button.visible = False
@@ -397,7 +421,15 @@ class CellsLayerEditorWidget(Container):
 
                 remaining_shapes.append(cell_shape)
 
+            if hasattr(edit_layer, "_mouse_drag_gen"):
+                edit_layer._mouse_drag_gen.clear()
+            edit_layer.selected_data = set()
+            edit_layer._selected_vertex = None
+            edit_layer._value = (None, None)
+            edit_layer._is_moving = False
+            edit_layer._drag_box = None
             edit_layer.data = remaining_shapes
+            edit_layer.refresh()
             if deleted_count > 0:
                 show_info(f"Deleted {deleted_count} cell(s)")
             else:
@@ -504,7 +536,13 @@ class CellsLayerEditorWidget(Container):
         snapshot = self._undo_stack.pop()
         self._undo_recording_paused = True
         try:
+            if hasattr(layer, "_mouse_drag_gen"):
+                layer._mouse_drag_gen.clear()
             layer.selected_data = set()
+            layer._selected_vertex = None
+            layer._value = (None, None)
+            layer._is_moving = False
+            layer._drag_box = None
             layer.data = list(zip(snapshot["data"], snapshot["shape_type"]))
             layer.refresh()
         finally:
@@ -648,6 +686,7 @@ class CellsLayerEditorWidget(Container):
             worker_thread.finished.connect(
                 lambda button=button: setattr(button, "enabled", True)
             )
+        worker_thread.finished.connect(self._update_edit_button_state)
         worker_thread.finished.connect(
             lambda: setattr(self._progress_bar, "visible", False)
         )
@@ -661,6 +700,10 @@ class CellsLayerEditorWidget(Container):
 
     def _edit_cells_geometries(self) -> None:
         """Run the segmentation analysis / vectorization."""
+        if "Rings Modification" in self._viewer.layers:
+            show_warning("Please apply or cancel active ring edits before editing cells.")
+            return
+
         # Get the selected input layer
         input_layer = self._input_layer
         if not input_layer:

@@ -74,10 +74,68 @@ def rearrange_coordinates(coords: list) -> list:
     Returns:
         list: Rearranged coordinates.
     """
+    if coords is None or len(coords) < 2:
+        return coords
 
     if coords[0][1] > coords[-1][1]:
         coords = coords[::-1]
     return coords
+
+
+def _project_point_to_segment(
+    p: np.ndarray, a: np.ndarray, b: np.ndarray
+) -> tuple[float, float]:
+    """
+    Project point p onto segment [a, b].
+    Returns:
+        tuple[float, float]: (t, dist) where t is the projection location
+        and dist is the Euclidean distance from p to the closest point on the segment.
+    """
+    ab = b - a
+    ap = p - a
+    denom = float(np.dot(ab, ab))
+    if denom < 1e-12:
+        return 0.0, float(np.linalg.norm(ap))
+    t = float(np.dot(ap, ab) / denom)
+    t_clamped = np.clip(t, 0.0, 1.0)
+    proj = a + t_clamped * ab
+    dist = float(np.linalg.norm(p - proj))
+    return t, dist
+
+
+def _get_local_vertex_insertion_index(
+    vertices: np.ndarray, click_point: np.ndarray
+) -> tuple[int, float]:
+    """
+    Determine the insertion index for click_point along polyline vertices using
+    local vertex proximity (only checking segments adjacent to the closest vertex).
+    """
+    p = np.asarray(click_point)
+    verts = np.asarray(vertices)
+    n = len(verts)
+    if n < 2:
+        return n, 0.0
+
+    dists_to_verts = np.linalg.norm(verts - p, axis=1)
+    k = int(np.argmin(dists_to_verts))
+
+    if k == 0:
+        t, dist = _project_point_to_segment(p, verts[0], verts[1])
+        insert_ind = 0 if t < 0 else 1
+    elif k == n - 1:
+        t, dist = _project_point_to_segment(p, verts[n - 2], verts[n - 1])
+        insert_ind = n if t > 1 else n - 1
+    else:
+        t_left, dist_left = _project_point_to_segment(p, verts[k - 1], verts[k])
+        t_right, dist_right = _project_point_to_segment(p, verts[k], verts[k + 1])
+        if dist_left < dist_right:
+            insert_ind = k
+            dist = dist_left
+        else:
+            insert_ind = k + 1
+            dist = dist_right
+
+    return insert_ind, dist
 
 
 def outside_rings_deletion(
@@ -675,6 +733,21 @@ class RingsLayerEditorWidget(Container):
             self._lasso_selection_checkbox.visible = False
             self._delete_lasso_vertices_button.visible = False
 
+        self._update_edit_button_state()
+
+    def _update_edit_button_state(self, *args) -> None:
+        """Update the enabled state and tooltip of the Edit Rings button."""
+        if self._is_editing or "Rings Modification" in self._viewer.layers:
+            return
+        if "Cells Modification" in self._viewer.layers:
+            self._edit_rings_geometries_button.enabled = False
+            self._edit_rings_geometries_button.tooltip = (
+                "Please apply or cancel active cell edits before editing rings."
+            )
+        else:
+            self._edit_rings_geometries_button.enabled = True
+            self._edit_rings_geometries_button.tooltip = None
+
     def _update_rerun_separator_style(self, *args) -> None:
         """Update separator styling to match the active napari theme."""
         if hasattr(self, "_rerun_separator") and hasattr(
@@ -943,6 +1016,7 @@ class RingsLayerEditorWidget(Container):
 
         # --- INITIALIZATION ---
         self._connect_layer_callback()
+        self._update_edit_button_state()
         # Ensure 'Rings Years' layer is initialized if a rings layer already exists.
         # A small delay ensures that napari has finished its initial layer setup.
         # Use a slightly longer delay and immediate follow-up to ensure visibility.
@@ -968,9 +1042,7 @@ class RingsLayerEditorWidget(Container):
         worker_thread.finished.connect(
             lambda: setattr(self._save_all_layers_button, "enabled", True)
         )
-        worker_thread.finished.connect(
-            lambda: setattr(self._edit_rings_geometries_button, "enabled", True)
-        )
+        worker_thread.finished.connect(self._update_edit_button_state)
         worker_thread.finished.connect(
             lambda: setattr(self._progress_bar, "visible", False)
         )
@@ -1091,7 +1163,72 @@ class RingsLayerEditorWidget(Container):
             ActionType.REMOVED,
         ):
             return
+
         self._record_undo_step()
+
+    def _custom_vertex_insert(self, layer, event) -> None:
+        """
+        Insert a vertex into a selected ring path using local vertex proximity.
+        Finds the closest vertex on the ring boundary and evaluates only the
+        immediate neighboring segments, preventing unintended connections to distant tails.
+        """
+        if not layer.selected_data or not layer.data:
+            return
+
+        coordinates = layer.world_to_data(event.position)
+        coord = np.array([coordinates[i] for i in layer._slice_input.displayed])
+
+        best_shape_idx = None
+        best_insert_ind = None
+        min_dist = float("inf")
+
+        for index in layer.selected_data:
+            if index >= len(layer._data_view.shapes):
+                continue
+            shape = layer._data_view.shapes[index]
+            from napari.layers.shapes._shapes_models import Path as ShapePath
+
+            if not isinstance(shape, ShapePath):
+                continue
+            vertices = layer._data_view.displayed_vertices[
+                layer._data_view.displayed_vertices_to_shape_num == index
+            ]
+            if len(vertices) < 2:
+                continue
+            insert_ind, dist = _get_local_vertex_insertion_index(vertices, coord)
+            if dist < min_dist:
+                min_dist = dist
+                best_shape_idx = index
+                best_insert_ind = insert_ind
+
+        if best_shape_idx is None:
+            from napari.layers.shapes._shapes_mouse_bindings import (
+                vertex_insert as napari_vertex_insert,
+            )
+
+            napari_vertex_insert(layer, event)
+            return
+
+        index = best_shape_idx
+        ind = best_insert_ind
+        vertices = layer._data_view.shapes[index].data
+
+        layer.events.data(
+            value=layer.data,
+            action=ActionType.CHANGING,
+            data_indices=(index,),
+            vertex_indices=((ind,),),
+        )
+        vertices = np.insert(vertices, ind, [coordinates], axis=0)
+        with layer.events.set_data.blocker():
+            layer._data_view.edit(index, vertices, new_type=None)
+        layer.events.data(
+            value=layer.data,
+            action=ActionType.CHANGED,
+            data_indices=(index,),
+            vertex_indices=((ind,),),
+        )
+        layer.refresh()
 
     def _on_edit_layer_affine_change(self, event=None) -> None:
         """Record an undo step and update year labels when affine transform changes."""
@@ -1114,7 +1251,13 @@ class RingsLayerEditorWidget(Container):
         snapshot = self._undo_stack.pop()
         self._undo_recording_paused = True
         try:
+            if hasattr(layer, "_mouse_drag_gen"):
+                layer._mouse_drag_gen.clear()
             layer.selected_data = set()
+            layer._selected_vertex = None
+            layer._value = (None, None)
+            layer._is_moving = False
+            layer._drag_box = None
             layer.data = list(zip(snapshot["data"], snapshot["shape_type"]))
             if snapshot["data"]:
                 layer.edge_color = snapshot["edge_color"]
@@ -1138,12 +1281,29 @@ class RingsLayerEditorWidget(Container):
 
     def _nudge_selected_rings(self, dy: float, dx: float) -> None:
         """
-        Nudge the entirety of all currently selected ring boundaries by (dy, dx).
+        Nudge the entirety of all currently selected ring boundaries by (dy, dx),
+        or nudge the entire layer affine transform when in transform mode.
         """
         if not self._is_editing:
             return
         layer = self._get_edit_layer()
-        if layer is None or not layer.selected_data:
+        if layer is None:
+            return
+
+        if str(getattr(layer, "mode", "")) == "transform":
+            scale = np.array(
+                getattr(layer, "scale", [1.0, 1.0])[-2:], dtype=float
+            )
+            delta_world = np.array([dy * scale[0], dx * scale[1]], dtype=float)
+            if hasattr(layer, "affine") and layer.affine is not None:
+                from napari.utils.transforms import Affine
+
+                new_matrix = np.array(layer.affine.affine_matrix, copy=True)
+                new_matrix[:-1, -1] += delta_world
+                layer.affine = Affine(affine_matrix=new_matrix)
+            return
+
+        if not layer.selected_data:
             return
 
         selected_indices = set(layer.selected_data)
@@ -1230,6 +1390,8 @@ class RingsLayerEditorWidget(Container):
         if event is not None and hasattr(event, "value") and event.value is not None:
             if getattr(event.value, "name", "") == "Rings Years":
                 return
+
+        self._update_edit_button_state()
 
         # Always trigger years update when layer list changes
         self._years_update_timer.start(50)
@@ -1357,6 +1519,10 @@ class RingsLayerEditorWidget(Container):
 
     def _edit_rings_geometries(self) -> None:
         """Run the segmentation analysis in a separate thread."""
+        if "Cells Modification" in self._viewer.layers:
+            show_warning("Please apply or cancel active cell edits before editing rings.")
+            return
+
         # Get the selected input layer
         input_layer = self._input_layer
         
@@ -1447,7 +1613,7 @@ class RingsLayerEditorWidget(Container):
             if approx.ndim != 2 or approx.shape[0] < 2:
                 continue
 
-            simplified_boundary_lines.append(approx.tolist())
+            simplified_boundary_lines.append(rearrange_coordinates(approx.tolist()))
             keep_rows.append(i)
 
         # Ensure features rows match the number of shapes
@@ -1489,6 +1655,9 @@ class RingsLayerEditorWidget(Container):
         self._reset_undo_history(shapes_layer)
         shapes_layer.events.data.connect(self._on_edit_layer_data_change)
         shapes_layer.events.affine.connect(self._on_edit_layer_affine_change)
+        shapes_layer._drag_modes[shapes_layer._modeclass.VERTEX_INSERT] = (
+            self._custom_vertex_insert
+        )
         shapes_layer.bind_key(
             "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
         )
@@ -1774,6 +1943,13 @@ class RingsLayerEditorWidget(Container):
             if "Rings Modification" in self._viewer.layers:
                 try:
                     edit_layer = self._viewer.layers["Rings Modification"]
+                    if hasattr(edit_layer, "_mouse_drag_gen"):
+                        edit_layer._mouse_drag_gen.clear()
+                    edit_layer.selected_data = set()
+                    edit_layer._selected_vertex = None
+                    edit_layer._value = (None, None)
+                    edit_layer._is_moving = False
+                    edit_layer._drag_box = None
                     self._viewer.layers.selection.active = edit_layer
                     edit_layer.mode = "direct"
                 except (ValueError, KeyError, IndexError):
@@ -1930,7 +2106,7 @@ class RingsLayerEditorWidget(Container):
                         points_layer = self._viewer.add_points(
                             points,
                             name="Selected Vertices",
-                            size=50,
+                            size=30,
                             face_color="yellow",
                             border_color="black",
                             scale=edit_layer.scale,
@@ -1989,8 +2165,9 @@ class RingsLayerEditorWidget(Container):
 
                 updated_shape = [p for j, p in enumerate(shape_list) if j not in indices_to_delete]
                 
-                # Keep only paths with at least 2 vertices
+                # Keep only paths with at least 2 vertices and ensure left-to-right orientation
                 if len(updated_shape) >= 2:
+                    updated_shape = rearrange_coordinates(updated_shape)
                     new_data.append(np.array(updated_shape))
                     for k in new_features_dict:
                         new_features_dict[k].append(edit_layer.features[k][i])
@@ -2001,6 +2178,15 @@ class RingsLayerEditorWidget(Container):
 
         if changed:
             try:
+                # Sanitize shapes interaction state before modifying data
+                if hasattr(edit_layer, "_mouse_drag_gen"):
+                    edit_layer._mouse_drag_gen.clear()
+                edit_layer.selected_data = set()
+                edit_layer._selected_vertex = None
+                edit_layer._value = (None, None)
+                edit_layer._is_moving = False
+                edit_layer._drag_box = None
+
                 # Update layer data and features atomically to maintain synchronization
                 edit_layer.data = new_data
                 edit_layer.features = pd.DataFrame(new_features_dict)

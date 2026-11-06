@@ -8,6 +8,7 @@ from napari_roxas_ai._edition._rings_layer_editor import (
     DEFAULT_RINGS_MODEL,
     UNDO_HISTORY_LIMIT,
     RingsLayerEditorWidget,
+    rearrange_coordinates,
 )
 
 
@@ -216,6 +217,196 @@ def test_lasso_deletion_multiple_non_overlapping_boundaries(
         edit_layer.data[2],
         np.array([[50.0, 0.0], [55.0, 25.0], [50.0, 50.0]]),
     )
+
+
+def test_lasso_deletion_clears_interaction_state_and_allows_direct_editing(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # 5-vertex polyline
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [12.0, 10.0], [14.0, 20.0], [16.0, 30.0], [18.0, 40.0]])
+    ]
+    edit_layer.mode = "direct"
+    # Simulate selection of vertex 4 (last vertex)
+    edit_layer._selected_vertex = 4
+    edit_layer._value = (0, 4)
+
+    # Lasso over vertices 3 and 4
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[15.0, 25.0], [15.0, 45.0], [20.0, 45.0], [20.0, 25.0]], dtype=float)
+    ]
+    widget._execute_lasso_deletion()
+
+    # Verify vertices were reduced from 5 to 3
+    assert len(edit_layer.data[0]) == 3
+    # Verify interaction states were sanitized
+    assert edit_layer._selected_vertex is None
+    assert edit_layer._value == (None, None)
+    assert edit_layer.selected_data == set()
+    assert len(edit_layer._mouse_drag_gen) == 0
+
+    # Test adding a new vertex onto the edited layer in direct mode does not raise IndexError
+    edit_layer.mode = "direct"
+    edit_layer.selected_data = {0}
+    edit_layer.add([np.array([[30.0, 0.0], [30.0, 50.0]])], shape_type="path")
+    assert len(edit_layer.data) == 2
+
+
+def test_lasso_deletion_rearranges_coordinates_left_to_right(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # Path with reversed/right-to-left orientation (x descending: 40.0 down to 0.0)
+    edit_layer.data = [
+        np.array([[18.0, 40.0], [16.0, 30.0], [14.0, 20.0], [12.0, 10.0], [10.0, 0.0]])
+    ]
+    edit_layer.mode = "direct"
+
+    # Lasso over the left-side vertices (x=0, x=10)
+    widget._lasso_selection_checkbox.value = True
+    viewer.layers["Lasso Selection"].data = [
+        np.array([[8.0, -5.0], [8.0, 15.0], [15.0, 15.0], [15.0, -5.0]], dtype=float)
+    ]
+    widget._execute_lasso_deletion()
+
+    # Remaining vertices should be rearranged from left to right (x ascending)
+    remaining_shape = edit_layer.data[0]
+    assert len(remaining_shape) == 3
+    assert remaining_shape[0][1] < remaining_shape[-1][1]
+    assert remaining_shape[0][1] == 20.0
+    assert remaining_shape[-1][1] == 40.0
+
+
+def test_vertex_removal_and_middle_insertion_maintains_local_proximity(
+    make_napari_viewer, qtbot, models_path
+):
+    import napari.layers.shapes._shapes_mouse_bindings as smb
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    # Initialize a 5-vertex boundary from left (x=0) to right (x=40)
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [12.0, 10.0], [14.0, 20.0], [16.0, 30.0], [18.0, 40.0]])
+    ]
+    edit_layer.selected_data = {0}
+    edit_layer._scale_factor = 1.0
+
+    class DummyEvent:
+        def __init__(self, pos):
+            self.position = pos
+            self.pos = pos
+
+    # 1. Delete terminal vertex at right tail (x=40.0) using vertex_remove
+    edit_layer.mode = "vertex_remove"
+    smb.vertex_remove(edit_layer, DummyEvent((18.0, 40.0)))
+    assert len(edit_layer.data[0]) == 4
+    assert edit_layer.data[0][-1][1] == 30.0
+
+    # 2. Add a new vertex in the middle at (y=15.0, x=15.0) using vertex_insert mode
+    edit_layer.mode = "vertex_insert"
+    for cb in edit_layer.mouse_drag_callbacks:
+        cb(edit_layer, DummyEvent((15.0, 15.0)))
+
+    # Verify 5 vertices, inserted locally between x=10.0 and x=20.0 (not at tail)
+    shape = edit_layer.data[0]
+    assert len(shape) == 5
+    assert shape[2][1] == 15.0
+    assert shape[3][1] == 20.0
+    assert shape[4][1] == 30.0
+
+    # 3. Test drawing a path that loops backward in X does not raise TypeError
+    edit_layer.mode = "add_path"
+    edit_layer.add(
+        [np.array([[50.0, 10.0], [50.0, 50.0], [50.0, 20.0], [50.0, 80.0]])],
+        shape_type="path",
+    )
+    assert len(edit_layer.data) == 2
+
+    # 4. Test undo restores state before insertion
+    widget._undo_last_change()
+    widget._undo_last_change()
+    assert len(edit_layer.data[0]) == 4
+    assert edit_layer.data[0][-1][1] == 30.0
+
+    # 5. Test undo restores state before terminal deletion (5 vertices, right tail x=40.0)
+    widget._undo_last_change()
+    assert len(edit_layer.data[0]) == 5
+    assert edit_layer.data[0][-1][1] == 40.0
+
+
+def test_mode_switching_restores_direct_and_add_path_behaviors(
+    make_napari_viewer, qtbot, models_path
+):
+    import napari.layers.shapes._shapes_mouse_bindings as smb
+    from napari.layers.shapes._shapes_mouse_bindings import select as napari_select
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    edit_layer.data = [
+        np.array([[10.0, 0.0], [10.0, 50.0], [10.0, 100.0]]),
+        np.array([[30.0, 0.0], [30.0, 50.0], [30.0, 100.0]]),
+    ]
+    edit_layer.selected_data = {0}
+
+    class DummyEvent:
+        def __init__(self, pos):
+            self.position = pos
+            self.pos = pos
+
+    # 1. In vertex_insert mode, insert vertex in shape 0
+    edit_layer.mode = "vertex_insert"
+    assert edit_layer.mouse_drag_callbacks[0] == widget._custom_vertex_insert
+    for cb in edit_layer.mouse_drag_callbacks:
+        cb(edit_layer, DummyEvent((10.0, 25.0)))
+    assert len(edit_layer.data[0]) == 4
+
+    # 2. Switch to direct mode: callback should be napari's select, NOT custom_vertex_insert
+    edit_layer.mode = "direct"
+    assert edit_layer.mouse_drag_callbacks[0] == napari_select
+    assert widget._custom_vertex_insert not in edit_layer.mouse_drag_callbacks
+
+    # 3. Switch to add_path mode: callback should NOT be custom_vertex_insert
+    edit_layer.mode = "add_path"
+    assert widget._custom_vertex_insert not in edit_layer.mouse_drag_callbacks
+    # Add a new path: should create a new separate shape
+    edit_layer.add(
+        [np.array([[50.0, 0.0], [50.0, 50.0], [50.0, 100.0]])],
+        shape_type="path",
+    )
+    assert len(edit_layer.data) == 3
+    assert len(edit_layer.data[0]) == 4  # shape 0 was not modified
+    assert len(edit_layer.data[1]) == 3  # shape 1 was not modified
+    assert len(edit_layer.data[2]) == 3  # new shape added
+
+    # 4. Switch to vertex_remove mode and remove vertex from shape 1
+    edit_layer.mode = "vertex_remove"
+    edit_layer.selected_data = {1}
+    smb.vertex_remove(edit_layer, DummyEvent((30.0, 100.0)))
+    assert len(edit_layer.data[1]) == 2
 
 
 def test_undo_restores_user_edits_in_reverse_order(
@@ -693,3 +884,94 @@ def test_nudge_multiple_selected_rings(
     assert np.allclose(edit_layer.data[0], orig_shape_0)
     assert np.allclose(edit_layer.data[1], orig_shape_1)
     assert not widget._undo_button.enabled
+
+
+def test_nudge_in_transform_mode(
+    make_napari_viewer, qtbot, models_path
+):
+    from napari.utils.transforms import Affine
+
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    initial_translate = np.array(edit_layer.affine.translate, copy=True)
+
+    # Switch to transform mode
+    edit_layer.mode = "transform"
+
+    # Nudge fine (+1 px Y) -> Control-Down
+    widget._nudge_selected_rings(1.0, 0.0)
+    assert np.allclose(
+        edit_layer.affine.translate, initial_translate + [1.0, 0.0]
+    )
+
+    # Nudge fast (+10 px X) -> Control-Shift-Right
+    widget._nudge_selected_rings(0.0, 10.0)
+    assert np.allclose(
+        edit_layer.affine.translate, initial_translate + [1.0, 10.0]
+    )
+
+    # Wait for the affine debounce timer (250 ms) to trigger undo recording
+    qtbot.wait(300)
+    assert widget._undo_button.enabled
+
+    # Undo restores affine translation
+    widget._undo_last_change()
+    assert np.allclose(edit_layer.affine.translate, initial_translate)
+    assert not widget._undo_button.enabled
+
+
+def test_nudge_in_transform_mode_and_apply(
+    make_napari_viewer, qtbot, models_path
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    edit_layer = viewer.layers["Rings Modification"]
+    original_coords = [np.array(d, copy=True) for d in edit_layer.data]
+
+    # Switch to transform mode and nudge by 5 pixels in Y
+    edit_layer.mode = "transform"
+    widget._nudge_selected_rings(5.0, 0.0)
+
+    widget._apply_rings_geometries()
+
+    rings_layer = viewer.layers["sample.rings"]
+    applied_rbxy = rings_layer.features["RBXY"].tolist()
+
+    assert len(applied_rbxy) == len(original_coords)
+    for orig, applied in zip(original_coords, applied_rbxy):
+        applied_arr = np.array(applied)
+        # Verify 5 pixel shift in Y
+        assert np.all(applied_arr[:, 0] >= 5.0)
+
+
+def test_rearrange_coordinates():
+    # Test None and empty/short sequences
+    assert rearrange_coordinates(None) is None
+    assert rearrange_coordinates([]) == []
+    assert rearrange_coordinates([[1.0, 2.0]]) == [[1.0, 2.0]]
+
+    # Test Python list
+    coords_list = [[10.0, 50.0], [20.0, 10.0]]
+    result_list = rearrange_coordinates(coords_list)
+    assert result_list == [[20.0, 10.0], [10.0, 50.0]]
+
+    # Test NumPy array (must not raise ValueError: ambiguous truth value)
+    coords_arr = np.array([[10.0, 50.0], [15.0, 30.0], [20.0, 10.0]])
+    result_arr = rearrange_coordinates(coords_arr)
+    assert np.array_equal(
+        result_arr, np.array([[20.0, 10.0], [15.0, 30.0], [10.0, 50.0]])
+    )
+
+    # Test NumPy array already sorted left-to-right
+    coords_arr_sorted = np.array([[10.0, 10.0], [15.0, 30.0], [20.0, 50.0]])
+    result_sorted = rearrange_coordinates(coords_arr_sorted)
+    assert np.array_equal(result_sorted, coords_arr_sorted)
