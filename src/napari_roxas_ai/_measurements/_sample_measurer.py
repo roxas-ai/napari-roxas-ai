@@ -5,8 +5,9 @@ Refactored and adapted to large images by github user tha-santacruz https://gith
 """
 
 import ast
+import json
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import cv2
 import numpy as np
@@ -75,6 +76,30 @@ class SampleAnalyzer:
         self.adjacent_cwt_ratio_limit = self._config_float(
             "adjacent_cwt_ratio_limit", 3.0
         )
+
+        # CWT circle visualization parameters and storage
+        cwt_vis = self.config.get("cwt_visualization")
+        if isinstance(cwt_vis, dict):
+            raw_interval = cwt_vis.get("sample_interval", 250)
+        else:
+            raw_interval = self.config.get(
+                "cwt_sample_interval",
+                self.config.get(
+                    "sample_interval",
+                    self.config.get("cwt_visualization.sample_interval", 250),
+                ),
+            )
+        try:
+            self.sample_interval = (
+                int(raw_interval) if raw_interval is not None else 250
+            )
+        except (ValueError, TypeError):
+            self.sample_interval = 250
+        if self.sample_interval < 1:
+            self.sample_interval = 250
+
+        self.cwt_visualization_data: Dict[str, Any] = {}
+        self._cwt_circles_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
     def _config_float(self, key: str, default: float) -> float:
         """
@@ -457,6 +482,7 @@ class SampleAnalyzer:
         dist_crop = self.dist_transform[y : y + h, x : x + w]
 
         # And we compute the thickness
+        is_sampled = (cell_id % self.sample_interval == 0)
         for label in label_map:
             # Get wall pixels where the label corresponds
             wall_pixel_coords = contour_points[
@@ -482,6 +508,27 @@ class SampleAnalyzer:
                     / self.pixels_per_um,
                 }
             )
+
+            # Record sampled circle geometry
+            if is_sampled and len(wall_pixel_coords) > 0:
+                mid_idx = len(wall_pixel_coords) // 2
+                center_y = float(y + wall_pixel_coords[mid_idx, 1])
+                center_x = float(x + wall_pixel_coords[mid_idx, 0])
+                wall_name = label_map[label]
+                if not np.isnan(avg_dist) and avg_dist > 0:
+                    if cell_id not in self._cwt_circles_metadata:
+                        self._cwt_circles_metadata[cell_id] = {}
+                    self._cwt_circles_metadata[cell_id][wall_name] = {
+                        "cell_id": int(cell_id),
+                        "wall": wall_name,
+                        "center_yx": [round(center_y, 2), round(center_x, 2)],
+                        "radius_px": round(float(avg_dist), 2),
+                        "radius_um": round(
+                            float(avg_dist / self.pixels_per_um), 2
+                        ),
+                        "status": "included",
+                        "reason": "",
+                    }
 
     def _cluster_cells(self) -> None:
         """Cluster cells based on proximity."""
@@ -576,10 +623,15 @@ class SampleAnalyzer:
         df = self.cells_table
 
         # Pull columns as numeric
-        pi = pd.to_numeric(df["CWT_pith"], errors="coerce")
-        ba = pd.to_numeric(df["CWT_bark"], errors="coerce")
-        le = pd.to_numeric(df["CWT_left"], errors="coerce")
-        ri = pd.to_numeric(df["CWT_right"], errors="coerce")
+        pi_raw = pd.to_numeric(df["CWT_pith"], errors="coerce")
+        ba_raw = pd.to_numeric(df["CWT_bark"], errors="coerce")
+        le_raw = pd.to_numeric(df["CWT_left"], errors="coerce")
+        ri_raw = pd.to_numeric(df["CWT_right"], errors="coerce")
+
+        pi = pi_raw.copy()
+        ba = ba_raw.copy()
+        le = le_raw.copy()
+        ri = ri_raw.copy()
 
         # --- combined quantiles ---
         tan_all = pd.concat([pi, ba], ignore_index=True).dropna()
@@ -610,31 +662,160 @@ class SampleAnalyzer:
             s.loc[(s < ll) | (s > ul)] = np.nan
             return s
 
-        pi = _apply_limits(pi, ll_tan, ul_tan)
-        ba = _apply_limits(ba, ll_tan, ul_tan)
-        le = _apply_limits(le, ll_rad, ul_rad)
-        ri = _apply_limits(ri, ll_rad, ul_rad)
+        pi_lim = _apply_limits(pi, ll_tan, ul_tan)
+        ba_lim = _apply_limits(ba, ll_tan, ul_tan)
+        le_lim = _apply_limits(le, ll_rad, ul_rad)
+        ri_lim = _apply_limits(ri, ll_rad, ul_rad)
 
         # --- Filter larger value of opposite sides if much larger ---
-        ba.loc[ba > (opposite_cwt_ratio_limit * pi)] = np.nan
-        pi.loc[pi > (opposite_cwt_ratio_limit * ba)] = np.nan
-        le.loc[le > (opposite_cwt_ratio_limit * ri)] = np.nan
-        ri.loc[ri > (opposite_cwt_ratio_limit * le)] = np.nan
+        pi_opp = pi_lim.copy()
+        ba_opp = ba_lim.copy()
+        le_opp = le_lim.copy()
+        ri_opp = ri_lim.copy()
+
+        ba_opp.loc[ba_opp > (opposite_cwt_ratio_limit * pi_opp)] = np.nan
+        pi_opp.loc[pi_opp > (opposite_cwt_ratio_limit * ba_opp)] = np.nan
+        le_opp.loc[le_opp > (opposite_cwt_ratio_limit * ri_opp)] = np.nan
+        ri_opp.loc[ri_opp > (opposite_cwt_ratio_limit * le_opp)] = np.nan
 
         # --- Filter larger value compared to adjacent sides if much larger ---
-        ave_lr = pd.concat([le, ri], axis=1).mean(axis=1, skipna=True)
-        ave_pb = pd.concat([pi, ba], axis=1).mean(axis=1, skipna=True)
+        ave_lr = pd.concat([le_opp, ri_opp], axis=1).mean(axis=1, skipna=True)
+        ave_pb = pd.concat([pi_opp, ba_opp], axis=1).mean(axis=1, skipna=True)
 
-        ba.loc[ba > (adjacent_cwt_ratio_limit * ave_lr)] = np.nan
-        pi.loc[pi > (adjacent_cwt_ratio_limit * ave_lr)] = np.nan
-        le.loc[le > (adjacent_cwt_ratio_limit * ave_pb)] = np.nan
-        ri.loc[ri > (adjacent_cwt_ratio_limit * ave_pb)] = np.nan
+        pi_adj = pi_opp.copy()
+        ba_adj = ba_opp.copy()
+        le_adj = le_opp.copy()
+        ri_adj = ri_opp.copy()
+
+        ba_adj.loc[ba_adj > (adjacent_cwt_ratio_limit * ave_lr)] = np.nan
+        pi_adj.loc[pi_adj > (adjacent_cwt_ratio_limit * ave_lr)] = np.nan
+        le_adj.loc[le_adj > (adjacent_cwt_ratio_limit * ave_pb)] = np.nan
+        ri_adj.loc[ri_adj > (adjacent_cwt_ratio_limit * ave_pb)] = np.nan
 
         # Write back filtered base values
-        df["CWT_pith"] = pi
-        df["CWT_bark"] = ba
-        df["CWT_left"] = le
-        df["CWT_right"] = ri
+        df["CWT_pith"] = pi_adj
+        df["CWT_bark"] = ba_adj
+        df["CWT_left"] = le_adj
+        df["CWT_right"] = ri_adj
+
+        # Update CWT visualization circle metadata status and reason
+        if self._cwt_circles_metadata:
+            for cell_id, walls in self._cwt_circles_metadata.items():
+                if cell_id not in df.index:
+                    continue
+                for wall, c_info in walls.items():
+                    if wall == "pith":
+                        raw = pi_raw.loc[cell_id]
+                        if pd.isna(raw):
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = "Invalid or missing measurement"
+                        elif raw < ll_tan:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = (
+                                f"Tukey IQR lower limit exceeded ({raw:.2f} µm < {ll_tan:.2f} µm)"
+                                if raw >= min_plausible
+                                else f"Below minimum plausible threshold ({raw:.2f} µm < {min_plausible:.2f} µm)"
+                            )
+                        elif raw > ul_tan:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Tukey IQR upper limit exceeded ({raw:.2f} µm > {ul_tan:.2f} µm)"
+                        elif pd.isna(pi_opp.loc[cell_id]):
+                            ba_val = ba_lim.loc[cell_id]
+                            ratio = raw / ba_val if pd.notna(ba_val) and ba_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Opposite wall ratio exceeded ({ratio:.1f}x > {opposite_cwt_ratio_limit:.1f}x limit)"
+                        elif pd.isna(pi_adj.loc[cell_id]):
+                            adj_val = ave_lr.loc[cell_id]
+                            ratio = raw / adj_val if pd.notna(adj_val) and adj_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Adjacent wall ratio exceeded ({ratio:.1f}x > {adjacent_cwt_ratio_limit:.1f}x limit)"
+                        else:
+                            c_info["status"] = "included"
+                            c_info["reason"] = ""
+                    elif wall == "bark":
+                        raw = ba_raw.loc[cell_id]
+                        if pd.isna(raw):
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = "Invalid or missing measurement"
+                        elif raw < ll_tan:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = (
+                                f"Tukey IQR lower limit exceeded ({raw:.2f} µm < {ll_tan:.2f} µm)"
+                                if raw >= min_plausible
+                                else f"Below minimum plausible threshold ({raw:.2f} µm < {min_plausible:.2f} µm)"
+                            )
+                        elif raw > ul_tan:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Tukey IQR upper limit exceeded ({raw:.2f} µm > {ul_tan:.2f} µm)"
+                        elif pd.isna(ba_opp.loc[cell_id]):
+                            pi_val = pi_lim.loc[cell_id]
+                            ratio = raw / pi_val if pd.notna(pi_val) and pi_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Opposite wall ratio exceeded ({ratio:.1f}x > {opposite_cwt_ratio_limit:.1f}x limit)"
+                        elif pd.isna(ba_adj.loc[cell_id]):
+                            adj_val = ave_lr.loc[cell_id]
+                            ratio = raw / adj_val if pd.notna(adj_val) and adj_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Adjacent wall ratio exceeded ({ratio:.1f}x > {adjacent_cwt_ratio_limit:.1f}x limit)"
+                        else:
+                            c_info["status"] = "included"
+                            c_info["reason"] = ""
+                    elif wall == "left":
+                        raw = le_raw.loc[cell_id]
+                        if pd.isna(raw):
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = "Invalid or missing measurement"
+                        elif raw < ll_rad:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = (
+                                f"Tukey IQR lower limit exceeded ({raw:.2f} µm < {ll_rad:.2f} µm)"
+                                if raw >= min_plausible
+                                else f"Below minimum plausible threshold ({raw:.2f} µm < {min_plausible:.2f} µm)"
+                            )
+                        elif raw > ul_rad:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Tukey IQR upper limit exceeded ({raw:.2f} µm > {ul_rad:.2f} µm)"
+                        elif pd.isna(le_opp.loc[cell_id]):
+                            ri_val = ri_lim.loc[cell_id]
+                            ratio = raw / ri_val if pd.notna(ri_val) and ri_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Opposite wall ratio exceeded ({ratio:.1f}x > {opposite_cwt_ratio_limit:.1f}x limit)"
+                        elif pd.isna(le_adj.loc[cell_id]):
+                            adj_val = ave_pb.loc[cell_id]
+                            ratio = raw / adj_val if pd.notna(adj_val) and adj_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Adjacent wall ratio exceeded ({ratio:.1f}x > {adjacent_cwt_ratio_limit:.1f}x limit)"
+                        else:
+                            c_info["status"] = "included"
+                            c_info["reason"] = ""
+                    elif wall == "right":
+                        raw = ri_raw.loc[cell_id]
+                        if pd.isna(raw):
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = "Invalid or missing measurement"
+                        elif raw < ll_rad:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = (
+                                f"Tukey IQR lower limit exceeded ({raw:.2f} µm < {ll_rad:.2f} µm)"
+                                if raw >= min_plausible
+                                else f"Below minimum plausible threshold ({raw:.2f} µm < {min_plausible:.2f} µm)"
+                            )
+                        elif raw > ul_rad:
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Tukey IQR upper limit exceeded ({raw:.2f} µm > {ul_rad:.2f} µm)"
+                        elif pd.isna(ri_opp.loc[cell_id]):
+                            le_val = le_lim.loc[cell_id]
+                            ratio = raw / le_val if pd.notna(le_val) and le_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Opposite wall ratio exceeded ({ratio:.1f}x > {opposite_cwt_ratio_limit:.1f}x limit)"
+                        elif pd.isna(ri_adj.loc[cell_id]):
+                            adj_val = ave_pb.loc[cell_id]
+                            ratio = raw / adj_val if pd.notna(adj_val) and adj_val > 0 else np.nan
+                            c_info["status"] = "excluded"
+                            c_info["reason"] = f"Adjacent wall ratio exceeded ({ratio:.1f}x > {adjacent_cwt_ratio_limit:.1f}x limit)"
+                        else:
+                            c_info["status"] = "included"
+                            c_info["reason"] = ""
 
     def _compute_cwt_metrics(self) -> None:
         """
@@ -692,6 +873,44 @@ class SampleAnalyzer:
             df["CWA"] = cwa
             df["RWD"] = (cwa / ca).where(cwa.notna() & (ca > 0))
 
+    def _build_cwt_visualization_data(self) -> Dict[str, Any]:
+        """Construct CWT visualization metadata dictionary conforming to specification."""
+        sample_name = str(self.config.get("sample_name", "sample"))
+        circles: List[Dict[str, Any]] = []
+        for cell_id in sorted(self._cwt_circles_metadata.keys()):
+            cell_dict = self._cwt_circles_metadata[cell_id]
+            for wall in ["pith", "bark", "left", "right"]:
+                if wall in cell_dict:
+                    circles.append(cell_dict[wall])
+
+        total_cells = (
+            len(self.cells)
+            if self.cells
+            else (len(self.cells_table) if self.cells_table is not None else 0)
+        )
+        sampled_cells_count = len(self._cwt_circles_metadata)
+
+        data = {
+            "sample_name": sample_name,
+            "sample_interval": self.sample_interval,
+            "total_cells": total_cells,
+            "sampled_cells_count": sampled_cells_count,
+            "circles": circles,
+        }
+        self.cwt_visualization_data = data
+        return data
+
+    def get_cwt_visualization_data(
+        self, sample_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Return CWT visualization metadata dictionary."""
+        if not self.cwt_visualization_data:
+            self._build_cwt_visualization_data()
+        data = self.cwt_visualization_data.copy()
+        if sample_name is not None:
+            data["sample_name"] = str(sample_name)
+        return data
+
     def analyze_cells(self) -> pd.DataFrame:
         """Main method to analyze cells."""
         self._smooth_cells_array()
@@ -715,6 +934,9 @@ class SampleAnalyzer:
 
         # Compute NBRNO and NBRID
         self._compute_cluster_sizes()
+
+        # Build CWT visualization metadata
+        self._build_cwt_visualization_data()
 
         return self.cells_table
 
@@ -1352,6 +1574,29 @@ class SampleAnalyzer:
         self.analyze_rings()
 
         return self.cells_table, self.rings_table
+
+
+def save_cwt_visualization_json(
+    path: Union[str, Path], data: Dict[str, Any]
+) -> None:
+    """Save CWT circle visualization metadata to a JSON file."""
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def load_cwt_visualization_json(
+    path: Union[str, Path]
+) -> Dict[str, Any]:
+    """Load CWT circle visualization metadata from a JSON file."""
+    file_path = Path(path)
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"CWT visualization file not found: {file_path}"
+        )
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 if __name__ == "__main__":
