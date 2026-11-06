@@ -80,23 +80,23 @@ class SampleAnalyzer:
         # CWT circle visualization parameters and storage
         cwt_vis = self.config.get("cwt_visualization")
         if isinstance(cwt_vis, dict):
-            raw_interval = cwt_vis.get("sample_interval", 250)
+            raw_interval = cwt_vis.get("sample_interval", 50)
         else:
             raw_interval = self.config.get(
                 "cwt_sample_interval",
                 self.config.get(
                     "sample_interval",
-                    self.config.get("cwt_visualization.sample_interval", 250),
+                    self.config.get("cwt_visualization.sample_interval", 50),
                 ),
             )
         try:
             self.sample_interval = (
-                int(raw_interval) if raw_interval is not None else 250
+                int(raw_interval) if raw_interval is not None else 50
             )
         except (ValueError, TypeError):
-            self.sample_interval = 250
+            self.sample_interval = 50
         if self.sample_interval < 1:
-            self.sample_interval = 250
+            self.sample_interval = 50
 
         self.cwt_visualization_data: Dict[str, Any] = {}
         self._cwt_circles_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}

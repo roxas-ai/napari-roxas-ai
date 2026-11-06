@@ -185,10 +185,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     "cwt_visualization": {
         "enabled": True,  # Enable CWT circle visualization
-        "sample_interval": 250,  # Sample interval (every N-th cell)
-        "included_color": "black",  # Color for included CWT measurements
+        "sample_interval": 50,  # Sample interval (every N-th cell)
+        "included_color": "lime",  # Color for included CWT measurements
         "excluded_color": "red",  # Color for excluded CWT measurements
-        "edge_width": 2.0,  # Circle edge width in pixels
+        "edge_width": 3.0,  # Circle edge width in pixels
     },
     "annotated_image": {
         "cell_opacity": 50,  # Opacity percentage of the cells overlay (0-100)

@@ -2,19 +2,19 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from datetime import datetime
 from pathlib import Path
 import napari.layers
-from qtpy.QtCore import QTimer
 from magicgui.widgets import (
     CheckBox,
     Container,
     PushButton,
 )
 from napari.utils.notifications import show_info
-from qtpy.QtCore import QObject, QThread, Signal
-from qtpy.QtWidgets import QInputDialog
+from qtpy.QtCore import QObject, QPoint, QThread, QTimer, Signal
+from qtpy.QtGui import QTextDocument
+from qtpy.QtWidgets import QInputDialog, QToolTip
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
-from ._sample_measurer import SampleAnalyzer
+from ._sample_measurer import SampleAnalyzer, save_cwt_visualization_json
 from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 from .._utils._version_utils import (
     get_measurement_operator,
@@ -34,9 +34,220 @@ if TYPE_CHECKING:
     import napari
 
 
+def format_cwt_tooltip(circle: Dict[str, Any]) -> str:
+    cell_id = circle.get("cell_id", "")
+    wall = str(circle.get("wall", "")).capitalize()
+    radius_um = circle.get("radius_um")
+    if radius_um is not None:
+        cwt_str = f"{float(radius_um):.2f} µm"
+    else:
+        cwt_str = "N/A"
+    status = circle.get("status", "included")
+    reason = circle.get("reason", "")
+
+    status_color = "#28a745" if status == "included" else "#d9534f"
+    status_label = status.capitalize()
+
+    lines = [
+        f"<b>Cell {cell_id}</b> ({wall} wall)",
+        f"<b>CWT:</b> {cwt_str}",
+        f"<b>Status:</b> <span style='color: {status_color};'><b>{status_label}</b></span>",
+    ]
+    if status != "included" and reason:
+        lines.append(f"<b>Reason:</b> {reason}")
+
+    return "<br>".join(lines)
+
+
+def calculate_cwt_tooltip_pos(
+    circle_center: QPoint,
+    radius_screen: float,
+    wall: str,
+    tooltip_html: str,
+    margin: int = 12,
+) -> QPoint:
+    """Calculate target screen coordinate for QToolTip.showText so that the entire
+    tooltip box appears outside the cell wall circle with a constant visual margin
+    (above for pith, below for bark, left for left, right for right).
+    """
+    doc = QTextDocument()
+    doc.setDefaultFont(QToolTip.font())
+    doc.setHtml(tooltip_html)
+    size = doc.size()
+    box_w = int(size.width()) + 16
+    box_h = int(size.height()) + 12
+
+    wall_lower = str(wall).lower()
+    r = int(round(radius_screen))
+    cx, cy = circle_center.x(), circle_center.y()
+
+    if wall_lower == "pith":
+        # Entire box ABOVE the circle: bottom edge placed margin pixels above top of circle
+        return QPoint(
+            cx - box_w // 2,
+            cy - r - box_h - margin,
+        )
+    elif wall_lower == "bark":
+        # Entire box BELOW the circle: top edge placed margin pixels below bottom of circle
+        return QPoint(
+            cx - box_w // 2,
+            cy + r + margin,
+        )
+    elif wall_lower == "left":
+        # Entire box LEFT of the circle: right edge placed margin pixels left of circle
+        return QPoint(
+            cx - r - box_w - margin,
+            cy - box_h // 2,
+        )
+    elif wall_lower == "right":
+        # Entire box RIGHT of the circle: left edge placed margin pixels right of circle
+        return QPoint(
+            cx + r + margin,
+            cy - box_h // 2,
+        )
+    else:
+        return QPoint(cx + r + margin, cy - box_h // 2)
+
+
+_last_hovered_cwt_key: Optional[Any] = None
+
+
+def on_cwt_mouse_move(viewer: "napari.viewer.Viewer", event: Any):
+    global _last_hovered_cwt_key
+    if not hasattr(viewer, "layers"):
+        return
+
+    try:
+        cwt_layers = [
+            layer
+            for layer in viewer.layers
+            if (
+                getattr(layer, "name", "").endswith(".cwt_circles")
+                and getattr(layer, "visible", True)
+            )
+        ]
+    except Exception:
+        return
+
+    if not cwt_layers:
+        if _last_hovered_cwt_key is not None:
+            _last_hovered_cwt_key = None
+            try:
+                QToolTip.hideText()
+            except Exception:
+                pass
+        return
+
+    pos = getattr(event, "position", None)
+    if pos is None:
+        if _last_hovered_cwt_key is not None:
+            _last_hovered_cwt_key = None
+            try:
+                QToolTip.hideText()
+            except Exception:
+                pass
+        return
+
+    hovered_circle = None
+    hovered_layer = None
+    hovered_layer_name = ""
+    min_dist = float("inf")
+
+    for layer in cwt_layers:
+        try:
+            circles = layer.metadata.get("cwt_data", {}).get("circles", [])
+            if not circles:
+                continue
+
+            data_pos = layer.world_to_data(pos)
+            y, x = float(data_pos[-2]), float(data_pos[-1])
+
+            for circle in circles:
+                center = circle.get("center_yx")
+                if not center or len(center) < 2:
+                    continue
+                cy, cx = float(center[0]), float(center[1])
+                r = float(circle.get("radius_px", 0.0))
+                dist = ((y - cy) ** 2 + (x - cx) ** 2) ** 0.5
+                if dist <= (r + 2.0):
+                    if dist < min_dist:
+                        min_dist = dist
+                        hovered_circle = circle
+                        hovered_layer = layer
+                        hovered_layer_name = getattr(layer, "name", "")
+        except Exception:
+            continue
+
+    if hovered_circle is not None and hovered_layer is not None:
+        circle_key = (
+            hovered_layer_name,
+            hovered_circle.get("cell_id"),
+            str(hovered_circle.get("wall", "")).lower(),
+        )
+        if circle_key != _last_hovered_cwt_key:
+            _last_hovered_cwt_key = circle_key
+            tooltip_html = format_cwt_tooltip(hovered_circle)
+            try:
+                center = hovered_circle.get("center_yx", [0.0, 0.0])
+                cy_data, cx_data = float(center[0]), float(center[1])
+                r_data = float(hovered_circle.get("radius_px", 0.0))
+
+                qv = getattr(
+                    viewer.window,
+                    "_qt_viewer",
+                    getattr(viewer.window, "qt_viewer", None),
+                )
+                if qv is not None and hasattr(qv, "canvas"):
+                    canvas = qv.canvas
+                    transform = (
+                        canvas.view.transform * canvas.view.scene.transform
+                    )
+
+                    # Transform circle center: layer data coords -> world -> canvas -> screen
+                    world_center = hovered_layer.data_to_world([cy_data, cx_data])
+                    canvas_center = transform.map(
+                        [world_center[-1], world_center[-2]]
+                    )[:2]
+                    circle_center_screen = canvas.native.mapToGlobal(
+                        QPoint(
+                            int(round(canvas_center[0])),
+                            int(round(canvas_center[1])),
+                        )
+                    )
+
+                    # Transform individual circle perimeter point to determine screen radius
+                    world_edge = hovered_layer.data_to_world(
+                        [cy_data, cx_data + r_data]
+                    )
+                    canvas_edge = transform.map(
+                        [world_edge[-1], world_edge[-2]]
+                    )[:2]
+                    radius_screen = max(
+                        1.0,
+                        float(np.linalg.norm(canvas_edge - canvas_center)),
+                    )
+
+                    target_pos = calculate_cwt_tooltip_pos(
+                        circle_center_screen,
+                        radius_screen,
+                        hovered_circle.get("wall", ""),
+                        tooltip_html,
+                    )
+                    QToolTip.showText(target_pos, tooltip_html)
+            except Exception:
+                pass
+    else:
+        if _last_hovered_cwt_key is not None:
+            _last_hovered_cwt_key = None
+            try:
+                QToolTip.hideText()
+            except Exception:
+                pass
+
+
 class Worker(QObject):
     finished = Signal()
-    result_ready = Signal(object, object, object)
+    result_ready = Signal(object, object, object, object)
 
     def __init__(
         self,
@@ -55,18 +266,23 @@ class Worker(QObject):
 
     def run(self):
         cleaned_cells_array = None
+        cwt_vis_data = None
         if self.measurement == "both":
             cells_table, rings_table = self.analyzer.analyze_sample()
             cleaned_cells_array = self.analyzer.cells_array
+            cwt_vis_data = self.analyzer.get_cwt_visualization_data()
         elif self.measurement == "cells":
             cells_table = self.analyzer.analyze_cells()
             cleaned_cells_array = self.analyzer.cells_array
             rings_table = pd.DataFrame()
+            cwt_vis_data = self.analyzer.get_cwt_visualization_data()
         elif self.measurement == "rings":
             cells_table = pd.DataFrame()
             rings_table = self.analyzer.analyze_rings()
         # Emit results to be added as layers
-        self.result_ready.emit(cells_table, rings_table, cleaned_cells_array)
+        self.result_ready.emit(
+            cells_table, rings_table, cleaned_cells_array, cwt_vis_data
+        )
 
         self.finished.emit()
 
@@ -311,6 +527,9 @@ class SingleSampleMeasurementsWidget(Container):
             "adjacent_cwt_ratio_limit": settings.get(
                 "measurements.adjacent_cwt_ratio_limit"
             ),
+            "sample_interval": settings.get(
+                "cwt_visualization.sample_interval", 50
+            ),
             "sample_type": sample_type,
         }
 
@@ -348,7 +567,13 @@ class SingleSampleMeasurementsWidget(Container):
         self.worker_thread.start()
 
 
-    def _add_result_layers(self, cells_table, rings_table, cleaned_cells_array=None):
+    def _add_result_layers(
+        self,
+        cells_table,
+        rings_table,
+        cleaned_cells_array=None,
+        cwt_vis_data=None,
+    ):
 
         project_dir = Path(settings.get("project_directory"))
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -393,6 +618,14 @@ class SingleSampleMeasurementsWidget(Container):
                 )
                 cells_path = str(project_dir / f"{sample_name}.cells.png")
                 self._cells_input_layer.metadata["file_path"] = cells_path
+            else:
+                sample_name = self._cells_input_layer.metadata.get(
+                    "sample_name"
+                ) or (
+                    Path(cells_path).stem.replace(".cells", "")
+                    if cells_path
+                    else self._cells_input_layer.name
+                )
 
             print(f"[Cells] Writing results to: {cells_path}")
             write_single_layer(
@@ -407,6 +640,117 @@ class SingleSampleMeasurementsWidget(Container):
             # Written with the measurements: nothing left to save
             self._cells_input_layer.metadata["_is_dirty"] = False
             show_info(f"Cells exported to: {cells_path}")
+
+            # ---------------------------
+            # Export CWT Circle Visualization (Shapes Layer & JSON)
+            # ---------------------------
+            if cwt_vis_data is not None:
+                cwt_path = Path(cells_path).parent / f"{sample_name}.cwt.json"
+                cwt_vis_data["sample_name"] = sample_name
+                save_cwt_visualization_json(cwt_path, cwt_vis_data)
+
+                # Check if visualization is enabled in settings
+                cwt_enabled = settings.get("cwt_visualization.enabled")
+                if cwt_enabled is None:
+                    cwt_enabled = True
+
+                layer_name = f"{sample_name}.cwt_circles"
+
+                # Find existing cwt layer for this sample
+                existing_cwt_layer = next(
+                    (
+                        layer
+                        for layer in self._viewer.layers
+                        if layer.name == layer_name
+                    ),
+                    None,
+                )
+
+                if cwt_enabled and cwt_vis_data.get("circles"):
+                    inc_color = str(
+                        settings.get("cwt_visualization.included_color")
+                        or "lime"
+                    ).strip()
+                    exc_color = str(
+                        settings.get("cwt_visualization.excluded_color")
+                        or "red"
+                    ).strip()
+                    edge_width = float(
+                        settings.get("cwt_visualization.edge_width")
+                        or 3.0
+                    )
+
+                    shapes_data = []
+                    edge_colors = []
+                    features_list = []
+                    for circle in cwt_vis_data["circles"]:
+                        cy, cx = circle["center_yx"]
+                        r = circle["radius_px"]
+                        bbox = np.array(
+                            [
+                                [cy - r, cx - r],
+                                [cy - r, cx + r],
+                                [cy + r, cx + r],
+                                [cy + r, cx - r],
+                            ]
+                        )
+                        shapes_data.append(bbox)
+                        status = circle.get("status", "included")
+                        edge_colors.append(
+                            inc_color if status == "included" else exc_color
+                        )
+                        features_list.append(
+                            {
+                                "cell_id": circle.get("cell_id", ""),
+                                "wall": str(circle.get("wall", "")).capitalize(),
+                                "cwt_um": circle.get("radius_um"),
+                                "status": status,
+                                "reason": circle.get("reason", ""),
+                            }
+                        )
+
+                    if shapes_data:
+                        features_df = pd.DataFrame(features_list)
+                        scale = getattr(self._cells_input_layer, "scale", None)
+
+                        if existing_cwt_layer is not None and isinstance(
+                            existing_cwt_layer, napari.layers.Shapes
+                        ):
+                            existing_cwt_layer.data = shapes_data
+                            existing_cwt_layer.edge_color = edge_colors
+                            existing_cwt_layer.edge_width = edge_width
+                            existing_cwt_layer.features = features_df
+                            if scale is not None:
+                                existing_cwt_layer.scale = scale
+                            existing_cwt_layer.metadata["sample_name"] = sample_name
+                            existing_cwt_layer.metadata["cwt_data"] = cwt_vis_data
+                            existing_cwt_layer.metadata["file_path"] = str(cwt_path)
+                        else:
+                            if existing_cwt_layer is not None:
+                                self._viewer.layers.remove(existing_cwt_layer)
+                            self._viewer.add_shapes(
+                                shapes_data,
+                                shape_type="ellipse",
+                                name=layer_name,
+                                edge_width=edge_width,
+                                edge_color=edge_colors,
+                                face_color=[0, 0, 0, 0],
+                                opacity=1.0,
+                                scale=scale,
+                                features=features_df,
+                                metadata={
+                                    "sample_name": sample_name,
+                                    "cwt_data": cwt_vis_data,
+                                    "file_path": str(cwt_path),
+                                },
+                            )
+
+                        if hasattr(self._viewer, "mouse_move_callbacks"):
+                            if on_cwt_mouse_move not in self._viewer.mouse_move_callbacks:
+                                self._viewer.mouse_move_callbacks.append(on_cwt_mouse_move)
+                else:
+                    if existing_cwt_layer is not None:
+                        self._viewer.layers.remove(existing_cwt_layer)
 
         # ---------------------------
         # Export Rings

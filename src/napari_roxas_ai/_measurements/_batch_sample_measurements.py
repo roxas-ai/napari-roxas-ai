@@ -51,7 +51,7 @@ from .._utils._version_utils import (
     get_measurement_operator,
     get_software_version,
 )
-from ._sample_measurer import SampleAnalyzer
+from ._sample_measurer import SampleAnalyzer, save_cwt_visualization_json
 
 if TYPE_CHECKING:
     import napari
@@ -258,6 +258,16 @@ class Worker(QObject):
             for key in MEASUREMENT_PARAMETER_KEYS:
                 cells_add_kwargs["metadata"][key] = self.config[key]
 
+            # Save CWT visualization JSON
+            sample_name = (
+                (cells_add_kwargs.get("metadata") or {}).get("sample_name")
+                or (rings_add_kwargs.get("metadata") or {}).get("sample_name")
+                or Path(cells_file_path).stem.replace(".cells", "")
+            )
+            cwt_data = analyzer.get_cwt_visualization_data(sample_name)
+            cwt_path = Path(cells_file_path).parent / f"{sample_name}.cwt.json"
+            save_cwt_visualization_json(cwt_path, cwt_data)
+
             # Save to file (the file extension in the path argument is ignored)
             write_single_layer(
                 path=cells_file_path,
@@ -302,6 +312,16 @@ class Worker(QObject):
             # Cells-only parameters, recorded so the run can be reproduced
             for key in MEASUREMENT_PARAMETER_KEYS:
                 cells_add_kwargs["metadata"][key] = self.config[key]
+
+            # Save CWT visualization JSON
+            sample_name = (
+                (cells_add_kwargs.get("metadata") or {}).get("sample_name")
+                or Path(cells_file_path).stem.replace(".cells", "")
+            )
+            cwt_data = analyzer.get_cwt_visualization_data(sample_name)
+            cwt_path = Path(cells_file_path).parent / f"{sample_name}.cwt.json"
+            save_cwt_visualization_json(cwt_path, cwt_data)
+
             # Save to file (the file extension in the path argument is ignored)
             write_single_layer(
                 path=cells_file_path,
@@ -905,6 +925,9 @@ class BatchSampleMeasurementsWidget(Container):
             ),
             "adjacent_cwt_ratio_limit": settings.get(
                 "measurements.adjacent_cwt_ratio_limit"
+            ),
+            "sample_interval": settings.get(
+                "cwt_visualization.sample_interval", 50
             ),
         }
 
