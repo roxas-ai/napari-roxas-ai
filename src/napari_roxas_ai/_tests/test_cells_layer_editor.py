@@ -2,9 +2,10 @@ from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 from napari.layers import Shapes, Labels
 
-from napari_roxas_ai._edition import CellsLayerEditorWidget
+from napari_roxas_ai._edition import CellsLayerEditorWidget, RingsLayerEditorWidget
 from napari.components._viewer_mouse_bindings import dims_scroll
 
 from napari_roxas_ai._edition._cells_layer_editor import (
@@ -736,3 +737,64 @@ def test_dims_scroll_disabled_during_raster_editing(make_napari_viewer):
     assert dims_scroll not in viewer.mouse_wheel_callbacks
     widget._apply_cells_geometries()
     assert viewer.mouse_wheel_callbacks.count(dims_scroll) == 1
+
+
+def test_mutual_editing_exclusion_cells_and_rings(make_napari_viewer):
+    viewer = make_napari_viewer()
+
+    # Add sample.cells layer
+    cells_data = np.zeros((50, 50), dtype=np.uint8)
+    cells_data[5:15, 5:15] = 1
+    viewer.add_labels(cells_data, name="sample.cells")
+
+    # Add sample.rings layer
+    rings_data = np.zeros((50, 50), dtype=np.uint8)
+    rings_data[20:30, :] = 1
+    rings_features = pd.DataFrame({
+        "RBXY": [[[20.0, 0.0], [20.0, 49.0]]],
+        "YEAR": [2020],
+        "enabled": [True],
+    })
+    viewer.add_labels(rings_data, name="sample.rings", features=rings_features)
+
+    cells_widget = CellsLayerEditorWidget(viewer)
+    rings_widget = RingsLayerEditorWidget(viewer)
+
+    # Initially both edit buttons should be enabled
+    assert cells_widget._edit_cells_geometries_button.enabled
+    assert not cells_widget._edit_cells_geometries_button.tooltip
+    assert rings_widget._edit_rings_geometries_button.enabled
+    assert not rings_widget._edit_rings_geometries_button.tooltip
+
+    # 1. Start ring editing
+    rings_widget._edit_rings_geometries()
+    assert "Rings Modification" in viewer.layers
+    assert not cells_widget._edit_cells_geometries_button.enabled
+    assert "Please apply or cancel active ring edits" in cells_widget._edit_cells_geometries_button.tooltip
+
+    # Attempt to start cell editing while ring editing is active -> must be blocked
+    cells_widget._edit_cells_geometries()
+    assert "Cells Modification" not in viewer.layers
+
+    # Cancel ring editing -> cells edit button should be re-enabled
+    rings_widget._cancel_rings_geometries()
+    assert "Rings Modification" not in viewer.layers
+    assert cells_widget._edit_cells_geometries_button.enabled
+    assert not cells_widget._edit_cells_geometries_button.tooltip
+
+    # 2. Start cell editing (raster mode for instant synchronous creation)
+    cells_widget._edition_mode_combo.value = "Raster"
+    cells_widget._edit_cells_geometries()
+    assert "Cells Modification" in viewer.layers
+    assert not rings_widget._edit_rings_geometries_button.enabled
+    assert "Please apply or cancel active cell edits" in rings_widget._edit_rings_geometries_button.tooltip
+
+    # Attempt to start ring editing while cell editing is active -> must be blocked
+    rings_widget._edit_rings_geometries()
+    assert "Rings Modification" not in viewer.layers
+
+    # Cancel cell editing -> rings edit button should be re-enabled
+    cells_widget._cancel_cells_geometries()
+    assert "Cells Modification" not in viewer.layers
+    assert rings_widget._edit_rings_geometries_button.enabled
+    assert not rings_widget._edit_rings_geometries_button.tooltip
