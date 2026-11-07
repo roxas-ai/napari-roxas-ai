@@ -708,3 +708,203 @@ def test_on_cwt_mouse_move(make_napari_viewer):
         shapes_layer.visible = False
         on_cwt_mouse_move(viewer, FakeEvent(position=(100.0, 100.0)))
         assert not mock_show.called
+
+
+def test_samples_loading_widget_cwt_circles_layer(make_napari_viewer, tmp_path, monkeypatch):
+    from copy import deepcopy
+    from napari_roxas_ai._loading import _samples_loading_widget as loader_module
+    from napari_roxas_ai._loading._samples_loading_widget import SamplesLoadingWidget
+    from napari_roxas_ai._measurements import save_cwt_visualization_json
+    from napari_roxas_ai._settings import DEFAULT_SETTINGS
+
+    viewer = make_napari_viewer()
+    loader = SamplesLoadingWidget(viewer)
+    loader.project_directory = str(tmp_path)
+
+    sample_name = "sample_test"
+    cwt_file = tmp_path / f"{sample_name}.cwt.json"
+    cwt_data = {
+        "sample_name": sample_name,
+        "sample_interval": 50,
+        "total_cells": 10,
+        "sampled_cells_count": 1,
+        "circles": [
+            {
+                "cell_id": 1,
+                "wall": "pith",
+                "center_yx": [10.0, 20.0],
+                "radius_px": 5.0,
+                "radius_um": 2.5,
+                "status": "included",
+                "reason": "",
+            }
+        ],
+    }
+    save_cwt_visualization_json(cwt_file, cwt_data)
+
+    settings_dict = deepcopy(DEFAULT_SETTINGS)
+    settings_dict["cwt_visualization"]["enabled"] = True
+
+    def mock_get(self, key, default=None):
+        parts = key.split(".")
+        val = settings_dict
+        for p in parts:
+            if isinstance(val, dict) and p in val:
+                val = val[p]
+            else:
+                return default
+        return val
+
+    monkeypatch.setattr(loader_module.SettingsManager, "get", mock_get)
+
+    # Add a cells layer to match
+    viewer.add_labels(
+        np.zeros((50, 50), dtype=np.uint8),
+        name=f"{sample_name}.cells",
+        metadata={"sample_name": sample_name},
+    )
+
+    class FakeSelect:
+        value = [sample_name]
+
+    loader._sample_select_widget = FakeSelect()
+
+    # Trigger loading finished
+    loader._on_sample_loading_finished()
+
+    cwt_layer_name = f"{sample_name}.cwt_circles"
+    assert cwt_layer_name in viewer.layers
+    cwt_layer = viewer.layers[cwt_layer_name]
+    assert len(cwt_layer.data) == 1
+    assert cwt_layer.metadata["sample_name"] == sample_name
+
+    # Test when disabled in settings: layer should not be loaded
+    viewer.layers.remove(cwt_layer)
+    settings_dict["cwt_visualization"]["enabled"] = False
+    loader._on_sample_loading_finished()
+    assert cwt_layer_name not in viewer.layers
+
+
+def test_cells_editor_cwt_circles_lifecycle(make_napari_viewer, tmp_path):
+    from napari_roxas_ai._edition._cells_layer_editor import CellsLayerEditorWidget
+
+    viewer = make_napari_viewer()
+    sample_name = "sample_test"
+
+    cells_layer = viewer.add_labels(
+        np.zeros((50, 50), dtype=np.uint8),
+        name=f"{sample_name}.cells",
+        metadata={"sample_name": sample_name},
+    )
+    cwt_layer = viewer.add_shapes(
+        [np.array([[5, 5], [5, 15], [15, 15], [15, 5]])],
+        shape_type="ellipse",
+        name=f"{sample_name}.cwt_circles",
+        metadata={"sample_name": sample_name},
+    )
+
+    editor = CellsLayerEditorWidget(viewer)
+    editor._edition_mode_combo.value = "Raster"
+
+    # 1. Edit mode: CWT circles should be hidden
+    editor._edit_cells_geometries()
+    assert not cwt_layer.visible
+
+    # 2. Cancel: CWT circles visibility should be restored
+    editor._cancel_cells_geometries()
+    assert cwt_layer.visible
+
+    # 3. Edit again and Apply: CWT circles layer should be removed from viewer
+    editor._edit_cells_geometries()
+    editor._apply_cells_geometries()
+    assert f"{sample_name}.cwt_circles" not in viewer.layers
+
+
+def test_rings_editor_cwt_circles_lifecycle(make_napari_viewer):
+    from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
+
+    viewer = make_napari_viewer()
+    sample_name = "sample_test"
+
+    rings_layer = viewer.add_labels(
+        np.zeros((50, 50), dtype=np.uint8),
+        name=f"{sample_name}.rings",
+        metadata={"sample_name": sample_name, "rings_outmost_complete_year": 2020},
+        features=pd.DataFrame({
+            "RBXY": [[[0.0, 0.0], [0.0, 49.0]], [[25.0, 0.0], [25.0, 49.0]]],
+            "YEAR": [2019, 2020],
+            "enabled": [True, True],
+        }),
+    )
+    cwt_layer = viewer.add_shapes(
+        [np.array([[5, 5], [5, 15], [15, 15], [15, 5]])],
+        shape_type="ellipse",
+        name=f"{sample_name}.cwt_circles",
+        metadata={"sample_name": sample_name},
+    )
+
+    editor = RingsLayerEditorWidget(viewer)
+
+    # 1. Edit mode: CWT circles should be hidden
+    editor._edit_rings_geometries()
+    assert not cwt_layer.visible
+
+    # 2. Cancel: CWT circles visibility should be restored
+    editor._cancel_rings_geometries()
+    editor._restore_original_visibility()
+    assert cwt_layer.visible
+
+
+def test_write_cells_file_deletes_stale_cwt_json(tmp_path, monkeypatch):
+    from copy import deepcopy
+    from napari_roxas_ai._writer import _writer as writer_module
+    from napari_roxas_ai._writer._writer import write_cells_file
+    from napari_roxas_ai._measurements import save_cwt_visualization_json
+    from napari_roxas_ai._settings import DEFAULT_SETTINGS
+
+    settings_dict = deepcopy(DEFAULT_SETTINGS)
+    settings_dict["project_directory"] = str(tmp_path)
+
+    def mock_get(self, key, default=None):
+        parts = key.split(".")
+        val = settings_dict
+        for p in parts:
+            if isinstance(val, dict) and p in val:
+                val = val[p]
+            else:
+                return default
+        return val
+
+    monkeypatch.setattr(writer_module.SettingsManager, "get", mock_get)
+
+    sample_name = "sample_01"
+    sample_stem_path = sample_name
+    cwt_file = tmp_path / f"{sample_name}.cwt.json"
+    save_cwt_visualization_json(cwt_file, {"sample_name": sample_name, "circles": []})
+    assert cwt_file.exists()
+
+    data = np.zeros((20, 20), dtype=np.uint8)
+
+    # 1. Write cells with empty features (e.g. after manual editing without measurements) -> should delete stale .cwt.json
+    meta_empty = {
+        "metadata": {
+            "sample_name": sample_name,
+            "sample_stem_path": sample_stem_path,
+        },
+        "features": pd.DataFrame(),
+    }
+    write_cells_file(str(tmp_path / f"{sample_name}.cells.png"), data, meta_empty)
+    assert not cwt_file.exists()
+
+    # 2. Write cells with valid features -> should preserve .cwt.json if present
+    save_cwt_visualization_json(cwt_file, {"sample_name": sample_name, "circles": []})
+    assert cwt_file.exists()
+    meta_with_features = {
+        "metadata": {
+            "sample_name": sample_name,
+            "sample_stem_path": sample_stem_path,
+        },
+        "features": pd.DataFrame({"id": [1], "area": [10.0]}),
+    }
+    write_cells_file(str(tmp_path / f"{sample_name}.cells.png"), data, meta_with_features)
+    assert cwt_file.exists()

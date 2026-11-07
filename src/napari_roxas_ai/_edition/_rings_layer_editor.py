@@ -1540,11 +1540,15 @@ class RingsLayerEditorWidget(Container):
                 return
 
         # --- LAYER VISIBILITY MANAGEMENT ---
-        # Hide .cells and .rings layers to reduce clutter during ring boundary editing.
+        # Hide .cells, .rings, and .cwt_circles layers to reduce clutter during ring boundary editing.
         # Store their original visibility state to restore it when editing is finished.
         self._layer_visibility_states = {}
         for layer in self._viewer.layers:
-            if layer.name.endswith(".cells") or layer.name.endswith(".rings"):
+            if (
+                layer.name.endswith(".cells")
+                or layer.name.endswith(".rings")
+                or layer.name.endswith(".cwt_circles")
+            ):
                 self._layer_visibility_states[layer.name] = layer.visible
                 layer.visible = False
 

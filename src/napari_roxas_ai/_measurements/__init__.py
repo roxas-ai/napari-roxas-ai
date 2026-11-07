@@ -4,7 +4,11 @@ from ._sample_measurer import (
     load_cwt_visualization_json,
     save_cwt_visualization_json,
 )
-from ._single_sample_measurements import SingleSampleMeasurementsWidget
+from ._single_sample_measurements import (
+    SingleSampleMeasurementsWidget,
+    create_or_update_cwt_circles_layer,
+    on_cwt_mouse_move,
+)
 
 __all__ = (
     "SingleSampleMeasurementsWidget",
@@ -12,4 +16,6 @@ __all__ = (
     "SampleAnalyzer",
     "save_cwt_visualization_json",
     "load_cwt_visualization_json",
+    "create_or_update_cwt_circles_layer",
+    "on_cwt_mouse_move",
 )

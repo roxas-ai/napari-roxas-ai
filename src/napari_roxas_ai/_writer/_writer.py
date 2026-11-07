@@ -788,6 +788,19 @@ def write_cells_file(
             index=False,
         )
         written_file_paths.append(cells_table_file_path)
+    else:
+        # If cell geometries were edited and saved without fresh measurements,
+        # delete any existing stale .cwt.json file from disk.
+        for cwt_candidate in (
+            Path(f"{sample_path}.cwt.json"),
+            Path(sample_path).parent / f"{Path(sample_path).name}.cwt.json",
+            Path(path).parent / f"{Path(path).stem.split('.')[0]}.cwt.json",
+        ):
+            try:
+                if cwt_candidate.exists():
+                    cwt_candidate.unlink(missing_ok=True)
+            except Exception:
+                pass
     if cb:
         cb(0.4)
 
