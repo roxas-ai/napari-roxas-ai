@@ -908,6 +908,33 @@ class TestWriterModule:
             loaded = np.array(im)
             assert np.array_equal(loaded, arr4)
 
+    def test_write_layers_with_stem_when_project_directory_is_none(self, temp_dir):
+        """When project_directory is None, sample_stem_path falls back to path's parent."""
+        from napari_roxas_ai._writer import _writer
+
+        scan_path = temp_dir / "sample_1.scan.jpg"
+        scan_meta = {
+            "name": "sample_1.scan",
+            "metadata": {
+                "sample_name": "sample_1",
+                "sample_stem_path": "sub/sample_1",
+            },
+        }
+
+        original_get = _writer.settings.get
+        with patch.object(
+            _writer.settings,
+            "get",
+            side_effect=lambda key, default=None: (
+                None if key == "project_directory" else original_get(key)
+            ),
+        ):
+            written = _writer.write_scan_file(
+                str(scan_path), np.zeros((10, 10, 3), dtype=np.uint8), scan_meta
+            )
+            assert len(written) == 1
+            assert (temp_dir / "sample_1.metadata.json").exists()
+
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

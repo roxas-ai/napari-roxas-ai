@@ -36,6 +36,7 @@ MEASUREMENT_PARAMETER_KEYS = (
     "lower_limit_cwt_iqr_multiplier",
     "upper_limit_cwt_iqr_multiplier",
     "opposite_cwt_ratio_limit",
+    "opposite_cwt_percentile_exception",
     "adjacent_cwt_ratio_limit",
 )
 

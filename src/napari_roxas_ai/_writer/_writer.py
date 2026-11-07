@@ -475,8 +475,12 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
-        project_dir = Path(settings.get("project_directory")).resolve()
-        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        proj = settings.get("project_directory")
+        if proj:
+            project_dir = Path(proj).resolve()
+            sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        else:
+            sample_path = (Path(path).parent / Path(stem).name).resolve()
     else:
         # Fallback: sample_name in current dir of 'path'
         sample_name = md.get("sample_name")
@@ -751,8 +755,12 @@ def write_cells_file(
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
-        project_dir = Path(settings.get("project_directory")).resolve()
-        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        proj = settings.get("project_directory")
+        if proj:
+            project_dir = Path(proj).resolve()
+            sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        else:
+            sample_path = (Path(path).parent / Path(stem).name).resolve()
     else:
         # Fallback: sample_name in current dir of 'path'
         sample_name = md.get("sample_name")
@@ -854,8 +862,12 @@ def write_rings_file(
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
-        project_dir = Path(settings.get("project_directory")).resolve()
-        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        proj = settings.get("project_directory")
+        if proj:
+            project_dir = Path(proj).resolve()
+            sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        else:
+            sample_path = (Path(path).parent / Path(stem).name).resolve()
     else:
         # Fallback: sample_name in current dir of 'path'
         sample_name = md.get("sample_name")

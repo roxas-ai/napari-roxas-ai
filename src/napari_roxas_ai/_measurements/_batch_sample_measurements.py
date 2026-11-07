@@ -923,6 +923,9 @@ class BatchSampleMeasurementsWidget(Container):
             "opposite_cwt_ratio_limit": settings.get(
                 "measurements.opposite_cwt_ratio_limit"
             ),
+            "opposite_cwt_percentile_exception": settings.get(
+                "measurements.opposite_cwt_percentile_exception"
+            ),
             "adjacent_cwt_ratio_limit": settings.get(
                 "measurements.adjacent_cwt_ratio_limit"
             ),

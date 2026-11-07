@@ -24,6 +24,7 @@ def default_config():
         "lower_limit_cwt_iqr_multiplier": settings.get("measurements.lower_limit_cwt_iqr_multiplier"),
         "upper_limit_cwt_iqr_multiplier": settings.get("measurements.upper_limit_cwt_iqr_multiplier"),
         "opposite_cwt_ratio_limit": settings.get("measurements.opposite_cwt_ratio_limit"),
+        "opposite_cwt_percentile_exception": settings.get("measurements.opposite_cwt_percentile_exception"),
         "adjacent_cwt_ratio_limit": settings.get("measurements.adjacent_cwt_ratio_limit"),
         "sample_type": "conifer",
         "sample_interval": 50,
@@ -477,6 +478,7 @@ def test_batch_sample_measurements_cwt_json_saved(tmp_path, monkeypatch):
         "lower_limit_cwt_iqr_multiplier": 1.5,
         "upper_limit_cwt_iqr_multiplier": 3.0,
         "opposite_cwt_ratio_limit": 1.5,
+        "opposite_cwt_percentile_exception": 0.5,
         "adjacent_cwt_ratio_limit": 3.0,
         "sample_interval": 1,
     }

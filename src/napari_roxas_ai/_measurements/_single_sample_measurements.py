@@ -557,6 +557,21 @@ class SingleSampleMeasurementsWidget(Container):
             self._run_analysis_button.enabled = True
             return
 
+        # Ensure a target directory can be determined if any layer lacks a file_path
+        proj = settings.get("project_directory")
+        has_file_path = any(
+            layer is not None and layer.metadata.get("file_path")
+            for layer in (self._cells_layer, self._rings_layer, self._scan_layer)
+        )
+        if not proj and not has_file_path:
+            show_info(
+                "Project directory is not configured. Please define a project directory before running measurements."
+            )
+            self._spinner_timer.stop()
+            self._run_analysis_button.text = "Measure"
+            self._run_analysis_button.enabled = True
+            return
+
         cells_layer = self._cells_layer
         if self._measure_cells_checkbox.value and cells_layer is None:
             show_info(
@@ -654,6 +669,9 @@ class SingleSampleMeasurementsWidget(Container):
             "opposite_cwt_ratio_limit": settings.get(
                 "measurements.opposite_cwt_ratio_limit"
             ),
+            "opposite_cwt_percentile_exception": settings.get(
+                "measurements.opposite_cwt_percentile_exception"
+            ),
             "adjacent_cwt_ratio_limit": settings.get(
                 "measurements.adjacent_cwt_ratio_limit"
             ),
@@ -705,8 +723,24 @@ class SingleSampleMeasurementsWidget(Container):
         cwt_vis_data=None,
     ):
 
-        project_dir = Path(settings.get("project_directory"))
-        project_dir.mkdir(parents=True, exist_ok=True)
+        proj_setting = settings.get("project_directory")
+        fallback_dir = None
+        for layer in (
+            getattr(self, "_cells_input_layer", None),
+            getattr(self, "_rings_input_layer", None),
+            getattr(self, "_scan_layer", None),
+        ):
+            if layer is not None and layer.metadata.get("file_path"):
+                fallback_dir = Path(layer.metadata["file_path"]).parent
+                break
+
+        if proj_setting:
+            project_dir = Path(proj_setting)
+            project_dir.mkdir(parents=True, exist_ok=True)
+        elif fallback_dir is not None:
+            project_dir = fallback_dir
+        else:
+            project_dir = None
 
         # One timestamp per measurement run, so that cells and rings written by
         # the same run carry the identical value.
@@ -736,13 +770,20 @@ class SingleSampleMeasurementsWidget(Container):
             self._cells_input_layer.metadata["sw_version"] = sw_version
             self._cells_input_layer.metadata["meas_by"] = meas_by
             # Cells-only parameters, recorded so the run can be reproduced
-            for key in MEASUREMENT_PARAMETER_KEYS:
-                self._cells_input_layer.metadata[key] = self._run_config[key]
+            if getattr(self, "_run_config", None):
+                for key in MEASUREMENT_PARAMETER_KEYS:
+                    if key in self._run_config:
+                        self._cells_input_layer.metadata[key] = self._run_config[key]
 
             cells_path = self._cells_input_layer.metadata.get("file_path")
 
 
             if cells_path is None:
+                if project_dir is None:
+                    show_info(
+                        "Project directory is not configured. Please define a project directory to save results."
+                    )
+                    return
                 sample_name = self._cells_input_layer.metadata.get(
                     "sample_name", self._cells_input_layer.name
                 )
@@ -802,6 +843,11 @@ class SingleSampleMeasurementsWidget(Container):
             rings_path = self._rings_input_layer.metadata.get("file_path")
 
             if rings_path is None:
+                if project_dir is None:
+                    show_info(
+                        "Project directory is not configured. Please define a project directory to save results."
+                    )
+                    return
                 sample_name = self._rings_input_layer.metadata.get(
                     "sample_name", self._rings_input_layer.name
                 )
@@ -853,9 +899,10 @@ class SingleSampleMeasurementsWidget(Container):
                 or (rings_layer.metadata.get("sample_name") if rings_layer and rings_layer.metadata else None)
                 or scan_layer.name.split(".")[0]
             )
-            annotated_path = str(project_dir / f"{sample_name}_annotated.jpg")
+            annotated_dir = project_dir or (Path(scan_path).parent if scan_path else None)
 
-            if scan_path and Path(scan_path).exists():
+            if annotated_dir and scan_path and Path(scan_path).exists():
+                annotated_path = str(annotated_dir / f"{sample_name}_annotated.jpg")
                 try:
                     save_annotated_scan_image(
                         scan_path=scan_path,

@@ -1365,8 +1365,6 @@ class RingsLayerEditorWidget(Container):
             # Safely access the qt_viewer and its canvas using getattr to avoid deprecation warnings
             # and to handle different napari versions.
             qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
-            if qt_viewer is None:
-                qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
 
             if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
                 canvas = qt_viewer.canvas
@@ -1734,8 +1732,6 @@ class RingsLayerEditorWidget(Container):
             
             # Force a canvas update to ensure the restored layers are redrawn
             qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
-            if qt_viewer is None:
-                qt_viewer = getattr(self._viewer.window, "qt_viewer", None)
             
             if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
                 canvas = qt_viewer.canvas

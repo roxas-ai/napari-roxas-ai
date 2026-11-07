@@ -1165,7 +1165,7 @@ def test_project_directory_changed_elsewhere_is_shown_and_kept_on_apply(
     assert SettingsManager().get("project_directory") == "C:/Projects/Other"
 
 
-def test_cwt_visualization_defaults():
+def test_cwt_visualization_defaults(settings_file):
     manager = SettingsManager()
     assert manager.get("cwt_visualization.enabled") is True
     assert manager.get("cwt_visualization.sample_interval") == 50

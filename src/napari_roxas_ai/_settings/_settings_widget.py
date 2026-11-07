@@ -199,6 +199,9 @@ SETTING_HINTS: Dict[str, str] = {
     "measurements.opposite_cwt_ratio_limit": (
         "Max CWT ratio between opposite cell sides"
     ),
+    "measurements.opposite_cwt_percentile_exception": (
+        "Percentile threshold to exempt thin walls from opposite ratio filtering"
+    ),
     "measurements.adjacent_cwt_ratio_limit": (
         "Max CWT ratio between a side and its adjacent sides"
     ),
@@ -240,12 +243,14 @@ FLOAT_SETTING_SPECS: Dict[str, Tuple[float, int]] = {
     "measurements.lower_limit_cwt_iqr_multiplier": (0.1, 2),
     "measurements.upper_limit_cwt_iqr_multiplier": (0.1, 2),
     "measurements.opposite_cwt_ratio_limit": (0.1, 2),
+    "measurements.opposite_cwt_percentile_exception": (0.05, 2),
     "measurements.adjacent_cwt_ratio_limit": (0.1, 2),
     "cwt_visualization.edge_width": (0.5, 1),
     "annotated_image.scale_factor": (0.01, 2),
 }
 
 FLOAT_SETTING_RANGES: Dict[str, Tuple[float, float]] = {
+    "measurements.opposite_cwt_percentile_exception": (0.0, 1.0),
     "cwt_visualization.edge_width": (0.5, 10.0),
 }
 

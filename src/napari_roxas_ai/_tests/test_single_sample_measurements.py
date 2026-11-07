@@ -255,3 +255,137 @@ def test_single_sample_measurements_cancelled_sample_choice_does_nothing(
     mock_worker_cls.assert_not_called()
     assert widget._run_analysis_button.enabled
     assert widget._run_analysis_button.text == "Measure"
+
+
+def test_single_sample_measurements_add_result_layers_project_dir_none_uses_fallback(
+    make_napari_viewer, tmp_path
+):
+    viewer = make_napari_viewer()
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    scan_file = tmp_path / "sample_1.scan.jpg"
+    scan_file.write_bytes(b"dummy")
+
+    viewer.add_image(
+        np.zeros((10, 10)),
+        name="sample_1.scan",
+        metadata={"file_path": str(scan_file), "sample_name": "sample_1"},
+    )
+    rings_layer = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8),
+        name="sample_1.rings",
+        metadata={
+            "file_path": str(tmp_path / "sample_1.rings.png"),
+            "sample_name": "sample_1",
+            "spatial_resolution": 1.0,
+            "sample_type": "conifer",
+            "_is_dirty": True,
+        },
+    )
+    widget._rings_input_layer = rings_layer
+    widget._run_config = {}
+
+    rings_table = pd.DataFrame(
+        {"RBXY": [[[0, 0], [0, 9]]], "YEAR": [2020]}
+    )
+
+    with patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.write_single_layer"
+    ), patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.save_annotated_scan_image"
+    ) as mock_save_annotated, patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.settings"
+    ) as mock_settings:
+        mock_settings.get.side_effect = lambda key: {
+            "project_directory": None,
+            "file_extensions.scan_file_extension": [".scan"],
+            "file_extensions.rings_file_extension": [".rings"],
+            "file_extensions.cells_file_extension": [".cells"],
+        }.get(key, "")
+
+        widget._add_result_layers(cells_table=pd.DataFrame(), rings_table=rings_table)
+
+        mock_save_annotated.assert_called_once()
+        call_kwargs = mock_save_annotated.call_args[1]
+        assert call_kwargs["scan_path"] == str(scan_file)
+        assert call_kwargs["annotated_path"] == str(tmp_path / "sample_1_annotated.jpg")
+        assert rings_layer.metadata["_is_dirty"] is False
+
+
+def test_single_sample_measurements_add_result_layers_project_dir_none_no_fallback(
+    make_napari_viewer,
+):
+    viewer = make_napari_viewer()
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    cells_layer = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8),
+        name="sample_1.cells",
+        metadata={
+            "sample_name": "sample_1",
+            "spatial_resolution": 1.0,
+            "sample_type": "conifer",
+        },
+    )
+    widget._cells_input_layer = cells_layer
+    widget._run_config = {}
+
+    cells_table = pd.DataFrame({"id": [1], "area": [50.0]})
+
+    with patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.show_info"
+    ) as mock_show_info, patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.settings"
+    ) as mock_settings:
+        mock_settings.get.side_effect = lambda key: {
+            "project_directory": None,
+            "file_extensions.scan_file_extension": [".scan"],
+            "file_extensions.rings_file_extension": [".rings"],
+            "file_extensions.cells_file_extension": [".cells"],
+        }.get(key, "")
+
+        widget._add_result_layers(cells_table=cells_table, rings_table=pd.DataFrame())
+
+        mock_show_info.assert_called_once()
+        assert "Project directory is not configured" in mock_show_info.call_args[0][0]
+
+
+def test_single_sample_measurements_run_analysis_warns_when_project_dir_none_and_no_file_path(
+    make_napari_viewer,
+):
+    viewer = make_napari_viewer()
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8),
+        name="sample_1.cells",
+        metadata={
+            "sample_name": "sample_1",
+            "spatial_resolution": 1.0,
+            "sample_type": "conifer",
+        },
+    )
+    widget._measure_cells_checkbox.value = True
+    widget._measure_rings_checkbox.value = False
+
+    with patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.show_info"
+    ) as mock_show_info, patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.Worker"
+    ) as mock_worker_cls, patch(
+        "napari_roxas_ai._measurements._single_sample_measurements.settings"
+    ) as mock_settings:
+        mock_settings.get.side_effect = lambda key: {
+            "project_directory": None,
+            "file_extensions.scan_file_extension": [".scan"],
+            "file_extensions.rings_file_extension": [".rings"],
+            "file_extensions.cells_file_extension": [".cells"],
+        }.get(key, "")
+
+        widget._run_analysis()
+
+        mock_worker_cls.assert_not_called()
+        mock_show_info.assert_called_once()
+        assert "Project directory is not configured" in mock_show_info.call_args[0][0]
+        assert widget._run_analysis_button.enabled
+        assert widget._run_analysis_button.text == "Measure"

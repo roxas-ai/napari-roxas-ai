@@ -105,6 +105,7 @@ def test_missing_settings_are_filled_in():
         "lower_limit_cwt_iqr_multiplier",
         "upper_limit_cwt_iqr_multiplier",
         "opposite_cwt_ratio_limit",
+        "opposite_cwt_percentile_exception",
         "adjacent_cwt_ratio_limit",
     ):
         assert measurements[key] == DEFAULT_SETTINGS["measurements"][key]

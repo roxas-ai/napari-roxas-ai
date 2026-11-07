@@ -39,6 +39,7 @@ class SampleAnalyzer:
                 - lower_limit_cwt_iqr_multiplier: IQR multiplier for the lower CWT outlier fence
                 - upper_limit_cwt_iqr_multiplier: IQR multiplier for the upper CWT outlier fence
                 - opposite_cwt_ratio_limit: Max CWT ratio between opposite cell sides
+                - opposite_cwt_percentile_exception: Percentile threshold to exempt thin walls from opposite ratio filtering
                 - adjacent_cwt_ratio_limit: Max CWT ratio between a side and its adjacent sides
         """
         self.config = config
@@ -61,20 +62,24 @@ class SampleAnalyzer:
         else:
             self.kernel = None
         self.relwidth_cwt_margin = (
-            1 - config["relwidth_cwt_integration"]
+            1 - float(config["relwidth_cwt_integration"])
         ) / 2
-        self.radial_angle = config["tangential_angle"] - 90
-        self.lower_limit_cwt_iqr_multiplier = self._config_float(
-            "lower_limit_cwt_iqr_multiplier", 1.5
+        self.radial_angle = float(config["tangential_angle"]) - 90
+        self.lower_limit_cwt_iqr_multiplier = float(
+            config["lower_limit_cwt_iqr_multiplier"]
         )
-        self.upper_limit_cwt_iqr_multiplier = self._config_float(
-            "upper_limit_cwt_iqr_multiplier", 3.0
+        self.upper_limit_cwt_iqr_multiplier = float(
+            config["upper_limit_cwt_iqr_multiplier"]
         )
-        self.opposite_cwt_ratio_limit = self._config_float(
-            "opposite_cwt_ratio_limit", 1.5
+        self.opposite_cwt_ratio_limit = float(
+            config["opposite_cwt_ratio_limit"]
         )
-        self.adjacent_cwt_ratio_limit = self._config_float(
-            "adjacent_cwt_ratio_limit", 3.0
+        raw_pct = float(config["opposite_cwt_percentile_exception"])
+        self.opposite_cwt_percentile_exception = (
+            raw_pct / 100.0 if raw_pct > 1.0 else raw_pct
+        )
+        self.adjacent_cwt_ratio_limit = float(
+            config["adjacent_cwt_ratio_limit"]
         )
 
         # CWT circle visualization parameters and storage
@@ -100,16 +105,6 @@ class SampleAnalyzer:
 
         self.cwt_visualization_data: Dict[str, Any] = {}
         self._cwt_circles_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
-
-    def _config_float(self, key: str, default: float) -> float:
-        """
-        Read a float from config, falling back to default.
-
-        The fallback also covers a present-but-None value, which happens when a
-        settings.json predates the key and SettingsManager.get() returns None.
-        """
-        value = self.config.get(key)
-        return default if value is None else float(value)
 
     def _smooth_cells_array(self) -> None:
         """Apply morphological smoothing if smoothing_kernel_size > 1."""
@@ -667,16 +662,43 @@ class SampleAnalyzer:
         le_lim = _apply_limits(le, ll_rad, ul_rad)
         ri_lim = _apply_limits(ri, ll_rad, ul_rad)
 
-        # --- Filter larger value of opposite sides if much larger ---
+        # --- Combined percentile thresholds on IQR-filtered values ---
+        tan_valid = pd.concat([pi_lim, ba_lim], ignore_index=True).dropna()
+        rad_valid = pd.concat([le_lim, ri_lim], ignore_index=True).dropna()
+
+        tan_thresh = (
+            tan_valid.quantile(self.opposite_cwt_percentile_exception)
+            if not tan_valid.empty
+            else np.inf
+        )
+        rad_thresh = (
+            rad_valid.quantile(self.opposite_cwt_percentile_exception)
+            if not rad_valid.empty
+            else np.inf
+        )
+
+        # --- Filter larger value of opposite sides if much larger and above percentile threshold ---
         pi_opp = pi_lim.copy()
         ba_opp = ba_lim.copy()
         le_opp = le_lim.copy()
         ri_opp = ri_lim.copy()
 
-        ba_opp.loc[ba_opp > (opposite_cwt_ratio_limit * pi_opp)] = np.nan
-        pi_opp.loc[pi_opp > (opposite_cwt_ratio_limit * ba_opp)] = np.nan
-        le_opp.loc[le_opp > (opposite_cwt_ratio_limit * ri_opp)] = np.nan
-        ri_opp.loc[ri_opp > (opposite_cwt_ratio_limit * le_opp)] = np.nan
+        ba_opp.loc[
+            (ba_opp > tan_thresh)
+            & (ba_opp > (opposite_cwt_ratio_limit * pi_opp))
+        ] = np.nan
+        pi_opp.loc[
+            (pi_opp > tan_thresh)
+            & (pi_opp > (opposite_cwt_ratio_limit * ba_opp))
+        ] = np.nan
+        le_opp.loc[
+            (le_opp > rad_thresh)
+            & (le_opp > (opposite_cwt_ratio_limit * ri_opp))
+        ] = np.nan
+        ri_opp.loc[
+            (ri_opp > rad_thresh)
+            & (ri_opp > (opposite_cwt_ratio_limit * le_opp))
+        ] = np.nan
 
         # --- Filter larger value compared to adjacent sides if much larger ---
         ave_lr = pd.concat([le_opp, ri_opp], axis=1).mean(axis=1, skipna=True)
@@ -1611,6 +1633,7 @@ if __name__ == "__main__":
         "lower_limit_cwt_iqr_multiplier": 1.5,
         "upper_limit_cwt_iqr_multiplier": 3.0,
         "opposite_cwt_ratio_limit": 1.5,
+        "opposite_cwt_percentile_exception": 0.5,
         "adjacent_cwt_ratio_limit": 3.0,
     }
 

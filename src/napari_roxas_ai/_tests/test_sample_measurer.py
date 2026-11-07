@@ -19,6 +19,7 @@ def default_config():
         "lower_limit_cwt_iqr_multiplier": settings.get("measurements.lower_limit_cwt_iqr_multiplier"),
         "upper_limit_cwt_iqr_multiplier": settings.get("measurements.upper_limit_cwt_iqr_multiplier"),
         "opposite_cwt_ratio_limit": settings.get("measurements.opposite_cwt_ratio_limit"),
+        "opposite_cwt_percentile_exception": settings.get("measurements.opposite_cwt_percentile_exception"),
         "adjacent_cwt_ratio_limit": settings.get("measurements.adjacent_cwt_ratio_limit"),
         "sample_type": "conifer",
     }
@@ -112,6 +113,101 @@ def test_cwt_outlier_filtering(default_config):
 
     # Adjacent side ratio filtered
     assert np.isnan(filtered_df.loc[15, "CWT_left"])
+
+
+def test_opposite_cwt_percentile_exception(default_config):
+    # Setup 100 cells uniformly distributed from 1.0 to 5.0 µm
+    # 50th percentile (median) will be ~3.0 µm
+    np.random.seed(123)
+    n = 100
+    df = pd.DataFrame({
+        "id": np.arange(n),
+        "CWT_pith": np.linspace(1.0, 5.0, n),
+        "CWT_bark": np.linspace(1.0, 5.0, n),
+        "CWT_left": np.linspace(1.0, 5.0, n),
+        "CWT_right": np.linspace(1.0, 5.0, n),
+    })
+
+    # Cell 0: Earlywood thin wall (pith=1.0, bark=1.7). Ratio = 1.7 > 1.5.
+    # Bark (1.7) <= median (~3.0) -> must be KEPT by percentile exception!
+    df.loc[0, "CWT_pith"] = 1.0
+    df.loc[0, "CWT_bark"] = 1.7
+    df.loc[0, "CWT_left"] = 1.7
+    df.loc[0, "CWT_right"] = 1.7
+
+    # Cell 1: Latewood thick wall (pith=2.0, bark=3.6). Ratio = 1.8 > 1.5.
+    # Bark (3.6) > median (~3.0) -> must be EXCLUDED (NaN)!
+    df.loc[1, "CWT_pith"] = 2.0
+    df.loc[1, "CWT_bark"] = 3.6
+    df.loc[1, "CWT_left"] = 3.6
+    df.loc[1, "CWT_right"] = 3.6
+
+    # Cell 2: Radial earlywood thin wall (left=1.0, right=1.7). Ratio = 1.7 > 1.5.
+    # Right (1.7) <= median (~3.0) -> must be KEPT!
+    df.loc[2, "CWT_pith"] = 1.7
+    df.loc[2, "CWT_bark"] = 1.7
+    df.loc[2, "CWT_left"] = 1.0
+    df.loc[2, "CWT_right"] = 1.7
+
+    # Cell 3: Radial latewood thick wall (left=2.0, right=3.6). Ratio = 1.8 > 1.5.
+    # Right (3.6) > median (~3.0) -> must be EXCLUDED (NaN)!
+    df.loc[3, "CWT_pith"] = 3.6
+    df.loc[3, "CWT_bark"] = 3.6
+    df.loc[3, "CWT_left"] = 2.0
+    df.loc[3, "CWT_right"] = 3.6
+
+    config = default_config.copy()
+    config["opposite_cwt_percentile_exception"] = 0.50
+
+    analyzer = SampleAnalyzer(
+        config=config,
+        cells_array=np.zeros((10, 10), dtype=np.uint8),
+        rings_table=pd.DataFrame(),
+        cells_table=df.copy(),
+    )
+    analyzer._apply_cwt_filters()
+    res = analyzer.cells_table
+
+    # Thin walls kept
+    assert not np.isnan(res.loc[0, "CWT_bark"])
+    assert np.isclose(res.loc[0, "CWT_bark"], 1.7)
+    assert not np.isnan(res.loc[2, "CWT_right"])
+    assert np.isclose(res.loc[2, "CWT_right"], 1.7)
+
+    # Thick walls excluded
+    assert np.isnan(res.loc[1, "CWT_bark"])
+    assert np.isnan(res.loc[3, "CWT_right"])
+
+    # Test shifting threshold to 60% (p60 ~ 3.4) vs 30% (p30 ~ 2.2)
+    # With 0.60: a wall of 3.2 (pith=2.0, bark=3.2, ratio=1.6) is <= p60 (3.4) -> KEPT
+    df60 = df.copy()
+    df60.loc[4, "CWT_pith"] = 2.0
+    df60.loc[4, "CWT_bark"] = 3.2
+    df60.loc[4, "CWT_left"] = 3.2
+    df60.loc[4, "CWT_right"] = 3.2
+
+    config60 = default_config.copy()
+    config60["opposite_cwt_percentile_exception"] = 0.60
+    analyzer60 = SampleAnalyzer(
+        config=config60,
+        cells_array=np.zeros((10, 10), dtype=np.uint8),
+        rings_table=pd.DataFrame(),
+        cells_table=df60,
+    )
+    analyzer60._apply_cwt_filters()
+    assert not np.isnan(analyzer60.cells_table.loc[4, "CWT_bark"])
+
+    # With 0.50 (median ~3.0): bark=3.2 > 3.0 -> EXCLUDED
+    config50 = default_config.copy()
+    config50["opposite_cwt_percentile_exception"] = 0.50
+    analyzer50 = SampleAnalyzer(
+        config=config50,
+        cells_array=np.zeros((10, 10), dtype=np.uint8),
+        rings_table=pd.DataFrame(),
+        cells_table=df60.copy(),
+    )
+    analyzer50._apply_cwt_filters()
+    assert np.isnan(analyzer50.cells_table.loc[4, "CWT_bark"])
 
 
 def test_cluster_cells_and_vessel_grouping_angiosperm(default_config):
