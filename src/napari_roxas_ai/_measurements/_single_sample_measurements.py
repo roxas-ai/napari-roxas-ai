@@ -557,21 +557,6 @@ class SingleSampleMeasurementsWidget(Container):
             self._run_analysis_button.enabled = True
             return
 
-        # Ensure a target directory can be determined if any layer lacks a file_path
-        proj = settings.get("project_directory")
-        has_file_path = any(
-            layer is not None and layer.metadata.get("file_path")
-            for layer in (self._cells_layer, self._rings_layer, self._scan_layer)
-        )
-        if not proj and not has_file_path:
-            show_info(
-                "Project directory is not configured. Please define a project directory before running measurements."
-            )
-            self._spinner_timer.stop()
-            self._run_analysis_button.text = "Measure"
-            self._run_analysis_button.enabled = True
-            return
-
         cells_layer = self._cells_layer
         if self._measure_cells_checkbox.value and cells_layer is None:
             show_info(
@@ -586,6 +571,21 @@ class SingleSampleMeasurementsWidget(Container):
         if self._measure_rings_checkbox.value and rings_layer is None:
             show_info(
                 "Rings layer not found in the viewer. Please load the rings layer first or uncheck 'Measure Rings'."
+            )
+            self._spinner_timer.stop()
+            self._run_analysis_button.text = "Measure"
+            self._run_analysis_button.enabled = True
+            return
+
+        # Ensure a target directory can be determined if any layer lacks a file_path
+        proj = settings.get("project_directory")
+        has_file_path = any(
+            layer is not None and layer.metadata.get("file_path")
+            for layer in (cells_layer, rings_layer, self._scan_layer)
+        )
+        if not proj and not has_file_path:
+            show_info(
+                "Project directory is not configured. Please define a project directory before running measurements."
             )
             self._spinner_timer.stop()
             self._run_analysis_button.text = "Measure"
