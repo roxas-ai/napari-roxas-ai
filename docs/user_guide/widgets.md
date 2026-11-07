@@ -2,41 +2,94 @@
 
 **ROXAS AI** provides a modular suite of widgets within the napari environment designed to take your wood cross-section images through the entire Quantitative Wood Anatomy (QWA) pipeline—from raw anatomical image to deep-learning segmentation, interactive manual curation, visual cross-dating, and measurement of anatomical traits.
 
-Widgets are numbered in the napari **Plugins > ROXAS AI** menu according to their typical execution sequence.
+Widgets are accessible via the napari **Plugins > ROXAS AI** menu and are numbered according to their typical execution sequence.
 
 ---
 
-## Overview of the Workflow & Widgets
+## ROXAS AI Launcher & Startup
 
-```mermaid
-flowchart TD
-    A["0 - Define Project Directory"] --> B["1 - Prepare Project Images"]
-    B --> C["2/4 - Load Image(s)"]
-    C --> D["3A - Detect Cells & Rings / 3B - Batch Detect"]
-    D --> E["5 - Edit Cells"]
-    D --> F["6 - Edit Rings"]
-    F --> G["7 - Visual Cross-Dating"]
-    E --> H["8 - Save Editing"]
-    F --> H
-    G --> H
-    H --> I["9A - Measure Cells & Rings / 9B - Batch Measure"]
-    J["ZZ - Settings"] -.-> A & B & C & D & E & F & G & H & I
+ROXAS AI provides a dedicated command-line entry point to launch napari pre-configured for wood anatomy workflows:
+
+```bash
+napari-roxas
 ```
 
-| Widget Number & Name | Primary Purpose | Input | Output |
-| :--- | :--- | :--- | :--- |
-| **0 - Define project directory** | Set the active working directory for the project | Folder path | Global project path in settings |
-| **1 - Prepare project images for analysis** | Standardize filenames, define spatial resolution, store initial metadata | Raw images (`.jpg`, `.tif`, etc.) & crossdating files | `.scan.<ext>`, `.metadata.json`, `rings_series.crossdating.txt` |
-| **2/4 - Load image(s)** | Load sample images and any existing rings and cells label masks | Prepared sample files | Image & Labels layers |
-| **3A - Detect cells & rings (individual image)** | Run deep-learning segmentation on currently loaded scan | Active sample image | `.cells` and `.rings` Labels layers |
-| **3B - Batch detect cells & rings** | Run deep-learning segmentation on multiple samples in the background | Prepared project directory or manually selected sample images | `.cells.png`, `.rings.tif`, `.metadata.json` |
-| **5 - Edit cells** | Manually refine cell segmentations (raster brush/eraser, vector contours, lasso deletion) | `.cells` layer | Edited `.cells` layer |
-| **6 - Edit rings** | Manually adjust, add, delete, or re-detect tree-ring boundaries | `.rings` layer | Edited `.rings` layer & updated ring years |
-| **7 - Visual cross-dating** | Align active ring-width series against reference series | `.rings` layer & crossdating file | Calibrated ring years & verified sample dating |
-| **8 - Save cells & rings editing** | Save manual edits back to disk | Active ROXAS AI layers | Updated `.cells.png`, `.rings.tif`, `.metadata.json` |
-| **9A - Measure cells & rings (individual image)** | Calculate anatomical traits for active sample image | `.cells` & `.rings` layers | `.cells_table.txt`, `.rings_table.txt` |
-| **9B - Batch measure cells & rings** | Calculate anatomical variables for all samples in directory | Project directory | Measurement tables for all samples |
-| **ZZ - Settings** | Configure global defaults, hardware acceleration, file extensions, and thresholds | User settings | `settings.json` configuration file |
+### What `napari-roxas` Does:
+1. **Installs Shortcuts Immediately**: Registers global viewport navigation (<kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>) and widget group shortcuts (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>/<kbd>B</kbd>/<kbd>W</kbd>) right from the start.
+2. **Docks the Manual Editing Group**: Automatically opens the **Manual Editing** workflow container in the right sidebar, ready for immediate sample loading and inspection.
+
+!!! info "Launching via standard `napari`"
+    You can also launch the application using standard `napari`. In this case, plugin shortcuts and duplicate prevention hooks activate automatically the moment any ROXAS AI widget or menu command is opened for the first time in that session.
+
+---
+
+## Workflow Widget Groups & Dock Management
+
+To eliminate sidebar clutter and streamline multi-step curation, ROXAS AI organizes individual tools into unified, scrollable **Workflow Widget Groups**:
+
+```mermaid
+flowchart LR
+    subgraph Manual_Editing ["Manual Editing Group (Ctrl+Shift+M)"]
+        direction TB
+        M1["2/4 - Load Image(s)"] --> M2["3A - Detect Cells & Rings"]
+        M2 --> M3["5 - Edit Cells"]
+        M3 --> M4["6 - Edit Rings"]
+        M4 --> M5["9A - Measure Cells & Rings"]
+    end
+
+    subgraph Batch_Operations ["Batch Operations Group (Ctrl+Shift+B)"]
+        direction TB
+        B1["1 - Prepare Project Images"] --> B2["3B - Batch Detect Cells & Rings"]
+        B2 --> B3["9B - Batch Measure & Update"]
+    end
+
+    Cross["7 - Visual Crossdating"]
+    Settings["ZZ - Settings"]
+    ProjDir["0 - Define Project Directory"]
+
+    ProjDir -.-> Manual_Editing & Batch_Operations
+    Manual_Editing <--> Cross
+    Settings -.-> Manual_Editing & Batch_Operations & Cross
+```
+
+### 1. Manual Editing Group (`Ctrl+Shift+M`)
+Designed for interactive sample-by-sample analysis. It docks a single, scrollable container containing:
+- **`2/4 - Load image(s)`**
+- **`3A - Detect cells & rings (individual image)`**
+- **`5 - Edit cells`**
+- **`6 - Edit rings`**
+- **`9A - Measure cells & rings (individual image)`**
+
+### 2. Batch Operations Group (`Ctrl+Shift+B`)
+Designed for high-throughput batch processing across entire project directories without loading individual images into the viewer. It docks:
+- **`1 - Prepare project images for analysis`**
+- **`3B - Batch detect cells & rings`**
+- **`9B - Batch measure & update`**
+
+### 3. Global Dock Management & Duplicate Prevention
+- **Close All Docks (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>W</kbd>)**: Instantly closes all open dock widgets in the napari viewer.
+- **Duplicate Prevention**: If you attempt to open an individual widget that is already loaded (either standalone or inside an active group), ROXAS AI displays a notification (`'<Widget Name>' is already active in the sidebar.`) and prevents duplicate dock instances.
+
+For a complete reference of all available keyboard and mouse shortcuts, see the dedicated [Shortcuts Reference](../reference/shortcuts.md).
+
+---
+
+## Overview of Widgets & Tools
+
+| Widget Number & Name | Primary Purpose | Dedicated Shortcut (Scope) | Input | Output |
+| :--- | :--- | :--- | :--- | :--- |
+| **0 - Define project directory** | Set or change the active project working directory | — | Folder path | Global project path in `settings.json` |
+| **1 - Prepare project images for analysis** | Standardize filenames, assign physical resolution, parse cross-dating files | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Raw image files & reference series | `<sample>.scan.<ext>`, `.metadata.json`, `rings_series.crossdating.txt` |
+| **2/4 - Load image(s)** | Load sample scans and associated cells/rings label layers | Part of Manual Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>) | Prepared sample files | Image & Labels layers in viewer |
+| **3A - Detect cells & rings (individual image)** | Run deep-learning segmentation on the currently active scan | Part of Manual Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>) | Active scan image | `.cells` and `.rings` Labels layers |
+| **3B - Batch detect cells & rings** | Run deep-learning segmentation across multiple samples in batch mode | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Project directory / selected files | `.cells.png`, `.rings.tif`, `.metadata.json` |
+| **5 - Edit cells** | Interactive curation of cell lumens (raster brush/eraser, vector polygons, lasso) | <kbd>Ctrl</kbd>+Wheel (Brush size), <kbd>Ctrl</kbd>+DblClick (Switch tool), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo) *(Scope: `5 - Edit cells`)* | `.cells` layer | Refined `.cells` layer |
+| **6 - Edit rings** | Interactive curation of tree-ring boundaries, nudging, wedging rings, re-runs | <kbd>Ctrl</kbd>+Arrows (1 px Nudge), <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+Arrows (10 px Nudge), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo) *(Scope: `6 - Edit rings`)* | `.rings` layer | Refined `.rings` layer & ring years |
+| **7 - Visual cross-dating** | Synchronize sample ring-width series against master reference chronologies | — | `.rings` layer & crossdating file | Synchronized ring years & reference plots |
+| **8 - Save cells & rings editing** | Persist manual edits, masks, annotated scan images, and metadata to disk | — | Active ROXAS AI layers | `.cells.png`, `.rings.tif`, `_annotated.jpg`, `.metadata.json` |
+| **9A - Measure cells & rings (individual image)** | Extract anatomical and tree-ring traits for active sample; update annotated image | Check Settings button *(Scope: `9A - Measure cells & rings`)* | `.cells` & `.rings` layers | `.cells_table.csv`, `.rings_table.csv`, `_annotated.jpg` |
+| **9B - Batch measure & update** | Batch measurement extraction, annotated image generation, and reference plot updates | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Project directory / selected files | Synchronized measurement tables, annotated images, and reference plots |
+| **ZZ - Settings** | Preferences for hardware acceleration, visualization, tolerances, and measurements | Floating dialog via widgets or menu | User configuration | `settings.json` file |
 
 ---
 
@@ -44,12 +97,18 @@ flowchart TD
 
 The **Define Project Directory** widget configures the root folder where your sample images, metadata, and analysis tables reside.
 
-![Screenshot: Project Directory Selector](../assets/screenshots/00_define_project_directory.png)
+![Screenshot: Project Directory Selector](../assets/user_guide/00_define_project_directory.png)
 
 *Figure 1: Project directory selection dialog.*
 
 ### How It Works
-When triggered from the menu, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory. Note that the exact same directory selection functionality is also triggered whenever selecting the project directory directly from within widgets [1 - Prepare Project Images](#1---prepare-project-images-for-analysis), [2/4 - Load Image(s)](#24---load-images), [3B - Batch Detect Cells & Rings](#3b---batch-detect-cells--rings), and [9B - Batch Measure Cells & Rings](#9b---batch-measure-cells--rings).
+When triggered from the menu or from any widget directory button, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory. Note that the exact same directory selection functionality is also triggered whenever selecting the project directory directly from within widgets [1 - Prepare Project Images](#1-prepare-project-images-for-analysis), [2/4 - Load Image(s)](#24-load-images), [3B - Batch Detect Cells & Rings](#3b-batch-detect-cells-rings), and [9B - Batch Measure & Update](#9b-batch-measure-update).
+
+### Inaccessible Directory Fallback
+On multi-user systems, shared network drives, or when folders are moved or deleted, a previously saved directory path may become invalid or restricted:
+
+- During startup and settings loading, ROXAS AI automatically validates read and execution permissions on the configured `project_directory`.
+- If the directory cannot be accessed (e.g., `PermissionError` or non-existent path), ROXAS AI safely catches the error, notifies the user with a warning notification, and resets `project_directory` to `"Not set"` (`None`) rather than causing application crashes.
 
 ### Key Controls
 - **Select Project Directory**: Prompts the user to pick a folder. Upon confirmation, a notification displays the chosen path.
@@ -58,29 +117,19 @@ When triggered from the menu, it opens a system folder browser. Selecting a fold
 
 ## 1 - Prepare Project Images for Analysis
 
-The **Prepare Project Images** widget standardizes anatomical images and associated cross-dating text files into the structured file naming conventions and data structures required by ROXAS AI.
-
-![Screenshot: Sample Preparation Widget](../assets/screenshots/01_preparation_widget.png)
-
-*Figure 2: Sample preparation widget interface.*
+The **Prepare Project Images** widget standardizes anatomical images and external cross-dating files into the structured file naming conventions and data structures required by ROXAS AI.
 
 ### How It Works
 1. Scans the selected project directory (and subdirectories) for supported image formats (`.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`, `.bmp`, `.jp2`).
 2. Opens an interactive **Metadata Dialog** for each sample to capture physical dimensions, spatial resolution ($\mu\text{m}/\text{px}$), sample type (e.g., `conifer`), measurement geometry (`linear`), and the outermost complete calendar year.
-3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` and creates a synchronized `<sample_name>.metadata.json`.
+    - **Apply to All Remaining Samples**: The metadata prompt provides an **Apply to all remaining samples** checkbox. Enabling this applies the current metadata choices across all remaining samples in the batch without prompting again.
+    - **ROXAS Classic Migration / Output Loading**: If a sample folder contains legacy ROXAS Classic output files, the dialog displays **Load Cells from ROXAS output** (which imports vessel segmentation masks from `_Vessels.scl` / `.scl`) and **Load Rings from ROXAS output** (which reconstructs ring boundaries, years, and label maps from `_ringtraces.txt` / `_ringtraces.csv`). This allows instant migration of existing ROXAS projects into ROXAS AI layers (`.cells.png` and `.rings.tif`) without re-running AI segmentation.
+3. Automatically standardizes filenames to `<sample_name>.scan.<ext>` (safely handling cross-device moves and case-insensitive filesystem renames) and creates a synchronized `<sample_name>.metadata.json`.
 4. Discovers and merges external cross-dating series (e.g., Tucson `.rwl`, `.tuc`, or tabular `.txt`/`.csv` files) into a unified reference file (`rings_series.crossdating.txt`, configured as `[".crossdating", ".txt"]` in `settings.json`) scaled to micrometers ($\mu\text{m}$).
-
-![Screenshot: Metadata Dialog](../assets/screenshots/01_metadata_dialog.png)
-
-*Figure 3: Interactive metadata prompt dialog during image preparation.*
 
 ### Cross-Dating Text Files Processing
 
 The **Start Processing Crossdating Files** action allows you to import and compile one or more external tree-ring width (TRW) measurement files or master reference chronologies into a single synchronized project cross-dating file.
-
-![Screenshot: Crossdating Selection Dialog](../assets/screenshots/01_crossdating_selection_dialog.png)
-
-*Figure 4: Dialog for selecting cross-dating files and setting unit scaling.*
 
 #### Supported Input File Formats
 The cross-dating parser automatically recognizes and parses several standard dendrochronological and tabular formats:
@@ -102,6 +151,7 @@ The cross-dating parser automatically recognizes and parses several standard den
 
 - **Tucson / Decadal Files (`.rwl`, `.tuc`)**:
     - **Raw Tucson Decadal Format**: Standard space-delimited format used by dendrochronology software (e.g., COFECHA, ARSTAN, TSAP-Win). Each line contains `series_id`, `start_year`, and up to 10 ring-width values followed by end-of-series sentinel markers (`-9999`, `-999`, `9999`, or `999`).
+    - **8-Character Series Names**: Series names of up to 8 characters are fully supported without collapsing into the `YEAR` column. The parsing algorithm detects when long series IDs abut the decade column and splits them smartly.
     - **Tab-Delimited ("Doctored") Tucson Format**: Tucson decadal files where fields are separated by tab characters. The parser identifies sentinel stop values and pivots the decadal entries into continuous annual time series.
 
     > **ATTENTION**: Tucson/decadal files must be saved with the `.rwl` or `.tuc` extension. If an RWL file is saved or renamed with a `.txt` extension, it will not be processed correctly because the parser will attempt to read it as a standard tabular file rather than a decadal file.
@@ -162,20 +212,22 @@ The compiled series is saved in the project directory as `<prefix><crossdating_f
 
 The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labels (`.cells`), and tree-ring labels (`.rings`) into napari with standardized colormaps, scaling, and navigation shortcuts.
 
-![Screenshot: Samples Loading Widget](../assets/screenshots/02_samples_loading_widget.png)
+![Screenshot: Samples Loading Widget](../assets/user_guide/02_samples_loading_widget.png)
 
 *Figure 5: Samples loading widget interface.*
 
 ### How It Works
 - Queries the project directory for prepared sample stems.
+- **Automatic Project Stem Path Repair**: When opening a project directory that has been moved, renamed, or transferred from another computer/OS, ROXAS AI automatically repairs all `sample_stem_path` references in metadata to match the current filesystem location.
 - **Real-Time Directory Synchronization**: Changes to the project directory are automatically synchronized and updated across all widgets in real-time.
 - **Single-Image Workflow Enforcement**: Only one sample image can be loaded in the napari viewer at a time. Attempting to load another image prompts the user to first close the currently active image.
 - Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata) and automatically loads any available associated `.rings` and `.cells` layers.
+- **Automatic Ring Year Overlay Initialization**: Background tracking monitors loaded layers so that calendar year labels (`Rings Years` text overlay) appear automatically in the viewer even if the ring editor widget is not docked.
 - Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).
 
 ### Key Controls
 - **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
-- **Available Images List**: Displays discovered sample scans in the current project directory. Double-clicking any sample entry immediately loads that image into the viewer along with its available associated rings and cells layers (identical to selecting the file and clicking **Load Selected Image**).
+- **Available Images List**: Displays discovered sample scans in the current project directory. The list height dynamically adapts between 5 and 7 visible rows based on content. **Double-clicking** any sample entry immediately loads that image into the viewer along with its available associated rings and cells layers (identical to selecting the file and clicking **Load Selected Image**).
 - **Load Selected Image**: Loads the currently selected sample file (along with available associated rings and cells layers) into the viewer.
 - **Progress Bar**: Displays sample loading progress.
 
@@ -188,7 +240,7 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 !!! info "Automatic Background Model Downloads"
     Pre-trained neural network models (`.pth` / `.pt` weights) are downloaded automatically in the background if they are missing. Once downloaded, models are cached locally for all subsequent operations.
 
-![Screenshot: Single Sample Segmentation Widget](../assets/screenshots/03a_single_segmentation_widget.png)
+![Screenshot: Single Sample Segmentation Widget](../assets/user_guide/03a_single_segmentation_widget.png)
 
 *Figure 6: Single sample AI segmentation interface.*
 
@@ -197,7 +249,12 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 - **Cells Detection**: Predicts individual cell lumen instances using a U-Net architecture with a ResNet-50 backbone (Katzenmaier et al. 2023) and outputs a labeled mask layer (`<sample>.cells`).
 - **Rings Detection**: Detects continuous tree-ring boundaries using an iterative regression formulation based on Katzenmaier et al. (2025), sorts boundaries from bark to pith, enforces boundary continuity across the sample width, and constructs labeled annual ring bands (`<sample>.rings`).
 - Post-processes masks to eliminate edge artefacts (e.g., boundary-touching partial cells).
-- Writes the annotated overview image (`<sample_name>_annotated.jpg`) right after segmentation for an immediate quality check (cells only, rings only, or both), drawn from the scan and masks in memory. The new layers themselves are written with **Save All Layers**.
+
+### Files and Layers Saved
+- **In-Memory Layers Created / Updated**: Adds or updates the `<sample>.cells` layer (Labels), `<sample>.rings` layer (Labels), and `Rings Years` text overlay layer in the active napari viewer.
+- **Annotated Overview Image**: Automatically generates and saves the `<sample>_annotated.jpg` overview scan in the sample directory, overlaid with detected ring boundaries and calendar year labels (and optional semi-transparent cell overlays).
+- **Metadata**: Updates `<sample>.metadata.json` with detected ring count (`rings_count`) and outermost complete year (`rings_outmost_complete_year`).
+- *Note on Label Files on Disk*: The raw segmentation label rasters (`.cells.png` and `.rings.tif`) are held in memory as viewer layers ready for manual inspection/editing; they are persisted to disk when clicking **Save All Layers** (or via [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)).
 
 ### Key Controls & Options
 - **Cell Segmentation Checkbox & Model Dropdown**: Checkbox to enable cell lumen detection, alongside a dropdown list to choose the trained cell model checkpoint (`.pth`). Unchecking disables cell detection and hides the model selection dropdown.
@@ -213,15 +270,16 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 !!! info "Automatic Background Model Downloads"
     If segmentation model weights are not present locally, they are automatically downloaded in the background when needed and cached for future runs.
 
-![Screenshot: Batch Segmentation Widget](../assets/screenshots/03b_batch_segmentation_widget.png)
-
-*Figure 7: Batch segmentation widget.*
-
 ### How It Works
 - Iterates over all discovered sample scans in the project directory.
 - Applies the selected neural network models sequentially (see [Deep-Learning Segmentation Models](../reference/segmentation_models.md)).
 - Automatically saves segmentation masks (`.cells.png` and `.rings.tif`) directly to disk alongside updated `.metadata.json` files.
-- Writes the annotated overview image (`<sample_name>_annotated.jpg`) of every sample in all segmentation modes. When only cells are segmented, the cell lumina are overlaid on the scan without rings. This step is part of the progress bar.
+
+### Files and Layers Saved
+- **Cell Masks (`<sample>.cells.png`)**: Saved directly to disk when cell segmentation is enabled.
+- **Ring Masks (`<sample>.rings.tif`)**: Saved directly to disk when ring segmentation is enabled.
+- **Annotated Overview Images (`<sample>_annotated.jpg`)**: Automatically created or updated on disk with ring boundaries and year labels when ring segmentation is run.
+- **Metadata (`<sample>.metadata.json`)**: Updated on disk with ring count (`rings_count`) and outermost complete year (`rings_outmost_complete_year`).
 
 ### Key Controls
 - **Project Directory Selection**: Choose the target folder containing prepared samples (triggering the same global project directory selection dialog).
@@ -237,132 +295,121 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 
 The **Cells Layer Editor Widget** provides interactive manual editing tools to correct, split, merge, add, or erase cell lumen detections.
 
-![Screenshot: Cells Layer Editor Widget - Startup](../assets/screenshots/05_cells_layer_editor_startup.png)
+![Screenshot: Cells Layer Editor Widget - Startup](../assets/user_guide/05_cells_layer_editor_startup.png)
 
-![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/screenshots/05_cells_layer_editor_vector_startup.png)
+![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/user_guide/05_cells_layer_editor_vector_startup.png)
 
-![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/screenshots/05_cells_layer_editor_vector_lasso.png)
+![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/user_guide/05_cells_layer_editor_vector_lasso.png)
 
-![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/screenshots/05_cells_layer_editor_raster.png)
+![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/user_guide/05_cells_layer_editor_raster.png)
 
 *Figure 8: Cells layer editor widget in its four states (from top to bottom): (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
 
 ### How It Works
 - Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
 - Supports two distinct editing paradigms:
-  - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation. The brush size (up to 100 pixels) can be adjusted with <kbd>Ctrl</kbd>+mouse wheel while painting or erasing, and <kbd>Ctrl</kbd>+double-click toggles between the eraser and the brush, e.g. to split merged cells and complete incomplete cells in the same edit.
-  - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
-- Includes a **Lasso Selection Tool** in Vector editing mode to quickly encircle and batch-delete unwanted cell polygons across a designated region.
-- When applied, rasterizes vectors back to label masks, resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
+    - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
+        - **Brush Size Adjustment**: Adjust brush diameter smoothly between 1 and 100 px using <kbd>Ctrl</kbd> + Mouse Wheel (or trackpad scroll). Dimension slider scrolling is suspended during resizing.
+        - **Tool Switching**: Quickly toggle between brush and eraser using <kbd>Ctrl</kbd> + Double-Click.
+    - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
+- **Lasso Selection & Union (OR) Behavior**: In Vector editing mode, drawing lasso loops encloses cells. Multiple overlapping lasso polygons combine (union / OR logic) rather than toggling/canceling, allowing seamless regional selection.
+- **Undo Mechanism**: Supports a 50-step history stack (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) that snapshots polygon coordinates and shape types in Vector mode, and triggers napari's label brush history in Raster mode.
+- When applied, rasterizes vectors back to label masks, marks the `.cells` layer as modified (triggering unsaved change tracking), resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
+- **Customizable Tolerances & Colors**: Polygon smoothing tolerances, line widths, and display colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
 
-### Vectorization, Rasterization & Smoothing
-- **Vectorization & Contour Smoothing**:
-  - When entering vector editing mode, cell lumen boundaries are extracted from the binary mask using `cv2.findContours`.
-  - Contours are geometrically simplified and smoothed using the **Ramer-Douglas-Peucker algorithm** (`cv2.approxPolyDP` with `closed=True`) to eliminate single-pixel staircase artefacts while preserving anatomical shape fidelity.
-  - Simplified polygons with fewer than 3 vertices are automatically discarded.
-- **Rasterization**:
-  - When applying vector edits, polygon vertices are rounded to integer pixel coordinates and filled onto a zero-initialized raster grid via OpenCV polygon contour rendering (`cv2.drawContours`). Each polygon is filled individually, so overlapping polygons are combined (union) and their overlapping area is preserved. No secondary morphological smoothing is applied during this rasterization step.
-- **Corresponding Settings & Default Values**:
-  - `vectorization.cells_tolerance`: Maximum approximation distance $\epsilon$ (in pixels) for Douglas-Peucker contour simplification. (*Default:* `1`)
-  - `vectorization.cells_edge_width`: Display line width (in pixels) of cell vector boundaries in the viewer. (*Default:* `5`)
-  - `vectorization.cells_edge_color`: Display outline color for cell vector shapes. (*Default:* `"blue"`)
-  - `vectorization.cells_face_color`: Fill color for cell vector shapes. (*Default:* `"cyan"`)
-  - `rasterization.cells_color`: Default colormap color for rasterized cell lumens. (*Default:* `"lime"`)
+### Files and Layers Saved
+- **In-Memory Modifications**: Changes made using Vector or Raster tools are committed to the in-memory `<sample>.cells` layer upon clicking **Apply Cell Changes**.
+- **Saving to Disk**: Clicking **Save All Layers** (or using [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)) writes the updated `<sample>.cells.png` raster directly to disk and updates `<sample>.metadata.json`. Manual saving does not redraw `<sample>_annotated.jpg` (keeping saves fast); the annotated image is automatically updated at major workflow checkpoints (segmentation, year updates, cross-dating, measurements).
 
 ### Key Controls & Options
 - **Editing Mode**: Switch between `Vector` and `Raster` editing modes.
 - **Edit Cells**: Enters editing mode, hides ring layers, and creates the working canvas (`Cells Modification`).
 - **Lasso Select**: Checkbox (available during Vector editing) that activates a yellow `Lasso Selection` shapes layer for freehand polygon area selection.
-- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the `Delete` or `Backspace` key).
+- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the <kbd>Delete</kbd> or <kbd>Backspace</kbd> key).
 - **Undo Last Change**: Reverts the most recent edit (brush/eraser stroke, shape edit or lasso deletion) made during the active editing session (also available with <kbd>Ctrl</kbd>+<kbd>Z</kbd>).
 - **Apply Cell Changes**: Commits edits, updates the `.cells` layer, restores layer visibility, and exits editing mode.
 - **Cancel Cell Changes**: Discards pending modifications, removes the working layer, restores original layer visibility, and exits editing mode.
-- **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar. For full details on the saving routine, see [8 - Save Cells & Rings Editing](#8---save-cells--rings-editing).
+- **Save All Layers**: Persists all modified sample layers, metadata, and the annotated overview image directly to disk (see [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)).
 
-### Keyboard Navigation Shortcuts
-When viewing and editing cells, standardized keyboard shortcuts allow rapid viewport navigation without switching away from active drawing tools:
+### Dedicated Shortcuts
+For a complete summary of all shortcuts across the application, see the [Shortcuts Reference](../reference/shortcuts.md).
 
-| Action | Assigned Key(s) | Description |
+| Action | Dedicated Shortcut | Scope |
 | :--- | :--- | :--- |
-| **Pan Up** | <kbd>W</kbd> or <kbd>↑</kbd> | Shifts the viewport upward by 200 pixels (adjusted for current zoom level). |
-| **Pan Down** | <kbd>S</kbd> or <kbd>↓</kbd> | Shifts the viewport downward by 200 pixels. |
-| **Pan Left** | <kbd>A</kbd> or <kbd>←</kbd> | Shifts the viewport leftward by 200 pixels. |
-| **Pan Right** | <kbd>D</kbd> or <kbd>→</kbd> | Shifts the viewport rightward by 200 pixels. |
-| **Fast Pan** | <kbd>Shift</kbd> + (<kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or <kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>) | Doubles the panning step speed (400 pixels per step). |
-| **Zoom Out** | <kbd>Q</kbd> | Decreases magnification level by a step of $0.25$. |
-| **Zoom In** | <kbd>E</kbd> | Increases magnification level by a step of $0.25$. |
+| **Adjust Brush Size** | <kbd>Ctrl</kbd> + Mouse Wheel *(macOS: <kbd>Cmd</kbd> + Wheel)* | Active in `5 - Edit cells` (Raster Mode) |
+| **Switch Brush / Eraser** | <kbd>Ctrl</kbd> + Double-Click *(macOS: <kbd>Cmd</kbd> + Double-Click)* | Active in `5 - Edit cells` (Raster Mode) |
+| **Delete Lasso Selection** | <kbd>Delete</kbd> or <kbd>Backspace</kbd> | Active in `5 - Edit cells` (Vector Mode) |
+| **Undo Last Change** | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Active in `5 - Edit cells` |
 
 ---
 
 ## 6 - Edit Rings
 
-The **Rings Layer Editor Widget** enables precise curation of annual tree-ring boundaries, outermost year re-numbering, and targeted model-assisted re-detection.
+The **Rings Layer Editor Widget** enables precise curation of annual tree-ring boundaries, outermost year re-numbering, fine nudging, handling of wedging rings, and targeted model-assisted re-detection.
 
 !!! info "Automatic Background Model Downloads"
     Opening this widget checks for missing ring segmentation model weights (required for the **Rerun Ring Segmentation** feature) and downloads them automatically in the background without blocking the interface. Once downloaded, models are cached locally for subsequent use.
-
-![Screenshot: Rings Layer Editor Widget](../assets/screenshots/06_rings_layer_editor.png)
-
-*Figure 9: Rings layer editor with interactive shapes and year labels.*
 
 ### How It Works
 1. Converts the raster ring mask into continuous polyline shapes representing each ring boundary.
 2. Displays real-time calendar year labels (`Rings Years` overlay) along the sample.
 3. Allows interactive vertex adjustments, insertion of missing boundaries, or deletion of false boundaries using napari shape tools.
-4. Includes a **Lasso Selection Tool** to select and delete unwanted boundary vertices over a designated area.
-5. Offers **Rerun Ring Segmentation**: Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
-6. When saved, completes boundary paths from edge to edge, validates ring ordering, and reconstructs the colored ring mask.
+4. **Fine-Positioning & Bulk Movement**:
+    - **Fine Nudging (1 px)**: Press <kbd>Ctrl</kbd> + Arrow keys to nudge all selected boundary vertices by 1 pixel.
+    - **Fast Nudging (10 px)**: Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys to nudge all selected boundary vertices by 10 pixels.
+    - **Bulk Movement**: Multiple boundaries can be selected simultaneously and moved manually or with nudging operations with full transform undo tracking.
+    - **Transformations**: The entire rings layer can be selected and moved manually or with nudging operations.
+5. **Lasso Selection Priority on Overlapping Rings**:
+    - When boundaries overlap or share coordinates, deleting vertices with the lasso tool selectively removes vertices strictly from the topmost ring boundary (highest shape index), leaving underlying boundaries intact.
+6. **Adding Missing & Wedging/Incomplete Rings**:
+    - **Missing Rings**: Select a ring boundary with the feature selection tool and copy-paste it; the added ring boundary will be perfectly on top.
+    - **Wedging / Incomplete Rings**:
+        1. Copy-paste the ring boundary that shares the common portion of the ring contour.
+        2. Use the lasso tool to delete the diverging/erroneous vertices from the top ring.
+        3. Extend the top ring by manually tracing the actual wedging trajectory.
+7. **Undo Mechanism**:
+    - Full 50-step undo history (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) restoring boundary geometries, calendar year metadata, deleted vertex markers, and affine transform states.
+8. **Annotated Image Generation**:
+    - Configurable annotated overview scans (`<sample_name>_annotated.jpg`) overlaid with ring boundaries, year labels, and optional semi-transparent cell lumen overlays (`cell_opacity`, `cell_fill_color`, `year_label_size`, scale factor, JPEG quality).
+9. **Rerun Ring Segmentation**:
+    - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
+10. **Customizable Tolerances & Colors**:
+    - Polyline smoothing tolerances, line thickness, and boundary colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
 
-### Vectorization, Rasterization & Smoothing
-- **Vectorization & Polyline Smoothing**:
-  - Ring boundaries stored in the rings table (`RBXY` coordinate arrays) are converted into open polyline shapes (`path` shape type in napari).
-  - Polyline smoothing and vertex reduction are performed using the **Ramer-Douglas-Peucker algorithm** (`cv2.approxPolyDP` with `closed=False`). Setting the tolerance to `0` disables smoothing and preserves all original pixel coordinates.
-  - The same Douglas-Peucker simplification is applied to new boundary segments generated when using the interactive **Re-run Rings Model** feature.
-- **Rasterization**:
-  - When committing edits via **Apply Geometries Changes** (`update_rings_geometries` / `rasterize_rings`):
-    1. Boundary coordinates are rearranged from left to right (`rearrange_coordinates`), clipped to image boundaries (`horizontal_rings_clipping`), and horizontally extrapolated to touch the canvas edges from $x=0$ to $x=\text{width}$ (`horizontal_rings_completion`).
-    2. Boundaries are chronologically ordered from the outermost (bark side) to innermost (pith side) based on polygon area above each boundary (`calculate_polygon_area`).
-    3. Adjacent boundary pairs are joined into closed polygons and rasterized into integer label masks using OpenCV filled polygon rendering (`cv2.fillPoly`).
-- **Corresponding Settings & Default Values**:
-  - `vectorization.rings_tolerance`: Maximum approximation distance $\epsilon$ (in pixels) for Douglas-Peucker polyline smoothing. Set to `0` to disable simplification. (*Default:* `5`)
-  - `vectorization.rings_edge_width`: Display line thickness (in pixels) for ring boundary polylines. (*Default:* `10`)
-  - `vectorization.rings_edge_color`: Display color for active ring boundary polylines. (*Default:* `"black"`)
-  - `vectorization.rerun_interactive_edge_color`: Display color for newly detected boundaries generated by the interactive AI re-run tool. (*Default:* `"lime"`)
-  - `rasterization.uncomplete_ring_value`: Integer label assigned to the topmost uncompleted ring zone. (*Default:* `-1`)
-  - `rasterization.uncomplete_ring_color`: Display color for uncompleted ring regions. (*Default:* `"red"`)
-  - `rasterization.rings_color_sequence`: List of alternating colors assigned cyclically to successive annual rings. (*Default:* `["blue", "green", "yellow", "purple", "orange", "cyan", "brown", "pink", "gray", "lime"]`)
+### Files and Layers Saved
+- **In-Memory Modifications**: Adding, deleting, or nudging ring boundaries updates the `<sample>.rings` labels layer and `Rings Years` text overlay upon clicking **Apply Ring Changes**, marking the `.rings` layer as modified.
+- **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-drawn and saved directly to disk whenever **Update Year** is clicked, reflecting the new ring year labels and boundary positions.
+- **Ring Table Synchronization (`<sample>.rings_table.csv`)**: When ring changes or year updates are applied, existing ring tables are updated to keep ring numbers and years consistent.
+- **Saving to Disk**: Clicking **Save All Layers** (or using [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)) writes the updated `<sample>.rings.tif` mask and `<sample>.metadata.json` (outermost year `rings_outmost_complete_year`, ring count `rings_count`) to disk. Manual saves do not redraw `<sample>_annotated.jpg` to keep saving instantaneous.
 
 ### Key Controls & Options
 - **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
 - **Update Year**: Updates the calendar year metadata, recalculates ring year labels in the viewer, and redraws the annotated overview image (`<sample_name>_annotated.jpg`) with the new ring years.
 - **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
 - **Lasso Select**: Checkbox activating lasso-based vertex selection.
-- **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection.
-- **Undo Last Change**: Reverts the most recent shape edit or deletion made during the active editing session.
-- **Perform Visual Crossdating**: Opens the Visual Cross-Dating widget directly for the active sample (see [7 - Visual Cross-Dating](#7---visual-cross-dating)).
+- **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection (deleting from the topmost boundary when layers overlap).
+- **Undo Last Change**: Reverts the most recent shape edit, deletion, or movement (also available via <kbd>Ctrl</kbd>+<kbd>Z</kbd>).
+- **Perform Visual Crossdating**: Opens the Visual Cross-Dating widget directly for the active sample (see [7 - Visual Cross-Dating](#7-visual-cross-dating)).
 - **Rerun Model from Year Workflow**: Re-evaluates and automatically re-detects ring boundaries starting below a corrected reference ring boundary:
-    1. **Initial Detection**: Run standard automated tree-ring segmentation on the sample (via [3A - Detect Cells & Rings](#3a---detect-cells--rings-individual-image)).
+    1. **Initial Detection**: Run standard automated tree-ring segmentation on the sample (via [3A - Detect Cells & Rings](#3a-detect-cells-rings-individual-image)).
     2. **Inspect Boundaries**: Starting from the top (bark side), inspect the detected ring boundaries.
     3. **Correct Boundary Error**: If you notice a series of systematically incorrectly defined ring boundaries (e.g., jumps, jags; frequently starting from the top ring), delete the first/top erroneous boundary and manually redraw it correctly using the shape editing tools; then click **Apply Ring Changes**.
     4. **Re-enter Editing & Set Year**: Click **Edit Ring Boundaries** again and set **Rerun From Year:** to the calendar year of the manually added or corrected ring boundary.
     5. **Select Model & Re-run**: In the **Model:** dropdown, choose the ring model checkpoint (e.g., `LinearRingModel_v3_iterative.pt`) and click **Rerun Ring Segmentation**.
     6. **Iterative Re-detection**: All ring boundaries below the manually corrected ring boundary are automatically re-detected and reconstructed based on the corrected boundary geometry.
-- **Apply Ring Changes**: Validates topology, updates `.rings` labels, updates `.rings_table.txt`, and saves year metadata.
+- **Apply Ring Changes**: Validates topology, updates `.rings` labels, updates `.rings_table.csv`, and saves year metadata.
 - **Cancel Ring Changes**: Reverts to original ring boundaries and restores previous layer states.
-- **Save All Layers**: Persists all modified sample layers back to disk with a visual progress bar. For full details on the saving routine, see [8 - Save Cells & Rings Editing](#8---save-cells--rings-editing).
+- **Save All Layers**: Persists all modified sample layers, metadata, and the annotated overview image directly to disk (see [8 - Save Cells & Rings Editing](#8-save-cells-rings-editing)).
 
-### Keyboard Navigation Shortcuts
-When curating tree-ring boundaries, standardized keyboard shortcuts allow rapid viewport navigation without switching away from active drawing tools:
+### Dedicated Shortcuts
+For a complete summary of all shortcuts across the application, see the [Shortcuts Reference](../reference/shortcuts.md).
 
-| Action | Assigned Key(s) | Description |
+| Action | Dedicated Shortcut | Scope |
 | :--- | :--- | :--- |
-| **Pan Up** | <kbd>W</kbd> or <kbd>↑</kbd> | Shifts the viewport upward by 200 pixels (adjusted for current zoom level). |
-| **Pan Down** | <kbd>S</kbd> or <kbd>↓</kbd> | Shifts the viewport downward by 200 pixels. |
-| **Pan Left** | <kbd>A</kbd> or <kbd>←</kbd> | Shifts the viewport leftward by 200 pixels. |
-| **Pan Right** | <kbd>D</kbd> or <kbd>→</kbd> | Shifts the viewport rightward by 200 pixels. |
-| **Fast Pan** | <kbd>Shift</kbd> + (<kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or <kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>) | Doubles the panning step speed (400 pixels per step). |
-| **Zoom Out** | <kbd>Q</kbd> | Decreases magnification level by a step of $0.25$. |
-| **Zoom In** | <kbd>E</kbd> | Increases magnification level by a step of $0.25$. |
+| **Fine Nudge Boundary (1 px)** | <kbd>Ctrl</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd> | Active in `6 - Edit rings` (Selected Boundaries) |
+| **Fast Nudge Boundary (10 px)** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd> | Active in `6 - Edit rings` (Selected Boundaries) |
+| **Delete Lasso Vertices** | <kbd>Delete</kbd> or <kbd>Backspace</kbd> | Active in `6 - Edit rings` (Lasso Mode) |
+| **Undo Last Change** | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Active in `6 - Edit rings` |
 
 ---
 
@@ -370,7 +417,7 @@ When curating tree-ring boundaries, standardized keyboard shortcuts allow rapid 
 
 The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series derived from detected rings with master reference chronologies in an interactive plotting environment.
 
-![Screenshot: Cross-Dating Plotter Widget](../assets/screenshots/07_cross_dating_plotter.png)
+![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter.png)
 
 *Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
 
@@ -379,12 +426,21 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 - Renders dual interactive curves in a Matplotlib canvas: the sample series and the reference series.
 - Supports calendar year ranges spanning from prehistoric/BCE periods down to **`-100,000`** up to **`9,999`** (CE).
 - Formats negative/prehistoric years as plain integers on axes and dynamically calculates gridline steps (e.g., 10, 20, 50, 100, 200, 500, 1000 years) based on the active viewing span.
-- Allows interactive shifting by a maximum of +/- 50 years along the time axis (year offset slider) or automated alignment to evaluate dating synchronization.
-- Calculates statistical synchrony metrics in real time:
-  - **Correlation coefficient ($r$)**
-  - **Gleichläufigkeit (GLK / % sign agreement)**
-  - **$t$-value / statistical significance**
-- **Bidirectional Viewport Linking**: Clicking any data point in the cross-dating plot automatically centers and zooms the napari viewer onto the corresponding tree-ring boundary in the image.
+- **Floating Presentation & Sizing Grip**: Opens automatically as a floating window centered on the active screen with a 100 px margin and a prominent diagonal sizing grip, allowing flexible side-by-side positioning with the napari viewer.
+- **Year Range & Offset Slider Interaction**:
+    - The standard view automatically centers on the target ROXAS sample series with a default buffer of **$\pm 10$ years** on each side.
+    - To slide the sample series beyond this initial $\pm 10$ year window, adjust the **Year Range** slider to expand the visible time span. Expanding the Year Range slider automatically widens the allowable range of the **Offset** slider, allowing you to slide the series across decades or centuries.
+    - Both the **Year Range** (X-axis) and **Width Range** (Y-axis) sliders use split handle labels (lower bound below the bar, upper bound above) to prevent label overlap when handles are close together.
+- **Auto-Offset Alignment & Candidate Selection**:
+    - The **Find Best Overlap** feature scans offsets across the active time window to automatically maximize correlation ($r$) and sign agreement (GLK).
+    - **Use Mean Checkbox**: When checked, aligns the sample against the overall mean of all reference series in the file rather than a single individual column.
+    - **Interactive Candidate Alignment Buttons**: In addition to applying the top-ranked alignment, ROXAS AI generates interactive buttons for alternative candidate alignments with their year spans and statistical scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any candidate button instantly shifts the plot to that dating and updates the button to allow swapping back.
+- **Uniform Scaling Across Reference Plots**:
+    - Reference plot figures are generated with a standardized vertical height of 800 pixels and a constant horizontal scale of **70 pixels per year** of overlap (`min(50 + (20 + overlap_years) * 70, 65000)`). This guarantees identical visual scale across different samples and chronologies.
+- **Reference Plot Creation**:
+    - Reference plot images (`<sample>_ReferenceSeries.jpg`) are generated and saved when clicking **Export Plot**, clicking **Apply Changes**, or automatically during batch measurement runs in [9B - Batch Measure & Update](#9b-batch-measure-update).
+- **Statistical Synchrony Metrics**:
+    - Computes **Correlation coefficient ($r$)**, **Gleichläufigkeit (GLK / % sign agreement)**, and **$t$-value / statistical significance** in real time.
 
 ### Cross-Dating Files Discovery & Folder Hierarchy Traversal
 
@@ -408,21 +464,30 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 ### Behavior When Multiple Cross-Dating Files Are Present
 
 - **Multiple Files in the Same Directory**:
-  - If two or more matching cross-dating files exist within the first directory where matches are found (e.g., `<project_root>/rings_series_site1.crossdating.txt` and `<project_root>/rings_series_site2.crossdating.txt`):
-    - All discovered cross-dating files are collected and populated into the **Crossdating File** dropdown combobox (`_crossdating_file_combo`).
-    - The widget automatically selects the first file in the list by default.
-    - Users can freely switch between files using the **Crossdating File** dropdown. Selecting a different file immediately re-reads the dataset, recalculates the series average, updates the **Reference Series** dropdown with all series columns from that file, and refreshes the plot.
+    - If two or more matching cross-dating files exist within the first directory where matches are found (e.g., `<project_root>/rings_series_site1.crossdating.txt` and `<project_root>/rings_series_site2.crossdating.txt`):
+        - All discovered cross-dating files are collected and populated into the **Crossdating File** dropdown combobox (`_crossdating_file_combo`).
+        - The widget automatically selects the first file in the list by default.
+        - Users can freely switch between files using the **Crossdating File** dropdown. Selecting a different file immediately re-reads the dataset, recalculates the series average, updates the **Reference Series** dropdown with all series columns from that file, and refreshes the plot.
 - **Files in Different Directory Levels**:
-  - Because traversal stops at the first directory containing matches, a cross-dating file located in a sample's local subfolder takes precedence over a cross-dating file located in parent or root directories.
+    - Because traversal stops at the first directory containing matches, a cross-dating file located in a sample's local subfolder takes precedence over a cross-dating file located in parent or root directories.
+
+### Files and Layers Saved
+- **In-Memory Modifications**: Clicking **Apply Changes** updates the year labels on the `Rings Years` text overlay, shifts `.rings` label indices, and marks the `.rings` layer as modified with the new outermost year.
+- **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-generated and saved to disk with updated ring calendar year labels upon clicking **Apply Changes**.
+- **Reference Series Plot (`<sample>_ReferenceSeries.jpg`)**: Generated and saved to disk when clicking **Apply Changes** or **Export Plot** (or automatically during batch measurement updates via [9B - Batch Measure & Update](#9b-batch-measure-update)), plotting sample mean ring width (`MRW`) against the selected reference chronology.
+- **Metadata (`<sample>.metadata.json`)**: Updated with the validated outermost year (`rings_outmost_complete_year`) and the selected reference series column (`reference_series`). The cross-dating file path itself is not stored, enabling portable directory hierarchies.
+- **Ring Table Synchronization (`<sample>.rings_table.csv`)**: If measurement tables already exist on disk, their `YEAR` column is automatically updated to reflect the new dating.
 
 ### Key Controls & Options
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
-- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation.
-- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows.
-- **Offset Slider**: Manually shifts sample dating by up to $-50$ to $+50$ years relative to the reference chronology.
-- **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, records the new outermost year in sample metadata, and writes the reference plot together with an updated annotated overview image (`<sample_name>_annotated.jpg`).
-- **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `.jpg` image in the sample directory and records the validated reference series in `<sample_name>.metadata.json`.
+- **Use Mean Checkbox**: Toggles whether auto-alignment computes the best overlap against the composite average of all columns in the cross-dating file instead of the selected reference series column.
+- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation and sign agreement (GLK), generating candidate alignment buttons.
+- **Candidate Alignment Buttons**: Interactive buttons created below the alignment row displaying the top alternative alignment year spans and scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any button shifts the plot to that dating and swaps previous alignment data for easy toggling.
+- **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows, using split handle labels to avoid label overlap.
+- **Offset Slider**: Manually shifts sample dating relative to the reference chronology. Expanding the Year Range slider broadens the available offset adjustment window.
+- **Apply Changes Button**: Confirms the adjusted temporal offset, updates ring boundary year numbering, shifts the `.rings` layer labels, records the new outermost year in sample metadata (`rings_outmost_complete_year`), synchronizes `.rings_table.csv`, regenerates `<sample>_annotated.jpg`, and exports `<sample>_ReferenceSeries.jpg`.
+- **Export Plot Button**: Saves the current cross-dating plot as a publication-ready `<sample>_ReferenceSeries.jpg` image in the sample directory and records the validated reference series in `<sample>.metadata.json`.
 
 ---
 
@@ -430,21 +495,33 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 
 The **Samples Saving Widget** writes modified cell masks, ring boundaries, and updated sample metadata from napari back to their respective files on disk.
 
-![Screenshot: Samples Saving Widget](../assets/screenshots/08_samples_saving_widget.png)
+![Screenshot: Samples Saving Widget](../assets/user_guide/08_samples_saving_widget.png)
 
 *Figure 11: Samples saving widget.*
 
 ### How It Works
 - Gathers data, layer parameters, and metadata from active napari layers.
-- Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif`.
-- Keeps track of unsaved changes: layers loaded from disk start out unmodified, and edits, year updates, cross-dating offsets and new segmentations mark them as modified.
-- Does not redraw the annotated overview image (`<sample_name>_annotated.jpg`), so that saving stays fast. The overview is updated at the workflow checkpoints instead: segmentation (3A/3B), **Update Year** (6), **Apply Changes** (7) and measurements (9A/9B).
+- Formats and writes `.cells.png` (8-bit or 16-bit label rasters) and `.rings.tif` to disk.
+- **Unsaved Changes Tracking**: Layers loaded from disk start out unmodified. Manual edits (vector/raster cell modifications, adding/moving/deleting rings, changing outermost ring year, applying cross-dating offsets) and freshly run AI segmentations mark the corresponding layers as modified (`layer.metadata["is_modified"] = True`).
+- **Targeted Saving**: **Save All Layers** checks which layers have unsaved edits and saves only those modified layers to disk, skipping unmodified files.
+- **Explicit Save Status Notifications**: Reports exactly what was written:
+    - `"Saved cells layer."` (when only `.cells` was modified)
+    - `"Saved rings layer."` (when only `.rings` was modified)
+    - `"Saved cells and rings layers."` (when both were modified)
+    - `"No unsaved changes in cells or rings layers."` (when no changes were pending)
+- **Fast Saving Decoupled from Overview Rendering**: Manual layer saving does **not** redraw the annotated overview image (`<sample_name>_annotated.jpg`), ensuring saves complete in milliseconds without disk or CPU overhead. The annotated overview image is automatically regenerated at key workflow checkpoints instead: AI segmentation (3A/3B), **Update Year** (6), **Apply Changes** in cross-dating (7), and trait measurement (9A/9B).
 - Updates `<sample_name>.metadata.json` with updated ring counts, outermost year, and timestamps.
 - Operates in a non-blocking background worker thread.
 
+### Files and Layers Saved
+- **Cell Masks (`<sample>.cells.png`)**: Written to disk if `.cells` has unsaved changes.
+- **Ring Masks (`<sample>.rings.tif`)**: Written to disk if `.rings` has unsaved changes.
+- **Metadata (`<sample>.metadata.json`)**: Synchronized with layer metadata parameters (outermost ring year `rings_outmost_complete_year`, ring count `rings_count`, layer timestamps).
+- *Overview Image Note*: `<sample>_annotated.jpg` is **not** overwritten on manual save, keeping layer saving instantaneous.
+
 ### Key Controls
 - **Save Selected Layers**: Saves only the layers currently highlighted in the napari layer list.
-- **Save All Layers**: Saves only the `.cells` and `.rings` layers with unsaved changes and reports what was written: "Saved cells layer.", "Saved rings layer." or "Saved cells and rings layers.". Without changes, nothing is written and "No unsaved changes in cells or rings layers." is shown.
+- **Save All Layers**: Saves only the `.cells` and `.rings` layers with unsaved changes and reports what was written ("Saved cells layer.", "Saved rings layer.", or "Saved cells and rings layers."). Without changes, nothing is written and "No unsaved changes in cells or rings layers." is shown.
 - **Progress Bar**: Shows disk write progress, scaled to the number of layers actually saved.
 
 ---
@@ -453,47 +530,73 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 
 The **Single Sample Measurements Widget** computes the full suite of Quantitative Wood Anatomy (QWA) metrics for the sample currently loaded in napari.
 
-![Screenshot: Single Sample Measurements Widget](../assets/screenshots/09a_single_measurements_widget.png)
+![Screenshot: Single Sample Measurements Widget](../assets/user_guide/09a_single_measurements_widget.png)
 
 *Figure 12: Single sample measurements interface.*
 
 ### How It Works
 - Combines the `.cells` lumen mask and `.rings` boundary geometry with spatial resolution metadata ($\mu\text{m}/\text{px}$).
 - Uses Continuous Wavelet Transform (CWT) and radial/tangential wall profiling to calculate:
-  - **Cell Lumen Metrics**: Lumen Area (`LA`), Hydraulic Diameter (`DH`), Theoretical Hydraulic Conductance (`KH`), Aspect Ratio (`ASP`).
-  - **Cell Wall Thickness (CWT)**: Radial (`CWTRAD`), Tangential (`CWTTAN`), Pith-side (`CWTPI`), Bark-side (`CWTBA`), Overall (`CWTALL`).
-  - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
-- Outputs tab-delimited tables: `<sample_name>.cells_table.txt` and `<sample_name>.rings_table.txt`.
+    - **Cell Lumen Metrics**: Lumen Area (`LA`), Hydraulic Diameter (`DH`), Theoretical Hydraulic Conductance (`KH`), Aspect Ratio (`ASP`).
+    - **Cell Wall Thickness (CWT)**: Radial (`CWTRAD`), Tangential (`CWTTAN`), Pith-side (`CWTPI`), Bark-side (`CWTBA`), Overall (`CWTALL`).
+    - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
+- Outputs semicolon-delimited CSV tables: `<sample_name>.cells_table.csv` and `<sample_name>.rings_table.csv` (file extensions and delimiter configurable in settings).
 - **Always Re-creates Annotated Image**: Re-creates and saves an updated annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years whenever measurements are performed, ensuring the annotated image remains strictly in line with the measurements.
+
+### Files and Layers Saved
+- **Cell Measurement Table (`<sample>.cells_table.csv`)**: Saved directly to disk with comprehensive lumen and cell wall thickness metrics per detected cell instance (when **Measure Cells** is enabled).
+- **Ring Measurement Table (`<sample>.rings_table.csv`)**: Saved directly to disk with ring-width and ring-level aggregate anatomical traits per calendar year (when **Measure Rings** is enabled).
+- **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-generated and saved to disk with synchronized ring boundaries, calendar years, and cell lumen overlays.
+- **Layer Feature Tables**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive inspection of properties directly within napari.
 
 ### Key Controls
 - **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
-- **Check Settings Button**: Launches the Settings window (see [ZZ - Settings](#zz---settings)) as a floating widget that appears maximized with a comfortable margin on top of napari, automatically scrolling to and focusing on the measurement parameters.
-- **Measure Button**: Launches analysis in a background worker, writes measurement tables and the updated annotated image, and attaches measurements to layer properties for interactive table inspection.
+- **Check Settings Button**: Launches the Settings window (see [ZZ - Settings](#zz-settings)) as a floating widget that appears maximized with a comfortable margin on top of napari, automatically expanding and scrolling to the measurement parameters.
+- **Measure Button**: Launches analysis in a background worker with an animated processing spinner (`Processing | / - \`), writes measurement tables and the updated annotated image, cleans non-measured edge artefacts from the cell mask, attaches measurements to layer properties for interactive table inspection, and marks layers as saved (`_is_dirty = False`).
 
 ---
 
-## 9B - Batch Measure Cells & Rings
+## 9B - Batch Measure & Update
 
-The **Batch Sample Measurements Widget** runs the anatomical measurement engine across all samples in a project folder without requiring interactive display in the napari viewer.
-
-![Screenshot: Batch Measurements Widget](../assets/screenshots/09b_batch_measurements_widget.png)
-
-*Figure 13: Batch measurements widget.*
+The **Batch Sample Measurements Widget** runs high-throughput anatomical trait extraction, annotated image generation, and reference plot synchronization across all samples in a project folder.
 
 ### How It Works
 - Discovers all matched pairs of `.cells` and `.rings` files in the project directory.
+- **Real-Time Dynamic Sync**: Listens to project directory and project file changes so that samples generated by earlier steps (such as preparation or batch segmentation) appear immediately in the file list without closing or reopening the widget.
 - Reads image scale and configuration from each sample's `.metadata.json`.
 - Computes cell-level and ring-level measurement tables in batch mode.
-- Writes `<sample>.cells_table.txt` and `<sample>.rings_table.txt` directly to each sample folder.
+- Writes `<sample>.cells_table.csv` and `<sample>.rings_table.csv` directly to each sample folder.
+- Generates or updates annotated overview scans (`<sample>_annotated.jpg`) and cross-dating reference plots (`<sample>_ReferenceSeries.jpg`).
+- **How Reference Plot Updates Work**: When generating `<sample>_ReferenceSeries.jpg`, ROXAS AI extracts the sample's measured mean ring width (`MRW`) series from `<sample>.rings_table.csv` (or calculates it from the `.rings` mask). It discovers available cross-dating files in the directory hierarchy by searching strictly upwards from the sample folder for files matching the configured cross-dating file extension (e.g., `*.crossdating.txt`). To determine which reference series to plot against:
+    - If a specific reference series was previously saved in `<sample>.metadata.json` (`reference_series`), and that column exists in one of the discovered cross-dating files, it uses that stored reference series.
+    - If no reference series is stored (or `reference_series` is `"NA"` or no longer present in the files), ROXAS AI automatically searches the series columns of the discovered cross-dating files for the best name match with the sample name.
+    - If a matching reference series is identified, the plot is rendered and `<sample>.metadata.json` is updated with the selected `reference_series`. If no cross-dating files or matching series are found, reference plot creation is safely skipped.
+
+### Files and Layers Saved
+- **Cell Measurement Tables (`<sample>.cells_table.csv`)**: Saved to disk for each processed sample when **Measure Cells** is enabled.
+- **Ring Measurement Tables (`<sample>.rings_table.csv`)**: Saved to disk for each processed sample when **Measure Rings** is enabled.
+- **Annotated Overview Images (`<sample>_annotated.jpg`)**: Saved or updated on disk for each sample when **Update Annotated image** is active (or locked on during measurements).
+- **Reference Series Plots (`<sample>_ReferenceSeries.jpg`)**: Saved or updated on disk for each sample when **Update Crossdating Reference Files** is active (or locked on during measurements), plotting sample MRW curves against their validated reference chronologies.
+- **Metadata (`<sample>.metadata.json`)**: Synchronized with updated analysis timestamps and measurement parameters.
+
+### Linked Operations Logic (File Synchronization)
+To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchronization:
+
+- When **Measure Cells** or **Measure Rings** is checked, the update checkboxes for **Update Annotated image** and **Update Crossdating Reference Files** are automatically locked **ON** (checked and disabled).
+- *Reason*: Any recalculation of anatomical traits or ring boundaries changes the underlying metrics and years; locking the image and plot updates guarantees that measurement tables, annotated scan images, and crossdating plots remain 100% synchronized with the new measurements.
+- When both measurement options are unchecked, the update checkboxes are unlocked, enabling standalone batch generation/updating of annotated images and reference plots across the project directory without re-running full measurements.
 
 ### Key Controls
-- **Project Directory**: Path to project directory containing segmented samples (selecting or changing the directory here triggers the same global project directory selection dialog).
-- **File Selection Mode**: Toggle between **Batch Process All Samples** and handpicking subsets (**Manually select files to process**).
+- **Project Directory Button**: Displays and allows switching the active project directory (triggering the same global project directory selection dialog).
+- **File Selection Mode**: Toggle between processing all samples and handpicking subsets (**Select individual files:**).
 - **Reverse Selection**: Inverts current sample selections in the list.
-- **Measure Cells / Measure Rings**: Checkboxes for target measurement outputs.
-- **Measurement Configuration**: Adjust global CWT thresholds, integration fractions, and smoothing settings in [ZZ - Settings](#zz---settings).
-- **Run Analysis Button**: Runs batch extraction with real-time progress updates.
+- **Operation Checkboxes**:
+    - **Measure Cells**: Extracts cell lumen and cell wall thickness metrics to `<sample>.cells_table.csv`.
+    - **Measure Rings**: Extracts ring-width and ring-level aggregate metrics to `<sample>.rings_table.csv`.
+    - **Update Annotated image**: Generates/updates `<sample>_annotated.jpg` with ring boundaries, year labels, and cell overlays.
+    - **Update Crossdating Reference Files**: Generates/updates standardized `<sample>_ReferenceSeries.jpg` plots.
+- **Check Settings Button**: Opens the floating Settings window focused directly on the measurement parameters.
+- **Measure & Update Button**: Runs batch extraction and updates with real-time progress bar tracking.
 
 ---
 
@@ -501,47 +604,45 @@ The **Batch Sample Measurements Widget** runs the anatomical measurement engine 
 
 The **Settings Widget** is a visual preferences manager that allows adjusting global defaults, file extensions, visualization parameters, and hardware settings without manual editing of JSON files.
 
-![Screenshot: Settings Manager Widget](../assets/screenshots/zz_settings_widget.png)
+![Screenshot: Settings Manager Widget](../assets/user_guide/zz_settings_widget.png)
 
 *Figure 14: Global settings manager widget with collapsible categories.*
 
 ### How It Works
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
 - Prevents syntax errors, invalid datatypes, or formatting corruption.
-- Dynamically notifies and updates active widgets upon applying changes without requiring a napari restart.
+- **Floating Presentation & Sizing Grip**: Opens automatically as a floating window centered on the active screen with comfortable 50 px vertical margins and a prominent diagonal sizing grip.
+- **Live Search & Filter**: Instant multi-term search filtering finds matching setting entries across all categories (e.g., typing `"gpu"` finds `try_to_use_gpu`, `"cells color"` finds `rasterization.cells_color`), displaying the count of matching items and offering a clear button.
+- **Expand All / Collapse All**: Toggles the expansion state of all setting categories at once.
+- **Immediate Application Without Restart**: Applying changes writes `settings.json` to disk and immediately notifies all active widgets and listeners in the running session.
 
 ### Key Settings Categories
 1. **File Extensions**:
-    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, and tables.
+    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, cross-dating chronologies, and tables.
 2. **Hardware & Processing**:
-    - `try_to_use_gpu`: Toggle CUDA / GPU acceleration for deep-learning segmentation.
+    - `try_to_use_gpu`: Toggle CUDA / MPS / GPU acceleration for deep-learning segmentation.
     - Worker thread and batch settings.
 3. **Visualization & Vectorization**:
     - Default colormaps for cell lumen layers.
     - Ring color sequence (alternating colormap for adjacent annual rings).
     - Display line widths and point sizes.
+    - Annotated image parameters (`cell_opacity`, `cell_fill_color`, `year_label_size`).
 4. **Measurement Defaults**:
-    - Default CWT integration widths, smoothing kernel sizes, and IQR outlier rejection multipliers.
+    - Default CWT integration widths, smoothing kernel sizes, IQR outlier rejection multipliers, and cluster thresholds.
 5. **Metadata Schema**:
     - Default metadata prompts and fields presented during sample preparation.
 
+### Key Controls
+- **Search Bar**: Live filter box matching any part of setting names or paths across categories.
+- **Expand all / Collapse all**: Expands or collapses all category groups.
+- **Apply**: Persists all settings to disk and applies them immediately across the running session.
+- **Reload from file**: Discards unapplied UI changes and reloads current settings from `settings.json`.
+- **Open settings.json**: Opens the raw configuration file in the system default text editor.
+- **Reset to defaults**: Resets all settings to the factory default configuration (with confirmation prompt).
+
 ### Troubleshooting: Settings Not Updating After an App Upgrade
 
-When updating or installing a new version of `napari-roxas-ai` over an older installation, you may occasionally find that updated defaults do not immediately take effect:
+When updating `napari-roxas-ai` over an older installation, existing configurations in `settings.json` are automatically preserved so custom user settings are not lost.
 
-**Why this happens**:
-   - The settings manager automatically preserves your existing `settings.json` file on disk so custom configurations are not accidentally lost during everyday use. Because existing values take precedence over new defaults during upgrade merges, previously saved properties are retained.
-   - In-place package installations (e.g., `pip install .` without removing the previous version) can also leave cached bytecode or untouched configuration files in the environment.
-
-**How to resolve**:
-   - **Step 1 — Reset from the UI**: Open the [ZZ - Settings](#zz---settings) widget and click **Reset to defaults**. This overwrites `settings.json` with the current code defaults and refreshes the widget.
-   - **Step 2 — Clean Reinstall**: If the settings or precision still do not update (e.g. due to stale package caches from an in-place upgrade), perform a clean reinstall:
-     1. Uninstall the package:
-        ```bash
-        pip uninstall napari-roxas-ai -y
-        ```
-     2. Remove any leftover `_settings` directory or `settings.json` file in your Python environment's `site-packages/napari_roxas_ai/`.
-     3. Reinstall the latest package version:
-        ```bash
-        pip install .
-        ```
+- **Reset from the UI**: To load the newest defaults, open the [ZZ - Settings](#zz-settings) widget and click **Reset to defaults**.
+- **Clean Reinstall**: For step-by-step instructions on performing a complete clean reinstall, see the [Installation Guide](../getting_started/installation.md#troubleshooting-clean-reinstall).
