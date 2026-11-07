@@ -181,12 +181,12 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "lower_limit_cwt_iqr_multiplier": 1.5,  # IQR multiplier for the lower CWT outlier fence
         "upper_limit_cwt_iqr_multiplier": 3.0,  # IQR multiplier for the upper CWT outlier fence
         "opposite_cwt_ratio_limit": 1.5,  # Max CWT ratio between opposite cell sides
-        "opposite_cwt_percentile_exception": 0.5,  # Percentile threshold to exempt thin walls from opposite ratio filtering
+        "opposite_cwt_percentile_exception": 0.6,  # Percentile threshold to exempt thin walls from opposite ratio filtering
         "adjacent_cwt_ratio_limit": 3.0,  # Max CWT ratio between a side and its adjacent sides
     },
     "cwt_visualization": {
         "enabled": True,  # Enable CWT circle visualization
-        "sample_interval": 50,  # Sample interval (every N-th cell)
+        "sample_interval": 25,  # Sample interval (every N-th cell)
         "included_color": "lime",  # Color for included CWT measurements
         "excluded_color": "red",  # Color for excluded CWT measurements
         "edge_width": 3.0,  # Circle edge width in pixels

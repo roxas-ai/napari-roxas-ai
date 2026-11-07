@@ -27,7 +27,7 @@ def default_config():
         "opposite_cwt_percentile_exception": settings.get("measurements.opposite_cwt_percentile_exception"),
         "adjacent_cwt_ratio_limit": settings.get("measurements.adjacent_cwt_ratio_limit"),
         "sample_type": "conifer",
-        "sample_interval": 50,
+        "sample_interval": 25,
         "sample_name": "conifer_sample",
     }
 
@@ -48,7 +48,7 @@ def test_cwt_sampling_and_geometry_conifer_end_to_end(default_config):
     config = default_config.copy()
     config["pixels_per_um"] = cells_meta["metadata"]["spatial_resolution"]
     config["sample_type"] = cells_meta["metadata"].get("sample_type", "conifer")
-    config["sample_interval"] = 50
+    config["sample_interval"] = 25
 
     analyzer = SampleAnalyzer(
         config=config,
@@ -60,7 +60,7 @@ def test_cwt_sampling_and_geometry_conifer_end_to_end(default_config):
     cwt_data = analyzer.get_cwt_visualization_data("conifer_sample")
     assert isinstance(cwt_data, dict)
     assert cwt_data["sample_name"] == "conifer_sample"
-    assert cwt_data["sample_interval"] == 50
+    assert cwt_data["sample_interval"] == 25
     assert cwt_data["total_cells"] == len(cells_df)
     assert cwt_data["sampled_cells_count"] > 0
     assert isinstance(cwt_data["circles"], list)
@@ -69,7 +69,7 @@ def test_cwt_sampling_and_geometry_conifer_end_to_end(default_config):
     valid_walls = {"pith", "bark", "left", "right"}
     for circle in cwt_data["circles"]:
         assert isinstance(circle["cell_id"], int)
-        assert circle["cell_id"] % 50 == 0
+        assert circle["cell_id"] % 25 == 0
         assert circle["wall"] in valid_walls
         assert len(circle["center_yx"]) == 2
         assert isinstance(circle["center_yx"][0], (int, float))

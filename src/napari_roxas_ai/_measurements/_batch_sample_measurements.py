@@ -930,7 +930,7 @@ class BatchSampleMeasurementsWidget(Container):
                 "measurements.adjacent_cwt_ratio_limit"
             ),
             "sample_interval": settings.get(
-                "cwt_visualization.sample_interval", 50
+                "cwt_visualization.sample_interval", 25
             ),
         }
 

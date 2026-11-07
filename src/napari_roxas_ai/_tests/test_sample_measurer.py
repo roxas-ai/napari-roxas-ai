@@ -209,6 +209,16 @@ def test_opposite_cwt_percentile_exception(default_config):
     analyzer50._apply_cwt_filters()
     assert np.isnan(analyzer50.cells_table.loc[4, "CWT_bark"])
 
+    # Test rounding of float artifact (0.7500000000000001 -> 0.75)
+    config_artifact = default_config.copy()
+    config_artifact["opposite_cwt_percentile_exception"] = 0.7500000000000001
+    analyzer_artifact = SampleAnalyzer(
+        config=config_artifact,
+        cells_array=np.zeros((10, 10), dtype=np.uint8),
+        rings_table=pd.DataFrame(),
+    )
+    assert analyzer_artifact.opposite_cwt_percentile_exception == 0.75
+
 
 def test_cluster_cells_and_vessel_grouping_angiosperm(default_config):
     config = default_config.copy()

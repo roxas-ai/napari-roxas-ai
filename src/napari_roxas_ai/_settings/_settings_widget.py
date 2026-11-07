@@ -255,7 +255,7 @@ FLOAT_SETTING_RANGES: Dict[str, Tuple[float, float]] = {
 }
 
 INT_SETTING_SPECS: Dict[str, Tuple[int, int, int]] = {
-    "cwt_visualization.sample_interval": (1, 10000, 50),
+    "cwt_visualization.sample_interval": (1, 10000, 25),
 }
 
 # Marker for a setting that has an explanation. A character rather than an
@@ -374,9 +374,10 @@ def _make_editor(
 
     if isinstance(value, float):
         float_spin_box = QDoubleSpinBox()
-        float_spin_box.setDecimals(
+        effective_decimals = (
             decimals if decimals is not None else _decimals_for(value)
         )
+        float_spin_box.setDecimals(effective_decimals)
         if step is not None:
             float_spin_box.setSingleStep(step)
         if val_range is not None:
@@ -384,7 +385,9 @@ def _make_editor(
         else:
             float_spin_box.setRange(-FLOAT_LIMIT, FLOAT_LIMIT)
         float_spin_box.setValue(value)
-        return float_spin_box, lambda: float(float_spin_box.value())
+        return float_spin_box, lambda: round(
+            float(float_spin_box.value()), effective_decimals
+        )
 
     if isinstance(value, str):
         line_edit = QLineEdit(value)

@@ -76,7 +76,7 @@ class SampleAnalyzer:
         )
         raw_pct = float(config["opposite_cwt_percentile_exception"])
         self.opposite_cwt_percentile_exception = (
-            raw_pct / 100.0 if raw_pct > 1.0 else raw_pct
+            round(raw_pct / 100.0, 4) if raw_pct > 1.0 else round(raw_pct, 2)
         )
         self.adjacent_cwt_ratio_limit = float(
             config["adjacent_cwt_ratio_limit"]
@@ -85,23 +85,23 @@ class SampleAnalyzer:
         # CWT circle visualization parameters and storage
         cwt_vis = self.config.get("cwt_visualization")
         if isinstance(cwt_vis, dict):
-            raw_interval = cwt_vis.get("sample_interval", 50)
+            raw_interval = cwt_vis.get("sample_interval", 25)
         else:
             raw_interval = self.config.get(
                 "cwt_sample_interval",
                 self.config.get(
                     "sample_interval",
-                    self.config.get("cwt_visualization.sample_interval", 50),
+                    self.config.get("cwt_visualization.sample_interval", 25),
                 ),
             )
         try:
             self.sample_interval = (
-                int(raw_interval) if raw_interval is not None else 50
+                int(raw_interval) if raw_interval is not None else 25
             )
         except (ValueError, TypeError):
-            self.sample_interval = 50
+            self.sample_interval = 25
         if self.sample_interval < 1:
-            self.sample_interval = 50
+            self.sample_interval = 25
 
         self.cwt_visualization_data: Dict[str, Any] = {}
         self._cwt_circles_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
@@ -1633,7 +1633,7 @@ if __name__ == "__main__":
         "lower_limit_cwt_iqr_multiplier": 1.5,
         "upper_limit_cwt_iqr_multiplier": 3.0,
         "opposite_cwt_ratio_limit": 1.5,
-        "opposite_cwt_percentile_exception": 0.5,
+        "opposite_cwt_percentile_exception": 0.6,
         "adjacent_cwt_ratio_limit": 3.0,
     }
 

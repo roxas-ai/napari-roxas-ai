@@ -157,6 +157,12 @@ def test_decimals_never_truncate_the_stored_value(value, expected):
     assert getter() == value
 
 
+def test_float_editor_rounds_to_specified_decimals():
+    # Value with floating point artifact e.g. 0.7500000000000001 with decimals=2
+    editor, getter = _make_editor(0.7500000000000001, step=0.05, decimals=2)
+    assert getter() == 0.75
+
+
 # ------------------------------------------------------------------ the editors
 
 
@@ -1168,7 +1174,7 @@ def test_project_directory_changed_elsewhere_is_shown_and_kept_on_apply(
 def test_cwt_visualization_defaults(settings_file):
     manager = SettingsManager()
     assert manager.get("cwt_visualization.enabled") is True
-    assert manager.get("cwt_visualization.sample_interval") == 50
+    assert manager.get("cwt_visualization.sample_interval") == 25
     assert manager.get("cwt_visualization.included_color") == "lime"
     assert manager.get("cwt_visualization.excluded_color") == "red"
     assert manager.get("cwt_visualization.edge_width") == 3.0
@@ -1185,8 +1191,8 @@ def test_cwt_visualization_widget_controls(widget, settings_file):
     assert isinstance(interval_sb, QSpinBox)
     assert interval_sb.minimum() == 1
     assert interval_sb.maximum() == 10000
-    assert interval_sb.singleStep() == 50
-    assert interval_sb.value() == 50
+    assert interval_sb.singleStep() == 25
+    assert interval_sb.value() == 25
 
     edge_width_dsb = _editor_for(widget, "cwt_visualization", "edge_width")
     assert isinstance(edge_width_dsb, QDoubleSpinBox)
