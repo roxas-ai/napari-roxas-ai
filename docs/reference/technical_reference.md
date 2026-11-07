@@ -19,6 +19,7 @@ ROXAS AI uses a standardized naming convention to organize analysis data. For a 
 
 ### Data & Metadata Files
 - **`.metadata.json`**: A comprehensive JSON file containing sample information, imaging parameters, and all processing thresholds required to reproduce the analysis.
+- **`.cwt.json`**: A JSON file storing cell wall thickness (CWT) quality assurance circles, centroid coordinates, thickness values, inclusion/exclusion status, and filter reasons for sampled cells. It is created during trait measurement (9A/9B) and automatically loaded into napari as the `[<sample>] CWT Circles` Shapes layer when reopening samples.
 - **`.cells_table.csv`**: A CSV file (semicolon-delimited by default, configurable in settings) containing measurements for every individual cell.
 - **`.rings_table.csv`**: A CSV file (semicolon-delimited by default, configurable in settings) containing aggregated measurements for each tree ring.
 
@@ -168,13 +169,106 @@ $$ \text{DHM} = \left( \frac{1}{N} \sum_{i=1}^N \text{DH}_i^4 \right)^{1/4} $$
 
 ---
 
-## Mork's Index (`RTSR`) and Circular Ratio (`CTSR`, Figure 1)
+## Vessel Grouping Metrics (`RVGI`, `RVSF`, `RGSGV`)
+
+In angiosperm wood, xylem vessels may appear as solitary conduits or grouped into pore multiples and clusters (Carlquist 2001). 
+
+### How Vessel Grouping Analysis Works
+ROXAS AI identifies vessel groupings based on spatial proximity between adjacent vessel lumina:
+
+1. **Cluster Separation Threshold**: Two vessels are considered connected within the same group if the spatial separation between their lumen perimeters is less than or equal to `cluster_dbl_cwt_threshold` (default: `3.0` $\mu\text{m}$, approximating intervening double cell wall thickness).
+2. **Cluster Topology**: Contiguous networks of connected vessels are clustered together into discrete grouping units.
+3. **Topological Indices**: From these clusters, standardized vessel grouping indices (Carlquist 2001) are computed:
+    - **Vessel Grouping Index (`RVGI`, ratio):** Average number of vessels per grouping unit (solitary vessels count as a group of 1): $\text{RVGI} = \frac{N_{\text{total vessels}}}{N_{\text{groups}}}$.
+    - **Vessel Solitary Fraction (`RVSF`, %):** Percentage of solitary vessels relative to all vessels: $\text{RVSF} = 100 \cdot \frac{N_{\text{solitary vessels}}}{N_{\text{total vessels}}}$.
+    - **Mean Group Size of Grouped Vessels (`RGSGV`, index):** Mean number of vessels per cluster considering only non-solitary groups ($\text{size} > 1$).
+
+*(Note: For conifer tracheid samples, vessel grouping metrics are not applicable and are populated with blank / NA).*
+
+---
+
+## Cell Wall Thickness (`CWT`) Quality Control & Filtering
+
+To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automated multi-stage quality control filters to all raw cell wall thickness measurements.
+
+### 1. Wall Definitions & Measurement Integration (Figure 1) {: #1-wall-definitions-measurement-integration }
+
+![Wall Definitions and Measurement Integration](../assets/reference/cwt_measurements_definitions.png){ width="80%" }
+
+*Figure 1: Definition of tangential and radial wall orientations and the central measurement integration span.*
+
+#### Cell Wall Identification Algorithm
+To measure the cell wall thickness of individual cells from segmented lumen masks, ROXAS AI uses an automated Euclidean distance and watershed-based approach:
+
+1. **Lumen Boundaries & Euclidean Distance Mask:** Based on the segmented cell lumina, an inverted binary mask is created where background and cell walls are foreground pixels. A Euclidean distance transform is calculated across this mask, computing the exact spatial distance of every wall pixel to the nearest cell lumen boundary.
+2. **Watershed Mask & Middle Lamella Approximation:** A watershed segmentation algorithm is computed between adjacent cell lumina to detect the contact boundary (the watershed line) between neighboring tracheids. Following Prendin et al. (2017), the exact position of the middle lamella separating two adjacent cells cannot be resolved directly from optical lumen contours alone; it is therefore geometrically approximated by assuming that each wall of two adjacent sharing cells has equal thickness (i.e., the middle lamella is located equidistant between the two lumina along the watershed ridge).
+3. **Lateral Integration:** For each of the four anatomical wall sectors (`CWTPI`, `CWTBA`, `CWTLE`, `CWTRI`), distance values are sampled along the watershed line. To avoid geometric distortion at rounded cell corners, measurements are laterally integrated over the central portion of the wall (defined by `relwidth_cwt_integration`, default: `0.75` / 75%).
+
+#### Wall Sectors & Aggregated Metrics
+For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
+
+- **Tangential walls:** `CWTPI` (pith-facing, top) and `CWTBA` (bark-facing, bottom).
+- **Radial walls:** `CWTLE` (left) and `CWTRI` (right).
+- **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: `0.75`) to avoid corner-rounding biases.
+- **Aggregated metrics:**
+    - Tangential mean: `CWTTAN` = (`CWTPI` + `CWTBA`) / 2; or single valid side if one is NA.
+    - Radial mean: `CWTRAD` = (`CWTLE` + `CWTRI`) / 2; or single valid side if one is NA.
+    - Overall mean: `CWTALL` = (`CWTTAN` + `CWTRAD`) / 2; or single valid side if one is NA.
+
+### 2. Global IQR Distribution Filter / Tukey's Fences (Figure 2) {: #2-global-iqr-distribution-filter }
+
+![Global IQR Distribution Filter](../assets/reference/cwt_iqr_filter.png){ width="80%" }
+
+*Figure 2: Global IQR outlier filtering based on lower and upper Tukey's fences.*
+
+To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls (`CWTPI`, `CWTBA`) and radial walls (`CWTLE`, `CWTRI`), based on the Interquartile Range ($\text{IQR} = Q_3 - Q_1$):
+
+- **Lower Limit:** $\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})$ (controlled by `lower_limit_cwt_iqr_multiplier`, default: `1.5`)
+- **Upper Limit:** $Q_3 + 3.0 \cdot \text{IQR}$ (controlled by `upper_limit_cwt_iqr_multiplier`, default: `3.0`)
+- Values falling outside **Lower Limit:** or **Upper Limit:** are set to **blank (NA)**.
+
+### 3. Opposite Wall Ratio Filter & Percentile Exception (Figure 3) {: #3-opposite-wall-ratio-filter }
+
+![Opposite Wall Ratio Filter](../assets/reference/cwt_opposite_wall_ration_filter.png){ width="80%" }
+
+*Figure 3: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.*
+
+In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different anatomical structure (such as unsegmented wood ray parenchyma cells) or an intercellular gap.
+
+- **Standard Ratio Rule:** If the thickness of one wall exceeds `opposite_cwt_ratio_limit` $\cdot$ opposing wall thickness (default threshold: `1.5`), the larger wall is flagged for potential exclusion (**NA**), while the valid opposing side is retained.
+- **Ray Artifacts & Wall Inflation:** Wood rays run radially from pith to bark, meaning unsegmented ray contacts almost exclusively inflate **radial walls** (`CWTLE`, `CWTRI`, `CWTRAD`). Because the distance-to-watershed method assumes equal double-wall thickness between adjacent detected lumina (Prendin et al. 2017), the entire ray gap between two tracheid files is assigned as a single inflated tracheid wall. In earlywood, an unsegmented ray contact inflates thin tracheid walls ($\sim 1.5\text{--}2.5\ \mu\text{m}$) to $\sim 3.5\text{--}5.0\ \mu\text{m}$ (asymmetry ratio $\ge 1.5\text{--}2.0\times$); in latewood, walls inflate from $\sim 5.0\text{--}8.0\ \mu\text{m}$ to $\ge 8.0\text{--}12.0\ \mu\text{m}$.
+- **Percentile Exception Threshold (`opposite_cwt_percentile_exception`):** To avoid falsely rejecting clean, thin earlywood walls due to benign natural ratio variations, the filter only activates when the thicker wall exceeds an empirical percentile cutoff (default: `0.60` / 60th percentile). This cutoff is calculated independently from the sample-wide distributions of tangential (`CWTPI` + `CWTBA`) and radial (`CWTLE` + `CWTRI`) walls immediately after IQR filtering. Walls thinner than the 60th percentile are protected from rejection, while walls exceeding the threshold that display opposite-side asymmetry (ratio > `opposite_cwt_ratio_limit`) are discarded.
+
+### 4. Adjacent Wall Ratio Filter (Figure 4) {: #4-adjacent-wall-ratio-filter }
+
+![Adjacent Wall Ratio Filter](../assets/reference/cwt_adjacent_wall_ratio_filter.png){ width="80%" }
+
+*Figure 4: Adjacent wall ratio filter detecting and discarding local segmentation anomalies.*
+
+Protects against severe local segmentation anomalies (e.g., pit aperture artifacts, small pollutions, tracheids sandwiched between two rays) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
+
+- **Rule:** If an individual tangential wall thickness exceeds `adjacent_cwt_ratio_limit` $\cdot$ perpendicular radial wall thickness (default threshold: `3.0`), the distorted tangential wall is set to **NA** (and vice versa for radial walls).
+
+### 5. CWT Quality Assurance Layer & File Lifecycle {: #5-cwt-quality-assurance-layer-file-lifecycle }
+
+To support visual validation and interactive quality control of cell wall thickness measurements, ROXAS AI includes a dedicated CWT QA layer and data export workflow:
+
+- **Data File (`<sample>.cwt.json`)**: During measurement (Widget 9A or 9B), measurement circle coordinates, wall thickness values, sector orientations, inclusion/exclusion status, and specific filter exclusion reasons are serialized directly to disk in `<sample>.cwt.json`.
+- **Napari QA Layer (`[<sample>] CWT Circles`)**: Rendered directly in the viewer on sampled cells (default: every 25th cell, configured via `cwt_visualization.sample_interval`). Circles are color-coded (green/lime for `included`, red for `excluded`).
+- **Interactive Tooltips**: Hovering the cursor over any measurement circle displays a tooltip with `Cell ID`, `Sector` (Pith/Bark/Left/Right), `Thickness` ($\mu\text{m}$), `Status` (`included`/`excluded`), and descriptive `Exclusion Reason`.
+- **Automatic Loading**: When loading a sample in Widget 2/4, if `<sample>.cwt.json` exists and `cwt_visualization.enabled` is `true`, the `[<sample>] CWT Circles` layer is automatically loaded and displayed.
+- **Mutual Editor Exclusion**: During manual cell editing (Widget 5) and ring editing (Widget 6), `[<sample>] CWT Circles` is automatically hidden to eliminate visual clutter and prevent accidental cross-layer edits, and restored when exiting edit mode.
+- **Synchronization**: Re-running measurements in Widget 9A or 9B automatically recalculates and overwrites `<sample>.cwt.json` and refreshes the QA layer in napari.
+
+---
+
+## Mork's Index (`RTSR`) and Circular Ratio (`CTSR`, Figure 5)
 
 Mork's index distinguishes earlywood from latewood tracheids based on the ratio between tangential cell wall thickness and radial lumen diameter (Denne 1989):
 
 ![Mork's Index Scheme](../assets/reference/mork_index.png){ width="450" }
 
-*Figure 1: Definition of Mork's index based on tangential cell wall thickness and radial lumen diameter.*
+*Figure 5: Definition of Mork's index based on tangential cell wall thickness and radial lumen diameter.*
 
 Mathematically, Mork's radial thickness-to-span ratio (`RTSR`) is defined as:
 
@@ -188,13 +282,13 @@ $$ \text{CTSR} = \frac{4 \cdot \text{CWTALL}}{2\sqrt{\text{LA} / \pi}} $$
 
 ---
 
-## Cell Wall Reinforcement Index (`TB2`, Figure 2)
+## Cell Wall Reinforcement Index (`TB2`, Figure 6)
 
 The cell wall reinforcement index estimates conduit resistance against cell wall collapse (implosion) induced by negative xylem pressure (Hacke et al. 2001):
 
 ![Cell Wall Reinforcement Scheme](../assets/reference/cell_wall_reinforcement.png){ width="450" }
 
-*Figure 2: Definition of the cell wall reinforcement index $(t/b)^2$.*
+*Figure 6: Definition of the cell wall reinforcement index $(t/b)^2$.*
 
 The index evaluates the double wall thickness ($t = 2 \cdot \text{CWT}$) relative to the internal lumen span ($b = \text{Diameter}$) independently for radial and tangential orientations:
 
@@ -240,81 +334,6 @@ In wood cross-sections, annual ring boundaries are rarely strictly horizontal. R
 
 ---
 
-## Vessel Grouping Metrics (`RVGI`, `RVSF`, `RGSGV`)
-
-For angiosperm xylem containing vessel clusters (Carlquist 2001), grouping statistics describe hydraulic redundancy and xylem topology:
-
-- **Vessel Grouping Index (`RVGI`, ratio):** Average number of vessels per grouping unit (solitary vessels count as a group of 1): $\text{RVGI} = \frac{N_{\text{total vessels}}}{N_{\text{groups}}}$.
-- **Vessel Solitary Fraction (`RVSF`, %):** Percentage of solitary vessels relative to all vessels: $\text{RVSF} = 100 \cdot \frac{N_{\text{solitary vessels}}}{N_{\text{total vessels}}}$.
-- **Mean Group Size of Grouped Vessels (`RGSGV`, index):** Mean number of vessels per cluster considering only non-solitary groups ($\text{size} > 1$).
-
-*(Note: For conifer tracheid samples, vessel grouping metrics are not applicable and are populated with **NA**).*
-
----
-
-## Cell Wall Thickness (`CWT`) Quality Control & Filtering
-
-To obtain robust, artifact-free anatomical measurements, ROXAS AI applies automated multi-stage quality control filters to all raw cell wall thickness measurements.
-
-### 1. Wall Definitions & Measurement Integration (Figure 3)
-
-![Wall Definitions and Measurement Integration](../assets/reference/cwt_measurements_definitions.png){ width="80%" }
-
-*Figure 3: Definition of tangential and radial wall orientations and the central measurement integration span.*
-
-#### Cell Wall Identification Algorithm
-To measure the cell wall thickness of individual cells from segmented lumen masks, ROXAS AI uses an automated Euclidean distance and watershed-based approach:
-
-1. **Lumen Boundaries & Euclidean Distance Mask:** Based on the segmented cell lumina, an inverted binary mask is created where background and cell walls are foreground pixels. A Euclidean distance transform is calculated across this mask, computing the exact spatial distance of every wall pixel to the nearest cell lumen boundary.
-2. **Watershed Mask & Middle Lamella Approximation:** A watershed segmentation algorithm is computed between adjacent cell lumina to detect the contact boundary (the watershed line) between neighboring tracheids. Following Prendin et al. (2017), the exact position of the middle lamella separating two adjacent cells cannot be resolved directly from optical lumen contours alone; it is therefore geometrically approximated by assuming that each wall of two adjacent sharing cells has equal thickness (i.e., the middle lamella is located equidistant between the two lumina along the watershed ridge).
-3. **Lateral Integration:** For each of the four anatomical wall sectors (`CWTPI`, `CWTBA`, `CWTLE`, `CWTRI`), distance values are sampled along the watershed line. To avoid geometric distortion at rounded cell corners, measurements are laterally integrated over the central portion of the wall (defined by `relwidth_cwt_integration`, default: 75%).
-
-#### Wall Sectors & Aggregated Metrics
-For each conifer tracheid, cell walls are measured across four distinct anatomical orientations:
-
-- **Tangential walls:** `CWTPI` (pith-facing, top) and `CWTBA` (bark-facing, bottom).
-- **Radial walls:** `CWTLE` (left) and `CWTRI` (right).
-- **Integration span:** Wall thicknesses are integrated over the central span of each wall segment (defined by `relwidth_cwt_integration`, default: 75%) to avoid corner-rounding biases.
-- **Aggregated metrics:**
-    - Tangential mean: `CWTTAN` = (`CWTPI` + `CWTBA`) / 2; or any of the two if the other **NA**
-    - Radial mean: `CWTRAD` = (`CWTLE` + `CWTRI`) / 2; or any of the two if the other **NA**
-    - Overall mean: `CWTALL` = (`CWTTAN` + `CWTRAD`) / 2; or any of the two if the other **NA**
-
-### 2. Global IQR Distribution Filter / Tukey's Fences (Figure 4)
-
-![Global IQR Distribution Filter](../assets/reference/cwt_iqr_filter.png){ width="80%" }
-
-*Figure 4: Global IQR outlier filtering based on lower and upper Tukey's fences.*
-
-To exclude segmentation debris, extreme clumps, or sub-pixel erosion artifacts, measurements are filtered against population-wide distributions computed independently for tangential walls (`CWTPI`, `CWTBA`) and radial walls (`CWTLE`, `CWTRI`), based on the Interquartile Range ($\text{IQR} = Q_3 - Q_1$):
-
-- **Lower Limit:** $\max(Q_1 - 1.5 \cdot \text{IQR},\, 1\text{ pixel in }\mu\text{m})$ (controlled by `lower_limit_cwt_iqr_multiplier`)
-- **Upper Limit:** $Q_3 + 3.0 \cdot \text{IQR}$ (controlled by `upper_limit_cwt_iqr_multiplier`)
-- Values falling outside **Lower Limit:** or **Upper Limit:** are set to **blank (NA)**.
-
-### 3. Opposite Wall Ratio Filter (Figure 5)
-
-![Opposite Wall Ratio Filter](../assets/reference/cwt_opposite_wall_ration_filter.png){ width="80%" }
-
-*Figure 5: Opposite wall ratio filter identifying and removing inflated wall measurements bordering ray cells.*
-
-In conifer xylem, opposing walls of a single tracheid have comparable thicknesses unless bordering a different cell type (such as wood ray cells) or an intercellular gap.
-
-- **Rule:** If the thickness of one wall exceeds `opposite_cwt_ratio_limit` $\cdot$ opposing wall thickness (default threshold: 1.5), the inflated side is excluded (**NA**), while the valid opposing side is retained.
-- **Anatomical and technical context:** Because the distance-to-watershed algorithm assumes equal double-wall thickness between adjacent detected lumina (Prendin et al. 2017), unsegmented or narrower intervening structures like uniseriate wood ray parenchyma cells are not recognized as independent tracheid lumina. Consequently, the Euclidean distance measured across the entire ray gap between two tracheid files is assigned as a single inflated tracheid wall (`CWTRI` in Figure 5). The filter identifies this asymmetric inflation relative to the normal opposing wall (`CWTLE`), discarding the artifactual `CWTRI` measurement while preserving `CWTLE`.
-
-### 4. Adjacent Wall Ratio Filter (Figure 6)
-
-![Adjacent Wall Ratio Filter](../assets/reference/cwt_adjacent_wall_ratio_filter.png){ width="80%" }
-
-*Figure 6: Adjacent wall ratio filter detecting and discarding local segmentation anomalies.*
-
-Protects against severe local segmentation anomalies (e.g., pit aperture artifacts, small pollutions, tracheids sandwiched between two rays) that disproportionately distort a single wall relative to the tracheid's perpendicular dimensions.
-
-- **Rule:** If an individual tangential wall thickness exceeds `adjacent_cwt_ratio_limit` (default threshold: 3.0), the distorted tangential wall is set to **NA** (and vice versa for radial walls!).
-
----
-
 ## The Metadata File (`.metadata.json`)
 
 The metadata file ensures traceability and reproducibility of your analysis. It stores four main categories of information:
@@ -342,12 +361,13 @@ The metadata file ensures traceability and reproducibility of your analysis. It 
 ### 4. Analysis Parameters & Quality Control
 These parameters define how cell walls are measured and how clusters are handled:
 
-- **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.
-- **`relwidth_cwt_integration`**: The relative width along the cell wall used for integrating thickness measurements.
-- **`lower_limit_cwt_iqr_multiplier`**: Multiplier for the lower Tukey's fence ($Q_1 - k \cdot \text{IQR}$) in cell wall thickness outlier detection.
-- **`upper_limit_cwt_iqr_multiplier`**: Multiplier for the upper Tukey's fence ($Q_3 + k \cdot \text{IQR}$) in cell wall thickness outlier detection.
-- **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
-- **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
+- **`cluster_dbl_cwt_threshold`**: Distance threshold in $\mu\text{m}$ for detecting vessel groupings in angiosperms (see [Vessel Grouping Metrics](#vessel-grouping-metrics-rvgi-rvsf-rgsgv)).
+- **`relwidth_cwt_integration`**: Relative wall fraction along the cell wall used for thickness integration (see [Wall Definitions & Measurement Integration](#1-wall-definitions-measurement-integration)).
+- **`lower_limit_cwt_iqr_multiplier`**: Multiplier for the lower Tukey's fence ($Q_1 - k \cdot \text{IQR}$) in cell wall thickness outlier detection (see [Global IQR Distribution Filter](#2-global-iqr-distribution-filter)).
+- **`upper_limit_cwt_iqr_multiplier`**: Multiplier for the upper Tukey's fence ($Q_3 + k \cdot \text{IQR}$) in cell wall thickness outlier detection (see [Global IQR Distribution Filter](#2-global-iqr-distribution-filter)).
+- **`opposite_cwt_ratio_limit`**: Maximum allowed ratio between opposite wall thicknesses before triggering exclusion (see [Opposite Wall Ratio Filter & Percentile Exception](#3-opposite-wall-ratio-filter)).
+- **`opposite_cwt_percentile_exception`**: Directional quantile cutoff (default: `0.60` / 60%) above which opposite-wall ratio filtering applies, protecting thin earlywood walls from false rejection while capturing ray artifacts (see [Opposite Wall Ratio Filter & Percentile Exception](#3-opposite-wall-ratio-filter)).
+- **`adjacent_cwt_ratio_limit`**: Maximum allowed ratio between adjacent wall thicknesses (see [Adjacent Wall Ratio Filter](#4-adjacent-wall-ratio-filter)).
 
 ---
 
@@ -363,30 +383,31 @@ The settings are organized into several logical blocks:
 
 Defines how ROXAS AI recognizes and names files:
 
-- **`scan_file_extension`**: `[".scan", ".jpg"]`
-- **`cells_file_extension`**: `[".cells", ".png"]`
-- **`cells_table_file_extension`**: `[".cells_table", ".csv"]`
-- **`rings_file_extension`**: `[".rings", ".tif"]`
-- **`rings_table_file_extension`**: `[".rings_table", ".csv"]`
-- **`metadata_file_extension`**: `[".metadata", ".json"]`
-- **`crossdating_file_extension`**: `[".crossdating", ".txt"]`
-- **`roxas_file_extensions`**: List of managed ROXAS file suffixes (`[".scan", ".cells", ".rings", ".metadata"]`).
-- **`image_file_extensions`**: Supported image formats (`[".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"]`).
-- **`text_file_extensions`**: Supported text and table formats (`[".rwl", ".tuc", ".txt", ".csv", ".tsv"]`).
+- **`scan_file_extension`**: File suffix for prepared scan images. (*Default:* `[".scan", ".jpg"]`)
+- **`cells_file_extension`**: File suffix for cell segmentation label masks. (*Default:* `[".cells", ".png"]`)
+- **`cells_table_file_extension`**: File suffix for cell-level measurement tables. (*Default:* `[".cells_table", ".csv"]`)
+- **`rings_file_extension`**: File suffix for ring boundary label masks. (*Default:* `[".rings", ".tif"]`)
+- **`rings_table_file_extension`**: File suffix for ring-level measurement tables. (*Default:* `[".rings_table", ".csv"]`)
+- **`metadata_file_extension`**: File suffix for sample metadata JSON files. (*Default:* `[".metadata", ".json"]`)
+- **`crossdating_file_extension`**: File suffix for Tucson cross-dating files. (*Default:* `[".crossdating", ".txt"]`)
+- **`cwt_file_extension`**: File suffix for CWT QA datasets. (*Default:* `[".cwt", ".json"]`)
+- **`roxas_file_extensions`**: List of managed ROXAS file suffixes. (*Default:* `[".scan", ".cells", ".rings", ".metadata", ".cwt"]`)
+- **`image_file_extensions`**: Supported image formats. (*Default:* `[".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".jp2"]`)
+- **`text_file_extensions`**: Supported text and table formats. (*Default:* `[".rwl", ".tuc", ".txt", ".csv", ".tsv"]`)
 
 ### 2. Processing & GPU (`processing`)
 
 Allows configuring hardware acceleration and memory optimization:
 
-- **`try_to_use_gpu`**: Set to `true` to enable GPU acceleration if a compatible CUDA-enabled graphics card is available.
-- **`try_to_use_autocast`**: Set to `true` for mixed precision acceleration during deep learning inference.
+- **`try_to_use_gpu`**: Set to `true` to enable GPU acceleration if a compatible CUDA-enabled graphics card, Apple Silicon (MPS), or Intel GPU (XPU) is available. (*Default:* `false`)
+- **`try_to_use_autocast`**: Set to `true` for mixed precision acceleration during deep learning inference. (*Default:* `false`)
 
 ### 3. Tables (`tables`)
 
 Defines the output format for tabular data:
 
-- **`separator`**: Column delimiter for output tables (default: `";"`).
-- **`index_column`**: Column identifier name (default: `"id"`).
+- **`separator`**: Column delimiter for output tables. (*Default:* `";"`)
+- **`index_column`**: Column identifier name. (*Default:* `"id"`)
 
 ### 4. Visualization (Vectorization & Rasterization) {: #4-visualization-vectorization-rasterization }
 
@@ -410,35 +431,51 @@ Controls how edited vector shapes are rasterized back onto integer label masks:
 - **`cells_color`**: Default colormap color for rasterized cell lumens. (*Default:* `"lime"`)
 - **`uncomplete_ring_value`**: Integer label assigned to the topmost uncompleted ring zone bordering the bark edge. (*Default:* `-1`)
 - **`uncomplete_ring_color`**: Display color assigned to the uncompleted ring zone. (*Default:* `"red"`)
-- **`rings_color_sequence`**: List of alternating colors assigned cyclically to successive annual rings (`["#8080ff", "#a8a8ff", "#d0d0ff", "#ffffff"]`).
+- **`rings_color_sequence`**: List of alternating colors assigned cyclically to successive annual rings. (*Default:* `["blue", "green", "yellow", "purple", "orange", "cyan", "brown", "pink", "gray", "lime"]`)
 
-### 5. Measurement Defaults (`measurements`)
+### 5. CWT Quality Assurance & Visualization (`cwt_visualization`)
+
+Configures the interactive cell wall thickness visualization layer rendered in napari (see [CWT Quality Assurance Layer & File Lifecycle](#5-cwt-quality-assurance-layer-file-lifecycle) for full details):
+
+- **`enabled`**: Toggle creation and display of the `[<sample>] CWT Circles` Shapes layer. (*Default:* `true`)
+- **`sample_interval`**: Step stride for cell sampling along the cross-section (e.g., displaying circles on every 25th tracheid). (*Default:* `25`)
+- **`included_color`**: Outline color for valid, measurement-included wall sectors. (*Default:* `"lime"`)
+- **`excluded_color`**: Outline color for filtered/excluded wall sectors. (*Default:* `"red"`)
+- **`edge_width`**: Line thickness (in pixels) for measurement circles. (*Default:* `3.0`)
+
+### 6. Measurement Defaults (`measurements`)
 
 Contains default parameters for anatomical analysis, used to populate metadata for new samples:
 
-- **`cluster_dbl_cwt_threshold`**: Threshold for detecting cell wall clusters (physiological grouping via pits). Used for angiosperms.
-- **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries.
-- **`relwidth_cwt_integration`**: The relative width along the cell wall used for thickness calculations.
-- **`cells_tangential_angle`**: Default angle for tangential orientation.
-- **`lower_limit_cwt_iqr_multiplier`**: Multiplier for the lower Tukey's fence ($Q_1 - k \cdot \text{IQR}$) in cell wall thickness outlier detection.
-- **`upper_limit_cwt_iqr_multiplier`**: Multiplier for the upper Tukey's fence ($Q_3 + k \cdot \text{IQR}$) in cell wall thickness outlier detection.
-- **`opposite_cwt_ratio_limit`**: Quality control factor comparing wall thickness on opposite sides of a cell.
-- **`adjacent_cwt_ratio_limit`**: Quality control factor comparing wall thickness on adjacent sides of a cell.
+- **`cluster_dbl_cwt_threshold`**: Distance threshold in $\mu\text{m}$ for detecting vessel groupings in angiosperms (see [Vessel Grouping Metrics](#vessel-grouping-metrics-rvgi-rvsf-rgsgv)). (*Default:* `3.0`)
+- **`cells_smoothing_kernel_size`**: Size of the kernel used for smoothing cell boundaries (see [Cell Wall Identification Algorithm](#cell-wall-identification-algorithm)). (*Default:* `1`)
+- **`relwidth_cwt_integration`**: Relative wall fraction along the cell wall used for thickness integration (see [Wall Definitions & Measurement Integration](#1-wall-definitions-measurement-integration)). (*Default:* `0.75`)
+- **`cells_tangential_angle`**: Default sample orientation angle in degrees clockwise. (*Default:* `0.0`)
+- **`lower_limit_cwt_iqr_multiplier`**: Multiplier for the lower Tukey's fence in CWT outlier detection (see [Global IQR Distribution Filter](#2-global-iqr-distribution-filter)). (*Default:* `1.5`)
+- **`upper_limit_cwt_iqr_multiplier`**: Multiplier for the upper Tukey's fence in CWT outlier detection (see [Global IQR Distribution Filter](#2-global-iqr-distribution-filter)). (*Default:* `3.0`)
+- **`opposite_cwt_ratio_limit`**: Maximum allowed ratio between opposite wall thicknesses before filtering (see [Opposite Wall Ratio Filter & Percentile Exception](#3-opposite-wall-ratio-filter)). (*Default:* `1.5`)
+- **`opposite_cwt_percentile_exception`**: Directional quantile cutoff exempting thin earlywood walls from opposite-wall ratio filtering (see [Opposite Wall Ratio Filter & Percentile Exception](#3-opposite-wall-ratio-filter)). (*Default:* `0.60`)
+- **`adjacent_cwt_ratio_limit`**: Maximum allowed ratio between adjacent wall thicknesses (see [Adjacent Wall Ratio Filter](#4-adjacent-wall-ratio-filter)). (*Default:* `3.0`)
 
-### 6. Annotated Image & Project Directory
+### 7. Annotated Image & Project Directory
 
-- **`project_directory`**: Path to the currently active project working directory.
-- **`annotated_image`**: Configuration for saved annotated verification images (`_annotated.jpg`), including cell overlay opacity (`cell_opacity`), fill color (`cell_fill_color`), year label font size (`year_label_size`), downscaling factor (`scale_factor`), and JPEG quality and compression settings (`quality`, `optimize`, `progressive`).
+- **`project_directory`**: Path to the currently active project working directory. (*Default:* `null`)
+- **`annotated_image`**: Configuration for saved annotated verification images (`_annotated.jpg`):
+    - **`cell_opacity`**: Opacity percentage (0–100) of the cell overlay. (*Default:* `50`)
+    - **`cell_fill_color`**: Fill color for cell lumina. (*Default:* `"yellow"`)
+    - **`year_label_size`**: Calendar year label font size as percentage of mean ring width. (*Default:* `20`)
+    - **`scale_factor`**: Scale factor for image downscaling (1.0 = original dimensions). (*Default:* `1.0`)
+    - **`quality`**: JPEG quality rating (1–100). (*Default:* `75`)
 
-### 7. Metadata Field Definitions (`samples_metadata`)
+### 8. Metadata Field Definitions (`samples_metadata`)
 
 Defines the structure, validation rules, and widget types for the input forms in the plugin:
 
-- **`sample_name`**: Text input for the unique sample identifier.
-- **`sample_type`**: Dropdown selection for wood type (`conifer`, `angiosperm`).
-- **`meas_geometry`**: Dropdown selection for measurement layout (`linear`, `circular`).
-- **`spatial_resolution`**: Numeric input for spatial resolution in $\text{px}/\mu\text{m}$.
-- **`rings_outmost_complete_year`**: Integer input for the calendar year of the outermost complete ring.
+- **`sample_name`**: Text input for the unique sample identifier. (*Read-only*)
+- **`sample_type`**: Dropdown selection for wood type (`conifer`, `angiosperm`). (*Default:* `"conifer"`)
+- **`meas_geometry`**: Dropdown selection for measurement layout (`linear`, `circular`). (*Default:* `"linear"`)
+- **`spatial_resolution`**: Numeric input for spatial resolution in $\text{px}/\mu\text{m}$. (*Default:* `2.267574`)
+- **`rings_outmost_complete_year`**: Integer input for the calendar year of the outermost complete ring. (*Default:* `9999` / "Not set")
 
 ---
 

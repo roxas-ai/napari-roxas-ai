@@ -68,11 +68,13 @@ flowchart LR
 
 1. In the sidebar, scroll to **9A - Measure cells & rings (individual image)**.
 2. Verify that **Measure Cells** and **Measure Rings** are checked.
-3. *(Optional)* Click **Check Settings** to review or customize CWT thresholds and measurement parameters in the floating settings window.
+3. *(Optional)* Click **Check Settings** to review or customize measurement parameters and quality control thresholds.
 4. Click **Measure**.
-5. The measurement engine outputs comprehensive semicolon-delimited CSV tables and an updated overview image in the project directory:
+5. The measurement engine outputs comprehensive semicolon-delimited CSV tables, CWT quality assurance data, and an updated overview image in the project directory:
     - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Lumen Area (`LA`), Cell Wall Thickness (`CWTALL`, `CWTRAD`, `CWTTAN`), Mork's Index (`RTSR`), Theoretical Hydraulic Conductance (`KH`), and Hydraulic Diameter (`DH`).
     - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Mean Ring Width (`MRW`), Cell Count (`CNO`), Mean Lumen Area (`MLA`), Cell Density (`CD`), and Relative Anatomical Density (`RWD`).
+    - **[`<sample>.cwt.json`](../reference/technical_reference.md#data-metadata-files)**: Circle geometries, wall thickness values, inclusion/exclusion status, and filter reasons for sampled cells.
+    - **`[<sample>] CWT Circles` Shapes Layer**: Non-destructive viewer layer displaying green (included) and red (excluded) measurement circles. Hover over any circle to view an interactive tooltip with Cell ID, wall sector, thickness ($\mu\text{m}$), status, and exclusion reason.
     - **`<sample>_annotated.jpg`**: High-resolution scan automatically regenerated with overlaid ring boundaries, calendar year labels, and cell lumen highlights.
     - **Layer Feature Tables**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive trait inspection directly inside napari.
 
@@ -217,11 +219,13 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
 
 1. In the Manual Editing group, scroll to **9A - Measure cells & rings (individual image)**.
 2. Check **Measure Cells** and/or **Measure Rings**.
-3. *(Optional)* Click **Check Settings** to review or customize CWT thresholds, smoothing kernels, or Tukey's fence parameters.
+3. *(Optional)* Click **Check Settings** to review or customize measurement parameters and quality control thresholds.
 4. Click **Measure**.
-5. The measurement engine computes anatomical traits via CWT and wall profiling, cleans non-measured edge artefacts, attaches measurements to layer properties for interactive table inspection, and outputs comprehensive semicolon-delimited CSV tables:
+5. The measurement engine computes anatomical traits via CWT and wall profiling, cleans non-measured edge artefacts, attaches measurements to layer properties for interactive table inspection, and outputs comprehensive semicolon-delimited CSV tables and quality assurance datasets:
     - **[`<sample>.cells_table.csv`](../reference/technical_reference.md#cell-level-output-cells_tablecsv)**: Individual cell metrics (`CID`, `YEAR`, `LA`, `CWTRAD`, `CWTTAN`, `CWTALL`, `RTSR`, `KH`, `DH`).
     - **[`<sample>.rings_table.csv`](../reference/technical_reference.md#ring-level-output-rings_tablecsv)**: Ring summary metrics (`YEAR`, `MRW`, `CNO`, `MLA`, `CD`, `CWTALL`, `RWD`, `RCTA`).
+    - **[`<sample>.cwt.json`](../reference/technical_reference.md#data-metadata-files)**: Exported CWT quality assurance dataset containing circle coordinates, wall thickness values, inclusion/exclusion flags, and exclusion reasons.
+    - **`[<sample>] CWT Circles` Shapes Layer**: Interactive viewer layer with hover tooltips displaying Cell ID, sector, thickness ($\mu\text{m}$), status, and exclusion reason for visual QA inspection.
     - **`<sample>_annotated.jpg`**: Automatically regenerated and saved with synchronized ring boundaries, calendar years, and cell lumen highlights matching the final measurements.
 
 ![Screenshot: Final measurement tables and visual summary](../assets/user_guide/09a_single_measurements_widget.png)
@@ -282,7 +286,7 @@ flowchart TD
 1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to return to the **Batch Operations Group**.
 2. In **9B - Batch measure & update**:
     - Check **Measure Cells** and **Measure Rings**.
-    - **Linked Operations Locking**: Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** whenever measurements are active. This guarantees that all numerical CSV tables, annotated overview images (`_annotated.jpg`), and reference cross-dating plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across every sample folder in the project.
+    - **Linked Operations Locking**: Notice that **Update Annotated image** and **Update Crossdating Reference Files** are **automatically locked ON** whenever measurements are active. This guarantees that all numerical CSV tables, CWT JSON files (`.cwt.json`), annotated overview images (`_annotated.jpg`), and reference cross-dating plots (`_ReferenceSeries.jpg`) remain 100% consistent and synchronized across every sample folder in the project.
     - **Reference Plot Auto-Generation**: ROXAS AI automatically searches upwards through the directory tree for cross-dating files and matches sample stems to reference chronologies (or uses the validated `reference_series` in metadata).
 3. Click **Measure & Update**.
-4. The batch engine executes across all samples, writing `.cells_table.csv`, `.rings_table.csv`, `_annotated.jpg`, and `_ReferenceSeries.jpg` directly to each sample folder.
+4. The batch engine executes across all samples, writing `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg`, and `_ReferenceSeries.jpg` directly to each sample folder.

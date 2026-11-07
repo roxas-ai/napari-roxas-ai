@@ -87,8 +87,8 @@ For a complete reference of all available keyboard and mouse shortcuts, see the 
 | **6 - Edit rings** | Interactive curation of tree-ring boundaries, nudging, wedging rings, re-runs | <kbd>Ctrl</kbd>+Arrows (1 px Nudge), <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+Arrows (10 px Nudge), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo) *(Scope: `6 - Edit rings`)* | `.rings` layer | Refined `.rings` layer & ring years |
 | **7 - Visual cross-dating** | Synchronize sample ring-width series against master reference chronologies | — | `.rings` layer & crossdating file | Synchronized ring years & reference plots |
 | **8 - Save cells & rings editing** | Persist manual edits, masks, annotated scan images, and metadata to disk | — | Active ROXAS AI layers | `.cells.png`, `.rings.tif`, `_annotated.jpg`, `.metadata.json` |
-| **9A - Measure cells & rings (individual image)** | Extract anatomical and tree-ring traits for active sample; update annotated image | Check Settings button *(Scope: `9A - Measure cells & rings`)* | `.cells` & `.rings` layers | `.cells_table.csv`, `.rings_table.csv`, `_annotated.jpg` |
-| **9B - Batch measure & update** | Batch measurement extraction, annotated image generation, and reference plot updates | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Project directory / selected files | Synchronized measurement tables, annotated images, and reference plots |
+| **9A - Measure cells & rings (individual image)** | Extract anatomical and tree-ring traits for active sample; generate CWT QA circles layer; update annotated image | Check Settings button *(Scope: `9A - Measure cells & rings`)* | `.cells` & `.rings` layers | `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg` |
+| **9B - Batch measure & update** | Batch measurement extraction, `.cwt.json` export, annotated image generation, and reference plot updates | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Project directory / selected files | Synchronized measurement tables, `.cwt.json` files, annotated images, and reference plots |
 | **ZZ - Settings** | Preferences for hardware acceleration, visualization, tolerances, and measurements | Floating dialog via widgets or menu | User configuration | `settings.json` file |
 
 ---
@@ -223,6 +223,7 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 - **Single-Image Workflow Enforcement**: Only one sample image can be loaded in the napari viewer at a time. Attempting to load another image prompts the user to first close the currently active image.
 - Reads image layers along with their associated metadata (scale in $\mu\text{m}/\text{px}$, sample stem paths, and ring year metadata) and automatically loads any available associated `.rings` and `.cells` layers.
 - **Automatic Ring Year Overlay Initialization**: Background tracking monitors loaded layers so that calendar year labels (`Rings Years` text overlay) appear automatically in the viewer even if the ring editor widget is not docked.
+- **Automatic CWT Quality Assurance Circles**: If a `<sample>.cwt.json` file is present in the sample folder and CWT visualization is enabled in settings (`cwt_visualization.enabled = true`), ROXAS AI automatically generates and displays the `[<sample>] CWT Circles` Shapes layer with interactive tooltips.
 - Applies high-contrast colormaps (binary colormap for cells and distinct color cycling for rings).
 
 ### Key Controls
@@ -306,7 +307,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 *Figure 8: Cells layer editor widget in its four states (from top to bottom): (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
 
 ### How It Works
-- Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), temporarily hiding tree-ring layers (`.rings` and `Rings Year`) to minimize visual clutter.
+- **Mutual Editing Exclusion & Layer Guards**: Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), while automatically hiding tree-ring layers (`.rings` and `Rings Years`) as well as CWT visualization circles (`[<sample>] CWT Circles`) to prevent visual clutter and accidental cross-layer modifications. Exiting editing mode automatically restores the previous visibility states.
 - Supports two distinct editing paradigms:
     - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
         - **Brush Size Adjustment**: Adjust brush diameter smoothly between 1 and 100 px using <kbd>Ctrl</kbd> + Mouse Wheel (or trackpad scroll). Dimension slider scrolling is suspended during resizing.
@@ -351,29 +352,30 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
     Opening this widget checks for missing ring segmentation model weights (required for the **Rerun Ring Segmentation** feature) and downloads them automatically in the background without blocking the interface. Once downloaded, models are cached locally for subsequent use.
 
 ### How It Works
-1. Converts the raster ring mask into continuous polyline shapes representing each ring boundary.
-2. Displays real-time calendar year labels (`Rings Years` overlay) along the sample.
-3. Allows interactive vertex adjustments, insertion of missing boundaries, or deletion of false boundaries using napari shape tools.
-4. **Fine-Positioning & Bulk Movement**:
+1. **Mutual Editing Exclusion & Layer Guards**: Enters vector polyline editing mode (`Rings Modification`) while automatically hiding cell layers (`.cells`) and CWT visualization circles (`[<sample>] CWT Circles`) to prevent layer conflicts. Exiting ring editing mode automatically restores cell and CWT layer visibilities.
+2. Converts the raster ring mask into continuous polyline shapes representing each ring boundary, enforcing strict left-to-right vertex ordering (`rearrange_coordinates`) and proximity-based vertex insertion to avoid self-intersecting loops.
+3. Displays real-time calendar year labels (`Rings Years` overlay) along the sample.
+4. Allows interactive vertex adjustments, insertion of missing boundaries, or deletion of false boundaries using napari shape tools.
+5. **Fine-Positioning & Bulk Movement**:
     - **Fine Nudging (1 px)**: Press <kbd>Ctrl</kbd> + Arrow keys to nudge all selected boundary vertices by 1 pixel.
     - **Fast Nudging (10 px)**: Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys to nudge all selected boundary vertices by 10 pixels.
     - **Bulk Movement**: Multiple boundaries can be selected simultaneously and moved manually or with nudging operations with full transform undo tracking.
     - **Transformations**: The entire rings layer can be selected and moved manually or with nudging operations.
-5. **Lasso Selection Priority on Overlapping Rings**:
+6. **Lasso Selection Priority on Overlapping Rings**:
     - When boundaries overlap or share coordinates, deleting vertices with the lasso tool selectively removes vertices strictly from the topmost ring boundary (highest shape index), leaving underlying boundaries intact.
-6. **Adding Missing & Wedging/Incomplete Rings**:
+7. **Adding Missing & Wedging/Incomplete Rings**:
     - **Missing Rings**: Select a ring boundary with the feature selection tool and copy-paste it; the added ring boundary will be perfectly on top.
     - **Wedging / Incomplete Rings**:
         1. Copy-paste the ring boundary that shares the common portion of the ring contour.
         2. Use the lasso tool to delete the diverging/erroneous vertices from the top ring.
         3. Extend the top ring by manually tracing the actual wedging trajectory.
-7. **Undo Mechanism**:
+8. **Undo Mechanism**:
     - Full 50-step undo history (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) restoring boundary geometries, calendar year metadata, deleted vertex markers, and affine transform states.
-8. **Annotated Image Generation**:
+9. **Annotated Image Generation**:
     - Configurable annotated overview scans (`<sample_name>_annotated.jpg`) overlaid with ring boundaries, year labels, and optional semi-transparent cell lumen overlays (`cell_opacity`, `cell_fill_color`, `year_label_size`, scale factor, JPEG quality).
-9. **Rerun Ring Segmentation**:
+10. **Rerun Ring Segmentation**:
     - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
-10. **Customizable Tolerances & Colors**:
+11. **Customizable Tolerances & Colors**:
     - Polyline smoothing tolerances, line thickness, and boundary colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
 
 ### Files and Layers Saved
@@ -535,24 +537,25 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 *Figure 12: Single sample measurements interface.*
 
 ### How It Works
-- Combines the `.cells` lumen mask and `.rings` boundary geometry with spatial resolution metadata ($\mu\text{m}/\text{px}$).
-- Uses Continuous Wavelet Transform (CWT) and radial/tangential wall profiling to calculate:
-    - **Cell Lumen Metrics**: Lumen Area (`LA`), Hydraulic Diameter (`DH`), Theoretical Hydraulic Conductance (`KH`), Aspect Ratio (`ASP`).
-    - **Cell Wall Thickness (CWT)**: Radial (`CWTRAD`), Tangential (`CWTTAN`), Pith-side (`CWTPI`), Bark-side (`CWTBA`), Overall (`CWTALL`).
-    - **Ring-Level Aggregates**: Mean Ring Width (`MRW`), Cell Density (`CD`), Conductive Area Fraction (`RCTA`), Mork's Index (`RTSR`), Relative Anatomical Density (`RWD`).
-- Outputs semicolon-delimited CSV tables: `<sample_name>.cells_table.csv` and `<sample_name>.rings_table.csv` (file extensions and delimiter configurable in settings).
+- Combines the `.cells` lumen mask, `.rings` boundary geometry, and spatial resolution metadata ($\mu\text{m}/\text{px}$) to compute anatomical and ring-width traits:
+    - **Cell-Level Metrics**: Lumen dimensions, conduit hydraulic diameter, theoretical conductance, and cell wall thickness. See [Cell-Level Output (`.cells_table.csv`)](../reference/technical_reference.md#cell-level-output-cells_tablecsv) for complete variable definitions.
+    - **Ring-Level Aggregates**: Mean ring width, cell count, cell density, conductive area percentage, Mork's index, and anatomical density. See [Ring-Level Output (`.rings_table.csv`)](../reference/technical_reference.md#ring-level-output-rings_tablecsv) for complete variable definitions.
+    - **CWT Quality Control & QA Layer**: Applies multi-stage outlier and ray-artifact filtering (see [CWT Quality Control & Filtering](../reference/technical_reference.md#cell-wall-thickness-cwt-quality-control-filtering)) and generates a non-destructive `[<sample>] CWT Circles` Shapes layer with color-coded circles and interactive hover tooltips (displaying Cell ID, sector, thickness, status, and filter reasons) for visual quality control.
+- Outputs semicolon-delimited CSV tables (`<sample_name>.cells_table.csv`, `<sample_name>.rings_table.csv`) and the CWT quality assurance dataset (`<sample_name>.cwt.json`).
 - **Always Re-creates Annotated Image**: Re-creates and saves an updated annotated overview image (`<sample_name>_annotated.jpg`) overlaid with ring boundaries and years whenever measurements are performed, ensuring the annotated image remains strictly in line with the measurements.
 
 ### Files and Layers Saved
 - **Cell Measurement Table (`<sample>.cells_table.csv`)**: Saved directly to disk with comprehensive lumen and cell wall thickness metrics per detected cell instance (when **Measure Cells** is enabled).
 - **Ring Measurement Table (`<sample>.rings_table.csv`)**: Saved directly to disk with ring-width and ring-level aggregate anatomical traits per calendar year (when **Measure Rings** is enabled).
+- **CWT Visualization Data (`<sample>.cwt.json`)**: Saved directly to disk with circle coordinates, thickness values, filter statuses, and exclusion reasons.
+- **CWT Circles Shapes Layer (`[<sample>] CWT Circles`)**: Added to the napari viewer for interactive visual quality control.
 - **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-generated and saved to disk with synchronized ring boundaries, calendar years, and cell lumen overlays.
 - **Layer Feature Tables**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive inspection of properties directly within napari.
 
 ### Key Controls
 - **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
 - **Check Settings Button**: Launches the Settings window (see [ZZ - Settings](#zz-settings)) as a floating widget that appears maximized with a comfortable margin on top of napari, automatically expanding and scrolling to the measurement parameters.
-- **Measure Button**: Launches analysis in a background worker with an animated processing spinner (`Processing | / - \`), writes measurement tables and the updated annotated image, cleans non-measured edge artefacts from the cell mask, attaches measurements to layer properties for interactive table inspection, and marks layers as saved (`_is_dirty = False`).
+- **Measure Button**: Launches analysis in a background worker with an animated processing spinner (`Processing | / - \`), writes measurement tables, `.cwt.json`, and the updated annotated image, cleans non-measured edge artefacts from the cell mask, attaches measurements to layer properties for interactive table inspection, and marks layers as saved (`_is_dirty = False`).
 
 ---
 
@@ -565,7 +568,7 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 - **Real-Time Dynamic Sync**: Listens to project directory and project file changes so that samples generated by earlier steps (such as preparation or batch segmentation) appear immediately in the file list without closing or reopening the widget.
 - Reads image scale and configuration from each sample's `.metadata.json`.
 - Computes cell-level and ring-level measurement tables in batch mode.
-- Writes `<sample>.cells_table.csv` and `<sample>.rings_table.csv` directly to each sample folder.
+- Writes `<sample>.cells_table.csv`, `<sample>.rings_table.csv`, and `<sample>.cwt.json` directly to each sample folder.
 - Generates or updates annotated overview scans (`<sample>_annotated.jpg`) and cross-dating reference plots (`<sample>_ReferenceSeries.jpg`).
 - **How Reference Plot Updates Work**: When generating `<sample>_ReferenceSeries.jpg`, ROXAS AI extracts the sample's measured mean ring width (`MRW`) series from `<sample>.rings_table.csv` (or calculates it from the `.rings` mask). It discovers available cross-dating files in the directory hierarchy by searching strictly upwards from the sample folder for files matching the configured cross-dating file extension (e.g., `*.crossdating.txt`). To determine which reference series to plot against:
     - If a specific reference series was previously saved in `<sample>.metadata.json` (`reference_series`), and that column exists in one of the discovered cross-dating files, it uses that stored reference series.
@@ -575,6 +578,7 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 ### Files and Layers Saved
 - **Cell Measurement Tables (`<sample>.cells_table.csv`)**: Saved to disk for each processed sample when **Measure Cells** is enabled.
 - **Ring Measurement Tables (`<sample>.rings_table.csv`)**: Saved to disk for each processed sample when **Measure Rings** is enabled.
+- **CWT Visualization Files (`<sample>.cwt.json`)**: Saved to disk for each processed sample when cell measurements are run.
 - **Annotated Overview Images (`<sample>_annotated.jpg`)**: Saved or updated on disk for each sample when **Update Annotated image** is active (or locked on during measurements).
 - **Reference Series Plots (`<sample>_ReferenceSeries.jpg`)**: Saved or updated on disk for each sample when **Update Crossdating Reference Files** is active (or locked on during measurements), plotting sample MRW curves against their validated reference chronologies.
 - **Metadata (`<sample>.metadata.json`)**: Synchronized with updated analysis timestamps and measurement parameters.
@@ -591,7 +595,7 @@ To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchroni
 - **File Selection Mode**: Toggle between processing all samples and handpicking subsets (**Select individual files:**).
 - **Reverse Selection**: Inverts current sample selections in the list.
 - **Operation Checkboxes**:
-    - **Measure Cells**: Extracts cell lumen and cell wall thickness metrics to `<sample>.cells_table.csv`.
+    - **Measure Cells**: Extracts cell lumen and cell wall thickness metrics to `<sample>.cells_table.csv` and saves `<sample>.cwt.json`.
     - **Measure Rings**: Extracts ring-width and ring-level aggregate metrics to `<sample>.rings_table.csv`.
     - **Update Annotated image**: Generates/updates `<sample>_annotated.jpg` with ring boundaries, year labels, and cell overlays.
     - **Update Crossdating Reference Files**: Generates/updates standardized `<sample>_ReferenceSeries.jpg` plots.
@@ -612,24 +616,29 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
 - Prevents syntax errors, invalid datatypes, or formatting corruption.
 - **Floating Presentation & Sizing Grip**: Opens automatically as a floating window centered on the active screen with comfortable 50 px vertical margins and a prominent diagonal sizing grip.
-- **Live Search & Filter**: Instant multi-term search filtering finds matching setting entries across all categories (e.g., typing `"gpu"` finds `try_to_use_gpu`, `"cells color"` finds `rasterization.cells_color`), displaying the count of matching items and offering a clear button.
+- **Live Search & Filter**: Instant multi-term search filtering finds matching setting entries across all categories (e.g., typing `"gpu"` finds `try_to_use_gpu`, `"cwt"` finds `cwt_visualization` options), displaying the count of matching items and offering a clear button.
 - **Expand All / Collapse All**: Toggles the expansion state of all setting categories at once.
 - **Immediate Application Without Restart**: Applying changes writes `settings.json` to disk and immediately notifies all active widgets and listeners in the running session.
 
 ### Key Settings Categories
 1. **File Extensions**:
-    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, cross-dating chronologies, and tables.
+    - Standardized file suffixes for scans, cell masks, ring masks, metadata files, CWT files (`.cwt.json`), cross-dating chronologies, and tables.
 2. **Hardware & Processing**:
-    - `try_to_use_gpu`: Toggle CUDA / MPS / GPU acceleration for deep-learning segmentation.
+    - `try_to_use_gpu`: Toggle CUDA / MPS / XPU acceleration for deep-learning segmentation.
     - Worker thread and batch settings.
 3. **Visualization & Vectorization**:
     - Default colormaps for cell lumen layers.
     - Ring color sequence (alternating colormap for adjacent annual rings).
     - Display line widths and point sizes.
     - Annotated image parameters (`cell_opacity`, `cell_fill_color`, `year_label_size`).
-4. **Measurement Defaults**:
-    - Default CWT integration widths, smoothing kernel sizes, IQR outlier rejection multipliers, and cluster thresholds.
-5. **Metadata Schema**:
+4. **CWT Quality Assurance & Visualization**:
+    - `enabled`: Toggle creation and display of the CWT circles layer.
+    - `sample_interval`: Stride interval for cell sampling (default: `25`).
+    - `included_color` / `excluded_color`: Custom display colors for included and excluded measurement circles.
+    - `edge_width`: Line width of visualization circles.
+5. **Measurement Defaults**:
+    - Default CWT integration widths, smoothing kernel sizes, IQR outlier rejection multipliers, opposite-wall percentile exception (`opposite_cwt_percentile_exception`, default `0.60`), and cluster thresholds.
+6. **Metadata Schema**:
     - Default metadata prompts and fields presented during sample preparation.
 
 ### Key Controls
