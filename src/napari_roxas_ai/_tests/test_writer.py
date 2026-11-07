@@ -935,6 +935,31 @@ class TestWriterModule:
             assert len(written) == 1
             assert (temp_dir / "sample_1.metadata.json").exists()
 
+    def test_update_metadata_file_sanitizes_floats(self, temp_dir):
+        """Metadata float values with IEEE 754 precision artifacts are rounded."""
+        metadata_path = temp_dir / "float_sample.metadata.json"
+        metadata = {
+            "sample_name": "float_sample",
+            "spatial_resolution": 2.2675740000000003,
+            "opposite_cwt_percentile_exception": 0.7500000000000001,
+            "relwidth_cwt_integration": 0.7500000000000001,
+            "arbitrary_float": 1.23456789,
+        }
+
+        update_metadata_file(
+            str(metadata_path),
+            metadata,
+            ("sample_", "spatial_resolution", "opposite_cwt_", "relwidth_", "arbitrary_"),
+        )
+
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+
+        assert saved["spatial_resolution"] == 2.267574
+        assert saved["opposite_cwt_percentile_exception"] == 0.75
+        assert saved["relwidth_cwt_integration"] == 0.75
+        assert saved["arbitrary_float"] == 1.2346
+
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

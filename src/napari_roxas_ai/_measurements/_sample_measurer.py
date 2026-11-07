@@ -15,6 +15,8 @@ import pandas as pd
 from PIL import Image
 from rasterio import features
 
+from napari_roxas_ai._utils._metadata_keys import sanitize_metadata_floats
+
 
 class SampleAnalyzer:
     """Main class for analyzing cell structures in segmented images."""
@@ -919,8 +921,10 @@ class SampleAnalyzer:
             "sampled_cells_count": sampled_cells_count,
             "circles": circles,
         }
-        self.cwt_visualization_data = data
-        return data
+        self.cwt_visualization_data = sanitize_metadata_floats(
+            data, default_decimals=2
+        )
+        return self.cwt_visualization_data
 
     def get_cwt_visualization_data(
         self, sample_name: Optional[str] = None
@@ -1604,8 +1608,9 @@ def save_cwt_visualization_json(
     """Save CWT circle visualization metadata to a JSON file."""
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
+    sanitized_data = sanitize_metadata_floats(data, default_decimals=2)
     with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(sanitized_data, f, indent=2)
 
 
 def load_cwt_visualization_json(

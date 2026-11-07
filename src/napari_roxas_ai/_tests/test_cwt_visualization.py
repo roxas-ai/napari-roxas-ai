@@ -214,6 +214,27 @@ def test_cwt_json_save_load_roundtrip(tmp_path):
     loaded_data = load_cwt_visualization_json(file_path)
     assert loaded_data == test_data
 
+    # Test float precision sanitization on save
+    dirty_data = {
+        "sample_name": "Sample_01",
+        "sample_interval": 25,
+        "circles": [
+            {
+                "cell_id": 25,
+                "wall": "pith",
+                "center_yx": [1240.5000000000002, 830.2000000000001],
+                "radius_px": 5.4000000000000004,
+                "radius_um": 2.1600000000000001,
+            }
+        ],
+    }
+    dirty_path = tmp_path / "dirty.cwt.json"
+    save_cwt_visualization_json(dirty_path, dirty_data)
+    loaded_clean = load_cwt_visualization_json(dirty_path)
+    assert loaded_clean["circles"][0]["center_yx"] == [1240.5, 830.2]
+    assert loaded_clean["circles"][0]["radius_px"] == 5.4
+    assert loaded_clean["circles"][0]["radius_um"] == 2.16
+
     with pytest.raises(FileNotFoundError):
         load_cwt_visualization_json(tmp_path / "non_existent.cwt.json")
 

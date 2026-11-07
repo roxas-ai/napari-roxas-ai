@@ -4,7 +4,7 @@ import warnings
 import weakref
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Encoding used to read settings.json. "utf-8-sig" is plain UTF-8 except that
 # it also accepts a leading byte order mark, which Windows editors such as
@@ -199,6 +199,93 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "quality": 75,  # JPEG quality (1-100) of the annotated image
     },
 }
+
+
+# Specific (single_step, decimals) for float settings by dotted path.
+# Float settings not listed here fall back to (1.0, DEFAULT_SETTINGS_FLOAT_DECIMALS).
+FLOAT_SETTING_SPECS: Dict[str, Tuple[float, int]] = {
+    "measurements.cluster_dbl_cwt_threshold": (0.1, 2),
+    "measurements.relwidth_cwt_integration": (0.05, 2),
+    "measurements.cells_tangential_angle": (1.0, 2),
+    "measurements.lower_limit_cwt_iqr_multiplier": (0.1, 2),
+    "measurements.upper_limit_cwt_iqr_multiplier": (0.1, 2),
+    "measurements.opposite_cwt_ratio_limit": (0.1, 2),
+    "measurements.opposite_cwt_percentile_exception": (0.05, 2),
+    "measurements.adjacent_cwt_ratio_limit": (0.1, 2),
+    "cwt_visualization.edge_width": (0.5, 1),
+    "annotated_image.scale_factor": (0.01, 2),
+}
+
+DEFAULT_SETTINGS_FLOAT_DECIMALS = 4
+
+
+def sanitize_settings_floats(
+    obj: Any,
+    prefix: str = "",
+    default_decimals: int = DEFAULT_SETTINGS_FLOAT_DECIMALS,
+) -> Any:
+    """
+    Recursively round float values in settings to prevent IEEE 754 precision artifacts.
+
+    Parameters
+    ----------
+    obj : Any
+        The settings object (dict, list, float, etc.) to sanitize.
+    prefix : str
+        The dotted key prefix representing the position in the settings tree.
+    default_decimals : int, default 4
+        Fallback decimal places for floats without a specific spec.
+
+    Returns
+    -------
+    Any
+        A sanitized copy of the settings object.
+    """
+    if isinstance(obj, float):
+        spec = FLOAT_SETTING_SPECS.get(prefix)
+        if spec is not None:
+            decimals = spec[1]
+        else:
+            leaf = prefix.split(".")[-1] if prefix else ""
+            leaf_spec = FLOAT_SETTING_SPECS.get(leaf)
+            decimals = (
+                leaf_spec[1] if leaf_spec is not None else default_decimals
+            )
+        return round(obj, decimals)
+
+    if isinstance(obj, dict):
+        if "decimals" in obj and isinstance(obj.get("default"), float):
+            field_decimals = int(obj["decimals"])
+            res = {}
+            for k, v in obj.items():
+                p = f"{prefix}.{k}" if prefix else str(k)
+                if k == "default" and isinstance(v, float):
+                    res[k] = round(v, field_decimals)
+                else:
+                    res[k] = sanitize_settings_floats(
+                        v, prefix=p, default_decimals=default_decimals
+                    )
+            return res
+
+        return {
+            k: sanitize_settings_floats(
+                v,
+                prefix=f"{prefix}.{k}" if prefix else str(k),
+                default_decimals=default_decimals,
+            )
+            for k, v in obj.items()
+        }
+
+    if isinstance(obj, (list, tuple)):
+        res = [
+            sanitize_settings_floats(
+                item, prefix=prefix, default_decimals=default_decimals
+            )
+            for item in obj
+        ]
+        return tuple(res) if isinstance(obj, tuple) else res
+
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +590,7 @@ class SettingsManager:
             return
 
         self._settings = upgrade_settings(stored)
+        self._settings = sanitize_settings_floats(self._settings)
 
         # Validate project directory accessibility (e.g. multi-user PC profile changes or deleted paths)
         project_dir = self._settings.get("project_directory")
@@ -603,6 +691,7 @@ class SettingsManager:
 
         Writes the settings dictionary to the settings file with pretty formatting.
         """
+        self._settings = sanitize_settings_floats(self._settings)
         with open(
             self.settings_file, "w", encoding=SETTINGS_WRITE_ENCODING
         ) as f:
@@ -649,7 +738,7 @@ class SettingsManager:
         previous = self._listened_values()
 
         if "." not in key:
-            self._settings[key] = value
+            self._settings[key] = sanitize_settings_floats(value, prefix=key)
             self.save_settings()
             self._notify_listeners(previous)
             return
@@ -665,7 +754,7 @@ class SettingsManager:
             current = current[k]
 
         # Set the value
-        current[keys[-1]] = value
+        current[keys[-1]] = sanitize_settings_floats(value, prefix=key)
         self.save_settings()
         self._notify_listeners(previous)
 
@@ -684,6 +773,7 @@ class SettingsManager:
         """
         previous = self._listened_values()
         self._settings.update(settings_dict)
+        self._settings = sanitize_settings_floats(self._settings)
         self.save_settings()
         self._notify_listeners(previous)
 
@@ -714,7 +804,7 @@ class SettingsManager:
             new_settings: The complete settings dictionary to store
         """
         previous = self._listened_values()
-        self._settings = upgrade_settings(new_settings)
+        self._settings = sanitize_settings_floats(upgrade_settings(new_settings))
         self.save_settings()
         self._notify_listeners(previous)
 

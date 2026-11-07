@@ -49,7 +49,7 @@ from qtpy.QtWidgets import (
 )
 from superqt import QCollapsible
 
-from ._settings_manager import SettingsManager
+from ._settings_manager import FLOAT_SETTING_SPECS, SettingsManager
 
 if TYPE_CHECKING:
     import napari
@@ -232,21 +232,6 @@ SETTING_HINTS: Dict[str, str] = {
     "annotated_image.quality": (
         "JPEG quality (1-100) of the annotated image"
     ),
-}
-
-# Specific (single_step, decimals) for float settings by dotted path.
-# Float settings not listed here fall back to (1.0, _decimals_for(value)).
-FLOAT_SETTING_SPECS: Dict[str, Tuple[float, int]] = {
-    "measurements.cluster_dbl_cwt_threshold": (0.1, 2),
-    "measurements.relwidth_cwt_integration": (0.05, 2),
-    "measurements.cells_tangential_angle": (1.0, 2),
-    "measurements.lower_limit_cwt_iqr_multiplier": (0.1, 2),
-    "measurements.upper_limit_cwt_iqr_multiplier": (0.1, 2),
-    "measurements.opposite_cwt_ratio_limit": (0.1, 2),
-    "measurements.opposite_cwt_percentile_exception": (0.05, 2),
-    "measurements.adjacent_cwt_ratio_limit": (0.1, 2),
-    "cwt_visualization.edge_width": (0.5, 1),
-    "annotated_image.scale_factor": (0.01, 2),
 }
 
 FLOAT_SETTING_RANGES: Dict[str, Tuple[float, float]] = {

@@ -22,7 +22,7 @@ from .._utils._ringtraces_utils import (
     get_instance_labels_linear,
     ring_labels_from_roxas,
 )
-from .._utils._metadata_keys import NO_REFERENCE_SERIES
+from .._utils._metadata_keys import NO_REFERENCE_SERIES, sanitize_metadata_floats
 from .._utils._scl_utils import read_scl
 from .._utils._segmentation_postprocess import (
     remove_border_touching_components,
@@ -800,6 +800,7 @@ class Worker(QObject):
 
             # Ensure all data is JSON serializable
             sanitized_metadata = self._sanitize_for_json(metadata)
+            sanitized_metadata = sanitize_metadata_floats(sanitized_metadata)
 
             with open(metadata_path, "w") as f:
                 json.dump(sanitized_metadata, f, indent=4)

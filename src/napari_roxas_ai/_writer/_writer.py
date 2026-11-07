@@ -33,6 +33,7 @@ from napari_roxas_ai._utils._metadata_keys import (
     RUN_METADATA_PREFIXES,
     SAMPLE_METADATA_PREFIXES,
     migrate_legacy_metadata_keys,
+    sanitize_metadata_floats,
 )
 
 
@@ -96,6 +97,7 @@ def update_metadata_file(
             sample_name = path_p.stem
 
     existing_metadata["sample_name"] = sample_name
+    existing_metadata = sanitize_metadata_floats(existing_metadata)
 
     with path_p.open("w", encoding="utf-8") as f:
         json.dump(existing_metadata, f, indent=4)

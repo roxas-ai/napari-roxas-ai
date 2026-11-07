@@ -163,6 +163,43 @@ def test_float_editor_rounds_to_specified_decimals():
     assert getter() == 0.75
 
 
+def test_sanitize_settings_floats_and_manager_sanitization(settings_file):
+    from napari_roxas_ai._settings._settings_manager import (
+        sanitize_settings_floats,
+    )
+
+    data = {
+        "measurements": {
+            "opposite_cwt_percentile_exception": 0.7500000000000001,
+            "relwidth_cwt_integration": 0.7500000000000001,
+            "cluster_dbl_cwt_threshold": 3.0000000000000004,
+        },
+        "annotated_image": {
+            "scale_factor": 0.5000000000000001,
+        },
+        "cwt_visualization": {
+            "edge_width": 3.0000000000000004,
+        },
+        "custom_float": 1.23456789,
+    }
+    sanitized = sanitize_settings_floats(data)
+    assert sanitized["measurements"]["opposite_cwt_percentile_exception"] == 0.75
+    assert sanitized["measurements"]["relwidth_cwt_integration"] == 0.75
+    assert sanitized["measurements"]["cluster_dbl_cwt_threshold"] == 3.0
+    assert sanitized["annotated_image"]["scale_factor"] == 0.5
+    assert sanitized["cwt_visualization"]["edge_width"] == 3.0
+    assert sanitized["custom_float"] == 1.2346
+
+    # Test SettingsManager.set() sanitization
+    manager = SettingsManager()
+    manager.set("measurements.opposite_cwt_percentile_exception", 0.7500000000000001)
+    assert manager.get("measurements.opposite_cwt_percentile_exception") == 0.75
+
+    # Check on disk
+    on_disk = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert on_disk["measurements"]["opposite_cwt_percentile_exception"] == 0.75
+
+
 # ------------------------------------------------------------------ the editors
 
 
