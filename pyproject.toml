@@ -72,6 +72,7 @@ testing = [
 docs = [
     "mkdocs-material",
     "mkdocstrings[python]",
+    "mkdocs-glightbox",
 ]
 
 [project.scripts]
