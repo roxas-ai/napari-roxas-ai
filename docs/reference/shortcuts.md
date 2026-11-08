@@ -68,8 +68,8 @@ In the **Edit Cells** widget, shortcuts streamline both pixel-level raster touch
   - Standard napari dimension slider scrolling is temporarily suppressed during editing to prevent accidental slice jumps.
 - **Brush / Eraser Quick Toggle (<kbd>Ctrl</kbd> + Double-Click / macOS: <kbd>Cmd</kbd> + Double-Click)**:
   - Holding <kbd>Ctrl</kbd> and double-clicking on the canvas instantly swaps between painting and erasing modes without needing to click toolbar icons.
-- **Lasso Polygon Deletion (<kbd>Delete</kbd> or <kbd>Backspace</kbd>)**:
-  - In Vector mode with **Lasso Select** active, drawing one or more closed loops and pressing <kbd>Delete</kbd> removes all cell polygons that intersect the lasso selection.
+- **Lasso & Shape Polygon Deletion (<kbd>Delete</kbd> or <kbd>Backspace</kbd>)**:
+  - In Vector mode with **Lasso Select** active, drawing one or more closed loops and pressing <kbd>Delete</kbd> removes all cell polygons that intersect the lasso selection. Selecting cell polygons directly with the shape selection tool and pressing <kbd>Delete</kbd> also deletes the selected cells.
 - **Undo Stack (<kbd>Ctrl</kbd> + <kbd>Z</kbd> / macOS: <kbd>Cmd</kbd> + <kbd>Z</kbd>)**:
   - Maintains a history of up to 50 operations. In vector mode, it restores exact shape geometries and properties; in raster mode, it triggers napari's label brush undo history.
 
@@ -93,6 +93,8 @@ In the **Edit Rings** widget, shortcuts facilitate precise alignment of vector p
 ---
 
 ## Cross-Platform Modifier Key Reference
+
+*(Note for macOS users: `<kbd>Cmd</kbd>` corresponds to `⌘ (Command)` and `<kbd>Option</kbd>` corresponds to `⌥ (Option/Alt)`).*
 
 | Action / Shortcut | Windows / Linux | macOS Equivalent |
 | :--- | :--- | :--- |

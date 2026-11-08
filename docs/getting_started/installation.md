@@ -197,11 +197,11 @@ napari-roxas
 
 ![Screenshot: ROXAS AI Workbench Startup Layout](../assets/getting_started/roxas_workbench_launch.png)
 
-*Figure 1: ROXAS AI workbench initialized in napari with the Manual Editing Group docked in the right sidebar.*
+*ROXAS AI workbench initialized in napari with the Manual Editing Group docked in the right sidebar.*
 
 ### 2. Verify with Bundled Sample Data
 
-1. In the napari menu, navigate to `File > Open Sample > ROXAS AI > Conifer Wood Sample (Pinus sylvestris)`.
+1. In the napari menu, navigate to `File > Open Sample > ROXAS AI`.
 2. Three layers (**Image**, **Rings**, and **Cells**) will load into the canvas viewer.
 
 !!! info "Automatic Background Model & Asset Downloads"

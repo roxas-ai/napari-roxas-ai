@@ -111,4 +111,4 @@ ROXAS AI is actively developed and maintained by the **Dendrosciences Group** at
 
 * **Source Code & Issue Tracker**: [GitHub Repository (roxas-ai/napari-roxas-ai)](https://github.com/roxas-ai/napari-roxas-ai)
 * **Bug Reports & Feature Requests**: Please submit an issue on GitHub with steps to reproduce and system information.
-* **License**: Released under the [BSD 3-Clause License](https://github.com/roxas-ai/napari-roxas-ai/blob/main/LICENSE).
+* **License**: Released under the [GNU General Public License v3.0 (GPLv3)](https://github.com/roxas-ai/napari-roxas-ai/blob/main/LICENSE).

@@ -2,6 +2,10 @@
 
 Step-by-step guides for quantitative wood anatomy (QWA) and dendrochronological analysis using ROXAS AI in napari.
 
+!!! tip "Choosing the Right Workflow"
+    - **Interactive / Single-Sample Workflow (Section 1 & 2)**: Best for detailed visual inspection, manual touch-ups of cell lumens and tree-ring boundaries, and interactive visual cross-dating using the **Manual Editing Group** (`Ctrl+Shift+M`).
+    - **Batch Processing Workflow (Section 3)**: Best for multi-sample datasets where segmentation, measurements, quality assurance data (`.cwt.json`), and overview plots are run automatically in sequence using the **Batch Operations Group** (`Ctrl+Shift+B`).
+
 ---
 
 ## 1. Quickstart: 5-Minute Single Sample Walkthrough
@@ -22,7 +26,7 @@ flowchart TD
    napari-roxas
    ```
    *This starts napari, registers viewport navigation shortcuts (<kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>), and docks the **Manual Editing Group** in the right sidebar.*
-2. Navigate to the top menu: **File > Open Sample > ROXAS AI > Conifer Sample Data**.
+2. Navigate to the top menu: **File > Open Sample > ROXAS AI**.
 3. ROXAS AI loads the conifer cross-section scan along with pre-configured spatial metadata ($\text{px}/\mu\text{m}$).
 
 ![Screenshot: Built-in sample loaded in napari](../assets/user_guide/02_samples_loading_widget.png)
@@ -230,6 +234,7 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
     - **[`<sample>.cwt.json`](../reference/technical_reference.md#data-metadata-files)**: Exported CWT quality assurance dataset containing circle coordinates, wall thickness values, inclusion/exclusion flags, and exclusion reasons.
     - **`[<sample>] CWT Circles` Shapes Layer**: Interactive viewer layer with hover tooltips displaying Cell ID, sector, thickness ($\mu\text{m}$), status, and exclusion reason for visual QA inspection.
     - **`<sample>_annotated.jpg`**: Automatically regenerated and saved with synchronized ring boundaries, calendar years, and cell lumen highlights matching the final measurements.
+    - **`<sample>_ReferenceSeries.jpg`**: Saved in the sample directory when cross-dating was performed and applied.
 
 === "A: Measurement Controls"
     ![Screenshot: Final measurement tables and visual summary](../assets/user_guide/09a_single_measurements_widget.png)

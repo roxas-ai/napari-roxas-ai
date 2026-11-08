@@ -93,7 +93,7 @@ For a complete reference of all available keyboard and mouse shortcuts, see the 
 | **3B - Batch detect cells & rings** | Run deep-learning segmentation across multiple samples in batch mode | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Project directory / selected files | `.cells.png`, `.rings.tif`, `.metadata.json` |
 | **5 - Edit cells** | Interactive curation of cell lumens (raster brush/eraser, vector polygons, lasso) | <kbd>Ctrl</kbd>+Wheel (Brush size), <kbd>Ctrl</kbd>+DblClick (Switch tool), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo) *(Scope: `5 - Edit cells`)* | `.cells` layer | Refined `.cells` layer |
 | **6 - Edit rings** | Interactive curation of tree-ring boundaries, nudging, wedging rings, re-runs | <kbd>Ctrl</kbd>+Arrows (1 px Nudge), <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+Arrows (10 px Nudge), <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo) *(Scope: `6 - Edit rings`)* | `.rings` layer | Refined `.rings` layer & ring years |
-| **7 - Visual cross-dating** | Synchronize sample ring-width series against master reference chronologies | — | `.rings` layer & crossdating file | Synchronized ring years & reference plots |
+| **7 - Visual crossdating** | Synchronize sample ring-width series against master reference chronologies | — | `.rings` layer & crossdating file | Synchronized ring years & reference plots |
 | **8 - Save cells & rings editing** | Persist manual edits, masks, annotated scan images, and metadata to disk | — | Active ROXAS AI layers | `.cells.png`, `.rings.tif`, `_annotated.jpg`, `.metadata.json` |
 | **9A - Measure cells & rings (individual image)** | Extract anatomical and tree-ring traits for active sample; generate CWT QA circles layer; update annotated image | Check Settings button *(Scope: `9A - Measure cells & rings`)* | `.cells` & `.rings` layers | `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg` |
 | **9B - Batch measure & update** | Batch measurement extraction, `.cwt.json` export, annotated image generation, and reference plot updates | Part of Batch Group (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) | Project directory / selected files | Synchronized measurement tables, `.cwt.json` files, annotated images, and reference plots |
@@ -339,7 +339,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
     - **Edit As Raster**: Uses napari's native brush, paint bucket, and eraser tools directly on the label mask without geometric approximation.
         - **Brush Size Adjustment**: Adjust brush diameter smoothly between 1 and 100 px using <kbd>Ctrl</kbd> + Mouse Wheel (or trackpad scroll). Dimension slider scrolling is suspended during resizing.
         - **Tool Switching**: Quickly toggle between brush and eraser using <kbd>Ctrl</kbd> + Double-Click.
-    - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion.
+    - **Edit As Vector**: Converts cell outlines into editable polygon shapes for precise vertex editing, shape adjustment, and deletion (individual shapes can be selected directly using napari's shape selection tool or via freehand lasso loops).
 - **Lasso Selection & Union (OR) Behavior**: In Vector editing mode, drawing lasso loops encloses cells. Multiple overlapping lasso polygons combine (union / OR logic) rather than toggling/canceling, allowing seamless regional selection.
 - **Undo Mechanism**: Supports a 50-step history stack (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) that snapshots polygon coordinates and shape types in Vector mode, and triggers napari's label brush history in Raster mode.
 - When applied, rasterizes vectors back to label masks, marks the `.cells` layer as modified (triggering unsaved change tracking), resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
@@ -353,7 +353,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 - **Editing Mode**: Switch between `Vector` and `Raster` editing modes.
 - **Edit Cells**: Enters editing mode, hides ring layers, and creates the working canvas (`Cells Modification`).
 - **Lasso Select**: Checkbox (available during Vector editing) that activates a yellow `Lasso Selection` shapes layer for freehand polygon area selection.
-- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area (can also be triggered using the <kbd>Delete</kbd> or <kbd>Backspace</kbd> key).
+- **Delete Selected Cells**: Deletes all cell polygons that intersect or touch the drawn lasso area, or those selected directly with the shape selection tool (can also be triggered using the <kbd>Delete</kbd> or <kbd>Backspace</kbd> key).
 - **Undo Last Change**: Reverts the most recent edit (brush/eraser stroke, shape edit or lasso deletion) made during the active editing session (also available with <kbd>Ctrl</kbd>+<kbd>Z</kbd>).
 - **Apply Cell Changes**: Commits edits, updates the `.cells` layer, restores layer visibility, and exits editing mode.
 - **Cancel Cell Changes**: Discards pending modifications, removes the working layer, restores original layer visibility, and exits editing mode.
@@ -413,7 +413,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 8. **Undo Mechanism**:
     - Full 50-step undo history (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) restoring boundary geometries, calendar year metadata, deleted vertex markers, and affine transform states.
 9. **Annotated Image Generation**:
-    - Configurable annotated overview scans (`<sample_name>_annotated.jpg`) overlaid with ring boundaries, year labels, and optional semi-transparent cell lumen overlays (`cell_opacity`, `cell_fill_color`, `year_label_size`, scale factor, JPEG quality).
+    - Configurable annotated overview scans (`<sample>_annotated.jpg`) overlaid with ring boundaries, year labels, and optional semi-transparent cell lumen overlays (`cell_opacity`, `cell_fill_color`, `year_label_size`, scale factor, JPEG quality).
 10. **Rerun Ring Segmentation**:
     - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
 11. **Customizable Tolerances & Colors**:
@@ -427,7 +427,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 
 ### Key Controls & Options
 - **Last Complete Ring Year (SpinBox)**: Specifies the calendar year of the outermost complete annual ring. Supports calendar years from **`-100,000`** (prehistoric/BCE dates) up to **`9,999`** (CE).
-- **Update Year**: Updates the calendar year metadata, recalculates ring year labels in the viewer, and redraws the annotated overview image (`<sample_name>_annotated.jpg`) with the new ring years.
+- **Update Year**: Updates the calendar year metadata, recalculates ring year labels in the viewer, and redraws the annotated overview image (`<sample>_annotated.jpg`) with the new ring years.
 - **Edit Ring Boundaries**: Enters vector polyline editing mode and displays boundary lines.
 - **Lasso Select**: Checkbox activating lasso-based vertex selection.
 - **Delete Selected Ring Vertices**: Removes all boundary vertices enclosed by the lasso selection (deleting from the topmost boundary when layers overlap).
@@ -559,8 +559,8 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
     - `"Saved rings layer."` (when only `.rings` was modified)
     - `"Saved cells and rings layers."` (when both were modified)
     - `"No unsaved changes in cells or rings layers."` (when no changes were pending)
-- **Fast Saving Decoupled from Overview Rendering**: Manual layer saving does **not** redraw the annotated overview image (`<sample_name>_annotated.jpg`), ensuring saves complete in milliseconds without disk or CPU overhead. The annotated overview image is automatically regenerated at key workflow checkpoints instead: AI segmentation (3A/3B), **Update Year** (6), **Apply Changes** in cross-dating (7), and trait measurement (9A/9B).
-- Updates `<sample_name>.metadata.json` with updated ring counts, outermost year, and timestamps.
+- **Fast Saving Decoupled from Overview Rendering**: Manual layer saving does **not** redraw the annotated overview image (`<sample>_annotated.jpg`), ensuring saves complete in milliseconds without disk or CPU overhead. The annotated overview image is automatically regenerated at key workflow checkpoints instead: AI segmentation (3A/3B), **Update Year** (6), **Apply Changes** in cross-dating (7), and trait measurement (9A/9B).
+- Updates `<sample>.metadata.json` with updated ring counts, outermost year, and timestamps.
 - Operates in a non-blocking background worker thread.
 
 ### Files and Layers Saved
