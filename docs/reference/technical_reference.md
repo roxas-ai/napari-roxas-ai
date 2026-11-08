@@ -23,6 +23,18 @@ ROXAS AI uses a standardized naming convention to organize analysis data. For a 
 - **`.cells_table.csv`**: A CSV file (semicolon-delimited by default, configurable in settings) containing measurements for every individual cell.
 - **`.rings_table.csv`**: A CSV file (semicolon-delimited by default, configurable in settings) containing aggregated measurements for each tree ring.
 
+### Napari Layers & In-Memory Representation
+
+When opening a sample or running segmentation in the napari viewer, ROXAS AI creates and manages the following interactive layer types in the viewer layer list:
+
+| Layer Name | Napari Layer Type | Description | Associated File |
+| :--- | :--- | :--- | :--- |
+| **`<sample>.scan`** (or `<sample>`) | `Image` | Raw high-resolution microsection scan displayed with spatial scale ($\mu\text{m}/\text{px}$). | `<sample>.scan.<ext>` |
+| **`<sample>.cells`** | `Labels` | Segmented cell lumen instances with unique integer labels, colormapped for individual lumen distinction. | `<sample>.cells.png` |
+| **`<sample>.rings`** | `Labels` / `Shapes` | Tree-ring boundary contours and annual ring zones. Represented as `Labels` during normal viewing and as vector polylines in `Shapes` during interactive ring editing. | `<sample>.rings.tif` |
+| **`Rings Years`** | `Points` | Persistent text overlay displaying calendar year numbers positioned at the lateral edges of each tree-ring boundary. Automatically updated upon nudging or year changes. | `<sample>.metadata.json` / `.rings_table.csv` |
+| **`[<sample>] CWT Circles`** | `Shapes` | Quality assurance overlay showing measured cell wall thickness circles (green = included, red = filtered/excluded) with interactive hover tooltips. | `<sample>.cwt.json` |
+
 ---
 
 ## Output Variables (Acronyms)

@@ -202,7 +202,11 @@ napari-roxas
 ### 2. Verify with Bundled Sample Data
 
 1. In the napari menu, navigate to `File > Open Sample > ROXAS AI`.
-2. Three layers (**Image**, **Rings**, and **Cells**) will load into the canvas viewer.
+2. The sample scan and its associated annotation layers will load into the viewer:
+    - **`conifer_sample`** (`Image` layer): The raw high-resolution wood cross-section scan.
+    - **`conifer_sample.cells`** (`Labels` layer): Labeled individual cell lumen instances.
+    - **`conifer_sample.rings`** (`Labels` layer): Labeled annual tree-ring boundaries and ring bands.
+    - **`Rings Years`** (`Points` layer): Calendar year text labels dynamically positioned along each ring boundary.
 
 !!! info "Automatic Background Model & Asset Downloads"
     Pre-trained deep learning neural network weights (`.pth` files) and sample image assets are automatically downloaded from remote repositories in the background upon first access and cached locally in your user data directory for all subsequent sessions. Download progress is logged in the terminal.

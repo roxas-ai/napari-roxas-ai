@@ -46,9 +46,10 @@ flowchart TD
    !!! info "Automatic Model Weights Download"
        If you are running segmentation for the first time, ROXAS AI automatically downloads pre-trained model weights in the background and caches them locally for all subsequent runs.
 
-4. Deep-learning inference generates two interactive napari layers:
-    - **`.cells`**: Labeled cell lumen instances (displayed with individual color labels).
-    - **`.rings`**: Labeled annual tree-ring bands and boundary polylines.
+4. Deep-learning inference populates the interactive napari layers:
+    - **`<sample>.cells`**: Labeled cell lumen instances (`Labels` layer).
+    - **`<sample>.rings`**: Labeled annual tree-ring bands and boundaries (`Labels` layer).
+    - **`Rings Years`**: Persistent calendar year text overlay along detected boundaries (`Points` layer).
 
 ![Screenshot: Automated DL detection result](../assets/user_guide/03a_single_segmentation_widget.png)
 
@@ -120,7 +121,7 @@ flowchart TD
 1. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> to switch to the **Manual Editing Group**.
 2. In **2/4 - Load image(s)**, select your prepared sample from the dropdown (or double-click to load). Single-image enforcement ensures clean memory management.
 3. In **3A - Detect cells & rings (individual image)**, select the neural network models and click **Run Segmentation**.
-4. Both cell lumen masks (`.cells`) and ring boundary contours (`.rings`) will populate as interactive napari layers.
+4. Cell lumen masks (`<sample>.cells`), ring boundary contours (`<sample>.rings`), and the `Rings Years` calendar year text overlay will populate as interactive napari layers in the viewer.
 
 ![Screenshot: Loaded segmentation layers](../assets/user_guide/03a_single_segmentation_widget.png)
 
