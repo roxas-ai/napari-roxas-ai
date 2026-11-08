@@ -72,6 +72,14 @@ Designed for high-throughput batch processing across entire project directories 
 
 For a complete reference of all available keyboard and mouse shortcuts, see the dedicated [Shortcuts Reference](../reference/shortcuts.md).
 
+=== "Manual Editing Group (Ctrl+Shift+M)"
+    ![Screenshot: Manual Editing Workflow Group](../assets/user_guide/00_manual_editing_group_sidebar.png)
+
+=== "Batch Operations Group (Ctrl+Shift+B)"
+    ![Screenshot: Batch Operations Workflow Group](../assets/user_guide/00_batch_operations_group_sidebar.png)
+
+*Figure 1: Workflow widget groups docked in the napari right sidebar: (A) Manual Editing Group and (B) Batch Operations Group.*
+
 ---
 
 ## Overview of Widgets & Tools
@@ -99,7 +107,7 @@ The **Define Project Directory** widget configures the root folder where your sa
 
 ![Screenshot: Project Directory Selector](../assets/user_guide/00_define_project_directory.png)
 
-*Figure 1: Project directory selection dialog.*
+*Figure 2: Project directory selection dialog.*
 
 ### How It Works
 When triggered from the menu or from any widget directory button, it opens a system folder browser. Selecting a folder updates the `project_directory` entry in `settings.json`. All subsequent loading, saving, and batch processing widgets default to this directory. Note that the exact same directory selection functionality is also triggered whenever selecting the project directory directly from within widgets [1 - Prepare Project Images](#1-prepare-project-images-for-analysis), [2/4 - Load Image(s)](#24-load-images), [3B - Batch Detect Cells & Rings](#3b-batch-detect-cells-rings), and [9B - Batch Measure & Update](#9b-batch-measure-update).
@@ -118,6 +126,17 @@ On multi-user systems, shared network drives, or when folders are moved or delet
 ## 1 - Prepare Project Images for Analysis
 
 The **Prepare Project Images** widget standardizes anatomical images and external cross-dating files into the structured file naming conventions and data structures required by ROXAS AI.
+
+=== "A: Main Interface"
+    ![Screenshot: Prepare Project Images Widget](../assets/user_guide/01_prepare_project_images_widget.png)
+
+=== "B: Metadata Configuration Dialog"
+    ![Screenshot: Interactive Metadata Dialog](../assets/user_guide/01_metadata_dialog.png)
+
+=== "C: Cross-Dating Files Processing Dialog"
+    ![Screenshot: Cross-Dating Files Processing Dialog](../assets/user_guide/01_crossdating_processing_dialog.png)
+
+*Figure 3: Prepare project images widget and interactive configuration dialogs: (A) Main preparation widget interface, (B) Interactive metadata configuration dialog, and (C) Cross-dating files compilation and unit scaling dialog.*
 
 ### How It Works
 1. Scans the selected project directory (and subdirectories) for supported image formats (`.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`, `.bmp`, `.jp2`).
@@ -214,7 +233,7 @@ The **Samples Loading Widget** loads prepared sample images (`.scan`), cell labe
 
 ![Screenshot: Samples Loading Widget](../assets/user_guide/02_samples_loading_widget.png)
 
-*Figure 5: Samples loading widget interface.*
+*Figure 4: Samples loading widget interface.*
 
 ### How It Works
 - Queries the project directory for prepared sample stems.
@@ -243,7 +262,7 @@ The **Single Sample Segmentation Widget** performs automated deep-learning infer
 
 ![Screenshot: Single Sample Segmentation Widget](../assets/user_guide/03a_single_segmentation_widget.png)
 
-*Figure 6: Single sample AI segmentation interface.*
+*Figure 5: Single sample AI segmentation interface.*
 
 ### How It Works
 - Runs neural network models (PyTorch / PyTorch Lightning / SMP architectures) locally on either GPU or CPU. For full architectural details and literature citations, see [Deep-Learning Segmentation Models](../reference/segmentation_models.md).
@@ -271,6 +290,10 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 !!! info "Automatic Background Model Downloads"
     If segmentation model weights are not present locally, they are automatically downloaded in the background when needed and cached for future runs.
 
+![Screenshot: Batch Sample Segmentation Widget](../assets/user_guide/03b_batch_segmentation_widget.png)
+
+*Figure 6: Batch sample segmentation interface.*
+
 ### How It Works
 - Iterates over all discovered sample scans in the project directory.
 - Applies the selected neural network models sequentially (see [Deep-Learning Segmentation Models](../reference/segmentation_models.md)).
@@ -296,15 +319,19 @@ The **Batch Sample Segmentation Widget** executes AI detection across multiple s
 
 The **Cells Layer Editor Widget** provides interactive manual editing tools to correct, split, merge, add, or erase cell lumen detections.
 
-![Screenshot: Cells Layer Editor Widget - Startup](../assets/user_guide/05_cells_layer_editor_startup.png)
+=== "A: Startup (Idle)"
+    ![Screenshot: Cells Layer Editor Widget - Startup](../assets/user_guide/05_cells_layer_editor_startup.png)
 
-![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/user_guide/05_cells_layer_editor_vector_startup.png)
+=== "B: Vector Mode"
+    ![Screenshot: Cells Layer Editor Widget - Vector Editing Startup](../assets/user_guide/05_cells_layer_editor_vector_startup.png)
 
-![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/user_guide/05_cells_layer_editor_vector_lasso.png)
+=== "C: Lasso Selection"
+    ![Screenshot: Cells Layer Editor Widget - Vector Editing with Lasso Delete](../assets/user_guide/05_cells_layer_editor_vector_lasso.png)
 
-![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/user_guide/05_cells_layer_editor_raster.png)
+=== "D: Raster Mode"
+    ![Screenshot: Cells Layer Editor Widget - Raster Editing](../assets/user_guide/05_cells_layer_editor_raster.png)
 
-*Figure 8: Cells layer editor widget in its four states (from top to bottom): (A) Startup, (B) Vector editing startup, (C) Vector editing with lasso selection enabled, and (D) Raster editing.*
+*Figure 7: Cells layer editor widget in its four operational states: (A) Startup, (B) Vector editing active, (C) Vector editing with lasso selection enabled, and (D) Raster editing mode.*
 
 ### How It Works
 - **Mutual Editing Exclusion & Layer Guards**: Temporarily transfers the active `.cells` layer into an editable working state (`Cells Modification`), while automatically hiding tree-ring layers (`.rings` and `Rings Years`) as well as CWT visualization circles (`[<sample>] CWT Circles`) to prevent visual clutter and accidental cross-layer modifications. Exiting editing mode automatically restores the previous visibility states.
@@ -350,6 +377,20 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 
 !!! info "Automatic Background Model Downloads"
     Opening this widget checks for missing ring segmentation model weights (required for the **Rerun Ring Segmentation** feature) and downloads them automatically in the background without blocking the interface. Once downloaded, models are cached locally for subsequent use.
+
+=== "A: Startup (Idle)"
+    ![Screenshot: Rings Layer Editor Widget - Startup](../assets/user_guide/06_rings_layer_editor_startup.png)
+
+=== "B: Vector Boundary Editing"
+    ![Screenshot: Rings Layer Editor Widget - Vector Boundary Editing](../assets/user_guide/06_rings_layer_editor_vector.png)
+
+=== "C: Lasso Vertex Deletion"
+    ![Screenshot: Rings Layer Editor Widget - Lasso Vertex Deletion](../assets/user_guide/06_rings_layer_editor_lasso.png)
+
+=== "D: Rerun Model from Year Workflow"
+    ![Screenshot: Rings Layer Editor Widget - Rerun Model from Year Workflow](../assets/user_guide/06_rings_layer_editor_rerun_workflow.png)
+
+*Figure 8: Rings layer editor widget in its four operational states: (A) Startup, (B) Vector polyline boundary editing, (C) Lasso vertex selection and deletion, and (D) Targeted model re-segmentation workflow.*
 
 ### How It Works
 1. **Mutual Editing Exclusion & Layer Guards**: Enters vector polyline editing mode (`Rings Modification`) while automatically hiding cell layers (`.cells`) and CWT visualization circles (`[<sample>] CWT Circles`) to prevent layer conflicts. Exiting ring editing mode automatically restores cell and CWT layer visibilities.
@@ -421,7 +462,7 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
 
 ![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter.png)
 
-*Figure 10: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
+*Figure 9: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
 
 ### How It Works
 - Computes mean ring width (`MRW`) from the ring boundaries currently in the viewer.
@@ -499,7 +540,7 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 
 ![Screenshot: Samples Saving Widget](../assets/user_guide/08_samples_saving_widget.png)
 
-*Figure 11: Samples saving widget.*
+*Figure 10: Samples saving widget interface.*
 
 ### How It Works
 - Gathers data, layer parameters, and metadata from active napari layers.
@@ -534,7 +575,7 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 
 ![Screenshot: Single Sample Measurements Widget](../assets/user_guide/09a_single_measurements_widget.png)
 
-*Figure 12: Single sample measurements interface.*
+*Figure 11: Single sample measurements interface.*
 
 ### How It Works
 - Combines the `.cells` lumen mask, `.rings` boundary geometry, and spatial resolution metadata ($\mu\text{m}/\text{px}$) to compute anatomical and ring-width traits:
@@ -562,6 +603,10 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 ## 9B - Batch Measure & Update
 
 The **Batch Sample Measurements Widget** runs high-throughput anatomical trait extraction, annotated image generation, and reference plot synchronization across all samples in a project folder.
+
+![Screenshot: Batch Sample Measurements Widget](../assets/user_guide/09b_batch_measurements_widget.png)
+
+*Figure 12: Batch sample measurements and update interface.*
 
 ### How It Works
 - Discovers all matched pairs of `.cells` and `.rings` files in the project directory.
@@ -610,7 +655,7 @@ The **Settings Widget** is a visual preferences manager that allows adjusting gl
 
 ![Screenshot: Settings Manager Widget](../assets/user_guide/zz_settings_widget.png)
 
-*Figure 14: Global settings manager widget with collapsible categories.*
+*Figure 13: Global settings manager widget with collapsible categories.*
 
 ### How It Works
 - Directly manages `settings.json` with dedicated input editors matching each data type (spinboxes, color selectors, list editors, checkboxes).
