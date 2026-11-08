@@ -461,13 +461,13 @@ For a complete summary of all shortcuts across the application, see the [Shortcu
 The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series derived from detected rings with master reference chronologies in an interactive plotting environment.
 
 === "A: Standard View"
-    ![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter.png)
+    ![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter_startup.png)
 
 === "B: Candidate Alignment Options"
     ![Screenshot: Cross-Dating Candidate Alignment Options](../assets/user_guide/07_cross_dating_candidates.png)
 
 === "C: Rendered Reference Plot"
-    ![Screenshot: Exported Reference Series Plot](../assets/user_guide/07_cross_dating_reference_series.png)
+    ![Screenshot: Exported Reference Series Plot](../assets/user_guide/07_cross_dating_reference_series.jpg)
 
 *Figure 9: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology: (A) Standard floating plotter interface with ±10-year buffer, (B) Candidate alignment suggestions ranked by correlation (r) and Gleichläufigkeit (GLK), and (C) Rendered reference series plot exported as `<sample>_ReferenceSeries.jpg`.*
 
@@ -586,7 +586,7 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 === "B: In-Viewer CWT QA Layer"
     ![Screenshot: Interactive CWT Quality Assurance Overlay](../assets/user_guide/09a_cwt_qa_overlay.png)
 
-*Figure 11: Single sample measurements and quality assurance interface: (A) Trait measurement controls and (B) Interactive CWT Quality Assurance shapes overlay in the napari viewer displaying color-coded inclusion/exclusion circles and hover tooltips.*
+*Figure 11: Single sample measurements and quality assurance interface: (A) Trait measurement controls and (B) Interactive CWT Quality Assurance shapes overlay in the napari viewer displaying color-coded inclusion (green)/exclusion (red) circles and hover tooltips.*
 
 ### How It Works
 - Combines the `.cells` lumen mask, `.rings` boundary geometry, and spatial resolution metadata ($\mu\text{m}/\text{px}$) to compute anatomical and ring-width traits:

@@ -9,11 +9,10 @@ Step-by-step guides for quantitative wood anatomy (QWA) and dendrochronological 
 This fast-track walkthrough guides you from raw anatomical image to measured cellular and tree-ring traits using the bundled conifer sample and the **Manual Editing Group** (`Ctrl+Shift+M`).
 
 ```mermaid
-flowchart LR
-    A["Launch napari-roxas"] --> B["Open Conifer Sample"]
-    B --> C["Detect Cells & Rings (3A)"]
-    C --> D["Review & Curate (5 & 6)"]
-    D --> E["Extract Traits (9A)"]
+flowchart TD
+    S1["Step 1: Launch napari-roxas & Open Sample Data"] --> S2["Step 2: Run Deep Learning Detection (Widget 3A)"]
+    S2 --> S3["Step 3: Quick Visual Verification & Curation (Widgets 5 & 6)"]
+    S3 --> S4["Step 4: Extract Cell & Ring Measurements (Widget 9A)"]
 ```
 
 ### Step 1: Launch ROXAS AI & Open Built-in Sample Data
@@ -182,7 +181,7 @@ Expand **6 - Edit rings** in the Manual Editing group.
 
 Open **Plugins > ROXAS AI > 7 - Visual crossdating** to verify ring counts and calendar year assignments against master chronologies.
 
-![Screenshot: Visual cross-dating interface](../assets/user_guide/07_cross_dating_plotter.png)
+![Screenshot: Visual cross-dating interface](../assets/user_guide/07_cross_dating_plotter_startup.png)
 
 *Figure 8: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
 
@@ -301,4 +300,4 @@ flowchart TD
 
 ![Screenshot: Batch Processing Output Organization](../assets/tutorials/batch_processing_workflow_overview.png)
 
-*Figure 11: Automated batch processing workflow and synchronized file output hierarchy (`.cells.png`, `.rings.tif`, `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg`, and `_ReferenceSeries.jpg`).*
+*Figure 11: Standardized sample folder file hierarchy generated after batch processing (`.cells.png`, `.rings.tif`, `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg`, and `_ReferenceSeries.jpg`).*
