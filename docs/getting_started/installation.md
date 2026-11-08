@@ -195,6 +195,10 @@ napari-roxas
 
 *(Note: Starting with plain `napari` works as well; plugin shortcuts and widgets become active as soon as you open any ROXAS AI widget via `Plugins > ROXAS AI`).*
 
+![Screenshot: ROXAS AI Workbench Startup Layout](../assets/getting_started/roxas_workbench_launch.png)
+
+*Figure 1: ROXAS AI workbench initialized in napari with the Manual Editing Group docked in the right sidebar.*
+
 ### 2. Verify with Bundled Sample Data
 
 1. In the napari menu, navigate to `File > Open Sample > ROXAS AI > Conifer Wood Sample (Pinus sylvestris)`.

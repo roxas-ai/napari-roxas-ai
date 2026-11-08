@@ -172,6 +172,10 @@ Expand **6 - Edit rings** in the Manual Editing group.
 - **Updating Outermost Calendar Year**: Adjust the outermost year in the widget and click **Update Year** (supports calendar years from `-100,000` to `9,999`).
 - **Undo (<kbd>Ctrl</kbd> + <kbd>Z</kbd>)**: Reverts any drawing, nudging, affine transformation, or deletion (up to 50 undo steps).
 
+![Screenshot: Ring vector boundary editing in napari canvas](../assets/tutorials/04_ring_vector_curation_canvas.png)
+
+*Figure 7: Curating tree-ring boundary polylines in the napari canvas, including vertex dragging, boundary nudging, and wedging ring tracing.*
+
 ---
 
 ### Step 5: Visual Cross-Dating & Ring Synchronization
@@ -180,7 +184,7 @@ Open **Plugins > ROXAS AI > 7 - Visual crossdating** to verify ring counts and c
 
 ![Screenshot: Visual cross-dating interface](../assets/user_guide/07_cross_dating_plotter.png)
 
-*Figure 7: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
+*Figure 8: Visual cross-dating plotter showing sample ring widths synchronized against reference series.*
 
 1. **Automatic File Discovery & Upward Traversal**:
     - The plotter searches strictly upwards from the sample folder through parent project directories to auto-discover all available `.crossdating.txt` files.
@@ -211,7 +215,7 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
 
 ![Screenshot: Save editing dialog](../assets/user_guide/08_samples_saving_widget.png)
 
-*Figure 8: Saving finalized annotation layers to disk.*
+*Figure 9: Saving finalized annotation layers to disk.*
 
 ---
 
@@ -228,9 +232,13 @@ Click **Save All Layers** inside the active editor or open **8 - Save cells & ri
     - **`[<sample>] CWT Circles` Shapes Layer**: Interactive viewer layer with hover tooltips displaying Cell ID, sector, thickness ($\mu\text{m}$), status, and exclusion reason for visual QA inspection.
     - **`<sample>_annotated.jpg`**: Automatically regenerated and saved with synchronized ring boundaries, calendar years, and cell lumen highlights matching the final measurements.
 
-![Screenshot: Final measurement tables and visual summary](../assets/user_guide/09a_single_measurements_widget.png)
+=== "A: Measurement Controls"
+    ![Screenshot: Final measurement tables and visual summary](../assets/user_guide/09a_single_measurements_widget.png)
 
-*Figure 9: Single sample measurement interface and exported tabular time series.*
+=== "B: In-Viewer CWT QA Layer"
+    ![Screenshot: In-viewer trait extraction and CWT QA circles overlay](../assets/tutorials/07_traits_extraction_canvas.png)
+
+*Figure 10: Single sample trait extraction and quality assurance: (A) Measurement control panel and (B) In-viewer CWT circles overlay with hover tooltips alongside extracted feature tables.*
 
 ---
 
@@ -290,3 +298,7 @@ flowchart TD
     - **Reference Plot Auto-Generation**: ROXAS AI automatically searches upwards through the directory tree for cross-dating files and matches sample stems to reference chronologies (or uses the validated `reference_series` in metadata).
 3. Click **Measure & Update**.
 4. The batch engine executes across all samples, writing `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg`, and `_ReferenceSeries.jpg` directly to each sample folder.
+
+![Screenshot: Batch Processing Output Organization](../assets/tutorials/batch_processing_workflow_overview.png)
+
+*Figure 11: Automated batch processing workflow and synchronized file output hierarchy (`.cells.png`, `.rings.tif`, `.cells_table.csv`, `.rings_table.csv`, `.cwt.json`, `_annotated.jpg`, and `_ReferenceSeries.jpg`).*

@@ -460,9 +460,16 @@ For a complete summary of all shortcuts across the application, see the [Shortcu
 
 The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series derived from detected rings with master reference chronologies in an interactive plotting environment.
 
-![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter.png)
+=== "A: Standard View"
+    ![Screenshot: Cross-Dating Plotter Widget](../assets/user_guide/07_cross_dating_plotter.png)
 
-*Figure 9: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology.*
+=== "B: Candidate Alignment Options"
+    ![Screenshot: Cross-Dating Candidate Alignment Options](../assets/user_guide/07_cross_dating_candidates.png)
+
+=== "C: Rendered Reference Plot"
+    ![Screenshot: Exported Reference Series Plot](../assets/user_guide/07_cross_dating_reference_series.png)
+
+*Figure 9: Visual cross-dating plotter synchronizing sample ring-width series with reference chronology: (A) Standard floating plotter interface with ±10-year buffer, (B) Candidate alignment suggestions ranked by correlation (r) and Gleichläufigkeit (GLK), and (C) Rendered reference series plot exported as `<sample>_ReferenceSeries.jpg`.*
 
 ### How It Works
 - Computes mean ring width (`MRW`) from the ring boundaries currently in the viewer.
@@ -573,9 +580,13 @@ The **Samples Saving Widget** writes modified cell masks, ring boundaries, and u
 
 The **Single Sample Measurements Widget** computes the full suite of Quantitative Wood Anatomy (QWA) metrics for the sample currently loaded in napari.
 
-![Screenshot: Single Sample Measurements Widget](../assets/user_guide/09a_single_measurements_widget.png)
+=== "A: Measurement Controls"
+    ![Screenshot: Single Sample Measurements Widget](../assets/user_guide/09a_single_measurements_widget.png)
 
-*Figure 11: Single sample measurements interface.*
+=== "B: In-Viewer CWT QA Layer"
+    ![Screenshot: Interactive CWT Quality Assurance Overlay](../assets/user_guide/09a_cwt_qa_overlay.png)
+
+*Figure 11: Single sample measurements and quality assurance interface: (A) Trait measurement controls and (B) Interactive CWT Quality Assurance shapes overlay in the napari viewer displaying color-coded inclusion/exclusion circles and hover tooltips.*
 
 ### How It Works
 - Combines the `.cells` lumen mask, `.rings` boundary geometry, and spatial resolution metadata ($\mu\text{m}/\text{px}$) to compute anatomical and ring-width traits:
