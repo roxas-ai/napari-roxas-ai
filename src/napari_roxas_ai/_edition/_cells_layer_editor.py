@@ -43,6 +43,29 @@ MAX_BRUSH_SIZE = 100
 BRUSH_SHORTCUT_MODIFIER = "Meta" if sys.platform == "darwin" else "Control"
 
 
+def fill_cells_holes(cells_raster: np.ndarray) -> np.ndarray:
+    """
+    Fill internal holes of the cells in a binary cells raster.
+
+    Uses the same approach as the measurements (``SampleMeasurer``): external
+    contours only (``cv2.RETR_EXTERNAL``) drawn filled, so a cell edited into a
+    donut-like shape is displayed exactly as it is measured. Existing cell
+    pixels keep their value, hole pixels are set to 1, the dtype is preserved.
+    """
+    contours, _ = cv2.findContours(
+        (cells_raster > 0).astype("uint8"),
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    filled = np.zeros(cells_raster.shape, dtype="uint8")
+    if contours:
+        cv2.drawContours(filled, contours, -1, 1, thickness=cv2.FILLED)
+
+    result = cells_raster.copy()
+    result[(filled > 0) & (cells_raster == 0)] = 1
+    return result
+
+
 @thread_worker
 def vectorize_cells_worker(layer_data: np.ndarray, tolerance: float):
     """
@@ -910,6 +933,10 @@ class CellsLayerEditorWidget(Container):
             )
             for shape in new_cells_shapes:
                 cv2.drawContours(new_cells_raster, [shape], -1, 1, -1)
+
+        # Fill holes inside edited cells so the displayed cells match the
+        # measurements, which fill cell interiors from their external contours.
+        new_cells_raster = fill_cells_holes(new_cells_raster)
 
         self._reset_undo_history()
 

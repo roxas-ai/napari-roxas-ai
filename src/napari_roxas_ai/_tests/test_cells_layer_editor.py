@@ -798,3 +798,46 @@ def test_mutual_editing_exclusion_cells_and_rings(make_napari_viewer):
     assert "Cells Modification" not in viewer.layers
     assert rings_widget._edit_rings_geometries_button.enabled
     assert not rings_widget._edit_rings_geometries_button.tooltip
+
+
+def test_fill_cells_holes_fills_only_internal_holes():
+    from napari_roxas_ai._edition._cells_layer_editor import fill_cells_holes
+
+    data = np.zeros((30, 30), dtype=np.uint8)
+    data[5:15, 5:15] = 1
+    data[8:12, 8:12] = 0  # internal hole (donut)
+    data[20:28, 20:28] = 1  # cell without hole
+    data[0:5, 25:30] = 1
+    data[0:2, 27:29] = 0  # notch open to the border: not a hole
+
+    result = fill_cells_holes(data)
+
+    assert result.dtype == data.dtype
+    assert np.all(result[5:15, 5:15] == 1)
+    assert np.all(result[20:28, 20:28] == 1)
+    assert np.all(result[0:2, 27:29] == 0)
+    # Background outside the cells stays empty
+    assert result.sum() == data.sum() + 16
+
+
+def test_apply_raster_edits_fills_cell_holes(make_napari_viewer):
+    viewer = make_napari_viewer()
+    data = np.zeros((40, 40), dtype=np.uint8)
+    data[5:20, 5:20] = 1
+    cells_layer = viewer.add_labels(data, name="sample.cells")
+
+    widget = CellsLayerEditorWidget(viewer)
+    widget._edition_mode_combo.value = "Raster"
+    widget._edit_cells_geometries()
+
+    # Erase the cell interior to create a donut-shaped cell
+    edit_layer = viewer.layers["Cells Modification"]
+    edited = edit_layer.data.copy()
+    edited[9:16, 9:16] = 0
+    edit_layer.data = edited
+
+    widget._apply_cells_geometries()
+
+    assert "Cells Modification" not in viewer.layers
+    assert np.all(cells_layer.data[5:20, 5:20] == 1)
+    assert cells_layer.data.sum() == 15 * 15
