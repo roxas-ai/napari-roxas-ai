@@ -2,6 +2,7 @@ from magicgui.widgets import Container, Label, ProgressBar, PushButton
 
 from napari_roxas_ai._jobs import Progress
 
+from ._display import bar_range, progress_text
 from ._handle import JobHandle
 
 
@@ -17,7 +18,7 @@ class JobProgressPanel(Container):
         super().__init__(**kwargs)
         self._handle: JobHandle | None = None
 
-        self._label = Label(value="")
+        self._status = Label(value="")
         self._bar = ProgressBar(value=0, min=0, max=100, label="Progress")
         self._cancel_button = PushButton(text="Cancel")
         self._cancel_button.visible = cancellable
@@ -28,7 +29,9 @@ class JobProgressPanel(Container):
             labels=False,
         )
         self._row.margins = (0, 0, 0, 0)
-        self.extend([self._label, self._row])
+        # Aligned with the widgets around it
+        self.margins = (0, 0, 0, 0)
+        self.extend([self._status, self._row])
         self.visible = False
 
     @property
@@ -41,7 +44,7 @@ class JobProgressPanel(Container):
 
     @property
     def text(self) -> str:
-        return self._label.value
+        return self._status.value
 
     def track(self, handle: JobHandle | None) -> None:
         """Show the progress of ``handle``."""
@@ -61,7 +64,7 @@ class JobProgressPanel(Container):
     def cancel(self) -> None:
         if self._handle is not None:
             self._cancel_button.enabled = False
-            self._label.value = f"{self._handle.name}: cancelling..."
+            self._status.value = f"{self._handle.name}: cancelling..."
             self._handle.cancel()
 
     def _on_progress(self, progress: Progress) -> None:
@@ -73,20 +76,12 @@ class JobProgressPanel(Container):
 
     def _show(self, progress: Progress | None) -> None:
         name = self._handle.name if self._handle is not None else ""
-        known = progress is not None and progress.total > 0
-        if known:
-            self._bar.max = 100
-            self._bar.value = progress.percent
-        else:
-            # A bar with max == min == 0 is shown as busy in magicgui
-            self._bar.value = 0
-            self._bar.max = 0
-        detail = ""
-        if progress is not None:
-            detail = progress.message or (
-                f"{progress.current}/{progress.total}" if known else ""
-            )
-        self._label.value = f"{name}: {detail}" if detail else name
+        maximum, value = bar_range(progress)
+        # Value first: it must stay within the bar's range
+        self._bar.value = 0
+        self._bar.max = maximum
+        self._bar.value = value
+        self._status.value = progress_text(name, progress)
 
     def _release(self) -> None:
         handle, self._handle = self._handle, None
@@ -97,4 +92,4 @@ class JobProgressPanel(Container):
         self.visible = False
         self._bar.value = 0
         self._bar.max = 100
-        self._label.value = ""
+        self._status.value = ""

@@ -10,11 +10,13 @@ handle = get_runner().submit(
 self._progress_panel.track(handle)
 """
 
+from ._button import JobButton
 from ._handle import JobHandle
 from ._panel import JobProgressPanel
 from ._runner import JobRunner, get_runner
 
 __all__ = [
+    "JobButton",
     "JobHandle",
     "JobProgressPanel",
     "JobRunner",
