@@ -30,6 +30,10 @@ from napari_roxas_ai.shortcuts import (
     prevent_duplicate_dock_if_already_present,
 )
 from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
+from napari_roxas_ai._measurements import (
+    create_or_update_cwt_circles_layer,
+    load_cwt_visualization_json,
+)
 
 
 
@@ -506,6 +510,8 @@ class SamplesLoadingWidget(Container):
         # Connect layer data signal to add layers to the viewer
         self.worker.layer_data.connect(self._add_loaded_layer)
 
+        # Connect CWT visualization layer loader
+        self.worker_thread.finished.connect(self._on_sample_loading_finished)
 
         # Run the analysis in a separate thread
         self.worker_thread.start()
@@ -532,3 +538,60 @@ class SamplesLoadingWidget(Container):
             self._progress_bar.value = percentage
             self._load_samples_button.visible = False
             self._progress_bar.visible = True
+
+    def _on_sample_loading_finished(self):
+        """Check for and load any existing .cwt.json files for loaded samples."""
+        cwt_enabled = settings.get("cwt_visualization.enabled")
+        if cwt_enabled is None:
+            cwt_enabled = True
+        if not cwt_enabled:
+            return
+
+        if (
+            not hasattr(self, "_sample_select_widget")
+            or not self._sample_select_widget.value
+        ):
+            return
+
+        for sample in self._sample_select_widget.value:
+            sample_path = Path(self.project_directory) / sample
+            candidate_paths = [
+                Path(f"{sample_path}.cwt.json"),
+                sample_path.parent / f"{sample_path.name}.cwt.json",
+                sample_path.with_suffix(".cwt.json"),
+            ]
+            cwt_path = next((p for p in candidate_paths if p.exists()), None)
+
+            if cwt_path is not None:
+                try:
+                    cwt_data = load_cwt_visualization_json(cwt_path)
+                    sample_name = sample_path.name
+                    cells_layer = next(
+                        (
+                            layer
+                            for layer in self._viewer.layers
+                            if layer.name.endswith(".cells")
+                            and (
+                                layer.metadata.get("sample_name") == sample_name
+                                or layer.name.startswith(sample_name)
+                            )
+                        ),
+                        None,
+                    )
+                    scale = (
+                        getattr(cells_layer, "scale", None)
+                        if cells_layer is not None
+                        else None
+                    )
+                    create_or_update_cwt_circles_layer(
+                        viewer=self._viewer,
+                        sample_name=sample_name,
+                        cwt_vis_data=cwt_data,
+                        scale=scale,
+                        file_path=str(cwt_path),
+                    )
+                    show_info(f"Loaded CWT visualization from {cwt_path.name}")
+                except Exception as e:
+                    print(
+                        f"[Loader] Failed to load CWT circles from {cwt_path}: {e}"
+                    )

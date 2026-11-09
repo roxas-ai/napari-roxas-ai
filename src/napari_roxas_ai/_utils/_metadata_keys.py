@@ -8,6 +8,11 @@ to load. Keys matching none of the applicable prefixes are dropped silently,
 so a new metadata key must be covered here to be read back or written out.
 """
 
+from typing import Any, Optional
+
+import numpy as np
+
+
 # Sample-level keys, meaningful for every layer of a sample. Entries without a
 # trailing underscore are whole key names rather than prefixes; ``startswith``
 # treats both alike. ``meas_geometry`` is listed here despite its ``meas_``
@@ -36,6 +41,7 @@ MEASUREMENT_PARAMETER_KEYS = (
     "lower_limit_cwt_iqr_multiplier",
     "upper_limit_cwt_iqr_multiplier",
     "opposite_cwt_ratio_limit",
+    "opposite_cwt_percentile_exception",
     "adjacent_cwt_ratio_limit",
 )
 
@@ -94,3 +100,60 @@ def migrate_legacy_metadata_keys(metadata: dict) -> dict:
             continue
         migrated[new_key] = value
     return migrated
+
+
+# Specific precision (decimal places) for float metadata keys.
+# Keys not listed here fall back to DEFAULT_METADATA_FLOAT_DECIMALS.
+METADATA_FLOAT_PRECISION = {
+    "spatial_resolution": 6,
+    "sample_angle": 2,
+    "resolution_dpi": 2,
+    "cluster_dbl_cwt_threshold": 2,
+    "relwidth_cwt_integration": 2,
+    "lower_limit_cwt_iqr_multiplier": 2,
+    "upper_limit_cwt_iqr_multiplier": 2,
+    "opposite_cwt_ratio_limit": 2,
+    "opposite_cwt_percentile_exception": 2,
+    "adjacent_cwt_ratio_limit": 2,
+}
+
+DEFAULT_METADATA_FLOAT_DECIMALS = 4
+
+
+def sanitize_metadata_floats(
+    obj: Any,
+    default_decimals: int = DEFAULT_METADATA_FLOAT_DECIMALS,
+    key_name: Optional[str] = None,
+) -> Any:
+    """
+    Recursively round float values in metadata to prevent IEEE 754 precision artifacts.
+
+    Parameters
+    ----------
+    obj : Any
+        The metadata object (dict, list, float, etc.) to sanitize.
+    default_decimals : int, default 4
+        Fallback decimal places for floats not matching a specific key rule.
+    key_name : str, optional
+        The key name of the current field if traversing a dict.
+
+    Returns
+    -------
+    Any
+        A copy of the object with all float values rounded.
+    """
+    if isinstance(obj, (float, np.floating)):
+        decimals = METADATA_FLOAT_PRECISION.get(key_name, default_decimals)
+        return round(float(obj), decimals)
+    if isinstance(obj, dict):
+        return {
+            k: sanitize_metadata_floats(v, default_decimals, key_name=str(k))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, (list, tuple)):
+        res = [
+            sanitize_metadata_floats(item, default_decimals, key_name=key_name)
+            for item in obj
+        ]
+        return tuple(res) if isinstance(obj, tuple) else res
+    return obj

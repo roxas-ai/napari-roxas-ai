@@ -711,11 +711,15 @@ class CellsLayerEditorWidget(Container):
             return
 
         # --- LAYER VISIBILITY MANAGEMENT ---
-        # Hide .rings and Rings Year layers to reduce clutter during cell editing.
+        # Hide .rings, Rings Year, and .cwt_circles layers to reduce clutter during cell editing.
         # Store their original visibility state to restore it when editing is finished.
         self._layer_visibility_states = {}
         for layer in self._viewer.layers:
-            if layer.name.endswith(".rings") or layer.name.startswith("Rings Year"):
+            if (
+                layer.name.endswith(".rings")
+                or layer.name.startswith("Rings Year")
+                or layer.name.endswith(".cwt_circles")
+            ):
                 self._layer_visibility_states[layer.name] = layer.visible
                 layer.visible = False
 
@@ -908,6 +912,15 @@ class CellsLayerEditorWidget(Container):
                 cv2.drawContours(new_cells_raster, [shape], -1, 1, -1)
 
         self._reset_undo_history()
+
+        # Remove any cwt_circles layers from viewer since cell shapes changed
+        cwt_layers = [
+            l for l in self._viewer.layers if l.name.endswith(".cwt_circles")
+        ]
+        for cwt_l in cwt_layers:
+            self._viewer.layers.remove(cwt_l)
+            if cwt_l.name in self._layer_visibility_states:
+                del self._layer_visibility_states[cwt_l.name]
 
         # Update the cells layer with the new geometries
         self.input_layer.data = new_cells_raster

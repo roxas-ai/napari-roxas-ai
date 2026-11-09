@@ -157,6 +157,49 @@ def test_decimals_never_truncate_the_stored_value(value, expected):
     assert getter() == value
 
 
+def test_float_editor_rounds_to_specified_decimals():
+    # Value with floating point artifact e.g. 0.7500000000000001 with decimals=2
+    editor, getter = _make_editor(0.7500000000000001, step=0.05, decimals=2)
+    assert getter() == 0.75
+
+
+def test_sanitize_settings_floats_and_manager_sanitization(settings_file):
+    from napari_roxas_ai._settings._settings_manager import (
+        sanitize_settings_floats,
+    )
+
+    data = {
+        "measurements": {
+            "opposite_cwt_percentile_exception": 0.7500000000000001,
+            "relwidth_cwt_integration": 0.7500000000000001,
+            "cluster_dbl_cwt_threshold": 3.0000000000000004,
+        },
+        "annotated_image": {
+            "scale_factor": 0.5000000000000001,
+        },
+        "cwt_visualization": {
+            "edge_width": 3.0000000000000004,
+        },
+        "custom_float": 1.23456789,
+    }
+    sanitized = sanitize_settings_floats(data)
+    assert sanitized["measurements"]["opposite_cwt_percentile_exception"] == 0.75
+    assert sanitized["measurements"]["relwidth_cwt_integration"] == 0.75
+    assert sanitized["measurements"]["cluster_dbl_cwt_threshold"] == 3.0
+    assert sanitized["annotated_image"]["scale_factor"] == 0.5
+    assert sanitized["cwt_visualization"]["edge_width"] == 3.0
+    assert sanitized["custom_float"] == 1.2346
+
+    # Test SettingsManager.set() sanitization
+    manager = SettingsManager()
+    manager.set("measurements.opposite_cwt_percentile_exception", 0.7500000000000001)
+    assert manager.get("measurements.opposite_cwt_percentile_exception") == 0.75
+
+    # Check on disk
+    on_disk = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert on_disk["measurements"]["opposite_cwt_percentile_exception"] == 0.75
+
+
 # ------------------------------------------------------------------ the editors
 
 
@@ -1163,3 +1206,61 @@ def test_project_directory_changed_elsewhere_is_shown_and_kept_on_apply(
 
     widget._apply()
     assert SettingsManager().get("project_directory") == "C:/Projects/Other"
+
+
+def test_cwt_visualization_defaults(settings_file):
+    manager = SettingsManager()
+    assert manager.get("cwt_visualization.enabled") is True
+    assert manager.get("cwt_visualization.sample_interval") == 25
+    assert manager.get("cwt_visualization.included_color") == "lime"
+    assert manager.get("cwt_visualization.excluded_color") == "red"
+    assert manager.get("cwt_visualization.edge_width") == 3.0
+
+
+def test_cwt_visualization_widget_controls(widget, settings_file):
+    from qtpy.QtWidgets import QCheckBox, QDoubleSpinBox, QLineEdit, QSpinBox
+
+    enabled_cb = _editor_for(widget, "cwt_visualization", "enabled")
+    assert isinstance(enabled_cb, QCheckBox)
+    assert enabled_cb.isChecked() is True
+
+    interval_sb = _editor_for(widget, "cwt_visualization", "sample_interval")
+    assert isinstance(interval_sb, QSpinBox)
+    assert interval_sb.minimum() == 1
+    assert interval_sb.maximum() == 10000
+    assert interval_sb.singleStep() == 25
+    assert interval_sb.value() == 25
+
+    edge_width_dsb = _editor_for(widget, "cwt_visualization", "edge_width")
+    assert isinstance(edge_width_dsb, QDoubleSpinBox)
+    assert edge_width_dsb.minimum() == pytest.approx(0.5)
+    assert edge_width_dsb.maximum() == pytest.approx(10.0)
+    assert edge_width_dsb.singleStep() == pytest.approx(0.5)
+    assert edge_width_dsb.value() == pytest.approx(3.0)
+
+    inc_color_le = _editor_for(widget, "cwt_visualization", "included_color")
+    assert isinstance(inc_color_le, QLineEdit)
+    assert inc_color_le.text() == "lime"
+
+    exc_color_le = _editor_for(widget, "cwt_visualization", "excluded_color")
+    assert isinstance(exc_color_le, QLineEdit)
+    assert exc_color_le.text() == "red"
+
+    # Test editing values and applying
+    enabled_cb.setChecked(False)
+    interval_sb.setValue(500)
+    edge_width_dsb.setValue(3.5)
+    inc_color_le.setText("gray")
+    exc_color_le.setText("orange")
+
+    widget._apply()
+
+    manager = SettingsManager()
+    assert manager.get("cwt_visualization.enabled") is False
+    assert manager.get("cwt_visualization.sample_interval") == 500
+    assert manager.get("cwt_visualization.edge_width") == pytest.approx(3.5)
+    assert manager.get("cwt_visualization.included_color") == "gray"
+    assert manager.get("cwt_visualization.excluded_color") == "orange"
+
+    # Verify focus_section for cwt_visualization
+    assert widget.focus_section("cwt_visualization") is True

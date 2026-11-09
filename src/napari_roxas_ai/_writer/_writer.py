@@ -33,6 +33,7 @@ from napari_roxas_ai._utils._metadata_keys import (
     RUN_METADATA_PREFIXES,
     SAMPLE_METADATA_PREFIXES,
     migrate_legacy_metadata_keys,
+    sanitize_metadata_floats,
 )
 
 
@@ -96,6 +97,7 @@ def update_metadata_file(
             sample_name = path_p.stem
 
     existing_metadata["sample_name"] = sample_name
+    existing_metadata = sanitize_metadata_floats(existing_metadata)
 
     with path_p.open("w", encoding="utf-8") as f:
         json.dump(existing_metadata, f, indent=4)
@@ -475,8 +477,12 @@ def write_scan_file(path: str, data: Any, meta: dict) -> str:
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
-        project_dir = Path(settings.get("project_directory")).resolve()
-        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        proj = settings.get("project_directory")
+        if proj:
+            project_dir = Path(proj).resolve()
+            sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        else:
+            sample_path = (Path(path).parent / Path(stem).name).resolve()
     else:
         # Fallback: sample_name in current dir of 'path'
         sample_name = md.get("sample_name")
@@ -751,8 +757,12 @@ def write_cells_file(
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
-        project_dir = Path(settings.get("project_directory")).resolve()
-        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        proj = settings.get("project_directory")
+        if proj:
+            project_dir = Path(proj).resolve()
+            sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        else:
+            sample_path = (Path(path).parent / Path(stem).name).resolve()
     else:
         # Fallback: sample_name in current dir of 'path'
         sample_name = md.get("sample_name")
@@ -788,6 +798,19 @@ def write_cells_file(
             index=False,
         )
         written_file_paths.append(cells_table_file_path)
+    else:
+        # If cell geometries were edited and saved without fresh measurements,
+        # delete any existing stale .cwt.json file from disk.
+        for cwt_candidate in (
+            Path(f"{sample_path}.cwt.json"),
+            Path(sample_path).parent / f"{Path(sample_path).name}.cwt.json",
+            Path(path).parent / f"{Path(path).stem.split('.')[0]}.cwt.json",
+        ):
+            try:
+                if cwt_candidate.exists():
+                    cwt_candidate.unlink(missing_ok=True)
+            except Exception:
+                pass
     if cb:
         cb(0.4)
 
@@ -841,8 +864,12 @@ def write_rings_file(
 
     stem = md.get("sample_stem_path")
     if isinstance(stem, str) and stem.strip():
-        project_dir = Path(settings.get("project_directory")).resolve()
-        sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        proj = settings.get("project_directory")
+        if proj:
+            project_dir = Path(proj).resolve()
+            sample_path = (project_dir / stem).resolve()  # stem is stored relative
+        else:
+            sample_path = (Path(path).parent / Path(stem).name).resolve()
     else:
         # Fallback: sample_name in current dir of 'path'
         sample_name = md.get("sample_name")
