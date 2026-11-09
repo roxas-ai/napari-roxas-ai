@@ -73,7 +73,7 @@ def _confirm_removal(viewer, removed_layers) -> bool:
         else None
     )
     discard_button = box.addButton(
-        "Discard", QMessageBox.ButtonRole.DestructiveRole
+        "Discard Changes", QMessageBox.ButtonRole.DestructiveRole
     )
     box.addButton(QMessageBox.StandardButton.Cancel)
     box.exec()
