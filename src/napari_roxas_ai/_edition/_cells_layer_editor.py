@@ -116,6 +116,9 @@ class CellsLayerEditorWidget(Container):
         # Stores visibility of .rings and Rings Year layers before editing to restore them later
         self._layer_visibility_states = {}
 
+        # True while an edit session ("Cells Modification" layer) is open
+        self._is_editing = False
+
         # --- UNDO STATE ---
         # Snapshots of the vector "Cells Modification" layer taken before each completed edit
         # (in raster mode, the undo history of the labels layer itself is used)
@@ -242,7 +245,16 @@ class CellsLayerEditorWidget(Container):
 
         self._viewer.layers.events.inserted.connect(self._update_edit_button_state)
         self._viewer.layers.events.removed.connect(self._update_edit_button_state)
+        self._viewer.layers.events.removed.connect(self._on_layer_removed)
         self._update_edit_button_state()
+
+    def _on_layer_removed(self, event) -> None:
+        """Cancel the edit session when its input or working layer is removed."""
+        if self._is_editing and (
+            event.value is self.input_layer
+            or event.value.name == "Cells Modification"
+        ):
+            self._cancel_cells_geometries()
 
     def _update_edit_button_state(self, *args) -> None:
         """Update the enabled state and tooltip of the Edit Cells button."""
@@ -783,6 +795,7 @@ class CellsLayerEditorWidget(Container):
                 work_layer.metadata["sample_stem_path"] = sample_stem_path
 
             self._setup_raster_shortcuts(work_layer)
+            self._is_editing = True
 
             # Track the edit session history for undo (button and Ctrl/Cmd+Z)
             self._reset_undo_history()
@@ -821,6 +834,7 @@ class CellsLayerEditorWidget(Container):
                         },
                     )
                     self._viewer.add_layer(work_layer)
+                    self._is_editing = True
                     if sample_name is not None:
                         work_layer.metadata["sample_name"] = sample_name
                     if sample_stem_path is not None:
@@ -873,6 +887,8 @@ class CellsLayerEditorWidget(Container):
 
     def _cancel_cells_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
+        # Ended first, so removing the working layer below does not re-trigger
+        self._is_editing = False
         if self._lasso_selection_checkbox.value:
             self._lasso_selection_checkbox.value = False
         if "Lasso Selection" in self._viewer.layers:
@@ -904,6 +920,8 @@ class CellsLayerEditorWidget(Container):
 
     def _apply_cells_geometries(self) -> None:
         """Apply the changes to the input layer."""
+        # Ended first, so removing the working layer below does not cancel
+        self._is_editing = False
         if self._lasso_selection_checkbox.value:
             self._lasso_selection_checkbox.value = False
         if "Lasso Selection" in self._viewer.layers:

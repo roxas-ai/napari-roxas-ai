@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import MagicMock
 from types import SimpleNamespace
 
@@ -841,3 +842,22 @@ def test_apply_raster_edits_fills_cell_holes(make_napari_viewer):
     assert "Cells Modification" not in viewer.layers
     assert np.all(cells_layer.data[5:20, 5:20] == 1)
     assert cells_layer.data.sum() == 15 * 15
+
+
+@pytest.mark.parametrize("removed", ["sample.cells", "Cells Modification"])
+def test_removing_session_layer_cancels_edit_session(make_napari_viewer, removed):
+    viewer = make_napari_viewer()
+    viewer.add_labels(np.zeros((20, 20), dtype=np.uint8), name="sample.cells")
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edition_mode_combo.value = "Raster"
+    widget._edit_cells_geometries()
+    assert widget._apply_cells_geometries_button.visible
+
+    viewer.layers.remove(removed)
+
+    assert "Cells Modification" not in viewer.layers
+    assert widget._edit_cells_geometries_button.visible
+    assert not widget._apply_cells_geometries_button.visible
+    assert not widget._cancel_cells_geometries_button.visible
+    assert not widget._undo_button.visible

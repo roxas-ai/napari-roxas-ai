@@ -1394,6 +1394,20 @@ class RingsLayerEditorWidget(Container):
         # Always trigger years update when layer list changes
         self._years_update_timer.start(50)
 
+        # Cancel the edit session when the layer it was started from or its
+        # working layer is removed (apply/cancel remove it while _is_updating)
+        if (
+            self._is_editing
+            and not self._is_updating
+            and getattr(event, "type", None) == "removed"
+            and (
+                event.value is getattr(self, "_current_input_layer", None)
+                or event.value.name == "Rings Modification"
+            )
+        ):
+            self._cancel_rings_geometries()
+            return
+
         if self._is_editing:
             return
 
@@ -1553,7 +1567,9 @@ class RingsLayerEditorWidget(Container):
         # --- UI UPDATE ---
         self._set_ui_editing_mode(True)
 
-        self._current_input_layer = input_layer
+        # The layer the session is based on: the rings layer, or the scan
+        # layer when rings are drawn from scratch
+        self._current_input_layer = input_layer or scan_layer
 
         # If there is already an edit session open, remove old helper layers first
         if "Rings Modification" in self._viewer.layers:
