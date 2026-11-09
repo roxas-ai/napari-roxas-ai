@@ -35,4 +35,9 @@ def test_load_sample_data():
             "labels",
         }, "Layer type should be 'image' or 'labels'"
 
+    # Ensure layer order from bottom to top: scan -> cells -> rings
+    assert sample_data[0][2] == "image" and "scan" in sample_data[0][1]["name"].lower()
+    assert sample_data[1][2] == "labels" and "cells" in sample_data[1][1]["name"].lower()
+    assert sample_data[2][2] == "labels" and "rings" in sample_data[2][1]["name"].lower()
+
     print("All sample data tests passed!")

@@ -25,3 +25,24 @@
   display: flex;
   align-items: center;
 }
+
+/* Improve Mermaid workflow diagrams readability */
+.md-typeset .mermaid {
+  font-size: 1rem;
+  text-align: center;
+  margin: 1.5rem auto;
+}
+
+.md-typeset .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.md-typeset .mermaid .nodeLabel,
+.md-typeset .mermaid .node .label,
+.md-typeset .mermaid .edgeLabel,
+.md-typeset .mermaid .label,
+.md-typeset .mermaid text {
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+}

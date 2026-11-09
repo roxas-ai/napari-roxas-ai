@@ -29,12 +29,12 @@ warnings.filterwarnings(
     message=r"data shape .* exceeds GL_MAX_TEXTURE_SIZE",
 )
 
-# The project directory "widget" only opens a folder dialog and returns None, which
-# napari then fails to dock; nothing is meant to be docked, so the warning is noise
+# The project directory and documentation "widgets" only execute actions and return None,
+# which napari then fails to dock; nothing is meant to be docked, so the warning is noise
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
-    message=r"Processor .* failed to process result \(None, '0 - Define project directory",
+    message=r"Processor .* failed to process result \(None, '(0 - Define project directory|── USER DOCUMENTATION \(online\) ──)",
 )
 
 # NumPy 2.0 Compatibility Patch
@@ -70,6 +70,7 @@ _LAZY_IMPORTS = {
     "SingleSampleMeasurementsWidget": "._measurements",
     "PreparationWidget": "._preparation",
     "open_project_directory_dialog": "._project_directory",
+    "open_user_documentation": "._docs",
     "napari_get_reader": "._reader",
     "load_sample_data": "._sample_data",
     "SamplesSavingWidget": "._saving",
