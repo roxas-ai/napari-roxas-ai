@@ -845,7 +845,7 @@ def test_apply_raster_edits_fills_cell_holes(make_napari_viewer):
 
 
 @pytest.mark.parametrize("removed", ["sample.cells", "Cells Modification"])
-def test_removing_session_layer_cancels_edit_session(make_napari_viewer, removed):
+def test_removing_session_layer_cancels_edit_session(make_napari_viewer, qtbot, removed):
     viewer = make_napari_viewer()
     viewer.add_labels(np.zeros((20, 20), dtype=np.uint8), name="sample.cells")
     widget = CellsLayerEditorWidget(viewer)
@@ -855,9 +855,27 @@ def test_removing_session_layer_cancels_edit_session(make_napari_viewer, removed
     assert widget._apply_cells_geometries_button.visible
 
     viewer.layers.remove(removed)
+    qtbot.wait(50)
 
     assert "Cells Modification" not in viewer.layers
     assert widget._edit_cells_geometries_button.visible
     assert not widget._apply_cells_geometries_button.visible
     assert not widget._cancel_cells_geometries_button.visible
     assert not widget._undo_button.visible
+
+
+def test_removing_all_layers_during_edit_session(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    viewer.add_labels(np.zeros((20, 20), dtype=np.uint8), name="sample.cells")
+    widget = CellsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edition_mode_combo.value = "Raster"
+    widget._edit_cells_geometries()
+
+    viewer.layers.selection = set(viewer.layers)
+    viewer.layers.remove_selected()
+    qtbot.wait(50)
+
+    assert len(viewer.layers) == 0
+    assert widget._edit_cells_geometries_button.visible
+    assert not widget._apply_cells_geometries_button.visible

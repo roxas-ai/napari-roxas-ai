@@ -1240,6 +1240,10 @@ class RingsLayerEditorWidget(Container):
     def _update_undo_button_state(self) -> None:
         """Enable the undo button only if there is something to undo."""
         self._undo_button.enabled = self._is_editing and bool(self._undo_stack)
+        # Lets the unsaved changes guard know whether the session has edits
+        layer = self._get_edit_layer()
+        if layer is not None:
+            layer.metadata["_is_dirty"] = bool(self._undo_stack)
 
     def _undo_last_change(self) -> None:
         """Restore the edit layer to the state before the last change."""
@@ -1405,7 +1409,9 @@ class RingsLayerEditorWidget(Container):
                 or event.value.name == "Rings Modification"
             )
         ):
-            self._cancel_rings_geometries()
+            # Deferred: removing layers while napari is still removing the
+            # selected ones makes napari fail on the already removed layers
+            QTimer.singleShot(0, self._cancel_if_editing)
             return
 
         if self._is_editing:
@@ -1417,6 +1423,10 @@ class RingsLayerEditorWidget(Container):
             return
 
         self._connect_layer_callback()
+
+    def _cancel_if_editing(self) -> None:
+        if self._is_editing:
+            self._cancel_rings_geometries()
 
     def _deferred_remove_layer(self, name: str) -> None:
         """

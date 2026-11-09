@@ -46,12 +46,14 @@ def _confirm_removal(viewer, removed_layers) -> bool:
     dirty_layers = [
         l for l in removed_samples if l.metadata.get("_is_dirty", False)
     ]
-    # An active edit session is lost when its working layer or the
-    # cells/rings layers it will be applied to are removed
+    # Unapplied edits are lost when the edit session's working layer or the
+    # cells/rings layers they would be applied to are removed. The editors
+    # flag the working layer as dirty once the session contains edits.
     active_sessions = [
         name
         for name in EDIT_SESSION_LAYERS
         if name in viewer.layers
+        and viewer.layers[name].metadata.get("_is_dirty", False)
         and (removed_samples or viewer.layers[name] in removed_layers)
     ]
     if not dirty_layers and not active_sessions:

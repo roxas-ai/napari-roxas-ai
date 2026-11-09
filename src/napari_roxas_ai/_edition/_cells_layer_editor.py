@@ -254,6 +254,12 @@ class CellsLayerEditorWidget(Container):
             event.value is self.input_layer
             or event.value.name == "Cells Modification"
         ):
+            # Deferred: removing layers while napari is still removing the
+            # selected ones makes napari fail on the already removed layers
+            QTimer.singleShot(0, self._cancel_if_editing)
+
+    def _cancel_if_editing(self) -> None:
+        if self._is_editing:
             self._cancel_cells_geometries()
 
     def _update_edit_button_state(self, *args) -> None:
@@ -547,6 +553,9 @@ class CellsLayerEditorWidget(Container):
         else:
             can_undo = layer is not None and bool(self._undo_stack)
         self._undo_button.enabled = can_undo
+        # Lets the unsaved changes guard know whether the session has edits
+        if layer is not None:
+            layer.metadata["_is_dirty"] = can_undo
 
     def _undo_last_change(self) -> None:
         """Restore the edit layer to the state before the last change."""

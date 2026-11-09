@@ -74,9 +74,20 @@ def test_dirty_layer_save_then_remove(make_napari_viewer, cells_name, answer, mo
     assert cells_name not in viewer.layers
 
 
+def test_edit_session_without_edits_is_ignored(make_napari_viewer, cells_name, answer):
+    viewer = _viewer_with_cells(make_napari_viewer, cells_name, dirty=False)
+    session = viewer.add_labels(np.zeros((5, 5), dtype=np.uint8), name="Cells Modification")
+    session.metadata["_is_dirty"] = False
+    viewer.layers.selection = {viewer.layers[cells_name]}
+    viewer.layers.remove_selected()
+    assert answer["shown"] == 0
+    assert cells_name not in viewer.layers
+
+
 def test_active_edit_session_offers_no_save(make_napari_viewer, cells_name, answer):
     viewer = _viewer_with_cells(make_napari_viewer, cells_name, dirty=True)
-    viewer.add_labels(np.zeros((5, 5), dtype=np.uint8), name="Cells Modification")
+    session = viewer.add_labels(np.zeros((5, 5), dtype=np.uint8), name="Cells Modification")
+    session.metadata["_is_dirty"] = True
     viewer.layers.selection = {viewer.layers[cells_name]}
     answer["button"] = "Cancel"
     viewer.layers.remove_selected()
