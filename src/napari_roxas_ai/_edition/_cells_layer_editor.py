@@ -43,6 +43,29 @@ MAX_BRUSH_SIZE = 100
 BRUSH_SHORTCUT_MODIFIER = "Meta" if sys.platform == "darwin" else "Control"
 
 
+def fill_cells_holes(cells_raster: np.ndarray) -> np.ndarray:
+    """
+    Fill internal holes of the cells in a binary cells raster.
+
+    Uses the same approach as the measurements (``SampleMeasurer``): external
+    contours only (``cv2.RETR_EXTERNAL``) drawn filled, so a cell edited into a
+    donut-like shape is displayed exactly as it is measured. Existing cell
+    pixels keep their value, hole pixels are set to 1, the dtype is preserved.
+    """
+    contours, _ = cv2.findContours(
+        (cells_raster > 0).astype("uint8"),
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    filled = np.zeros(cells_raster.shape, dtype="uint8")
+    if contours:
+        cv2.drawContours(filled, contours, -1, 1, thickness=cv2.FILLED)
+
+    result = cells_raster.copy()
+    result[(filled > 0) & (cells_raster == 0)] = 1
+    return result
+
+
 @thread_worker
 def vectorize_cells_worker(layer_data: np.ndarray, tolerance: float):
     """
@@ -92,6 +115,9 @@ class CellsLayerEditorWidget(Container):
 
         # Stores visibility of .rings and Rings Year layers before editing to restore them later
         self._layer_visibility_states = {}
+
+        # True while an edit session ("Cells Modification" layer) is open
+        self._is_editing = False
 
         # --- UNDO STATE ---
         # Snapshots of the vector "Cells Modification" layer taken before each completed edit
@@ -219,7 +245,22 @@ class CellsLayerEditorWidget(Container):
 
         self._viewer.layers.events.inserted.connect(self._update_edit_button_state)
         self._viewer.layers.events.removed.connect(self._update_edit_button_state)
+        self._viewer.layers.events.removed.connect(self._on_layer_removed)
         self._update_edit_button_state()
+
+    def _on_layer_removed(self, event) -> None:
+        """Cancel the edit session when its input or working layer is removed."""
+        if self._is_editing and (
+            event.value is self.input_layer
+            or event.value.name == "Cells Modification"
+        ):
+            # Deferred: removing layers while napari is still removing the
+            # selected ones makes napari fail on the already removed layers
+            QTimer.singleShot(0, self._cancel_if_editing)
+
+    def _cancel_if_editing(self) -> None:
+        if self._is_editing:
+            self._cancel_cells_geometries()
 
     def _update_edit_button_state(self, *args) -> None:
         """Update the enabled state and tooltip of the Edit Cells button."""
@@ -512,6 +553,9 @@ class CellsLayerEditorWidget(Container):
         else:
             can_undo = layer is not None and bool(self._undo_stack)
         self._undo_button.enabled = can_undo
+        # Lets the unsaved changes guard know whether the session has edits
+        if layer is not None:
+            layer.metadata["_is_dirty"] = can_undo
 
     def _undo_last_change(self) -> None:
         """Restore the edit layer to the state before the last change."""
@@ -760,6 +804,7 @@ class CellsLayerEditorWidget(Container):
                 work_layer.metadata["sample_stem_path"] = sample_stem_path
 
             self._setup_raster_shortcuts(work_layer)
+            self._is_editing = True
 
             # Track the edit session history for undo (button and Ctrl/Cmd+Z)
             self._reset_undo_history()
@@ -798,6 +843,7 @@ class CellsLayerEditorWidget(Container):
                         },
                     )
                     self._viewer.add_layer(work_layer)
+                    self._is_editing = True
                     if sample_name is not None:
                         work_layer.metadata["sample_name"] = sample_name
                     if sample_stem_path is not None:
@@ -850,6 +896,8 @@ class CellsLayerEditorWidget(Container):
 
     def _cancel_cells_geometries(self) -> None:
         """Cancel the changes made to the input layer."""
+        # Ended first, so removing the working layer below does not re-trigger
+        self._is_editing = False
         if self._lasso_selection_checkbox.value:
             self._lasso_selection_checkbox.value = False
         if "Lasso Selection" in self._viewer.layers:
@@ -881,6 +929,8 @@ class CellsLayerEditorWidget(Container):
 
     def _apply_cells_geometries(self) -> None:
         """Apply the changes to the input layer."""
+        # Ended first, so removing the working layer below does not cancel
+        self._is_editing = False
         if self._lasso_selection_checkbox.value:
             self._lasso_selection_checkbox.value = False
         if "Lasso Selection" in self._viewer.layers:
@@ -910,6 +960,10 @@ class CellsLayerEditorWidget(Container):
             )
             for shape in new_cells_shapes:
                 cv2.drawContours(new_cells_raster, [shape], -1, 1, -1)
+
+        # Fill holes inside edited cells so the displayed cells match the
+        # measurements, which fill cell interiors from their external contours.
+        new_cells_raster = fill_cells_holes(new_cells_raster)
 
         self._reset_undo_history()
 

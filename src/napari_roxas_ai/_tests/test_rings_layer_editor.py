@@ -975,3 +975,40 @@ def test_rearrange_coordinates():
     coords_arr_sorted = np.array([[10.0, 10.0], [15.0, 30.0], [20.0, 50.0]])
     result_sorted = rearrange_coordinates(coords_arr_sorted)
     assert np.array_equal(result_sorted, coords_arr_sorted)
+
+
+@pytest.mark.parametrize("removed", ["sample.rings", "Rings Modification"])
+def test_removing_session_layer_cancels_edit_session(
+    make_napari_viewer, qtbot, models_path, removed
+):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+    assert widget._is_editing
+
+    viewer.layers.remove(removed)
+    qtbot.wait(50)
+
+    assert not widget._is_editing
+    assert "Rings Modification" not in viewer.layers
+    assert widget._edit_rings_geometries_button.visible
+    assert not widget._apply_rings_geometries_button.visible
+    assert not widget._undo_button.visible
+
+
+def test_removing_all_layers_during_edit_session(make_napari_viewer, qtbot, models_path):
+    viewer = make_napari_viewer()
+    _add_rings_layer(viewer)
+    widget = RingsLayerEditorWidget(viewer)
+    widget.show()
+    widget._edit_rings_geometries()
+
+    viewer.layers.selection = set(viewer.layers)
+    viewer.layers.remove_selected()
+    qtbot.wait(50)
+
+    assert "Rings Modification" not in viewer.layers
+    assert not widget._is_editing
+    assert widget._edit_rings_geometries_button.visible

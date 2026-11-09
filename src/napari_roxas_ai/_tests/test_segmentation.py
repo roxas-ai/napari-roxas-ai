@@ -212,6 +212,8 @@ class TestSingleSampleSegmentation:
         ), patch(
             "napari_roxas_ai._segmentation._single_sample_segmentation.SettingsManager",
             return_value=mock_settings,
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.install_unsaved_changes_guard"
         ):
             viewer = MagicMock()
             viewer.layers = []
@@ -265,6 +267,8 @@ class TestSingleSampleSegmentation:
             return_value=mock_settings,
         ), patch(
             "napari.layers.Image", (type(image_layer),)
+        ), patch(
+            "napari_roxas_ai._segmentation._single_sample_segmentation.install_unsaved_changes_guard"
         ):
             viewer.layers = [image_layer]
             widget = SingleSampleSegmentationWidget(viewer)

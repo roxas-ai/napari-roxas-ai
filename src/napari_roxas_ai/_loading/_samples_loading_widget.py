@@ -22,6 +22,7 @@ from napari_roxas_ai._reader import (
     read_scan_file,
 )
 from napari_roxas_ai._settings._settings_manager import SettingsManager
+from napari_roxas_ai._saving import install_unsaved_changes_guard
 from napari_roxas_ai._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from napari_roxas_ai.shortcuts import (
     install_wasd_shortcuts,
@@ -182,6 +183,7 @@ class SamplesLoadingWidget(Container):
         super().__init__(labels=False)
         self._viewer = viewer
         prevent_duplicate_dock_if_already_present(self, viewer, "2/4 - Load image(s)")
+        install_unsaved_changes_guard(viewer)
         try:
             if not has_shortcuts_applied(viewer):
                 install_wasd_shortcuts(viewer)

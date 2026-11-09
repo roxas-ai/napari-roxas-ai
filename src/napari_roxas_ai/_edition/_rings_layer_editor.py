@@ -1240,6 +1240,10 @@ class RingsLayerEditorWidget(Container):
     def _update_undo_button_state(self) -> None:
         """Enable the undo button only if there is something to undo."""
         self._undo_button.enabled = self._is_editing and bool(self._undo_stack)
+        # Lets the unsaved changes guard know whether the session has edits
+        layer = self._get_edit_layer()
+        if layer is not None:
+            layer.metadata["_is_dirty"] = bool(self._undo_stack)
 
     def _undo_last_change(self) -> None:
         """Restore the edit layer to the state before the last change."""
@@ -1394,6 +1398,22 @@ class RingsLayerEditorWidget(Container):
         # Always trigger years update when layer list changes
         self._years_update_timer.start(50)
 
+        # Cancel the edit session when the layer it was started from or its
+        # working layer is removed (apply/cancel remove it while _is_updating)
+        if (
+            self._is_editing
+            and not self._is_updating
+            and getattr(event, "type", None) == "removed"
+            and (
+                event.value is getattr(self, "_current_input_layer", None)
+                or event.value.name == "Rings Modification"
+            )
+        ):
+            # Deferred: removing layers while napari is still removing the
+            # selected ones makes napari fail on the already removed layers
+            QTimer.singleShot(0, self._cancel_if_editing)
+            return
+
         if self._is_editing:
             return
 
@@ -1403,6 +1423,10 @@ class RingsLayerEditorWidget(Container):
             return
 
         self._connect_layer_callback()
+
+    def _cancel_if_editing(self) -> None:
+        if self._is_editing:
+            self._cancel_rings_geometries()
 
     def _deferred_remove_layer(self, name: str) -> None:
         """
@@ -1553,7 +1577,9 @@ class RingsLayerEditorWidget(Container):
         # --- UI UPDATE ---
         self._set_ui_editing_mode(True)
 
-        self._current_input_layer = input_layer
+        # The layer the session is based on: the rings layer, or the scan
+        # layer when rings are drawn from scratch
+        self._current_input_layer = input_layer or scan_layer
 
         # If there is already an edit session open, remove old helper layers first
         if "Rings Modification" in self._viewer.layers:
