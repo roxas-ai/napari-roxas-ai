@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -86,10 +87,17 @@ def apply_segmentation_results_to_viewer(
 
         try:
             cells_layer = viewer.layers[cells_name]
-            cells_layer.data = cells["data"]
-            cells_layer.colormap = make_binary_labels_colormap()
-            # Update metadata for existing layer as well
-            cells_layer.metadata.update(cells_md)
+            events_blocker = (
+                cells_layer.events.blocker_all()
+                if hasattr(cells_layer, "events") and hasattr(cells_layer.events, "blocker_all")
+                else (cells_layer.events.blocker() if hasattr(cells_layer, "events") and hasattr(cells_layer.events, "blocker") else nullcontext())
+            )
+            with events_blocker:
+                cells_layer.data = cells["data"]
+                cells_layer.colormap = make_binary_labels_colormap()
+                cells_layer.metadata.update(cells_md)
+                cells_layer.scale = input_scale
+                cells_layer.metadata["_is_dirty"] = True
         except KeyError:
             # Important: pass metadata at creation time
             cells_layer = viewer.add_labels(
@@ -97,11 +105,9 @@ def apply_segmentation_results_to_viewer(
                 name=cells_name,
                 colormap=make_binary_labels_colormap(),
                 metadata=cells_md,
+                scale=input_scale,
             )
-
-        cells_layer.scale = input_scale
-        # New segmentation, not yet written to disk
-        cells_layer.metadata["_is_dirty"] = True
+            cells_layer.metadata["_is_dirty"] = True
 
     # --- RINGS ---
     if "rings" in results:
@@ -141,24 +147,27 @@ def apply_segmentation_results_to_viewer(
 
         try:
             rings_layer = viewer.layers[rings_name]
-            rings_layer.data = rings["data"]
-            rings_layer.metadata.update(rings_md)
         except KeyError:
             # pass metadata at creation time
             rings_layer = viewer.add_labels(
                 rings["data"],
                 name=rings_name,
                 metadata=rings_md,
+                scale=input_scale,
             )
 
-        rings_layer.scale = input_scale
-        # New segmentation, not yet written to disk
-        rings_layer.metadata["_is_dirty"] = True
+        events_blocker = (
+            rings_layer.events.blocker_all()
+            if hasattr(rings_layer, "events") and hasattr(rings_layer.events, "blocker_all")
+            else (rings_layer.events.blocker() if hasattr(rings_layer, "events") and hasattr(rings_layer.events, "blocker") else nullcontext())
+        )
+        with events_blocker:
+            rings_layer.metadata.update(rings_md)
+            rings_layer.scale = input_scale
+            rings_layer.metadata["_is_dirty"] = True
 
-        # Apply / merge features
-        new_df = rings.get("features", None)
-
-        with rings_layer.events.blocker():
+            # Apply / merge features
+            new_df = rings.get("features", None)
             if new_df is not None and not new_df.empty:
                 df = new_df.copy()
 
@@ -190,7 +199,7 @@ def apply_segmentation_results_to_viewer(
             new_rings_table, new_rings_raster, new_colormap = update_rings_geometries(
                 rings_table=rings_layer.features,
                 last_year=rings_layer.metadata["rings_outmost_complete_year"],
-                image_shape=rings_layer.data.shape,
+                image_shape=rings["data"].shape if "data" in rings and hasattr(rings["data"], "shape") else rings_layer.data.shape,
             )
 
             rings_layer.features = new_rings_table

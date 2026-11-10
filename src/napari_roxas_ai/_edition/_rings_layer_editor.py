@@ -2406,6 +2406,7 @@ class RingsLayerEditorWidget(Container):
 
         # Fallback: remove and recreate the layer if in-place update is not possible
         if "Rings Years" in self._viewer.layers:
+            self._viewer.layers["Rings Years"].visible = False
             self._viewer.layers.remove("Rings Years")
 
         # Defer the addition to ensure it happens in a clean event cycle
