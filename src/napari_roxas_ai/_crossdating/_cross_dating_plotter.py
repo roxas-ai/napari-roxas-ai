@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -566,6 +567,7 @@ def save_crossdating_plot(
         dpi=dpi,
         facecolor="black",
     )
+    fig.clf()
     return out_path
 
 
@@ -1806,18 +1808,30 @@ class CrossDatingPlotterWidget(Container):
             input_layer.features = input_layer.features.copy()
             input_layer.features["YEAR"] = list(range(start, int(new_last_year) + 1))
 
-        input_layer.metadata["rings_outmost_complete_year"] = new_last_year
-        new_rings_table, new_rings_raster, new_colormap = (
-            update_rings_geometries(
-                rings_table=input_layer.features,
-                last_year=new_last_year,
-                image_shape=input_layer.data.shape,
-            )
+        events_blocker = (
+            input_layer.events.blocker_all()
+            if hasattr(input_layer, "events") and hasattr(input_layer.events, "blocker_all")
+            else nullcontext()
         )
-        input_layer.data = new_rings_raster
-        input_layer.features = new_rings_table
-        input_layer.colormap = new_colormap
-        input_layer.metadata["_is_dirty"] = True
+        with events_blocker:
+            input_layer.metadata["rings_outmost_complete_year"] = new_last_year
+            new_rings_table, new_rings_raster, new_colormap = (
+                update_rings_geometries(
+                    rings_table=input_layer.features,
+                    last_year=new_last_year,
+                    image_shape=input_layer.data.shape,
+                )
+            )
+            input_layer.data = new_rings_raster
+            input_layer.features = new_rings_table
+            input_layer.colormap = new_colormap
+            input_layer.metadata["_is_dirty"] = True
+
+        if hasattr(input_layer, "events"):
+            if hasattr(input_layer.events, "data"):
+                input_layer.events.data()
+            if hasattr(input_layer.events, "colormap"):
+                input_layer.events.colormap()
 
         # Re-establish x-range to +/- 10 years of the now shifted ROXAS series
         if n > 0:
