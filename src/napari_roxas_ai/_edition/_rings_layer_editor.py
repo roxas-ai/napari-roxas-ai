@@ -1451,7 +1451,7 @@ class RingsLayerEditorWidget(Container):
                     # removed by another concurrent event.
                     pass
 
-        QTimer.singleShot(50, _rm)
+        QTimer.singleShot(0, _rm)
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the rings file extension."""
@@ -1761,9 +1761,6 @@ class RingsLayerEditorWidget(Container):
             input_layer = self._input_layer
             if input_layer is not None:
                 input_layer.visible = True
-                # Force events to ensure UI and Vispy are updated
-                input_layer.events.visible()
-                input_layer.events.data()
 
             self._layer_visibility_states = {}
             
@@ -1838,16 +1835,16 @@ class RingsLayerEditorWidget(Container):
                 # Prepare the new geometries for rasterization
                 rings_table = self._get_rings_data(layer)
 
-                # Cleanup temporary edit layers.
+                # Cleanup temporary edit layers deferred.
                 # Explicit hiding before removal prevents Vispy from drawing partially purged states.
-                self._viewer.layers.remove("Rings Modification")
+                self._deferred_remove_layer("Rings Modification")
                 
                 if "Lasso Selection" in self._viewer.layers:
                     self._viewer.layers["Lasso Selection"].visible = False
-                    self._viewer.layers.remove("Lasso Selection")
+                    self._deferred_remove_layer("Lasso Selection")
                 if "Selected Vertices" in self._viewer.layers:
                     self._viewer.layers["Selected Vertices"].visible = False
-                    self._viewer.layers.remove("Selected Vertices")
+                    self._deferred_remove_layer("Selected Vertices")
                 self._selected_vertices = {}
                 self._all_deleted_points = []
                 self._reset_undo_history()
@@ -2407,13 +2404,16 @@ class RingsLayerEditorWidget(Container):
         # Fallback: remove and recreate the layer if in-place update is not possible
         if "Rings Years" in self._viewer.layers:
             self._viewer.layers["Rings Years"].visible = False
-            self._viewer.layers.remove("Rings Years")
+            self._deferred_remove_layer("Rings Years")
 
         # Defer the addition to ensure it happens in a clean event cycle
         def _add_years_layer():
             try:
                 if "Rings Years" in self._viewer.layers:
-                    return
+                    try:
+                        self._viewer.layers.remove("Rings Years")
+                    except Exception:
+                        pass
 
                 self._viewer.add_points(
                     points_rc,
