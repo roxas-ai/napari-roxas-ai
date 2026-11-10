@@ -2,7 +2,7 @@ import warnings
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, ContextManager
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 import cv2
 import napari.layers
@@ -1451,7 +1451,7 @@ class RingsLayerEditorWidget(Container):
                     # removed by another concurrent event.
                     pass
 
-        QTimer.singleShot(50, _rm)
+        QTimer.singleShot(0, _rm)
 
     def _get_valid_layers(self, widget=None) -> list:
         """Get layers that are both Labels type and match the rings file extension."""
@@ -1514,7 +1514,12 @@ class RingsLayerEditorWidget(Container):
             # ATOMIC-LIKE UPDATE WITH EVENT BLOCKER:
             # We block events during the update to prevent feedback loops with other widgets
             # (like the crossdating plotter) while the data is in an intermediate state.
-            with layer.events.blocker():
+            events_blocker = (
+                layer.events.blocker_all()
+                if hasattr(layer, "events") and hasattr(layer.events, "blocker_all")
+                else (layer.events.blocker() if hasattr(layer, "events") and hasattr(layer.events, "blocker") else nullcontext())
+            )
+            with events_blocker:
                 layer.metadata["rings_outmost_complete_year"] = new_outmost_year
                 new_rings_table, new_rings_raster, new_colormap = (
                     update_rings_geometries(
@@ -1529,9 +1534,15 @@ class RingsLayerEditorWidget(Container):
                 layer.metadata["_is_dirty"] = True
 
             # Manually trigger events after the update is complete and consistent
-            layer.events.metadata()
-            layer.events.features()
-            layer.events.data()
+            if hasattr(layer, "events"):
+                if hasattr(layer.events, "metadata"):
+                    layer.events.metadata()
+                if hasattr(layer.events, "features"):
+                    layer.events.features()
+                if hasattr(layer.events, "data"):
+                    layer.events.data()
+                if hasattr(layer.events, "colormap"):
+                    layer.events.colormap()
 
             # Redraw the annotated image with the new ring years
             save_layers_annotated_image(
@@ -1750,9 +1761,6 @@ class RingsLayerEditorWidget(Container):
             input_layer = self._input_layer
             if input_layer is not None:
                 input_layer.visible = True
-                # Force events to ensure UI and Vispy are updated
-                input_layer.events.visible()
-                input_layer.events.data()
 
             self._layer_visibility_states = {}
             
@@ -1827,16 +1835,16 @@ class RingsLayerEditorWidget(Container):
                 # Prepare the new geometries for rasterization
                 rings_table = self._get_rings_data(layer)
 
-                # Cleanup temporary edit layers.
+                # Cleanup temporary edit layers deferred.
                 # Explicit hiding before removal prevents Vispy from drawing partially purged states.
-                self._viewer.layers.remove("Rings Modification")
+                self._deferred_remove_layer("Rings Modification")
                 
                 if "Lasso Selection" in self._viewer.layers:
                     self._viewer.layers["Lasso Selection"].visible = False
-                    self._viewer.layers.remove("Lasso Selection")
+                    self._deferred_remove_layer("Lasso Selection")
                 if "Selected Vertices" in self._viewer.layers:
                     self._viewer.layers["Selected Vertices"].visible = False
-                    self._viewer.layers.remove("Selected Vertices")
+                    self._deferred_remove_layer("Selected Vertices")
                 self._selected_vertices = {}
                 self._all_deleted_points = []
                 self._reset_undo_history()
@@ -1882,21 +1890,33 @@ class RingsLayerEditorWidget(Container):
                     self._viewer.layers.selection.active = input_layer
 
                 # Update the rings layer with the new geometries
-                new_rings_table, new_rings_raster, new_colormap = (
-                    update_rings_geometries(
-                        rings_table=rings_table,
-                        last_year=input_layer.metadata[
-                            "rings_outmost_complete_year"
-                        ],
-                        image_shape=input_layer.data.shape,
-                    )
+                events_blocker = (
+                    input_layer.events.blocker_all()
+                    if hasattr(input_layer, "events") and hasattr(input_layer.events, "blocker_all")
+                    else (input_layer.events.blocker() if hasattr(input_layer, "events") and hasattr(input_layer.events, "blocker") else nullcontext())
                 )
+                with events_blocker:
+                    new_rings_table, new_rings_raster, new_colormap = (
+                        update_rings_geometries(
+                            rings_table=rings_table,
+                            last_year=input_layer.metadata[
+                                "rings_outmost_complete_year"
+                            ],
+                            image_shape=input_layer.data.shape,
+                        )
+                    )
 
-                # Update the rings layer with the new geometries
-                input_layer.data = new_rings_raster
-                input_layer.features = new_rings_table
-                input_layer.colormap = new_colormap
-                input_layer.metadata["_is_dirty"] = True
+                    # Update the rings layer with the new geometries
+                    input_layer.data = new_rings_raster
+                    input_layer.features = new_rings_table
+                    input_layer.colormap = new_colormap
+                    input_layer.metadata["_is_dirty"] = True
+
+                if hasattr(input_layer, "events"):
+                    if hasattr(input_layer.events, "data"):
+                        input_layer.events.data()
+                    if hasattr(input_layer.events, "colormap"):
+                        input_layer.events.colormap()
 
             # UI Update (outside pause)
             self._set_ui_editing_mode(False)
@@ -2383,13 +2403,17 @@ class RingsLayerEditorWidget(Container):
 
         # Fallback: remove and recreate the layer if in-place update is not possible
         if "Rings Years" in self._viewer.layers:
-            self._viewer.layers.remove("Rings Years")
+            self._viewer.layers["Rings Years"].visible = False
+            self._deferred_remove_layer("Rings Years")
 
         # Defer the addition to ensure it happens in a clean event cycle
         def _add_years_layer():
             try:
                 if "Rings Years" in self._viewer.layers:
-                    return
+                    try:
+                        self._viewer.layers.remove("Rings Years")
+                    except Exception:
+                        pass
 
                 self._viewer.add_points(
                     points_rc,
