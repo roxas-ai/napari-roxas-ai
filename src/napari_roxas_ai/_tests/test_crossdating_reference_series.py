@@ -499,3 +499,148 @@ def test_crossdating_offset_slider_bounds_include_base_offset(make_napari_viewer
     assert widget._offset_slider.value == 0
     assert tuple(widget._x_range_slider.value) == (2041, 2070)
     assert widget._offset_slider.range == (-10, 10)
+
+
+def _overhang_plot_df(sample_start, sample_vals, ref_years, ref_vals):
+    import numpy as np
+    import pandas as pd
+
+    sample = pd.Series(
+        sample_vals, index=np.arange(sample_start, sample_start + len(sample_vals))
+    )
+    reference = pd.Series(ref_vals, index=ref_years)
+    years = sorted(set(sample.index) | set(reference.index))
+    return pd.DataFrame(
+        {
+            "layer_series": sample.reindex(years),
+            "reference_series": reference.reindex(years),
+            "average": reference.reindex(years),
+        },
+        index=years,
+    )
+
+
+@pytest.mark.parametrize("overhang_at", ["start", "end"])
+def test_alignment_finds_sample_sticking_out_of_reference(overhang_at):
+    """
+    The sample may stick out beyond either end of the reference by up to a
+    third of its length; r and glk are computed over the overlap.
+    """
+    import numpy as np
+
+    from napari_roxas_ai._crossdating._cross_dating_plotter import (
+        compute_alignment_candidates,
+    )
+
+    rng = np.random.RandomState(0)
+    true_vals = rng.rand(130) * 100
+    # 24 values, 8 of them outside the reference (min overlap = 16)
+    if overhang_at == "start":
+        ref_years, ref_vals = np.arange(1008, 1130), true_vals[8:]
+    else:
+        ref_years, ref_vals = np.arange(900, 1016), true_vals[:116]
+    sample_vals = true_vals[:24] if overhang_at == "start" else true_vals[100:124]
+    # In both cases the sample truly covers 1000-1023
+    sample_true_start = 1000
+
+    # The sample is dated somewhere else entirely
+    plot_df = _overhang_plot_df(5000, sample_vals, ref_years, ref_vals)
+    best = compute_alignment_candidates(plot_df, top_k=4)[0]
+
+    assert best["start_year"] == sample_true_start
+    assert best["end_year"] == sample_true_start + 23
+    assert best["corr"] == pytest.approx(1.0)
+    assert best["glk"] == pytest.approx(100.0)
+
+
+def test_alignment_requires_minimum_overlap():
+    """Positions overlapping less than max(5, ceil(2/3 * n)) are skipped."""
+    import numpy as np
+
+    from napari_roxas_ai._crossdating._cross_dating_plotter import (
+        compute_alignment_candidates,
+    )
+
+    rng = np.random.RandomState(1)
+    plot_df = _overhang_plot_df(
+        5000, rng.rand(24), np.arange(1000, 1100), rng.rand(100)
+    )
+    candidates = compute_alignment_candidates(plot_df, top_k=1000)
+
+    # 77 fully contained positions plus 8 sticking out at each end
+    assert len(candidates) == (100 - 24 + 1) + 2 * 8
+    assert min(c["start_year"] for c in candidates) == 1000 - 8
+    assert max(c["end_year"] for c in candidates) == 1099 + 8
+
+
+def test_alignment_with_sample_longer_than_reference():
+    """A reference shorter than the sample still yields candidates."""
+    import numpy as np
+
+    from napari_roxas_ai._crossdating._cross_dating_plotter import (
+        compute_alignment_candidates,
+    )
+
+    true_vals = np.random.RandomState(2).rand(30)
+    # 30 values, minimum overlap 20, reference holds values 5 to 26
+    plot_df = _overhang_plot_df(
+        5000, true_vals, np.arange(1005, 1027), true_vals[5:27]
+    )
+    best = compute_alignment_candidates(plot_df, top_k=4)[0]
+
+    assert (best["start_year"], best["end_year"]) == (1000, 1029)
+    assert best["corr"] == pytest.approx(1.0)
+
+
+def test_legend_shows_whole_roxas_period_beyond_reference():
+    """The legend shows all years of the shifted sample, not only the overlap."""
+    import numpy as np
+    import pandas as pd
+
+    from napari_roxas_ai._crossdating._cross_dating_plotter import roxas_period
+
+    shifted = pd.Series(np.arange(24.0), index=np.arange(1425, 1449))
+    assert roxas_period(shifted) == "1425-1448"
+    assert roxas_period(pd.Series([np.nan], index=[1])) == "no data"
+
+
+def test_saved_plot_spans_roxas_series_beyond_reference(tmp_path):
+    """The saved plot shows the whole ROXAS series, also outside the overlap."""
+    from unittest.mock import patch
+
+    import numpy as np
+    import pandas as pd
+
+    from napari_roxas_ai._crossdating import _cross_dating_plotter as module
+
+    reference_years = np.arange(1432, 1652)
+    crossdating = pd.DataFrame(
+        {"REF": np.random.RandomState(3).rand(len(reference_years))},
+        index=reference_years,
+    )
+    crossdating["average"] = crossdating["REF"]
+    widths = pd.Series(np.random.RandomState(4).rand(24), index=np.arange(1425, 1449))
+    plot_df = module.build_crossdating_plot_df(crossdating, "REF", widths)
+
+    from matplotlib.axes import Axes
+
+    xlims, labels = [], []
+    set_xlim, legend = Axes.set_xlim, Axes.legend
+
+    def record_xlim(ax, *args, **kwargs):
+        xlims.append(args)
+        return set_xlim(ax, *args, **kwargs)
+
+    def record_legend(ax, *args, **kwargs):
+        labels.extend(ax.get_legend_handles_labels()[1])
+        return legend(ax, *args, **kwargs)
+
+    with patch.object(Axes, "set_xlim", record_xlim), patch.object(
+        Axes, "legend", record_legend
+    ):
+        module.save_crossdating_plot(
+            plot_df, "REF", "S1", tmp_path / "S1_ReferenceSeries.jpg"
+        )
+
+    assert xlims[0] == (1425 - 10, 1448 + 10)
+    assert labels[0] == "RXS: S1 (1425-1448)"
