@@ -1,0 +1,1821 @@
+<!DOCTYPE html><html lang="en" class="no-js"><head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Comprehensive documentation for ROXAS AI (napari-roxas-ai), an open-source deep-learning quantitative wood anatomy (QWA) and dendrochronology analysis toolkit for napari.">
+      
+      
+        <meta name="author" content="The WSL Dendrosciences Group">
+      
+      
+        <link rel="canonical" href="https://roxas-ai.github.io/napari-roxas-ai/tutorials/workflows/">
+      
+      
+        <link rel="prev" href="../../user_guide/widgets/">
+      
+      
+        <link rel="next" href="../../reference/technical_reference/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Workflows - ROXAS AI</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
+            html.glightbox-open { overflow: initial; height: 100%; }
+            .gslide-title { margin-top: 0px; user-select: text; }
+            .gslide-desc { color: #666; user-select: text; }
+            .gslide-image img { background: white; }
+            .gscrollbar-fixer { padding-right: 15px; }
+            .gdesc-inner { font-size: 0.75rem; }
+            body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color); }
+            body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
+            body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
+        </style></head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tutorials-workflows" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ROXAS AI" class="md-header__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ROXAS AI
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Workflows
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red" aria-label="Switch to dark mode" type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden="">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="red" aria-label="Switch to light mode" type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden="">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required="">
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix="">
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting_started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user_guide/widgets/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/technical_reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ROXAS AI" class="md-nav__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    ROXAS AI
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix="">
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2">
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3">
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user_guide/widgets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Widgets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked="">
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#1-quickstart-5-minute-single-sample-walkthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Quickstart: 5-Minute Single Sample Walkthrough
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Quickstart: 5-Minute Single Sample Walkthrough">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-launch-roxas-ai-open-built-in-sample-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Launch ROXAS AI &amp; Open Built-in Sample Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-run-deep-learning-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Run Deep Learning Detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-quick-visual-verification-curation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Quick Visual Verification &amp; Curation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-extract-cell-ring-measurements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Extract Cell &amp; Ring Measurements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-standard-workflow-tree-ring-cell-anatomy-time-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Standard Workflow: Tree-Ring &amp; Cell Anatomy Time Series
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Standard Workflow: Tree-Ring &amp; Cell Anatomy Time Series">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-project-setup-image-preparation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Project Setup &amp; Image Preparation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-loading-automated-segmentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Loading &amp; Automated Segmentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-high-accuracy-lumen-cell-wall-editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: High-Accuracy Lumen &amp; Cell Wall Editing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3: High-Accuracy Lumen &amp; Cell Wall Editing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#raster-vs-vector-editing-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Raster vs. Vector Editing Modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-editing-techniques" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Editing Techniques
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-tree-ring-editing-boundary-curation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Tree-Ring Editing &amp; Boundary Curation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 4: Tree-Ring Editing &amp; Boundary Curation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#boundary-curation-nudging-wedging-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Boundary Curation, Nudging &amp; Wedging Rings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-visual-cross-dating-ring-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Visual Cross-Dating &amp; Ring Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-saving-verified-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Saving Verified Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-7-anatomical-traits-extraction-chronology-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 7: Anatomical Traits Extraction &amp; Chronology Export
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-production-workflow-batch-processing-multi-sample-studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Production Workflow: Batch Processing Multi-Sample Studies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Production Workflow: Batch Processing Multi-Sample Studies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-batch-preparation-standardization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Batch Preparation &amp; Standardization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-batch-cell-ring-segmentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Batch Cell &amp; Ring Segmentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-targeted-quality-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Targeted Quality Control
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-automated-batch-measurement-file-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Automated Batch Measurement &amp; File Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5">
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/technical_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/segmentation_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmentation Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/shortcuts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shortcuts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#1-quickstart-5-minute-single-sample-walkthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Quickstart: 5-Minute Single Sample Walkthrough
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Quickstart: 5-Minute Single Sample Walkthrough">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-launch-roxas-ai-open-built-in-sample-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Launch ROXAS AI &amp; Open Built-in Sample Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-run-deep-learning-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Run Deep Learning Detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-quick-visual-verification-curation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Quick Visual Verification &amp; Curation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-extract-cell-ring-measurements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Extract Cell &amp; Ring Measurements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-standard-workflow-tree-ring-cell-anatomy-time-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Standard Workflow: Tree-Ring &amp; Cell Anatomy Time Series
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Standard Workflow: Tree-Ring &amp; Cell Anatomy Time Series">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-project-setup-image-preparation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Project Setup &amp; Image Preparation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-loading-automated-segmentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Loading &amp; Automated Segmentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-high-accuracy-lumen-cell-wall-editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: High-Accuracy Lumen &amp; Cell Wall Editing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3: High-Accuracy Lumen &amp; Cell Wall Editing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#raster-vs-vector-editing-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Raster vs. Vector Editing Modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-editing-techniques" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Editing Techniques
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-tree-ring-editing-boundary-curation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Tree-Ring Editing &amp; Boundary Curation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 4: Tree-Ring Editing &amp; Boundary Curation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#boundary-curation-nudging-wedging-rings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Boundary Curation, Nudging &amp; Wedging Rings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-visual-cross-dating-ring-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Visual Cross-Dating &amp; Ring Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-saving-verified-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Saving Verified Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-7-anatomical-traits-extraction-chronology-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 7: Anatomical Traits Extraction &amp; Chronology Export
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-production-workflow-batch-processing-multi-sample-studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Production Workflow: Batch Processing Multi-Sample Studies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Production Workflow: Batch Processing Multi-Sample Studies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-batch-preparation-standardization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Batch Preparation &amp; Standardization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-batch-cell-ring-segmentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Batch Cell &amp; Ring Segmentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-targeted-quality-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Targeted Quality Control
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-automated-batch-measurement-file-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Automated Batch Measurement &amp; File Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="tutorials-workflows">Tutorials &amp; Workflows<a class="headerlink" href="#tutorials-workflows" title="Permanent link">¶</a></h1>
+<p>Step-by-step guides for quantitative wood anatomy (QWA) and dendrochronological analysis using ROXAS AI in napari.</p>
+<div class="admonition tip">
+<p class="admonition-title">Choosing the Right Workflow</p>
+<ul>
+<li><strong>Interactive / Single-Sample Workflow (Section 1 &amp; 2)</strong>: Best for detailed visual inspection, manual touch-ups of cell lumens and tree-ring boundaries, and interactive visual cross-dating using the <strong>Manual Editing Group</strong> (<code>Ctrl+Shift+M</code>).</li>
+<li><strong>Batch Processing Workflow (Section 3)</strong>: Best for multi-sample datasets where segmentation, measurements, quality assurance data (<code>.cwt.json</code>), and overview plots are run automatically in sequence using the <strong>Batch Operations Group</strong> (<code>Ctrl+Shift+B</code>).</li>
+</ul>
+</div>
+<hr>
+<h2 id="1-quickstart-5-minute-single-sample-walkthrough">1. Quickstart: 5-Minute Single Sample Walkthrough<a class="headerlink" href="#1-quickstart-5-minute-single-sample-walkthrough" title="Permanent link">¶</a></h2>
+<p>This fast-track walkthrough guides you from raw anatomical image to measured cellular and tree-ring traits using the bundled conifer sample and the <strong>Manual Editing Group</strong> (<code>Ctrl+Shift+M</code>).</p>
+<pre class="mermaid"><code>flowchart TD
+    S1["Step 1: Launch napari-roxas &amp; Open Sample Data"] --&gt; S2["Step 2: Run Deep Learning Detection (Widget 3A)"]
+    S2 --&gt; S3["Step 3: Quick Visual Verification &amp; Curation (Widgets 5 &amp; 6)"]
+    S3 --&gt; S4["Step 4: Extract Cell &amp; Ring Measurements (Widget 9A)"]</code></pre>
+<h3 id="step-1-launch-roxas-ai-open-built-in-sample-data">Step 1: Launch ROXAS AI &amp; Open Built-in Sample Data<a class="headerlink" href="#step-1-launch-roxas-ai-open-built-in-sample-data" title="Permanent link">¶</a></h3>
+<ol>
+<li>Open your terminal or conda prompt with the <code>roxas-ai</code> environment active and start the application:
+   <div class="highlight"><pre><span></span><code>napari-roxas
+</code></pre></div>
+   <em>This starts napari, registers viewport navigation shortcuts (<kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>), and docks the <strong>Manual Editing Group</strong> in the right sidebar.</em></li>
+<li>Navigate to the top menu: <strong>File &gt; Open Sample &gt; ROXAS AI</strong>.</li>
+<li>ROXAS AI loads the conifer cross-section scan along with pre-configured spatial metadata (<span class="arithmatex">\(\text{px}/\mu\text{m}\)</span>).</li>
+</ol>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/02_samples_loading_widget.png" data-title="Screenshot: Built-in sample loaded in napari" data-desc-position="bottom"><img alt="Screenshot: Built-in sample loaded in napari" src="../../assets/user_guide/02_samples_loading_widget.png"></a></p>
+<p><em>Figure 1: Conifer sample dataset loaded into the napari viewer.</em></p>
+<hr>
+<h3 id="step-2-run-deep-learning-detection">Step 2: Run Deep Learning Detection<a class="headerlink" href="#step-2-run-deep-learning-detection" title="Permanent link">¶</a></h3>
+<ol>
+<li>In the docked sidebar, locate <strong>3A - Detect cells &amp; rings (individual image)</strong>.</li>
+<li>Select the deep-learning models:<ul>
+<li><strong>Cells Model</strong>: <code>linear_cells_model</code> (ResNet-50 U-Net architecture)</li>
+<li><strong>Rings Model</strong>: <code>LinearRingModel_v3_iterative.pt</code> (Iterative boundary regression)</li>
+</ul>
+</li>
+<li>Click <strong>Run Segmentation</strong>.</li>
+</ol>
+<p>!!! info "Automatic Model Weights Download"
+       If you are running segmentation for the first time, ROXAS AI automatically downloads pre-trained model weights in the background and caches them locally for all subsequent runs.</p>
+<ol>
+<li>Deep-learning inference populates the interactive napari layers:<ul>
+<li><strong><code>&lt;sample&gt;.cells</code></strong>: Labeled cell lumen instances (<code>Labels</code> layer).</li>
+<li><strong><code>&lt;sample&gt;.rings</code></strong>: Labeled annual tree-ring bands and boundaries (<code>Labels</code> layer).</li>
+<li><strong><code>Rings Years</code></strong>: Persistent calendar year text overlay along detected boundaries (<code>Points</code> layer).</li>
+</ul>
+</li>
+</ol>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/03a_single_segmentation_widget.png" data-title="Screenshot: Automated DL detection result" data-desc-position="bottom"><img alt="Screenshot: Automated DL detection result" src="../../assets/user_guide/03a_single_segmentation_widget.png"></a></p>
+<p><em>Figure 2: Automated cell lumen and tree-ring boundary segmentation layers.</em></p>
+<hr>
+<h3 id="step-3-quick-visual-verification-curation">Step 3: Quick Visual Verification &amp; Curation<a class="headerlink" href="#step-3-quick-visual-verification-curation" title="Permanent link">¶</a></h3>
+<ol>
+<li>Navigate across the sample using single-key shortcuts:<ul>
+<li><strong>Pan</strong>: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or Arrow keys (hold <kbd>Shift</kbd> for fast panning at 400 px/step).</li>
+<li><strong>Zoom</strong>: <kbd>Q</kbd> to zoom out, <kbd>E</kbd> to zoom in (<span class="arithmatex">\(0.25\times\)</span> zoom step).</li>
+</ul>
+</li>
+<li>Expand <strong>5 - Edit cells</strong> or <strong>6 - Edit rings</strong> in the sidebar to make quick adjustments:<ul>
+<li><strong>Cell Editing (Raster Mode)</strong>: Hold <kbd>Ctrl</kbd> + <strong>Mouse Wheel</strong> to dynamically resize the brush (1–100 px); hold <kbd>Ctrl</kbd> + <strong>Double-Click</strong> to toggle between brush and eraser. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo any stroke.</li>
+<li><strong>Ring Editing</strong>: Select a boundary and press <kbd>Ctrl</kbd> + Arrow keys to nudge it by 1 pixel (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys for 10 pixels). Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="step-4-extract-cell-ring-measurements">Step 4: Extract Cell &amp; Ring Measurements<a class="headerlink" href="#step-4-extract-cell-ring-measurements" title="Permanent link">¶</a></h3>
+<ol>
+<li>In the sidebar, scroll to <strong>9A - Measure cells &amp; rings (individual image)</strong>.</li>
+<li>Verify that <strong>Measure Cells</strong> and <strong>Measure Rings</strong> are checked.</li>
+<li><em>(Optional)</em> Click <strong>Check Settings</strong> to review or customize measurement parameters and quality control thresholds.</li>
+<li>Click <strong>Measure</strong>.</li>
+<li>The measurement engine outputs comprehensive semicolon-delimited CSV tables, CWT quality assurance data, and an updated overview image in the project directory:<ul>
+<li><strong><a href="../../reference/technical_reference/#cell-level-output-cells_tablecsv"><code>&lt;sample&gt;.cells_table.csv</code></a></strong>: Lumen Area (<code>LA</code>), Cell Wall Thickness (<code>CWTALL</code>, <code>CWTRAD</code>, <code>CWTTAN</code>), Mork's Index (<code>RTSR</code>), Theoretical Hydraulic Conductance (<code>KH</code>), and Hydraulic Diameter (<code>DH</code>).</li>
+<li><strong><a href="../../reference/technical_reference/#ring-level-output-rings_tablecsv"><code>&lt;sample&gt;.rings_table.csv</code></a></strong>: Mean Ring Width (<code>MRW</code>), Cell Count (<code>CNO</code>), Mean Lumen Area (<code>MLA</code>), Cell Density (<code>CD</code>), and Relative Anatomical Density (<code>RWD</code>).</li>
+<li><strong><a href="../../reference/technical_reference/#data-metadata-files"><code>&lt;sample&gt;.cwt.json</code></a></strong>: Circle geometries, wall thickness values, inclusion/exclusion status, and filter reasons for sampled cells.</li>
+<li><strong><code>[&lt;sample&gt;] CWT Circles</code> Shapes Layer</strong>: Non-destructive viewer layer displaying green (included) and red (excluded) measurement circles. Hover over any circle to view an interactive tooltip with Cell ID, wall sector, thickness (<span class="arithmatex">\(\mu\text{m}\)</span>), status, and exclusion reason.</li>
+<li><strong><code>&lt;sample&gt;_annotated.jpg</code></strong>: High-resolution scan automatically regenerated with overlaid ring boundaries, calendar year labels, and cell lumen highlights.</li>
+<li><strong>Layer Feature Tables</strong>: In-memory feature tables on <code>.cells</code> and <code>.rings</code> layers are updated, allowing interactive trait inspection directly inside napari.</li>
+</ul>
+</li>
+</ol>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/09a_single_measurements_widget.png" data-title="Screenshot: Extracted anatomical measurement tables" data-desc-position="bottom"><img alt="Screenshot: Extracted anatomical measurement tables" src="../../assets/user_guide/09a_single_measurements_widget.png"></a></p>
+<p><em>Figure 3: Single sample measurement interface and extracted output tables.</em></p>
+<hr>
+<h2 id="2-standard-workflow-tree-ring-cell-anatomy-time-series">2. Standard Workflow: Tree-Ring &amp; Cell Anatomy Time Series<a class="headerlink" href="#2-standard-workflow-tree-ring-cell-anatomy-time-series" title="Permanent link">¶</a></h2>
+<p>This comprehensive protocol describes the standard end-to-end workflow for generating publication-quality dendroclimatic and wood anatomical time series from raw microsections or surface scans.</p>
+<pre class="mermaid"><code>flowchart TD
+    P1["Step 1: Project Setup &amp; Image Preparation (Widget 1 / Ctrl+Shift+B)"] --&gt; P2["Step 2: Loading &amp; Automated Segmentation (Widgets 2/4 &amp; 3A / Ctrl+Shift+M)"]
+    P2 --&gt; P3["Step 3: High-Accuracy Lumen &amp; Cell Wall Editing (Widget 5)"]
+    P3 --&gt; P4["Step 4: Tree-Ring Editing &amp; Boundary Curation (Widget 6)"]
+    P4 --&gt; P5["Step 5: Visual Cross-Dating (Widget 7)"]
+    P5 --&gt; P6["Step 6: Save Annotations &amp; Metadata (Widget 8 / Save All Layers)"]
+    P6 --&gt; P7["Step 7: Trait Extraction &amp; Chronology Export (Widget 9A)"]</code></pre>
+<hr>
+<h3 id="step-1-project-setup-image-preparation">Step 1: Project Setup &amp; Image Preparation<a class="headerlink" href="#step-1-project-setup-image-preparation" title="Permanent link">¶</a></h3>
+<ol>
+<li>Launch napari via <code>napari-roxas</code>.</li>
+<li>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to open the <strong>Batch Operations Group</strong>.</li>
+<li>In <strong>1 - Prepare project images for analysis</strong>:<ul>
+<li>Select your project directory (or use <strong>0 - Define project directory</strong>).</li>
+<li>Enter physical spatial resolution (<span class="arithmatex">\(\text{px}/\mu\text{m}\)</span> or <span class="arithmatex">\(\mu\text{m}/\text{px}\)</span>), anatomy type (<code>conifer</code>), geometry (<code>linear</code>), and the outermost complete calendar year.</li>
+<li><em>(Optional)</em> Click <strong>Start Processing Crossdating Files</strong> to import reference ring-width chronologies (<code>.rwl</code>, <code>.tuc</code>, or tabular <code>.txt</code>/<code>.csv</code>). Series names of up to 8 characters are parsed automatically.</li>
+</ul>
+</li>
+<li>Click <strong>Prepare Images</strong>. The images are standardized to <code>&lt;sample&gt;.scan.&lt;ext&gt;</code>, initialized with <code>&lt;sample&gt;.metadata.json</code>, and parsed reference chronologies saved to <code>rings_series.crossdating.txt</code>.</li>
+</ol>
+<hr>
+<h3 id="step-2-loading-automated-segmentation">Step 2: Loading &amp; Automated Segmentation<a class="headerlink" href="#step-2-loading-automated-segmentation" title="Permanent link">¶</a></h3>
+<ol>
+<li>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> to switch to the <strong>Manual Editing Group</strong>.</li>
+<li>In <strong>2/4 - Load image(s)</strong>, select your prepared sample from the dropdown (or double-click to load). Single-image enforcement ensures clean memory management.</li>
+<li>In <strong>3A - Detect cells &amp; rings (individual image)</strong>, select the neural network models and click <strong>Run Segmentation</strong>.</li>
+<li>Cell lumen masks (<code>&lt;sample&gt;.cells</code>), ring boundary contours (<code>&lt;sample&gt;.rings</code>), and the <code>Rings Years</code> calendar year text overlay will populate as interactive napari layers in the viewer.</li>
+</ol>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/03a_single_segmentation_widget.png" data-title="Screenshot: Loaded segmentation layers" data-desc-position="bottom"><img alt="Screenshot: Loaded segmentation layers" src="../../assets/user_guide/03a_single_segmentation_widget.png"></a></p>
+<p><em>Figure 4: Automated cell and ring predictions visualized in napari.</em></p>
+<hr>
+<h3 id="step-3-high-accuracy-lumen-cell-wall-editing">Step 3: High-Accuracy Lumen &amp; Cell Wall Editing<a class="headerlink" href="#step-3-high-accuracy-lumen-cell-wall-editing" title="Permanent link">¶</a></h3>
+<p>Refine cell lumen annotations using <strong>5 - Edit cells</strong> in the Manual Editing group.</p>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/05_cells_layer_editor_raster.png" data-title="Screenshot: Cell layer editor raster mode" data-desc-position="bottom"><img alt="Screenshot: Cell layer editor raster mode" src="../../assets/user_guide/05_cells_layer_editor_raster.png"></a></p>
+<p><em>Figure 5: Cell layer editor displaying raster brush/eraser controls and vector polygon conversion.</em></p>
+<h4 id="raster-vs-vector-editing-modes">Raster vs. Vector Editing Modes<a class="headerlink" href="#raster-vs-vector-editing-modes" title="Permanent link">¶</a></h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Mode</th>
+<th style="text-align: left;">Best Used For</th>
+<th style="text-align: left;">Tooling &amp; Mechanics</th>
+<th style="text-align: left;">Dedicated Shortcuts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Raster Mode</strong></td>
+<td style="text-align: left;">Rapid mask cleaning, separating merged cells, filling voids</td>
+<td style="text-align: left;">Pixel brush, eraser, and paint bucket operating directly on the integer label raster.</td>
+<td style="text-align: left;"><kbd>Ctrl</kbd> + Wheel (Brush size: 1–100 px)<br><kbd>Ctrl</kbd> + Double-Click (Switch brush/eraser)<br><kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo stroke)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Vector Mode</strong></td>
+<td style="text-align: left;">High-precision boundary adjustments, polygon vertex editing, batch lasso deletion</td>
+<td style="text-align: left;">Interactive polygon contours with vertex dragging, shape addition, and Lasso Delete.</td>
+<td style="text-align: left;"><kbd>Delete</kbd> / <kbd>Backspace</kbd> (Delete lasso selection)<br><kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo up to 50 operations)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="core-editing-techniques">Core Editing Techniques<a class="headerlink" href="#core-editing-techniques" title="Permanent link">¶</a></h4>
+<ol>
+<li><strong>Separating Merged Lumens</strong>:<ul>
+<li>In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the eraser, hold <kbd>Ctrl</kbd> + mouse wheel to size the brush to 3–8 px, and draw a dividing cut through the shared wall.</li>
+</ul>
+</li>
+<li><strong>Batch-Removing False Detections &amp; Clearing Resin Ducts</strong>:<ul>
+<li>In Vector mode, check <strong>Lasso Select</strong> and encircle unwanted objects (multiple lasso loops union automatically). Press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to delete all enclosed cells simultaneously.</li>
+</ul>
+</li>
+<li><strong>Restoring Overlooked Tracheids</strong>:<ul>
+<li>In Raster mode, hold <kbd>Ctrl</kbd> and double-click to switch to the paint brush and fill faint or damaged cell lumens.</li>
+</ul>
+</li>
+<li><strong>Undo History</strong>:<ul>
+<li>Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> at any time to revert changes (supporting up to 50 undo steps).</li>
+</ul>
+</li>
+</ol>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/05_cells_layer_editor_vector_lasso.png" data-title="Screenshot: Lasso selection and multi-cell cleanup" data-desc-position="bottom"><img alt="Screenshot: Lasso selection and multi-cell cleanup" src="../../assets/user_guide/05_cells_layer_editor_vector_lasso.png"></a></p>
+<p><em>Figure 6: Using lasso selection in vector mode to batch-remove resin canal cells and preparation artifacts.</em></p>
+<hr>
+<h3 id="step-4-tree-ring-editing-boundary-curation">Step 4: Tree-Ring Editing &amp; Boundary Curation<a class="headerlink" href="#step-4-tree-ring-editing-boundary-curation" title="Permanent link">¶</a></h3>
+<p>Expand <strong>6 - Edit rings</strong> in the Manual Editing group.</p>
+<h4 id="boundary-curation-nudging-wedging-rings">Boundary Curation, Nudging &amp; Wedging Rings<a class="headerlink" href="#boundary-curation-nudging-wedging-rings" title="Permanent link">¶</a></h4>
+<ul>
+<li><strong>Fine &amp; Fast Nudging</strong>: Select one or more ring boundaries and press <kbd>Ctrl</kbd> + Arrow keys (1 px shift) or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + Arrow keys (10 px shift) to align boundaries perfectly along the terminal latewood tracheid row.</li>
+<li><strong>Adding Missing Rings</strong>: Draw a path across the wood cross-section using napari's path tool; ROXAS AI automatically completes the line horizontally to both image margins (<span class="arithmatex">\(x=0\)</span> to <span class="arithmatex">\(x=\text{width}\)</span>) upon applying changes.</li>
+<li><strong>Handling Wedging / Incomplete Rings</strong>:<ol>
+<li>Select and <strong>copy-paste</strong> the existing boundary that shares the common portion of the ring boundary.</li>
+<li>Enable <strong>Lasso Select</strong> and draw a lasso loop around the diverging section of the duplicated (topmost) ring.</li>
+<li>Press <kbd>Delete</kbd> or <kbd>Backspace</kbd>. ROXAS AI's top-priority lasso logic deletes vertices <strong>strictly from the topmost ring</strong>, keeping the underlying shared boundary completely intact.</li>
+<li>Use the path tool to extend and accurately trace the wedging branch.</li>
+</ol>
+</li>
+<li><strong>Re-running AI Ring Segmentation Below Corrected Ring</strong>: Select a verified ring boundary and trigger a model re-run to re-segment all rings below that year without disturbing validated boundaries above.</li>
+<li><strong>Updating Outermost Calendar Year</strong>: Adjust the outermost year in the widget and click <strong>Update Year</strong> (supports calendar years from <code>-100,000</code> to <code>9,999</code>).</li>
+<li><strong>Undo (<kbd>Ctrl</kbd> + <kbd>Z</kbd>)</strong>: Reverts any drawing, nudging, affine transformation, or deletion (up to 50 undo steps).</li>
+</ul>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/tutorials/04_ring_vector_curation_canvas.png" data-title="Screenshot: Ring vector boundary editing in napari canvas" data-desc-position="bottom"><img alt="Screenshot: Ring vector boundary editing in napari canvas" src="../../assets/tutorials/04_ring_vector_curation_canvas.png"></a></p>
+<p><em>Figure 7: Curating tree-ring boundary polylines in the napari canvas, including vertex dragging, boundary nudging, and wedging ring tracing.</em></p>
+<hr>
+<h3 id="step-5-visual-cross-dating-ring-synchronization">Step 5: Visual Cross-Dating &amp; Ring Synchronization<a class="headerlink" href="#step-5-visual-cross-dating-ring-synchronization" title="Permanent link">¶</a></h3>
+<p>Open <strong>Plugins &gt; ROXAS AI &gt; 7 - Visual crossdating</strong> to verify ring counts and calendar year assignments against master chronologies.</p>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/07_cross_dating_plotter_startup.png" data-title="Screenshot: Visual cross-dating interface" data-desc-position="bottom"><img alt="Screenshot: Visual cross-dating interface" src="../../assets/user_guide/07_cross_dating_plotter_startup.png"></a></p>
+<p><em>Figure 8: Visual cross-dating plotter showing sample ring widths synchronized against reference series.</em></p>
+<ol>
+<li><strong>Automatic File Discovery &amp; Upward Traversal</strong>:<ul>
+<li>The plotter searches strictly upwards from the sample folder through parent project directories to auto-discover all available <code>.crossdating.txt</code> files.</li>
+</ul>
+</li>
+<li><strong>Reference Series Selection</strong>:<ul>
+<li>Select reference series from the dropdown (or use the site composite curve with <strong>Use Mean</strong>). ROXAS AI automatically prioritizes series names matching the sample stem.</li>
+</ul>
+</li>
+<li><strong>Inspect Standard View (<span class="arithmatex">\(\pm 10\)</span> Years)</strong>:<ul>
+<li>The plotter opens centered on the sample series with an overview buffer of <span class="arithmatex">\(\pm 10\)</span> years on each side.</li>
+</ul>
+</li>
+<li><strong>Expand Year Range &amp; Offset Slider</strong>:<ul>
+<li>To explore candidate shifts larger than <span class="arithmatex">\(\pm 10\)</span> years, widen the <strong>Year Range</strong> slider; this automatically expands the bounds of the <strong>Offset</strong> slider, allowing you to slide the sample across larger time spans.</li>
+</ul>
+</li>
+<li><strong>Auto-Offset Alignment</strong>:<ul>
+<li>Click <strong>Find Best Overlap</strong> to let ROXAS AI compute candidate alignments ranked by statistical correlation (<span class="arithmatex">\(r\)</span>), Gleichläufigkeit (GLK), and <span class="arithmatex">\(t\)</span>-value. Interactive candidate alignment buttons allow instantaneous toggling between suggested shifts.</li>
+</ul>
+</li>
+<li><strong>Confirm Dating &amp; Export Plot</strong>:<ul>
+<li>Click <strong>Apply Changes</strong> to update the sample's outermost complete year metadata, shift ring years across <code>.rings</code> and <code>.rings_table.csv</code>, and regenerate <code>&lt;sample&gt;_annotated.jpg</code>.</li>
+<li>Click <strong>Export Plot</strong> to save a publication-ready <code>&lt;sample&gt;_ReferenceSeries.jpg</code> image (rendered with a standardized 70 px/year aspect ratio) in the sample directory.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3 id="step-6-saving-verified-annotations">Step 6: Saving Verified Annotations<a class="headerlink" href="#step-6-saving-verified-annotations" title="Permanent link">¶</a></h3>
+<p>Click <strong>Save All Layers</strong> inside the active editor or open <strong>8 - Save cells &amp; rings editing</strong>.</p>
+<ul>
+<li><strong>Modified-Layer Tracking</strong>: Checks which layers have pending changes (<code>layer.metadata["is_modified"] = True</code>) and saves only modified files to disk:<ul>
+<li><code>.cells.png</code> (8-bit or 16-bit label mask).</li>
+<li><code>.rings.tif</code> (16-bit TIFF label mask).</li>
+<li><code>.metadata.json</code> (synchronized metadata record with updated ring counts, outermost year, and timestamps).</li>
+</ul>
+</li>
+<li><strong>Explicit Save Status Notifications</strong>: Displays clear feedback: <code>"Saved cells layer."</code>, <code>"Saved rings layer."</code>, <code>"Saved cells and rings layers."</code>, or <code>"No unsaved changes in cells or rings layers."</code>.</li>
+<li><strong>Fast Decoupled Saving</strong>: Manual layer saving does <strong>not</strong> redraw the annotated overview image, ensuring saves complete in milliseconds without disk or CPU overhead. The overview image is automatically re-rendered at key workflow checkpoints (AI segmentation, Year updates, Cross-dating application, and Trait measurement).</li>
+</ul>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/08_samples_saving_widget.png" data-title="Screenshot: Save editing dialog" data-desc-position="bottom"><img alt="Screenshot: Save editing dialog" src="../../assets/user_guide/08_samples_saving_widget.png"></a></p>
+<p><em>Figure 9: Saving finalized annotation layers to disk.</em></p>
+<hr>
+<h3 id="step-7-anatomical-traits-extraction-chronology-export">Step 7: Anatomical Traits Extraction &amp; Chronology Export<a class="headerlink" href="#step-7-anatomical-traits-extraction-chronology-export" title="Permanent link">¶</a></h3>
+<ol>
+<li>In the Manual Editing group, scroll to <strong>9A - Measure cells &amp; rings (individual image)</strong>.</li>
+<li>Check <strong>Measure Cells</strong> and/or <strong>Measure Rings</strong>.</li>
+<li><em>(Optional)</em> Click <strong>Check Settings</strong> to review or customize measurement parameters and quality control thresholds.</li>
+<li>Click <strong>Measure</strong>.</li>
+<li>The measurement engine computes anatomical traits via CWT and wall profiling, cleans non-measured edge artefacts, attaches measurements to layer properties for interactive table inspection, and outputs comprehensive semicolon-delimited CSV tables and quality assurance datasets:<ul>
+<li><strong><a href="../../reference/technical_reference/#cell-level-output-cells_tablecsv"><code>&lt;sample&gt;.cells_table.csv</code></a></strong>: Individual cell metrics (<code>CID</code>, <code>YEAR</code>, <code>LA</code>, <code>CWTRAD</code>, <code>CWTTAN</code>, <code>CWTALL</code>, <code>RTSR</code>, <code>KH</code>, <code>DH</code>).</li>
+<li><strong><a href="../../reference/technical_reference/#ring-level-output-rings_tablecsv"><code>&lt;sample&gt;.rings_table.csv</code></a></strong>: Ring summary metrics (<code>YEAR</code>, <code>MRW</code>, <code>CNO</code>, <code>MLA</code>, <code>CD</code>, <code>CWTALL</code>, <code>RWD</code>, <code>RCTA</code>).</li>
+<li><strong><a href="../../reference/technical_reference/#data-metadata-files"><code>&lt;sample&gt;.cwt.json</code></a></strong>: Exported CWT quality assurance dataset containing circle coordinates, wall thickness values, inclusion/exclusion flags, and exclusion reasons.</li>
+<li><strong><code>[&lt;sample&gt;] CWT Circles</code> Shapes Layer</strong>: Interactive viewer layer with hover tooltips displaying Cell ID, sector, thickness (<span class="arithmatex">\(\mu\text{m}\)</span>), status, and exclusion reason for visual QA inspection.</li>
+<li><strong><code>&lt;sample&gt;_annotated.jpg</code></strong>: Automatically regenerated and saved with synchronized ring boundaries, calendar years, and cell lumen highlights matching the final measurements.</li>
+<li><strong><code>&lt;sample&gt;_ReferenceSeries.jpg</code></strong>: Saved in the sample directory when cross-dating was performed and applied.</li>
+</ul>
+</li>
+</ol>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">A: Measurement Controls</label><label for="__tabbed_1_2">B: In-Viewer CWT QA Layer</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/user_guide/09a_single_measurements_widget.png" data-title="Screenshot: Final measurement tables and visual summary" data-desc-position="bottom"><img alt="Screenshot: Final measurement tables and visual summary" src="../../assets/user_guide/09a_single_measurements_widget.png"></a></p>
+</div>
+<div class="tabbed-block">
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/tutorials/07_traits_extraction_canvas.png" data-title="Screenshot: In-viewer trait extraction and CWT QA circles overlay" data-desc-position="bottom"><img alt="Screenshot: In-viewer trait extraction and CWT QA circles overlay" src="../../assets/tutorials/07_traits_extraction_canvas.png"></a></p>
+</div>
+</div>
+</div>
+<p><em>Figure 10: Single sample trait extraction and quality assurance: (A) Measurement control panel and (B) In-viewer CWT circles overlay with hover tooltips alongside extracted feature tables.</em></p>
+<hr>
+<h2 id="3-production-workflow-batch-processing-multi-sample-studies">3. Production Workflow: Batch Processing Multi-Sample Studies<a class="headerlink" href="#3-production-workflow-batch-processing-multi-sample-studies" title="Permanent link">¶</a></h2>
+<p>When analyzing dozens or hundreds of wood sections, ROXAS AI provides an automated batch processing pipeline to maximize throughput while guaranteeing complete file synchronization across all sample folders.</p>
+<pre class="mermaid"><code>flowchart TD
+    B1["1. Batch Preparation (Widget 1 / Ctrl+Shift+B)"] --&gt; B2["2. Batch AI Detection (Widget 3B)"]
+    B2 --&gt; B3["3. Targeted Quality Control (Group Ctrl+Shift+M)"]
+    B3 --&gt; B4["4. Batch Measure &amp; Synchronize (Widget 9B)"]</code></pre>
+<hr>
+<h3 id="step-1-batch-preparation-standardization">Step 1: Batch Preparation &amp; Standardization<a class="headerlink" href="#step-1-batch-preparation-standardization" title="Permanent link">¶</a></h3>
+<ol>
+<li>Organize raw cross-section scans into your project folder.</li>
+<li>Launch <code>napari-roxas</code> and press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to open the <strong>Batch Operations Group</strong>.</li>
+<li>In <strong>1 - Prepare project images for analysis</strong>:<ul>
+<li>Select your project directory (or use <strong>0 - Define project directory</strong>).</li>
+<li>Batch-assign physical spatial resolution (<span class="arithmatex">\(\text{px}/\mu\text{m}\)</span>), sample type, and geometry across all matching images.</li>
+<li>Import reference cross-dating chronologies if available.</li>
+</ul>
+</li>
+<li>Click <strong>Prepare Images</strong> to standardize filenames (<code>&lt;sample&gt;.scan.&lt;ext&gt;</code>) and initialize <code>&lt;sample&gt;.metadata.json</code> across the entire dataset.</li>
+</ol>
+<hr>
+<h3 id="step-2-batch-cell-ring-segmentation">Step 2: Batch Cell &amp; Ring Segmentation<a class="headerlink" href="#step-2-batch-cell-ring-segmentation" title="Permanent link">¶</a></h3>
+<ol>
+<li>In the same batch container, scroll to <strong>3B - Batch detect cells &amp; rings</strong>.</li>
+<li><strong>Real-Time Dynamic Sync</strong>: The widget automatically listens to the project directory so all newly prepared samples appear immediately in the file list.</li>
+<li>Select your deep-learning models (<code>linear_cells_model</code> and <code>LinearRingModel_v3_iterative.pt</code>).</li>
+<li>Click <strong>Run Batch Segmentation</strong>.</li>
+<li>The multi-threaded background queue processes each sample sequentially, creating <code>&lt;sample&gt;.cells.png</code> and <code>&lt;sample&gt;.rings.tif</code> masks without loading full-resolution images into memory.</li>
+</ol>
+<hr>
+<h3 id="step-3-targeted-quality-control">Step 3: Targeted Quality Control<a class="headerlink" href="#step-3-targeted-quality-control" title="Permanent link">¶</a></h3>
+<ol>
+<li>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> to switch to the <strong>Manual Editing Group</strong>.</li>
+<li>In <strong>2/4 - Load image(s)</strong>, iterate through samples to inspect automated predictions.</li>
+<li>Perform targeted curation as needed:<ul>
+<li><strong>5 - Edit cells</strong>: Use Vector Lasso Select (<kbd>Delete</kbd>) to batch-remove resin canal cells or preparation defects.</li>
+<li><strong>6 - Edit rings</strong>: Nudge boundaries (<kbd>Ctrl</kbd>+Arrows), add missing rings, or curate wedging rings.</li>
+<li><strong>7 - Visual cross-dating</strong>: Verify ring counts and synchronize calendar dating against master chronologies.</li>
+</ul>
+</li>
+<li>Click <strong>Save All Layers</strong> (or use <strong>8 - Save cells &amp; rings editing</strong>) to persist curated layers.</li>
+</ol>
+<hr>
+<h3 id="step-4-automated-batch-measurement-file-synchronization">Step 4: Automated Batch Measurement &amp; File Synchronization<a class="headerlink" href="#step-4-automated-batch-measurement-file-synchronization" title="Permanent link">¶</a></h3>
+<ol>
+<li>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> to return to the <strong>Batch Operations Group</strong>.</li>
+<li>In <strong>9B - Batch measure &amp; update</strong>:<ul>
+<li>Check <strong>Measure Cells</strong> and <strong>Measure Rings</strong>.</li>
+<li><strong>Linked Operations Locking</strong>: Notice that <strong>Update Annotated image</strong> and <strong>Update Crossdating Reference Files</strong> are <strong>automatically locked ON</strong> whenever measurements are active. This guarantees that all numerical CSV tables, CWT JSON files (<code>.cwt.json</code>), annotated overview images (<code>_annotated.jpg</code>), and reference cross-dating plots (<code>_ReferenceSeries.jpg</code>) remain 100% consistent and synchronized across every sample folder in the project.</li>
+<li><strong>Reference Plot Auto-Generation</strong>: ROXAS AI automatically searches upwards through the directory tree for cross-dating files and matches sample stems to reference chronologies (or uses the validated <code>reference_series</code> in metadata).</li>
+</ul>
+</li>
+<li>Click <strong>Measure &amp; Update</strong>.</li>
+<li>The batch engine executes across all samples, writing <code>.cells_table.csv</code>, <code>.rings_table.csv</code>, <code>.cwt.json</code>, <code>_annotated.jpg</code>, and <code>_ReferenceSeries.jpg</code> directly to each sample folder.</li>
+</ol>
+<p><a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="../../assets/tutorials/batch_processing_workflow_overview.png" data-title="Screenshot: Batch Processing Output Organization" data-desc-position="bottom"><img alt="Screenshot: Batch Processing Output Organization" src="../../assets/tutorials/batch_processing_workflow_overview.png"></a></p>
+<p><em>Figure 11: Standardized sample folder file hierarchy generated after batch processing (<code>.cells.png</code>, <code>.rings.tif</code>, <code>.cells_table.csv</code>, <code>.rings_table.csv</code>, <code>.cwt.json</code>, <code>_annotated.jpg</code>, and <code>_ReferenceSeries.jpg</code>).</em></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden="">
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"></path></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  
+<script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});
+document$.subscribe(()=>{ lightbox.reload(); });
+</script></body></html>

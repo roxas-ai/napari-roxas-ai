@@ -1,0 +1,1446 @@
+<!DOCTYPE html><html lang="en" class="no-js"><head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Comprehensive documentation for ROXAS AI (napari-roxas-ai), an open-source deep-learning quantitative wood anatomy (QWA) and dendrochronology analysis toolkit for napari.">
+      
+      
+        <meta name="author" content="The WSL Dendrosciences Group">
+      
+      
+        <link rel="canonical" href="https://roxas-ai.github.io/napari-roxas-ai/reference/segmentation_models/">
+      
+      
+        <link rel="prev" href="../technical_reference/">
+      
+      
+        <link rel="next" href="../shortcuts/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Segmentation Models - ROXAS AI</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
+            html.glightbox-open { overflow: initial; height: 100%; }
+            .gslide-title { margin-top: 0px; user-select: text; }
+            .gslide-desc { color: #666; user-select: text; }
+            .gslide-image img { background: white; }
+            .gscrollbar-fixer { padding-right: 15px; }
+            .gdesc-inner { font-size: 0.75rem; }
+            body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color); }
+            body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
+            body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
+        </style></head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#deep-learning-segmentation-models" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ROXAS AI" class="md-header__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ROXAS AI
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Segmentation Models
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red" aria-label="Switch to dark mode" type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden="">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="red" aria-label="Switch to light mode" type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden="">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required="">
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix="">
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting_started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user_guide/widgets/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/workflows/" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../technical_reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ROXAS AI" class="md-nav__button md-logo" aria-label="ROXAS AI" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    ROXAS AI
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/roxas-ai/napari-roxas-ai" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+  </div>
+  <div class="md-source__repository">
+    roxas-ai/napari-roxas-ai
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix="">
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2">
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3">
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user_guide/widgets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Widgets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4">
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked="">
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmentation Models
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmentation Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cell-segmentation-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Segmentation Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cell Segmentation Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture &amp; Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tiled-patch-inference-reflection-padding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tiled Patch Inference &amp; Reflection Padding
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tree-ring-boundary-segmentation-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tree-Ring Boundary Segmentation Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tree-Ring Boundary Segmentation Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#iterative-boundary-regression-formulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Iterative Boundary Regression Formulation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-processing-geometry-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Processing &amp; Geometry Construction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#targeted-re-segmentation-below-a-given-year" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Targeted Re-Segmentation Below a Given Year
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#model-weights-automatic-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Weights &amp; Automatic Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Model Weights &amp; Automatic Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background-download-local-checkpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background Download &amp; Local Checkpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardware-acceleration-resource-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardware Acceleration &amp; Resource Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scientific-literature-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scientific Literature &amp; References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shortcuts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shortcuts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cell-segmentation-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Segmentation Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cell Segmentation Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture &amp; Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tiled-patch-inference-reflection-padding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tiled Patch Inference &amp; Reflection Padding
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tree-ring-boundary-segmentation-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tree-Ring Boundary Segmentation Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tree-Ring Boundary Segmentation Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#iterative-boundary-regression-formulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Iterative Boundary Regression Formulation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-processing-geometry-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Processing &amp; Geometry Construction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#targeted-re-segmentation-below-a-given-year" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Targeted Re-Segmentation Below a Given Year
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#model-weights-automatic-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Weights &amp; Automatic Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Model Weights &amp; Automatic Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background-download-local-checkpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background Download &amp; Local Checkpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardware-acceleration-resource-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardware Acceleration &amp; Resource Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scientific-literature-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scientific Literature &amp; References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="deep-learning-segmentation-models">Deep-Learning Segmentation Models<a class="headerlink" href="#deep-learning-segmentation-models" title="Permanent link">¶</a></h1>
+<p>Technical reference on the deep-learning neural network architectures, boundary regression formulation, tiled inference pipeline, and model checkpoint management in <strong>ROXAS AI</strong>.</p>
+<hr>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">¶</a></h2>
+<p>Traditional quantitative wood anatomy (QWA) workflows often rely on manual thresholding and morphological filtering, which can be sensitive to staining variations, compression wood, cutting artifacts, or resin deposits. <strong>ROXAS AI</strong> replaces these manual thresholds with specialized deep-learning models trained specifically on conifer wood micro-sections and surface scans:</p>
+<ol>
+<li><strong>Cell Lumina Semantic Segmentation (<code>linear_cells_model</code>)</strong>: Delineates tracheid cell lumina across whole-slide cross-sections.</li>
+<li><strong>Tree-Ring Boundary Regression (<code>linear_rings_model.pth</code> / <code>LinearRingModel_v3_iterative.pt</code>)</strong>: Detects annual growth boundaries using an iterative regression formulation along the radial axis.</li>
+</ol>
+<p>All models run locally on your system using PyTorch and PyTorch Lightning. Inference seamlessly leverages hardware acceleration (NVIDIA CUDA or Apple Silicon Metal Performance Shaders / MPS) when available, falling back to multi-core CPU execution.</p>
+<hr>
+<h2 id="cell-segmentation-model">Cell Segmentation Model<a class="headerlink" href="#cell-segmentation-model" title="Permanent link">¶</a></h2>
+<p>The cell segmentation model automates the detection and lumen delineation of individual tracheids in high-resolution conifer cross-sections.</p>
+<div class="highlight"><pre><span></span><code>+-----------------------------------------------------------------------------+
+|                           CELL INFERENCE PIPELINE                           |
+|                                                                             |
+|  [ Full Scan Image ]                                                        |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Reflection Padding (112 px) ]                                            |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Tiled Patches: 1024x1024 px, Stride: 800 px ]                            |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ ResNet-50 Encoder + U-Net Decoder (smp.Unet) ]                           |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Argmax / Binary Class Probability Map ]                                  |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Center Patch Stitching (800x800 px unpadded region) ]                    |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Connected-Component Labeling + Border Component Removal ]                |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Final Binary Mask / Cell Labels Layer (.cells) ]                         |
++-----------------------------------------------------------------------------+
+</code></pre></div>
+<h3 id="architecture-parameters">Architecture &amp; Parameters<a class="headerlink" href="#architecture-parameters" title="Permanent link">¶</a></h3>
+<ul>
+<li><strong>Architecture</strong>: <strong>U-Net</strong> semantic segmentation network built with a <strong>ResNet-50</strong> encoder backbone (initialized via <code>segmentation_models_pytorch</code>).</li>
+<li><strong>Input Channels &amp; Normalization</strong>: Standard 3-channel RGB image patches normalized via ResNet-50 pre-processing statistics.</li>
+<li><strong>Output Classes</strong>: Binary classification (Background vs. Cell Lumen).</li>
+<li><strong>Inference Mode</strong>: Evaluated in <code>eval()</code> mode with automatic mixed precision (<code>torch.autocast</code>) when GPU acceleration is active.</li>
+</ul>
+<h3 id="tiled-patch-inference-reflection-padding">Tiled Patch Inference &amp; Reflection Padding<a class="headerlink" href="#tiled-patch-inference-reflection-padding" title="Permanent link">¶</a></h3>
+<p>High-resolution anatomical scans frequently exceed tens of thousands of pixels in height and width. To handle massive images with bounded GPU memory usage while preventing edge artifacts:</p>
+<ol>
+<li><strong>Patch Dimensions</strong>: Patches of dimension <span class="arithmatex">\(1024 \times 1024\text{ px}\)</span> are extracted with a sliding stride of <span class="arithmatex">\(800\text{ px}\)</span>.</li>
+<li><strong>Reflection Padding</strong>: The full image is padded in <code>reflect</code> mode with a margin of:
+   $<span class="arithmatex">\(\text{pad\_size} = \frac{\text{patch\_size} - \text{stride}}{2} = \frac{1024 - 800}{2} = 112\text{ px}\)</span>$</li>
+<li><strong>Margin Discarding &amp; Seamless Stitching</strong>: Predictions generated on the <span class="arithmatex">\(1024 \times 1024\text{ px}\)</span> patch are sliced to retain only the central <span class="arithmatex">\(800 \times 800\text{ px}\)</span> region, completely discarding boundary distortion zones before stitching into the final canvas.</li>
+<li><strong>Border Component Post-Processing</strong>: Cells touching the outer edges of the entire image canvas are filtered out (<code>remove_border_touching_components</code>) to prevent partial, truncated cell measurements.</li>
+<li><strong>Instance Labeling</strong>: Binary predictions are labeled into discrete cell instances using connected components (<code>skimage.measure.label</code>).</li>
+</ol>
+<hr>
+<h2 id="tree-ring-boundary-segmentation-model">Tree-Ring Boundary Segmentation Model<a class="headerlink" href="#tree-ring-boundary-segmentation-model" title="Permanent link">¶</a></h2>
+<p>Annual ring boundaries define the temporal framework for dendrochronological dating and ring-width series extraction.</p>
+<div class="highlight"><pre><span></span><code>+-----------------------------------------------------------------------------+
+|                           RING INFERENCE PIPELINE                           |
+|                                                                             |
+|  [ Full Scan Image / Radial Microsection ]                                  |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Iterative Boundary Regression Network (PackageImporter) ]                 |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Sequential Boundary Polylines (Bark -&gt; Pith) ]                           |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Coordinate Reordering (Left-to-Right) ]                                  |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Horizontal Completion to Canvas Margins (x=0 to x=Width) ]                |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Top Incomplete Boundary Prepended (Dummy Row 0) ]                         |
+|         │                                                                   |
+|         ▼                                                                   |
+|  [ Annual Ring Polygon Bands &amp; Raster Labels (.rings) ]                     |
++-----------------------------------------------------------------------------+
+</code></pre></div>
+<h3 id="iterative-boundary-regression-formulation">Iterative Boundary Regression Formulation<a class="headerlink" href="#iterative-boundary-regression-formulation" title="Permanent link">¶</a></h3>
+<p>Unlike conventional semantic segmentation models that classify pixels independently (often leading to broken, fragmented, or bleeding ring lines), ROXAS AI adopts an <strong>iterative regression formulation</strong>:</p>
+<ul>
+<li><strong>Continuous Coordinate Trajectories</strong>: The model regresses ordered coordinate trajectories <span class="arithmatex">\(P_k = \{(y_1, x_1), (y_2, x_2), \dots, (y_n, x_n)\}\)</span> representing each annual boundary line sequentially from the bark toward the pith.</li>
+<li><strong>Topological Continuity</strong>: Because boundaries are represented as parametric curves, lines remain unbroken across faint latewood zones, narrow rings, or local staining blemishes.</li>
+<li><strong>Linear Conifer Adaptation</strong>: While the generalized framework supports multi-species circular geometries (Katzenmaier et al. 2025), the integrated model checkpoint is optimized for linear radial microsections common in microtome-based quantitative wood anatomy.</li>
+</ul>
+<h3 id="post-processing-geometry-construction">Post-Processing &amp; Geometry Construction<a class="headerlink" href="#post-processing-geometry-construction" title="Permanent link">¶</a></h3>
+<p>Once boundary polyline trajectories are predicted:</p>
+<ol>
+<li><strong>Left-to-Right Sorting</strong>: Boundary point sequences are sorted from the left margin to the right margin (<code>rearrange_coordinates</code>).</li>
+<li><strong>Horizontal Completion</strong>: Boundary endpoints are extended horizontally to the image boundaries (<span class="arithmatex">\(x = 0\)</span> and <span class="arithmatex">\(x = W - 1\)</span>) using <code>horizontal_rings_completion</code>, ensuring complete division into annual polygons without self-intersections.</li>
+<li><strong>Dummy Top Boundary</strong>: A horizontal reference line is prepended at <span class="arithmatex">\(y = 0\)</span> (row index <code>0</code>) to mark the outer, incomplete growth ring (assigned <code>enabled = False</code>).</li>
+<li><strong>Rasterization &amp; Ring Colormap</strong>: The enclosed polygonal areas between consecutive boundaries are rasterized into integer labels, rendered using a high-contrast categorical ring colormap.</li>
+</ol>
+<h3 id="targeted-re-segmentation-below-a-given-year">Targeted Re-Segmentation Below a Given Year<a class="headerlink" href="#targeted-re-segmentation-below-a-given-year" title="Permanent link">¶</a></h3>
+<p>In the <strong>Edit Rings</strong> widget (<code>6 - Edit rings</code>), users can re-run the deep-learning model starting from any selected calendar year. The model re-segments all boundaries below that anchor year while preserving manually validated boundaries above it, eliminating the need to re-process the entire image when correcting early-stage errors.</p>
+<hr>
+<h2 id="model-weights-automatic-management">Model Weights &amp; Automatic Management<a class="headerlink" href="#model-weights-automatic-management" title="Permanent link">¶</a></h2>
+<p>ROXAS AI automatically handles model checkpoint discovery, remote downloads, integrity checks, and local caching.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Model Identifier</th>
+<th style="text-align: left;">File Name</th>
+<th style="text-align: left;">Format</th>
+<th style="text-align: left;">Primary Task</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Cell Segmentation</strong></td>
+<td style="text-align: left;"><code>linear_cells_model.pth</code></td>
+<td style="text-align: left;">PyTorch State Dict / TorchScript</td>
+<td style="text-align: left;">Tracheid lumen semantic segmentation</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Ring Segmentation</strong></td>
+<td style="text-align: left;"><code>linear_rings_model.pth</code></td>
+<td style="text-align: left;">PyTorch Package (<code>torch.package</code>)</td>
+<td style="text-align: left;">Initial annual ring boundary regression</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Ring Re-run Model</strong></td>
+<td style="text-align: left;"><code>LinearRingModel_v3_iterative.pt</code></td>
+<td style="text-align: left;">PyTorch Package (<code>torch.package</code>)</td>
+<td style="text-align: left;">Iterative boundary regression below edited ring</td>
+</tr>
+</tbody>
+</table>
+<h3 id="background-download-local-checkpoints">Background Download &amp; Local Checkpoints<a class="headerlink" href="#background-download-local-checkpoints" title="Permanent link">¶</a></h3>
+<ul>
+<li><strong>Automatic Asset Detection</strong>: Upon opening segmentation widgets or running batch inference, ROXAS AI checks local directories (<code>_models/_cells</code> and <code>_models/_rings</code>).</li>
+<li><strong>GitHub Release Storage</strong>: If checkpoints are missing or incomplete, the asset manager (<code>check_assets_and_download</code>) fetches <code>cells_models.zip</code> and <code>rings_models.zip</code> directly from official GitHub releases.</li>
+<li><strong>Atomic Extraction &amp; Tracking</strong>: Archives are downloaded into temporary directories and extracted atomically. A <code>.asset_id</code> marker tracks the release version to prevent duplicate downloads.</li>
+<li><strong>Offline Reliability</strong>: Once downloaded, model checkpoints reside locally and do not require active internet access.</li>
+</ul>
+<h3 id="hardware-acceleration-resource-management">Hardware Acceleration &amp; Resource Management<a class="headerlink" href="#hardware-acceleration-resource-management" title="Permanent link">¶</a></h3>
+<ul>
+<li><strong>Device Selection</strong>: Controlled via the <code>processing.try_to_use_gpu</code> setting in <code>ZZ - Settings</code>.</li>
+<li><strong>NVIDIA GPUs</strong>: Leverages CUDA acceleration with tensor cores and mixed precision.</li>
+<li><strong>Apple Silicon</strong>: Uses Metal Performance Shaders (<code>mps</code>) backend on M-series chips.</li>
+<li><strong>CPU Fallback</strong>: Seamless fallback on systems without dedicated GPU hardware.</li>
+<li><strong>Thread Safety</strong>: Multithreaded execution sets <code>torch.set_num_threads(1)</code> within background worker threads to prevent OpenMP runtime conflicts across Qt event loops.</li>
+</ul>
+<hr>
+<h2 id="scientific-literature-references">Scientific Literature &amp; References<a class="headerlink" href="#scientific-literature-references" title="Permanent link">¶</a></h2>
+<p>If you use ROXAS AI in academic publications, please cite the following foundational papers describing the deep-learning models:</p>
+<ul>
+<li>
+<p><strong>Katzenmaier et al. (2023) — Conifer Cell Segmentation</strong>:<br>
+  Katzenmaier, M., Sainte Fare Garnot, V., Björklund, J., Schneider, L., Wegner, J. D., &amp; von Arx, G. (2023). Towards ROXAS AI: deep learning for faster and more accurate conifer cell analysis. <em>Dendrochronologia</em>, 81, 126126.<br>
+<a href="https://doi.org/10.1016/j.dendro.2023.126126">https://doi.org/10.1016/j.dendro.2023.126126</a><br>
+<em>Introduces the deep-learning semantic segmentation framework for automated conifer tracheid lumen extraction and anatomical validation.</em></p>
+</li>
+<li>
+<p><strong>Katzenmaier et al. (2025) — Tree-Ring Boundary Regression</strong>:<br>
+  Katzenmaier, M., Garnot, V. S. F., Wegner, J. D., &amp; von Arx, G. (2025). Towards ROXAS AI: automatic multi-species ring boundaries segmentation as regression in anatomical images. <em>Frontiers in Plant Science</em>, 16, 1516635.<br>
+<a href="https://doi.org/10.3389/fpls.2025.1516635">https://doi.org/10.3389/fpls.2025.1516635</a><br>
+<em>Presents the iterative boundary regression formulation for tree-ring boundary detection in wood anatomical images.</em></p>
+</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden="">
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"></path></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  
+<script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});
+document$.subscribe(()=>{ lightbox.reload(); });
+</script></body></html>

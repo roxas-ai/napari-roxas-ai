@@ -1,0 +1,48 @@
+/* Increase site title font size */
+.md-header__title {
+  font-size: 1.8rem;
+  line-height: 2.4rem;
+}
+
+/* Increase logo size and align it */
+.md-logo img {
+  height: 2.4rem !important; /* Adjusted to user preference */
+  width: auto !important;
+  display: block;
+}
+
+.md-logo {
+  height: 2.4rem !important;
+  margin: 0.8rem 0.8rem 0.8rem 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Ensure header has enough height */
+.md-header__inner {
+  height: 4.0rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Improve Mermaid workflow diagrams readability */
+.md-typeset .mermaid {
+  font-size: 1rem;
+  text-align: center;
+  margin: 1.5rem auto;
+}
+
+.md-typeset .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.md-typeset .mermaid .nodeLabel,
+.md-typeset .mermaid .node .label,
+.md-typeset .mermaid .edgeLabel,
+.md-typeset .mermaid .label,
+.md-typeset .mermaid text {
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+}
