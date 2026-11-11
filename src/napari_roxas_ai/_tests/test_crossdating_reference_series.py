@@ -10,6 +10,7 @@ without anyone having looked at it. A sample without an exported plot keeps the
 """
 
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -76,6 +77,14 @@ def sample(tmp_path):
     return layer, path
 
 
+class _LayerList(list):
+    """A plain list of layers with napari's batched_update context."""
+
+    @contextmanager
+    def batched_update(self):
+        yield
+
+
 def _stored(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -104,7 +113,7 @@ def test_applying_changes_records_reference_series(sample, monkeypatch):
         lambda rings_table, last_year, image_shape: (None, "new_raster", "new_cmap"),
     )
     monkeypatch.setattr(plotter, "_sync_rings_editor_year", lambda: None)
-    plotter._viewer = SimpleNamespace(layers=[layer])
+    plotter._viewer = SimpleNamespace(layers=_LayerList([layer]))
     annotated_calls = []
     monkeypatch.setattr(
         "napari_roxas_ai._crossdating._cross_dating_plotter.save_layers_annotated_image",

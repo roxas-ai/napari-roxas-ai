@@ -1814,9 +1814,12 @@ class CrossDatingPlotterWidget(Container):
                 image_shape=input_layer.data.shape,
             )
         )
-        input_layer.data = new_rings_raster
-        input_layer.features = new_rings_table
-        input_layer.colormap = new_colormap
+        # Batch the update so napari syncs the GPU once the old colormap
+        # textures are released, as the rings editor does on apply
+        with self._viewer.layers.batched_update():
+            input_layer.data = new_rings_raster
+            input_layer.features = new_rings_table
+            input_layer.colormap = new_colormap
         input_layer.metadata["_is_dirty"] = True
 
         # Re-establish x-range to +/- 10 years of the now shifted ROXAS series

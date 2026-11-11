@@ -1354,35 +1354,17 @@ class RingsLayerEditorWidget(Container):
     @contextmanager
     def _pause_rendering(self) -> ContextManager[None]:
         """
-        Context manager to pause Vispy rendering.
-        
-        This is a CRITICAL stability component. Direct layer modifications in napari
-        (adding/removing/moving layers) trigger immediate redraws in Vispy. If these
-        modifications happen while Vispy is already in its paint cycle, it causes
-        'RuntimeError: Error drawing visual' or 'OSError' during scenegraph updates.
-        
-        By setting canvas._pause_scene_graph = True, we prevent Vispy from attempting
-        to draw until we've finished all our synchronous layer operations.
-        """
-        canvas = None
-        try:
-            # Safely access the qt_viewer and its canvas using getattr to avoid deprecation warnings
-            # and to handle different napari versions.
-            qt_viewer = getattr(self._viewer.window, "_qt_viewer", None)
+        Context manager to batch layer additions/removals.
 
-            if qt_viewer is not None and hasattr(qt_viewer, "canvas"):
-                canvas = qt_viewer.canvas
-                if canvas is not None:
-                    canvas._pause_scene_graph = True
+        Uses napari's own batching, so the scenegraph update is deferred while
+        layers are added or removed. On exit napari collects the OpenGL
+        resources of the removed layers, waits for the GPU to finish and only
+        then rebuilds the scenegraph. Skipping that step leaves dangling
+        resources that crash some Windows drivers with an access violation
+        in glDrawArrays.
+        """
+        with self._viewer.layers.batched_update():
             yield
-        finally:
-            if canvas is not None:
-                canvas._pause_scene_graph = False
-                # Force a single clean redraw once modifications are complete.
-                if hasattr(canvas, "update"):
-                    canvas.update()
-                elif hasattr(canvas, "native") and hasattr(canvas.native, "update"):
-                    canvas.native.update()
 
     def _on_layer_change(self, event=None):
         """Called when layers are added/removed in the viewer.
