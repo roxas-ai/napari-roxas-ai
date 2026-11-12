@@ -479,15 +479,13 @@ def test_save_all_layers_without_layers_reenables_buttons(
 
     messages = []
     monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.show_info",
-        messages.append,
+        "napari_roxas_ai._saving._actions.show_info", messages.append
     )
 
     widget._save_all_layers()
 
     assert widget._save_all_layers_button.enabled
     assert widget._edit_rings_geometries_button.enabled
-    assert not widget._progress_bar.visible
     assert messages == ["No rings or cells layers to save"]
 
 
@@ -575,12 +573,12 @@ def test_save_all_layers_shows_hint_when_completed(
 
     written = []
     monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.write_single_layer",
+        "napari_roxas_ai._saving._operations.write_single_layer",
         lambda path, data, kwargs, **options: written.append(path),
     )
-    from napari_roxas_ai._saving import _samples_saving_widget
+    from napari_roxas_ai._saving import _actions
 
-    saving_settings = _samples_saving_widget.settings
+    saving_settings = _actions.settings
     original_get = saving_settings.get
     monkeypatch.setattr(
         saving_settings,
@@ -590,11 +588,11 @@ def test_save_all_layers_shows_hint_when_completed(
         ),
     )
     messages = []
-    monkeypatch.setattr(_samples_saving_widget, "show_info", messages.append)
+    monkeypatch.setattr(_actions, "show_info", messages.append)
 
-    widget._save_all_layers()
+    widget._save_all_layers_button._button.native.click()
     qtbot.wait_until(
-        lambda: widget._save_all_layers_button.enabled, timeout=5000
+        lambda: not widget._save_all_layers_button.is_busy, timeout=20000
     )
 
     assert len(written) == 1

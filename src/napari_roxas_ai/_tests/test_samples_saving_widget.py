@@ -1,230 +1,162 @@
-from unittest.mock import MagicMock
-import pytest
-import napari
 import numpy as np
+import pytest
 
-from napari_roxas_ai._saving._samples_saving_widget import SamplesSavingWidget, Worker
+from napari_roxas_ai._job_runner import JobHandle, _runner
+from napari_roxas_ai._jobs import Job, JobStatus, Progress, run_job_sync
+from napari_roxas_ai._saving import (
+    SamplesSavingWidget,
+    _operations,
+    _samples_saving_widget,
+    start_saving,
+)
+from napari_roxas_ai._saving._operations import LayerSnapshot, save_layers
 
-
-def test_samples_saving_widget_layer_filtering(make_napari_viewer, monkeypatch, tmp_path):
-    viewer = make_napari_viewer()
-    
-    # Add various layers: scan, cells, rings, and temporary/other
-    scan_layer = viewer.add_image(np.zeros((10, 10)), name="sample1.scan")
-    cells_layer = viewer.add_labels(np.zeros((10, 10), dtype=int), name="sample1.cells")
-    rings_layer = viewer.add_labels(np.zeros((10, 10), dtype=int), name="sample1.rings")
-    temp_layer = viewer.add_shapes(name="sample1.vectorization_preview")
-
-    widget = SamplesSavingWidget(viewer)
-
-    saved_worker_layers = []
-
-    class MockWorker:
-        def __init__(self, layers):
-            nonlocal saved_worker_layers
-            saved_worker_layers = list(layers)
-            self.finished = MagicMock()
-            self.progress = MagicMock()
-            self.run = MagicMock()
-            self.deleteLater = MagicMock()
-        def moveToThread(self, thread):
-            pass
-
-    monkeypatch.setattr("napari_roxas_ai._saving._samples_saving_widget.Worker", MockWorker)
-    monkeypatch.setattr("napari_roxas_ai._saving._samples_saving_widget.QThread", MagicMock)
-
-    # Test "Save all layers": should only include cells and rings (max 2 for this sample), not scan or temp
-    widget._save_layers(how="all")
-    assert len(saved_worker_layers) == 2
-    assert cells_layer in saved_worker_layers
-    assert rings_layer in saved_worker_layers
-    assert scan_layer not in saved_worker_layers
-    assert temp_layer not in saved_worker_layers
-
-    # Test "Save selected layers" when only scan and temp are selected
-    saved_worker_layers.clear()
-    viewer.layers.selection.clear()
-    viewer.layers.selection.add(scan_layer)
-    viewer.layers.selection.add(temp_layer)
-    widget._save_layers(how="selected")
-    # No valid layers to save -> worker not created
-    assert len(saved_worker_layers) == 0
-
-    # Test "Save selected layers" when cells and scan are selected
-    saved_worker_layers.clear()
-    viewer.layers.selection.clear()
-    viewer.layers.selection.add(scan_layer)
-    viewer.layers.selection.add(cells_layer)
-    widget._save_layers(how="selected")
-    assert len(saved_worker_layers) == 1
-    assert saved_worker_layers == [cells_layer]
+ACTIONS = "napari_roxas_ai._saving._actions"
 
 
-def test_progress_bar_update(make_napari_viewer):
-    viewer = make_napari_viewer()
-    widget = SamplesSavingWidget(viewer)
+@pytest.fixture
+def saved(monkeypatch):
+    """Replace the save job: record the names of the layers it would save."""
+    names = []
 
-    # Initially progress bar should have min 0, max 100
-    assert widget._progress_bar.min == 0
-    assert widget._progress_bar.max == 100
-    assert not widget._progress_bar.native.isVisible()
+    def fake_save_layers(snapshots, project_dir):
+        names.extend(snapshot.name for snapshot in snapshots)
+        yield Progress(len(snapshots), len(snapshots))
+        return len(snapshots)
 
-    # 1 out of 2 layers saved -> 50%
-    widget._update_progress(1, 2)
-    assert widget._progress_bar.value == 50
-    assert not widget._progress_bar.native.isHidden()
-
-    # 2 out of 2 layers saved -> 100%
-    widget._update_progress(2, 2)
-    assert widget._progress_bar.value == 100
-    assert not widget._progress_bar.native.isHidden()
+    monkeypatch.setattr(f"{ACTIONS}.save_layers", fake_save_layers)
+    return names
 
 
-def test_save_buttons_report_nothing_to_save(make_napari_viewer, monkeypatch):
-    viewer = make_napari_viewer()
+@pytest.fixture
+def messages(monkeypatch):
+    shown = []
+    monkeypatch.setattr(f"{ACTIONS}.show_info", shown.append)
+    return shown
+
+
+@pytest.fixture
+def viewer(make_napari_viewer):
+    return make_napari_viewer()
+
+
+def add_labels(viewer, name, **metadata):
+    return viewer.add_labels(
+        np.zeros((10, 10), dtype=int), name=name, metadata=metadata
+    )
+
+
+# -- start_saving --
+
+
+def test_only_cells_and_rings_layers_are_saved(viewer, sync_runner, saved):
     viewer.add_image(np.zeros((10, 10)), name="sample1.scan")
-    widget = SamplesSavingWidget(viewer)
+    add_labels(viewer, "sample1.cells")
+    add_labels(viewer, "sample1.rings")
+    viewer.add_shapes(name="sample1.vectorization_preview")
 
-    messages = []
-    monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.show_info", messages.append
-    )
+    start_saving(viewer.layers, only_unsaved=False)
+    assert saved == ["sample1.cells", "sample1.rings"]
 
-    widget._save_layers(how="all")
+
+def test_nothing_to_save_is_reported(viewer, sync_runner, messages, saved):
+    viewer.add_image(np.zeros((10, 10)), name="sample1.scan")
+
+    assert start_saving(viewer.layers, only_unsaved=False) is None
     assert messages == ["No rings or cells layers to save"]
-    assert widget.worker is None
-    assert widget.worker_thread is None
+    assert saved == []
 
 
-def _mock_save_run(monkeypatch):
-    """Replace the save worker and thread by mocks, return (worker, thread)."""
-    worker = MagicMock()
-    thread = MagicMock()
+def test_only_unsaved_skips_saved_layers(viewer, sync_runner, messages, saved):
+    add_labels(viewer, "sample1.cells", _is_dirty=False)
+    add_labels(viewer, "sample1.rings", _is_dirty=True)
 
-    def make_worker(layers):
-        worker.layers = layers
-        return worker
-
-    monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.Worker", make_worker
-    )
-    monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.QThread", lambda: thread
-    )
-    return worker, thread
+    start_saving(viewer.layers, only_unsaved=True)
+    assert saved == ["sample1.rings"]
 
 
-def _finish_save_run(thread):
-    """Run the callbacks connected to the end of the save thread."""
-    for call in thread.finished.connect.call_args_list:
-        call.args[0]()
+def test_no_unsaved_changes_is_reported(viewer, sync_runner, messages, saved):
+    add_labels(viewer, "sample1.cells", _is_dirty=False)
 
-
-def test_save_all_skips_clean_layers(make_napari_viewer, monkeypatch):
-    viewer = make_napari_viewer()
-    viewer.add_labels(
-        np.zeros((10, 10), dtype=int),
-        name="sample1.cells",
-        metadata={"_is_dirty": False},
-    )
-    viewer.add_labels(
-        np.zeros((10, 10), dtype=int),
-        name="sample1.rings",
-        metadata={"_is_dirty": False},
-    )
-    widget = SamplesSavingWidget(viewer)
-
-    messages = []
-    monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.show_info", messages.append
-    )
-    _mock_save_run(monkeypatch)
-
-    widget._save_layers(how="all")
+    assert start_saving(viewer.layers, only_unsaved=True) is None
     assert messages == ["No unsaved changes in cells or rings layers."]
-    assert widget.worker is None
-    assert widget.worker_thread is None
-    assert not widget._progress_bar.visible
+    assert saved == []
 
 
-def test_save_all_saves_only_the_modified_layer(make_napari_viewer, monkeypatch):
-    viewer = make_napari_viewer()
-    viewer.add_labels(
-        np.zeros((10, 10), dtype=int),
-        name="sample1.cells",
-        metadata={"_is_dirty": False},
-    )
-    rings_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=int),
-        name="sample1.rings",
-        metadata={"_is_dirty": True},
-    )
-    widget = SamplesSavingWidget(viewer)
-
-    messages = []
-    monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.show_info", messages.append
-    )
-    worker, thread = _mock_save_run(monkeypatch)
-
-    widget._save_layers(how="all")
-    assert worker.layers == [rings_layer]
-    assert messages == []
-
-    _finish_save_run(thread)
-    assert messages == ["Saved rings layer."]
-    assert rings_layer.metadata["_is_dirty"] is False
-
-
-def test_save_buttons_report_saved_layers(make_napari_viewer, monkeypatch):
-    viewer = make_napari_viewer()
-    cells_layer = viewer.add_labels(np.zeros((10, 10), dtype=int), name="sample1.cells")
-    rings_layer = viewer.add_labels(np.zeros((10, 10), dtype=int), name="sample1.rings")
-    widget = SamplesSavingWidget(viewer)
-
-    messages = []
-    monkeypatch.setattr(
-        "napari_roxas_ai._saving._samples_saving_widget.show_info", messages.append
-    )
-    worker, thread = _mock_save_run(monkeypatch)
-
+def test_saved_layers_are_marked_saved(viewer, sync_runner, messages, saved):
     # Layers without the flag count as modified
-    widget._save_layers(how="all")
-    assert worker.layers == [cells_layer, rings_layer]
-    assert messages == []
+    cells = add_labels(viewer, "sample1.cells")
+    rings = add_labels(viewer, "sample1.rings")
 
-    _finish_save_run(thread)
+    handle = start_saving(viewer.layers, only_unsaved=True)
+    assert handle.status is JobStatus.SUCCEEDED
     assert messages == ["Saved cells and rings layers."]
-    assert cells_layer.metadata["_is_dirty"] is False
-    assert rings_layer.metadata["_is_dirty"] is False
+    assert cells.metadata["_is_dirty"] is False
+    assert rings.metadata["_is_dirty"] is False
 
 
-def test_worker_skips_the_annotated_image(make_napari_viewer, monkeypatch, tmp_path):
-    viewer = make_napari_viewer()
-    rings_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=int),
-        name="sample1.rings",
-        metadata={"sample_name": "sample1"},
-    )
+def test_failed_save_is_reported_and_layers_stay_unsaved(
+    viewer, sync_runner, messages, monkeypatch
+):
+    rings = add_labels(viewer, "sample1.rings")
 
-    from napari_roxas_ai._saving import _samples_saving_widget
+    def failing_save_layers(snapshots, project_dir):
+        yield Progress(0, 1)
+        raise OSError("disk full")
 
-    saving_settings = _samples_saving_widget.settings
-    original_get = saving_settings.get
-    monkeypatch.setattr(
-        saving_settings,
-        "get",
-        lambda key: (
-            str(tmp_path) if key == "project_directory" else original_get(key)
-        ),
-    )
+    monkeypatch.setattr(f"{ACTIONS}.save_layers", failing_save_layers)
+    errors = []
+    monkeypatch.setattr(_runner, "show_error", errors.append)
+
+    handle = start_saving(viewer.layers, only_unsaved=True)
+    assert handle.status is JobStatus.FAILED
+    assert errors == ["Saving failed: disk full"]
+    assert messages == []  # no "Saved ..." message
+    assert rings.metadata.get("_is_dirty", True)
+
+
+# -- The saving job --
+
+
+def test_save_skips_the_annotated_image(viewer, monkeypatch, tmp_path):
+    rings = add_labels(viewer, "sample1.rings", sample_name="sample1")
     calls = []
     monkeypatch.setattr(
-        _samples_saving_widget,
+        _operations,
         "write_single_layer",
         lambda path, data, kwargs, **options: calls.append(options),
     )
 
-    Worker([rings_layer]).run()
-    assert len(calls) == 1
-    assert calls[0]["save_annotated"] is False
+    outcome = run_job_sync(
+        Job(
+            "save",
+            save_layers,
+            args=([LayerSnapshot.of(rings)], str(tmp_path)),
+        )
+    )
+    assert outcome.status is JobStatus.SUCCEEDED
+    assert calls == [{"save_annotated": False}]
+
+
+def test_save_without_project_directory_fails():
+    outcome = run_job_sync(Job("save", save_layers, args=([], None)))
+    assert outcome.status is JobStatus.FAILED
+
+
+# -- The widget --
+
+
+def test_other_save_button_is_locked_while_saving(viewer, monkeypatch):
+    save = JobHandle(Job("Saving", lambda: None))  # finished by hand below
+    monkeypatch.setattr(
+        _samples_saving_widget, "start_saving", lambda *a, **k: save
+    )
+    widget = SamplesSavingWidget(viewer)
+
+    widget._save_all_layers_button._button.native.click()
+    assert not widget._save_selected_layers_button.enabled
+
+    save._on_succeeded(1)
+    save._on_finished()
+    assert widget._save_selected_layers_button.enabled
+    assert widget._save_all_layers_button.enabled
