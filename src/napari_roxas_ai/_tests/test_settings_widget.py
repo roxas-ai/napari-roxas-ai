@@ -228,17 +228,17 @@ def test_editing_a_value_applies_to_memory_and_to_the_file(
     widget, settings_file
 ):
     _editor_for(widget, "processing", "try_to_use_gpu").setChecked(True)
-    _editor_for(widget, "tables", "separator").setText(",")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("red")
 
     widget._apply()
 
     manager = SettingsManager()
     assert manager.get("processing.try_to_use_gpu") is True
-    assert manager.get("tables.separator") == ","
+    assert manager.get("vectorization.cells_edge_color") == "red"
 
     on_disk = json.loads(settings_file.read_text(encoding="utf-8"))
     assert on_disk["processing"]["try_to_use_gpu"] is True
-    assert on_disk["tables"]["separator"] == ","
+    assert on_disk["vectorization"]["cells_edge_color"] == "red"
 
 
 def test_project_directory_round_trips_through_an_empty_field(
@@ -291,20 +291,20 @@ def test_a_metadata_field_can_be_edited(widget):
 def test_reload_discards_unapplied_edits_and_reads_the_file(
     widget, settings_file
 ):
-    _editor_for(widget, "tables", "separator").setText("#")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("black")
 
     external = deepcopy(DEFAULT_SETTINGS)
-    external["tables"]["separator"] = "|"
+    external["vectorization"]["cells_edge_color"] = "pink"
     settings_file.write_text(json.dumps(external, indent=4), encoding="utf-8")
 
     widget._reload()
 
-    assert widget._form.collect()["tables"]["separator"] == "|"
-    assert SettingsManager().get("tables.separator") == "|"
+    assert widget._form.collect()["vectorization"]["cells_edge_color"] == "pink"
+    assert SettingsManager().get("vectorization.cells_edge_color") == "pink"
 
 
 def test_reset_restores_the_defaults_after_confirmation(widget):
-    _editor_for(widget, "tables", "separator").setText("#")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("pink")
     widget._apply()
 
     with patch(
@@ -317,7 +317,7 @@ def test_reset_restores_the_defaults_after_confirmation(widget):
 
 
 def test_reset_is_abandoned_when_not_confirmed(widget):
-    _editor_for(widget, "tables", "separator").setText("#")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("pink")
     widget._apply()
 
     with patch(
@@ -326,7 +326,7 @@ def test_reset_is_abandoned_when_not_confirmed(widget):
         message_box.question.return_value = message_box.No
         widget._reset()
 
-    assert SettingsManager().get("tables.separator") == "#"
+    assert SettingsManager().get("vectorization.cells_edge_color") == "pink"
 
 
 # ------------------------------------------------------ the explanation hints
@@ -473,10 +473,10 @@ def test_a_setting_without_an_explanation_gets_no_icon(widget):
     """The icon has to mean there is something to read."""
     from qtpy.QtWidgets import QLabel
 
-    label = _row_label_widget(widget, "separator")
+    label = _row_label_widget(widget, "uncomplete_ring_value")
 
     assert isinstance(label, QLabel)
-    assert label.text() == "separator:"
+    assert label.text() == "uncomplete_ring_value:"
     assert not label.toolTip()
     assert INFO_ICON not in label.text()
 
@@ -637,13 +637,13 @@ def test_filtering_hides_settings_without_dropping_them(widget):
 def test_applying_while_filtered_changes_only_what_was_edited(
     widget, settings_file
 ):
-    _filter(widget, "separator")
-    _editor_for(widget, "tables", "separator").setText("#")
+    _filter(widget, "cells_edge_color")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("yellow")
     widget._apply()
 
     stored = json.loads(settings_file.read_text())
     expected = deepcopy(DEFAULT_SETTINGS)
-    expected["tables"]["separator"] = "#"
+    expected["vectorization"]["cells_edge_color"] = "yellow"
     assert stored == json.loads(json.dumps(expected))
 
 
@@ -840,7 +840,7 @@ def test_open_settings_file_reports_a_system_without_an_editor(
 
 def test_open_settings_file_changes_nothing(widget, settings_file):
     """Looking at the file must not apply the form or rewrite the file."""
-    _editor_for(widget, "tables", "separator").setText("#")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("pink")
     before = settings_file.read_text()
 
     with patch(
@@ -850,7 +850,7 @@ def test_open_settings_file_changes_nothing(widget, settings_file):
         widget._open_settings_file()
 
     assert settings_file.read_text() == before
-    assert SettingsManager().get("tables.separator") == ";"
+    assert SettingsManager().get("vectorization.cells_edge_color") == "blue"
 
 
 # ------------------------------------------------------------------- the layout
@@ -960,10 +960,10 @@ def test_a_failing_refresh_does_not_break_apply(widget, settings_file):
     broken.refresh_from_settings.side_effect = RuntimeError("boom")
     widget._viewer.window.dock_widgets = {"broken": broken}
 
-    _editor_for(widget, "tables", "separator").setText(";;")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("pink")
     widget._apply()
 
-    assert SettingsManager().get("tables.separator") == ";;"
+    assert SettingsManager().get("vectorization.cells_edge_color") == "pink"
 def _touch_every_editor(widget):
     """
     Write every editor's own current value back into it through the Qt API.
@@ -1098,7 +1098,7 @@ def test_reload_of_a_broken_file_keeps_the_settings_in_use(
     widget, settings_file
 ):
     """_load_settings() would fall back to the defaults, losing good values."""
-    _editor_for(widget, "tables", "separator").setText("#")
+    _editor_for(widget, "vectorization", "cells_edge_color").setText("pink")
     widget._apply()
 
     settings_file.write_text("{ broken", encoding="utf-8")
@@ -1109,7 +1109,7 @@ def test_reload_of_a_broken_file_keeps_the_settings_in_use(
         widget._reload()
         message_box.warning.assert_called_once()
 
-    assert SettingsManager().get("tables.separator") == "#"
+    assert SettingsManager().get("vectorization.cells_edge_color") == "pink"
 
 
 def test_reload_of_a_deleted_file_does_not_overwrite_it(widget, settings_file):

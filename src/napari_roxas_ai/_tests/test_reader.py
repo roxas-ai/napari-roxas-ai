@@ -138,8 +138,6 @@ def mock_settings():
                 ".jpg",
                 ".png",
             ],
-            "tables.separator": "\t",
-            "tables.index_column": "index",
         }.get(key, default)
 
         yield mock_settings
