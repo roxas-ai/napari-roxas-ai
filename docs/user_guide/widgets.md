@@ -343,7 +343,7 @@ The **Cells Layer Editor Widget** provides interactive manual editing tools to c
 - **Lasso Selection & Union (OR) Behavior**: In Vector editing mode, drawing lasso loops encloses cells. Multiple overlapping lasso polygons combine (union / OR logic) rather than toggling/canceling, allowing seamless regional selection.
 - **Undo Mechanism**: Supports a 50-step history stack (<kbd>Ctrl</kbd>+<kbd>Z</kbd> or **Undo Last Change** button) that snapshots polygon coordinates and shape types in Vector mode, and triggers napari's label brush history in Raster mode.
 - When applied, rasterizes vectors back to label masks, marks the `.cells` layer as modified (triggering unsaved change tracking), resets layer feature tables for fresh re-measurement, restores ring layer visibility, and preserves layer metadata.
-- **Customizable Tolerances & Colors**: Polygon smoothing tolerances, line widths, and display colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
+- **Customizable Tolerances & Colors**: Polygon smoothing tolerances, line widths, and display colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#3-visualization-vectorization-rasterization)).
 
 ### Files and Layers Saved
 - **In-Memory Modifications**: Changes made using Vector or Raster tools are committed to the in-memory `<sample>.cells` layer upon clicking **Apply Cell Changes**.
@@ -417,7 +417,7 @@ The **Rings Layer Editor Widget** enables precise curation of annual tree-ring b
 10. **Rerun Ring Segmentation**:
     - Re-runs the ring boundary detection AI specifically below a corrected reference ring boundary.
 11. **Customizable Tolerances & Colors**:
-    - Polyline smoothing tolerances, line thickness, and boundary colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#4-visualization-vectorization-rasterization)).
+    - Polyline smoothing tolerances, line thickness, and boundary colors can be customized in [ZZ - Settings](#zz-settings) (see [Technical Reference: Visualization Settings](../reference/technical_reference.md#3-visualization-vectorization-rasterization)).
 
 ### Files and Layers Saved
 - **In-Memory Modifications**: Adding, deleting, or nudging ring boundaries updates the `<sample>.rings` labels layer and `Rings Years` text overlay upon clicking **Apply Ring Changes**, marking the `.rings` layer as modified.
@@ -483,10 +483,12 @@ The **Cross-Dating Plotter Widget** couples tree-ring width (TRW) time series de
     - Both the **Year Range** (X-axis) and **Width Range** (Y-axis) sliders use split handle labels (lower bound below the bar, upper bound above) to prevent label overlap when handles are close together.
 - **Auto-Offset Alignment & Candidate Selection**:
     - The **Find Best Overlap** feature scans offsets across the active time window to automatically maximize correlation ($r$) and sign agreement (GLK).
+    - **Flexible Partial Overlap**: Candidate alignment does not require the sample series to fall completely within the reference chronology bounds. A sample can extend beyond either end of the reference series (e.g., when the sample contains extra rings near the bark or pith that the reference chronology lacks), provided at least $\max(5, \lceil \frac{2}{3} \cdot N_{\text{sample}} \rceil)$ years overlap with the reference series. Statistical synchrony ($r$, GLK) is computed over the overlapping segment.
     - **Use Mean Checkbox**: When checked, aligns the sample against the overall mean of all reference series in the file rather than a single individual column.
-    - **Interactive Candidate Alignment Buttons**: In addition to applying the top-ranked alignment, ROXAS AI generates interactive buttons for alternative candidate alignments with their year spans and statistical scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any candidate button instantly shifts the plot to that dating and updates the button to allow swapping back.
-- **Uniform Scaling Across Reference Plots**:
-    - Reference plot figures are generated with a standardized vertical height of 800 pixels and a constant horizontal scale of **70 pixels per year** of overlap (`min(50 + (20 + overlap_years) * 70, 65000)`). This guarantees identical visual scale across different samples and chronologies.
+    - **Interactive Candidate Alignment Buttons**: In addition to applying the top-ranked alignment, ROXAS AI generates interactive buttons for alternative candidate alignments displaying their full shifted year spans and statistical scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any candidate button instantly shifts the plot to that dating and updates the button to allow swapping back.
+- **Uniform Scaling Across Reference Plots & Full Period Span**:
+    - Reference plot figures are generated with a standardized vertical height of 800 pixels and a constant horizontal scale of **70 pixels per year** (`min(50 + (20 + span_years) * 70, 65000)`). The plot horizontal axis dynamically spans the full (shifted) ROXAS sample series and the reference overlap window with a $\pm 10$-year margin, ensuring rings extending outside the reference series remain completely visible.
+    - The plot legend clearly displays the full calendar year period of the ROXAS sample series (`RXS: <sample> (<start_year>-<end_year>)`), including any years extending beyond the reference chronology.
 - **Reference Plot Creation**:
     - Reference plot images (`<sample>_ReferenceSeries.jpg`) are generated and saved when clicking **Export Plot**, clicking **Apply Changes**, or automatically during batch measurement runs in [9B - Batch Measure & Update](#9b-batch-measure-update).
 - **Statistical Synchrony Metrics**:
@@ -532,7 +534,7 @@ When a sample's tree-ring layer is selected in napari, the widget automatically 
 - **Crossdating File Dropdown**: Selects among multiple detected cross-dating files in the directory tree.
 - **Reference Series Dropdown**: Selects from individual series, site chronologies, or the auto-computed `"average"` column from the active cross-dating file. Automatically prioritizes columns whose names match the active sample stem.
 - **Use Mean Checkbox**: Toggles whether auto-alignment computes the best overlap against the composite average of all columns in the cross-dating file instead of the selected reference series column.
-- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation and sign agreement (GLK), generating candidate alignment buttons.
+- **Find Best Overlap Button**: Automatically scans temporal shifts to align sample and reference curves by maximizing correlation and sign agreement (GLK), supporting partial overlap alignments where samples extend beyond reference series endpoints, and generating interactive candidate alignment buttons.
 - **Candidate Alignment Buttons**: Interactive buttons created below the alignment row displaying the top alternative alignment year spans and scores (e.g., `1900–1980 (r=0.642, glk=72)`). Clicking any button shifts the plot to that dating and swaps previous alignment data for easy toggling.
 - **Year Range & Width Range Dual Sliders**: Interactively set X (calendar year range, supporting `-100,000` to `9,999`) and Y (ring width in $\mu\text{m}$) viewing windows, using split handle labels to avoid label overlap.
 - **Offset Slider**: Manually shifts sample dating relative to the reference chronology. Expanding the Year Range slider broadens the available offset adjustment window.
