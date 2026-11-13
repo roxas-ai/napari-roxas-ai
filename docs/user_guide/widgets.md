@@ -602,7 +602,10 @@ The **Single Sample Measurements Widget** computes the full suite of Quantitativ
 - **CWT Visualization Data (`<sample>.cwt.json`)**: Saved directly to disk with circle coordinates, thickness values, filter statuses, and exclusion reasons.
 - **CWT Circles Shapes Layer (`[<sample>] CWT Circles`)**: Added to the napari viewer for interactive visual quality control.
 - **Annotated Overview Image (`<sample>_annotated.jpg`)**: Automatically re-generated and saved to disk with synchronized ring boundaries, calendar years, and cell lumen overlays.
-- **Layer Feature Tables**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive inspection of properties directly within napari.
+- **Layer Feature Tables (In-Viewer Inspection)**: In-memory feature tables on `.cells` and `.rings` layers are updated, allowing interactive sorting, filtering, and inspection of all measured properties directly within napari without opening external spreadsheet software.
+
+??? tip "Opening measurement CSVs in Microsoft Excel or spreadsheet software?"
+    ROXAS AI exports measurement CSVs using a globally invariant scientific standard (semicolon delimiter with period decimal separator) for universal reproducibility. If you are opening files in spreadsheet software with comma-decimal settings (where numbers might otherwise display with thousands-grouping like `XXX.XXX.XXX`) or wish to permanently configure Windows/Excel for automatic double-click opening, see the step-by-step guide in [CSV Table Formatting & Regional Settings](../reference/technical_reference.md#csv-table-formatting-regional-settings).
 
 ### Key Controls
 - **Measure Cells / Measure Rings**: Checkboxes selecting whether to measure cell anatomical metrics, tree-ring boundary metrics, or both.
@@ -638,6 +641,9 @@ The **Batch Sample Measurements Widget** runs high-throughput anatomical trait e
 - **Annotated Overview Images (`<sample>_annotated.jpg`)**: Saved or updated on disk for each sample when **Update Annotated image** is active (or locked on during measurements).
 - **Reference Series Plots (`<sample>_ReferenceSeries.jpg`)**: Saved or updated on disk for each sample when **Update Crossdating Reference Files** is active (or locked on during measurements), plotting sample MRW curves against their validated reference chronologies.
 - **Metadata (`<sample>.metadata.json`)**: Synchronized with updated analysis timestamps and measurement parameters.
+
+??? tip "Opening measurement CSVs in Microsoft Excel or spreadsheet software?"
+    ROXAS AI exports measurement CSVs using a globally invariant scientific standard (semicolon delimiter with period decimal separator) for universal reproducibility. If you are opening files in spreadsheet software with comma-decimal settings (where numbers might otherwise display with thousands-grouping like `XXX.XXX.XXX`) or wish to permanently configure Windows/Excel for automatic double-click opening, see the step-by-step guide in [CSV Table Formatting & Regional Settings](../reference/technical_reference.md#csv-table-formatting-regional-settings).
 
 ### Linked Operations Logic (File Synchronization)
 To prevent dataset inconsistencies, ROXAS AI enforces linked operation synchronization:

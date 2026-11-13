@@ -281,7 +281,7 @@ def _edited_settings():
     edited["measurements"]["cells_tangential_angle"] = 42.0
     edited["my_own_block"] = {"hello": "world"}
     edited["rasterization"]["rings_color_sequence"] = ["red", "blue"]
-    del edited["tables"]["separator"]  # a setting a newer version added
+    del edited["vectorization"]["cells_edge_width"]  # a setting a newer version added
     return edited
 
 
@@ -302,7 +302,7 @@ def _assert_edits_survived(manager, custom=None):
     # List: the user list is not overwritten
     assert manager.get("rasterization.rings_color_sequence") == ["red", "blue"]
     # Key missing: filled in from the defaults
-    assert manager.get("tables.separator") == ";"
+    assert manager.get("vectorization.cells_edge_width") == 5
 
 
 @pytest.mark.parametrize(

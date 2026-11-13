@@ -137,11 +137,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
             ".tsv",
         ],  # Supported text file extensions
     },
-    # Tabular data settings
-    "tables": {
-        "index_column": "id",
-        "separator": ";",
-    },
     "processing": {
         "try_to_use_gpu": False,  # Try to use GPU if available
         "try_to_use_autocast": False,  # Try to use autocast if available
