@@ -130,6 +130,10 @@ class JobButton(Container):
         self._button.visible = False
         self._progress_row.visible = True
 
+    def press(self) -> None:
+        if self.enabled:
+            self._on_clicked()
+
     def _on_clicked(self) -> None:
         self.track(self._start())
 

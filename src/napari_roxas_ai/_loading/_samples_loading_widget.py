@@ -6,21 +6,16 @@ import glob
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import napari.layers
-from magicgui.widgets import Container, Label, ProgressBar, PushButton, Select
+from magicgui.widgets import Container, Label, PushButton, Select
 from napari.utils.notifications import show_info
-from qtpy.QtCore import QObject, Qt, QThread, Signal
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QMessageBox,
 )
 
-from napari_roxas_ai._reader import (
-    read_cells_file,
-    read_rings_file,
-    read_scan_file,
-)
+from napari_roxas_ai._job_runner import JobButton, JobHandle
 from napari_roxas_ai._settings._settings_manager import SettingsManager
 from napari_roxas_ai._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from napari_roxas_ai.shortcuts import (
@@ -30,6 +25,8 @@ from napari_roxas_ai.shortcuts import (
     prevent_duplicate_dock_if_already_present,
 )
 from napari_roxas_ai._edition._rings_layer_editor import RingsLayerEditorWidget
+
+from ._actions import start_loading
 
 
 
@@ -66,110 +63,6 @@ def _elide_path(path: str, max_chars: int = MAX_PROJECT_DIRECTORY_CHARS) -> str:
     head = keep // 2
     tail = keep - head
     return f"{path[:head]}…{path[-tail:]}"
-
-
-class Worker(QObject):
-    """Worker thread for loading samples."""
-
-    finished = Signal()
-    progress = Signal(int, int)  # current, total
-    layer_data = Signal(tuple)
-
-    def __init__(
-        self,
-        samples_stem_paths: list[str],
-        project_directory: str,
-    ):
-        super().__init__()
-        self.samples_stem_paths = samples_stem_paths
-        self.project_directory = project_directory
-
-        self.scan_file_extension = "".join(
-            settings.get("file_extensions.scan_file_extension")
-        )
-        self.cells_file_extension = "".join(
-            settings.get("file_extensions.cells_file_extension")
-        )
-        self.rings_file_extension = "".join(
-            settings.get("file_extensions.rings_file_extension")
-        )
-        # Fetch supported image extensions and the base scan extension from settings.
-        # This allows the loader to be flexible with different image formats (e.g. .jpg, .png, .tif).
-        self.image_file_extensions = settings.get(
-            "file_extensions.image_file_extensions"
-        )
-        self.scan_content_extension = settings.get(
-            "file_extensions.scan_file_extension"
-        )[0]
-
-    def run(self):
-
-        total = len(self.samples_stem_paths) * 3
-
-        project_dir = Path(self.project_directory).resolve()
-
-        for i, sample_stem_path in enumerate(self.samples_stem_paths):
-
-            sample_path = Path(sample_stem_path).resolve()
-            try:
-                relative_stem = sample_path.relative_to(project_dir)
-            except Exception as e:
-                relative_stem = sample_path
-
-
-            # FLEXIBLE IMAGE EXTENSION RESOLUTION:
-            # If the default scan file doesn't exist, we iterate through supported image extensions
-            # defined in settings to find a match. This supports JPEG scans and other formats
-            # without requiring strict filename conventions.
-            scan_file_path = f"{sample_stem_path}{self.scan_file_extension}"
-            if not Path(scan_file_path).exists():
-                # Try alternative extensions defined in settings
-                for ext in self.image_file_extensions:
-                    alt_path = f"{sample_stem_path}{self.scan_content_extension}{ext}"
-                    if Path(alt_path).exists():
-                        scan_file_path = alt_path
-                        break
-
-            if Path(scan_file_path).exists():
-                self.progress.emit(i, total)
-                scan_data, scan_add_kwargs, scan_layer_type = read_scan_file(
-                    scan_file_path
-                )
-
-                scan_add_kwargs["metadata"]["sample_stem_path"] = str(relative_stem)
-
-                self.layer_data.emit(
-                    (scan_data, scan_add_kwargs, scan_layer_type)
-                )
-
-            cells_file_path = f"{sample_stem_path}{self.cells_file_extension}"
-            if Path(cells_file_path).exists():
-                self.progress.emit(i + 1, total)
-                cells_data, cells_add_kwargs, cells_layer_type = read_cells_file(
-                    cells_file_path
-                )
-
-                cells_add_kwargs["metadata"]["sample_stem_path"] = str(relative_stem)
-
-                self.layer_data.emit(
-                    (cells_data, cells_add_kwargs, cells_layer_type)
-                )
-
-            rings_file_path = f"{sample_stem_path}{self.rings_file_extension}"
-            if Path(rings_file_path).exists():
-                self.progress.emit(i + 2, total)
-                rings_data, rings_add_kwargs, rings_layer_type = read_rings_file(
-                    rings_file_path
-                )
-
-                rings_add_kwargs["metadata"]["sample_stem_path"] = str(relative_stem)
-
-                self.layer_data.emit(
-                    (rings_data, rings_add_kwargs, rings_layer_type)
-                )
-
-        self.progress.emit(total, total)
-        self.finished.emit()
 
 
 class SamplesLoadingWidget(Container):
@@ -249,15 +142,10 @@ class SamplesLoadingWidget(Container):
         )
 
         # Load selected sample button
-        self._load_samples_button = PushButton(
-            text="Load Selected Image"
-        )
-        self._load_samples_button.changed.connect(self._load_selected_samples)
-        self._is_loading = False
-
-        # Add a progress bar with a description
-        self._progress_bar = ProgressBar(
-            value=0, min=0, max=100, visible=False, label="Progress"
+        self._load_samples_button = JobButton(
+            text="Load Selected Image",
+            start=self._load_selected_samples,
+            cancellable=False,
         )
 
         # Append all widgets to the container
@@ -266,7 +154,6 @@ class SamplesLoadingWidget(Container):
                 self._project_directory_row,
                 self._samples_selection_row,
                 self._load_samples_button,
-                self._progress_bar,
             ]
         )
         self._refresh_samples_list()
@@ -398,7 +285,7 @@ class SamplesLoadingWidget(Container):
             )
             # Double-clicking an image loads it, same as the load button
             self._sample_select_widget.native.itemDoubleClicked.connect(
-                lambda _item: self._load_selected_samples()
+                lambda _item: self._load_samples_button.press()
             )
 
             # Add the widget to the container
@@ -444,15 +331,14 @@ class SamplesLoadingWidget(Container):
                 return sample_stem_path
         return None
 
-    def _load_selected_samples(self):
+    def _load_selected_samples(self) -> JobHandle | None:
         """Load the selected sample and add its layers to the viewer."""
         if (
-            self._is_loading
-            or not self.project_directory
+            not self.project_directory
             or not hasattr(self, "_sample_select_widget")
             or not self._sample_select_widget.value
         ):
-            return
+            return None
 
         # Only one sample may be open at a time
         loaded_sample = self._loaded_sample()
@@ -464,71 +350,13 @@ class SamplesLoadingWidget(Container):
                 "Please close it first (remove its layers) before loading "
                 "another image.",
             )
-            return
+            return None
 
-        # Disable the run button while processing
-        self._is_loading = True
-        self._load_samples_button.enabled = False
-
-        self.worker_thread = QThread()
-        self.worker = Worker(
-            samples_stem_paths=[
+        return start_loading(
+            self._viewer,
+            [
                 str(Path(self.project_directory) / sample)
                 for sample in self._sample_select_widget.value
             ],
-            project_directory=self.project_directory,
+            self.project_directory,
         )
-        self.worker.moveToThread(self.worker_thread)
-
-        # Connect signals
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        # Connect progress signal
-        self.worker.progress.connect(self._update_progress)
-
-        # Reset buttons and progress after processing
-        self.worker_thread.finished.connect(
-            lambda: setattr(self, "_is_loading", False)
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._load_samples_button, "enabled", True)
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._load_samples_button, "visible", True)
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._progress_bar, "visible", False)
-        )
-
-        # Connect layer data signal to add layers to the viewer
-        self.worker.layer_data.connect(self._add_loaded_layer)
-
-
-        # Run the analysis in a separate thread
-        self.worker_thread.start()
-
-    def _add_loaded_layer(self, layer_data_tuple):
-        data, add_kwargs, layer_type = layer_data_tuple
-
-        layer = napari.layers.Layer.create(data, add_kwargs, layer_type)
-
-        original_path = add_kwargs.get("metadata", {}).get("path")
-
-        if original_path:
-            print(f"[Loader] Setting file_path = {original_path}")
-            layer.metadata["file_path"] = original_path
-        else:
-            print("[Loader] WARNING: no file_path in reader metadata")
-
-        self._viewer.add_layer(layer)
-
-    def _update_progress(self, current, total):
-        """Update the progress bar."""
-        if total > 0:
-            percentage = int(100 * current / total)
-            self._progress_bar.value = percentage
-            self._load_samples_button.visible = False
-            self._progress_bar.visible = True
