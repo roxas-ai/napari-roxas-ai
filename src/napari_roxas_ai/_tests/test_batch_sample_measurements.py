@@ -1,4 +1,4 @@
-"""The batch measure & update widget and its worker."""
+"""The batch measure & update widget and its operation."""
 
 import json
 from pathlib import Path
@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from napari_roxas_ai._job_runner import _runner
+from napari_roxas_ai._jobs import Job, JobStatus, Message, run_job_sync
+from napari_roxas_ai._measurements import _batch_operations as operations
 from napari_roxas_ai._measurements import _batch_sample_measurements as module
 from napari_roxas_ai._settings import DEFAULT_SETTINGS, SettingsManager
 from napari_roxas_ai._utils._metadata_keys import NO_REFERENCE_SERIES
@@ -127,7 +130,7 @@ def test_layout_follows_the_mockup(widget):
         "Manually Select Files To Process:",
         "Check Settings",
     ]
-    assert widget._run_analysis_button.native.text() == "Measure && Update"
+    assert widget._run_analysis_button.text == "Measure && Update"
     assert widget._file_selection_container.visible
     assert widget._reverse_selection_button.visible
 
@@ -235,10 +238,10 @@ def test_check_settings_opens_the_measurement_settings(widget):
     )
 
 
-# --- Worker -----------------------------------------------------------------
+# --- Operation --------------------------------------------------------------
 
 
-def _worker(**kwargs):
+def _measurer(**kwargs):
     options = dict(
         measure_cells=False,
         measure_rings=False,
@@ -246,7 +249,7 @@ def _worker(**kwargs):
         update_reference_plots=False,
     )
     options.update(kwargs)
-    return module.Worker({}, {}, **options)
+    return operations.BatchMeasurer({}, **options)
 
 
 def _rings(widths, sample_name="S1", reference_series=NO_REFERENCE_SERIES):
@@ -295,8 +298,8 @@ def project(tmp_path, settings, sample_widths):
 
 
 def test_reference_plot_uses_the_stored_series(project, sample_widths):
-    with patch.object(module, "save_crossdating_plot") as save:
-        _worker()._update_reference_plot(
+    with patch.object(operations, "save_crossdating_plot") as save:
+        _measurer()._update_reference_plot(
             project, _rings(sample_widths, reference_series="OTHER")
         )
     plot_df, reference_name, image_id, out_path = save.call_args.args
@@ -310,10 +313,13 @@ def test_reference_plot_uses_the_stored_series(project, sample_widths):
 def test_reference_plot_without_stored_series_uses_the_matching_name(
     project, sample_widths
 ):
-    with patch.object(module, "save_crossdating_plot") as save, patch.object(
-        module, "update_metadata_file"
-    ) as update_meta:
-        task = _worker()._update_reference_plot(project, _rings(sample_widths))
+    with (
+        patch.object(operations, "save_crossdating_plot") as save,
+        patch.object(operations, "update_metadata_file") as update_meta,
+    ):
+        task = _measurer()._update_reference_plot(
+            project, _rings(sample_widths)
+        )
     assert save.call_args.args[1] == "S1"
     assert task == "Reference plot (S1, best match)"
     update_meta.assert_called_once()
@@ -323,10 +329,11 @@ def test_reference_plot_without_stored_series_uses_the_matching_name(
 def test_reference_plot_with_unknown_stored_series_uses_the_matching_name(
     project, sample_widths
 ):
-    with patch.object(module, "save_crossdating_plot") as save, patch.object(
-        module, "update_metadata_file"
-    ) as update_meta:
-        _worker()._update_reference_plot(
+    with (
+        patch.object(operations, "save_crossdating_plot") as save,
+        patch.object(operations, "update_metadata_file") as update_meta,
+    ):
+        _measurer()._update_reference_plot(
             project, _rings(sample_widths, reference_series="GONE")
         )
     assert save.call_args.args[1] == "S1"
@@ -343,10 +350,11 @@ def test_reference_plot_without_matching_series_is_skipped(
     rings = _rings(sample_widths, sample_name="UNMATCHED")
     # Missing reference_series in metadata
     del rings[1]["metadata"]["reference_series"]
-    with patch.object(module, "save_crossdating_plot") as save, patch.object(
-        module, "update_metadata_file"
-    ) as update_meta:
-        task = _worker()._update_reference_plot(unmatched_stem, rings)
+    with (
+        patch.object(operations, "save_crossdating_plot") as save,
+        patch.object(operations, "update_metadata_file") as update_meta,
+    ):
+        task = _measurer()._update_reference_plot(unmatched_stem, rings)
     save.assert_not_called()
     assert task == "Reference plot skipped (no matching reference series)"
     update_meta.assert_called_once()
@@ -358,12 +366,12 @@ def test_reference_plot_is_skipped_without_crossdating_file(
 ):
     rings = _rings(sample_widths)
     del rings[1]["metadata"]["reference_series"]
-    with patch.object(module, "save_crossdating_plot") as save, patch.object(
-        module, "find_crossdating_files", return_value=[]
-    ), patch.object(module, "update_metadata_file") as update_meta:
-        task = _worker()._update_reference_plot(
-            str(tmp_path / "S1"), rings
-        )
+    with (
+        patch.object(operations, "save_crossdating_plot") as save,
+        patch.object(operations, "find_crossdating_files", return_value=[]),
+        patch.object(operations, "update_metadata_file") as update_meta,
+    ):
+        task = _measurer()._update_reference_plot(str(tmp_path / "S1"), rings)
     save.assert_not_called()
     assert task == "Reference plot skipped (no crossdating file)"
     update_meta.assert_called_once()
@@ -371,33 +379,47 @@ def test_reference_plot_is_skipped_without_crossdating_file(
 
 
 def test_reference_plot_is_written(project, sample_widths, tmp_path):
-    _worker()._update_reference_plot(project, _rings(sample_widths))
+    _measurer()._update_reference_plot(project, _rings(sample_widths))
     assert (tmp_path / "trees" / "S1_ReferenceSeries.jpg").exists()
+
+
+def _measure_samples(stems, should_cancel=None, **options):
+    """Run the batch on rings-only samples; returns the outcome and messages."""
+    samples = {
+        stem: {"cells": None, "rings": f"{stem}.rings.tif"} for stem in stems
+    }
+    outcome = run_job_sync(
+        Job(
+            "Batch measuring",
+            operations.measure_samples,
+            args=({}, samples),
+            kwargs=options,
+        ),
+        should_cancel=should_cancel,
+    )
+    messages = [e.text for e in outcome.events if isinstance(e, Message)]
+    return outcome, messages
 
 
 def test_updates_without_measurements_read_the_rings_file(tmp_path, settings):
     rings = _rings(np.full(10, 100.0))
     stem = str(tmp_path / "S1")
-    worker = module.Worker(
-        {},
-        {stem: {"cells": None, "rings": f"{stem}.rings.tif"}},
-        measure_cells=False,
-        measure_rings=False,
-        update_annotated_images=True,
-        update_reference_plots=True,
-    )
-    with patch.object(
-        module, "read_rings_file", return_value=(*rings, "labels")
-    ) as read, patch.object(
-        module, "save_sample_annotated_image"
-    ) as annotate, patch.object(
-        worker, "_update_reference_plot"
-    ) as reference, patch.object(
-        module, "get_software_version", return_value="test"
-    ), patch.object(
-        module, "get_measurement_operator", return_value="test"
+    with (
+        patch.object(
+            operations, "read_rings_file", return_value=(*rings, "labels")
+        ) as read,
+        patch.object(operations, "save_sample_annotated_image") as annotate,
+        patch.object(
+            operations.BatchMeasurer, "_update_reference_plot"
+        ) as reference,
     ):
-        worker.run()
+        _measure_samples(
+            [stem],
+            measure_cells=False,
+            measure_rings=False,
+            update_annotated_images=True,
+            update_reference_plots=True,
+        )
 
     read.assert_called_once()
     annotate.assert_called_once()
@@ -409,51 +431,118 @@ def test_measuring_rings_does_not_redraw_the_annotated_image_twice(
     tmp_path, settings
 ):
     """Writing the rings file already updates the annotated image."""
-    stem = str(tmp_path / "S1")
-    worker = module.Worker(
-        {},
-        {stem: {"cells": None, "rings": f"{stem}.rings.tif"}},
-        measure_cells=False,
-        measure_rings=True,
-        update_annotated_images=True,
-        update_reference_plots=False,
-    )
     rings = _rings(np.full(10, 100.0))
-    with patch.object(
-        worker, "_measure", return_value=(rings, True, "Rings")
-    ), patch.object(module, "save_sample_annotated_image") as annotate:
-        worker.run()
+    with (
+        patch.object(
+            operations.BatchMeasurer,
+            "_measure",
+            return_value=(rings, True, "Rings"),
+        ),
+        patch.object(operations, "save_sample_annotated_image") as annotate,
+    ):
+        _measure_samples(
+            [str(tmp_path / "S1")],
+            measure_cells=False,
+            measure_rings=True,
+            update_annotated_images=True,
+            update_reference_plots=False,
+        )
     annotate.assert_not_called()
 
 
-def test_worker_reports_info_for_each_processed_file(tmp_path, settings):
+def test_each_processed_file_is_reported(tmp_path, settings):
     """Each sample is reported as an info message, as in batch detection."""
-    stems = [str(tmp_path / "S1"), str(tmp_path / "S2")]
-    worker = module.Worker(
-        {},
-        {stem: {"cells": None, "rings": f"{stem}.rings.tif"} for stem in stems},
-        measure_cells=False,
-        measure_rings=True,
-        update_annotated_images=True,
-        update_reference_plots=True,
-    )
-    messages = []
-    worker.message.connect(messages.append)
     rings = _rings(np.full(10, 100.0))
-    with patch.object(
-        worker,
-        "_measure",
-        side_effect=[(rings, True, "Rings"), RuntimeError("broken")],
-    ), patch.object(
-        worker, "_update_reference_plot", return_value="Reference plot (A)"
+    with (
+        patch.object(
+            operations.BatchMeasurer,
+            "_measure",
+            side_effect=[(rings, True, "Rings"), RuntimeError("broken")],
+        ),
+        patch.object(
+            operations.BatchMeasurer,
+            "_update_reference_plot",
+            return_value="Reference plot (A)",
+        ),
     ):
-        worker.run()
+        outcome, messages = _measure_samples(
+            [str(tmp_path / "S1"), str(tmp_path / "S2")],
+            measure_cells=False,
+            measure_rings=True,
+            update_annotated_images=True,
+            update_reference_plots=True,
+        )
 
+    # A failing sample does not fail the batch
+    assert outcome.status is JobStatus.SUCCEEDED
     assert messages == [
         "[Batch Measurements] [1/2] S1: Rings, Annotated image, Reference plot (A)",
         "[Batch Measurements] [2/2] Error processing S2: broken",
         "[Batch Measurements] Completed 1 of 2 file(s) successfully.",
     ]
+
+
+def test_cancelling_stops_between_samples(tmp_path, settings):
+    """The finished samples stay processed, the next ones are not started."""
+    processed = []
+
+    def process(self, stem, files):
+        processed.append(Path(stem).name)
+        return ["Rings"]
+
+    with patch.object(operations.BatchMeasurer, "process", process):
+        outcome, _ = _measure_samples(
+            [str(tmp_path / name) for name in ("S1", "S2", "S3")],
+            should_cancel=lambda: len(processed) == 1,
+        )
+
+    assert outcome.status is JobStatus.CANCELLED
+    assert processed == ["S1"]
+
+
+@pytest.fixture
+def batch_widget(widget, sync_runner):
+    """The widget, processing all samples of the project."""
+    widget._handpick_files_checkbox.value = False
+    return widget
+
+
+def test_batch_processes_all_samples_and_reports_each(batch_widget):
+    infos = []
+    with (
+        patch.object(
+            operations.BatchMeasurer, "process", return_value=["Cells"]
+        ),
+        patch.object(_runner, "show_info", infos.append),
+        patch.object(module, "show_info", infos.append),
+    ):
+        batch_widget._run_analysis_button.press()
+
+    assert infos == [
+        "Batch measure & update in progress...",
+        "[Batch Measurements] [1/3] A: Cells",
+        "[Batch Measurements] [2/3] C: Cells",
+        "[Batch Measurements] [3/3] B: Cells",
+        "[Batch Measurements] Completed 3 of 3 file(s) successfully.",
+        "Batch measure & update complete",
+    ]
+    assert batch_widget._run_analysis_button.enabled
+
+
+def test_failed_batch_reports_and_leaves_the_widget_usable(batch_widget):
+    errors = []
+    with (
+        patch.object(
+            operations,
+            "get_software_version",
+            side_effect=OSError("no version"),
+        ),
+        patch.object(_runner, "show_error", errors.append),
+    ):
+        batch_widget._run_analysis_button.press()
+
+    assert errors == ["Batch measuring failed: no version"]
+    assert batch_widget._run_analysis_button.enabled
 
 
 def test_reference_plot_far_from_its_reference_is_saved(tmp_path):
