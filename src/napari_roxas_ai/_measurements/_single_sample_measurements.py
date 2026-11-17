@@ -1,31 +1,17 @@
-from typing import TYPE_CHECKING, Any, Dict, Optional
-from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 import napari.layers
-from qtpy.QtCore import QTimer
 from magicgui.widgets import (
     CheckBox,
     Container,
     PushButton,
 )
 from napari.utils.notifications import show_info
-from qtpy.QtCore import QObject, QThread, Signal
 from qtpy.QtWidgets import QInputDialog
+from napari_roxas_ai._job_runner import JobButton, JobHandle
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
-from ._sample_measurer import SampleAnalyzer
-from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
-from .._utils._version_utils import (
-    get_measurement_operator,
-    get_software_version,
-)
-from napari_roxas_ai._writer import write_single_layer
-from napari_roxas_ai._writer._writer import save_annotated_scan_image
-
-
-import numpy as np
-import pandas as pd
+from ._actions import start_measuring
 
 
 settings = SettingsManager()
@@ -34,53 +20,9 @@ if TYPE_CHECKING:
     import napari
 
 
-class Worker(QObject):
-    finished = Signal()
-    result_ready = Signal(object, object, object)
-
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        cells_array: np.array,
-        rings_table: pd.DataFrame,
-        cells_table: pd.DataFrame,
-        measurement: str,
-    ):
-        super().__init__()
-
-        self.analyzer = SampleAnalyzer(
-            config, cells_array, rings_table, cells_table
-        )
-        self.measurement = measurement
-
-    def run(self):
-        cleaned_cells_array = None
-        if self.measurement == "both":
-            cells_table, rings_table = self.analyzer.analyze_sample()
-            cleaned_cells_array = self.analyzer.cells_array
-        elif self.measurement == "cells":
-            cells_table = self.analyzer.analyze_cells()
-            cleaned_cells_array = self.analyzer.cells_array
-            rings_table = pd.DataFrame()
-        elif self.measurement == "rings":
-            cells_table = pd.DataFrame()
-            rings_table = self.analyzer.analyze_rings()
-        # Emit results to be added as layers
-        self.result_ready.emit(cells_table, rings_table, cleaned_cells_array)
-
-        self.finished.emit()
-
-
 class SingleSampleMeasurementsWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
-
-        self._spinner_frames = ["|", "/", "-", "\\"]
-        self._spinner_index = 0
-
-        self._spinner_timer = QTimer()
-        self._spinner_timer.setInterval(150)  # update speed in ms
-        self._spinner_timer.timeout.connect(self._update_spinner)
 
         self._viewer = viewer
         prevent_duplicate_dock_if_already_present(
@@ -102,9 +44,11 @@ class SingleSampleMeasurementsWidget(Container):
         self._check_settings_button = PushButton(text="Check Settings")
         self._check_settings_button.changed.connect(self._open_settings)
 
-        # Create a button to launch the analysis
-        self._run_analysis_button = PushButton(text="Measure")
-        self._run_analysis_button.changed.connect(self._run_analysis)
+        # Create a button to launch the analysis (shows its progress; the
+        # measured layers are written at the end, so it cannot be cancelled)
+        self._run_analysis_button = JobButton(
+            text="Measure", start=self._run_analysis, cancellable=False
+        )
 
         # Append the widgets to the container
         self.extend(
@@ -187,106 +131,42 @@ class SingleSampleMeasurementsWidget(Container):
         self._selected_sample = name
         return True
 
-    def _update_spinner(self):
-        frame = self._spinner_frames[self._spinner_index]
-        self._spinner_index = (self._spinner_index + 1) % len(self._spinner_frames)
-        self._run_analysis_button.text = f"{self._current_status} {frame}"
-
-    def _run_analysis(self):
+    def _run_analysis(self) -> JobHandle | None:
+        """Measure the selected sample; None when nothing was started."""
         if not self._choose_sample():
-            return
+            return None
 
-        self._run_analysis_button.enabled = False
-        self._current_status = "Processing"
-        self._spinner_index = 0
-        self._spinner_timer.start()
-
-        if (
-            not self._measure_cells_checkbox.value
-            and not self._measure_rings_checkbox.value
-        ):
+        measure_cells = self._measure_cells_checkbox.value
+        measure_rings = self._measure_rings_checkbox.value
+        if not measure_cells and not measure_rings:
             show_info("Please select at least one measurement (cells or rings).")
-            self._spinner_timer.stop()
-            self._run_analysis_button.text = "Measure"
-            self._run_analysis_button.enabled = True
-            return
+            return None
 
         cells_layer = self._cells_layer
-        if self._measure_cells_checkbox.value and cells_layer is None:
+        if measure_cells and cells_layer is None:
             show_info(
                 "Cells layer not found in the viewer. Please load the cells layer first or uncheck 'Measure Cells'."
             )
-            self._spinner_timer.stop()
-            self._run_analysis_button.text = "Measure"
-            self._run_analysis_button.enabled = True
-            return
+            return None
 
         rings_layer = self._rings_layer
-        if self._measure_rings_checkbox.value and rings_layer is None:
+        if measure_rings and rings_layer is None:
             show_info(
                 "Rings layer not found in the viewer. Please load the rings layer first or uncheck 'Measure Rings'."
             )
-            self._spinner_timer.stop()
-            self._run_analysis_button.text = "Measure"
-            self._run_analysis_button.enabled = True
-            return
+            return None
 
-        if (
-            self._measure_cells_checkbox.value
-            and self._measure_rings_checkbox.value
-        ):
+        if measure_cells and measure_rings:
             measurement = "both"
-            self._cells_input_layer = cells_layer
-            self._rings_input_layer = rings_layer
-            self._cells_layer_name = cells_layer.name
-            self._rings_layer_name = rings_layer.name
-            scale = self._cells_input_layer.metadata["spatial_resolution"]
-            cells_array = self._cells_input_layer.data
-            rings_table = self._rings_input_layer.features
-            cells_table = self._cells_input_layer.features
-
-        elif (
-            self._measure_cells_checkbox.value
-            and not self._measure_rings_checkbox.value
-        ):
+        elif measure_cells:
             measurement = "cells"
-            self._cells_input_layer = cells_layer
-            self._cells_layer_name = cells_layer.name
-            scale = self._cells_input_layer.metadata["spatial_resolution"]
-            cells_array = self._cells_input_layer.data
-            if rings_layer is not None and hasattr(rings_layer, "features") and not rings_layer.features.empty:
-                self._rings_input_layer = rings_layer
-                self._rings_layer_name = rings_layer.name
-                rings_table = self._rings_input_layer.features
-            else:
-                self._rings_input_layer = None
-                self._rings_layer_name = None
-                rings_table = pd.DataFrame()
-            cells_table = pd.DataFrame()
-
-        elif (
-            self._measure_rings_checkbox.value
-            and not self._measure_cells_checkbox.value
-        ):
-            measurement = "rings"
-            self._rings_input_layer = rings_layer
-            self._rings_layer_name = rings_layer.name
-            scale = self._rings_input_layer.metadata["spatial_resolution"]
-            cells_array = np.zeros_like(self._rings_input_layer.data)
-            rings_table = self._rings_input_layer.features
-            cells_table = pd.DataFrame()
-
         else:
-            raise ValueError("Choose a measurement to compute.")
+            measurement = "rings"
 
-        sample_type = None
-        if self._measure_cells_checkbox.value:
-            sample_type = self._cells_input_layer.metadata["sample_type"]
-        elif self._measure_rings_checkbox.value:
-            sample_type = self._rings_input_layer.metadata["sample_type"]
-
+        # Scale and sample type: from the cells layer when measuring cells
+        reference_layer = cells_layer if measure_cells else rings_layer
         config = {
-            "pixels_per_um": scale,
+            "pixels_per_um": reference_layer.metadata["spatial_resolution"],
             "cluster_dbl_cwt_threshold": settings.get(
                 "measurements.cluster_dbl_cwt_threshold"
             ),
@@ -311,183 +191,13 @@ class SingleSampleMeasurementsWidget(Container):
             "adjacent_cwt_ratio_limit": settings.get(
                 "measurements.adjacent_cwt_ratio_limit"
             ),
-            "sample_type": sample_type,
+            "sample_type": reference_layer.metadata["sample_type"],
         }
 
-        # Keep the config of this run so that _add_result_layers records the
-        # values actually used, even if a widget is changed while it runs.
-        self._run_config = config
-
-        # Run the analysis in a separate thread
-
-        self.worker_thread = QThread()
-        self.worker = Worker(
-            config,
-            cells_array.astype("uint8") * 255,
-            rings_table,
-            cells_table,
+        return start_measuring(
             measurement,
+            config,
+            cells_layer,
+            rings_layer,
+            settings.get("project_directory"),
         )
-        self.worker.moveToThread(self.worker_thread)
-
-        # Connect signals
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.result_ready.connect(self._add_result_layers)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        self.worker_thread.finished.connect(self._spinner_timer.stop)
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._run_analysis_button, "text", "Measure")
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._run_analysis_button, "enabled", True)
-        )
-
-        self.worker_thread.start()
-
-
-    def _add_result_layers(self, cells_table, rings_table, cleaned_cells_array=None):
-
-        project_dir = Path(settings.get("project_directory"))
-        project_dir.mkdir(parents=True, exist_ok=True)
-
-        # One timestamp per measurement run, so that cells and rings written by
-        # the same run carry the identical value.
-        meas_created_at = datetime.now().isoformat()
-        sw_version = get_software_version()
-        meas_by = get_measurement_operator()
-
-        # ---------------------------
-        # Export Cells
-        # ---------------------------
-        if not cells_table.empty:
-            print("[Cells] Updating layer features...")
-            self._cells_input_layer.features = cells_table
-            if cleaned_cells_array is not None and hasattr(self._cells_input_layer, "data"):
-                if self._cells_input_layer.data.dtype == bool:
-                    self._cells_input_layer.data = cleaned_cells_array > 0
-                elif np.issubdtype(self._cells_input_layer.data.dtype, np.integer):
-                    if self._cells_input_layer.data.max() <= 1:
-                        self._cells_input_layer.data = (cleaned_cells_array > 0).astype(self._cells_input_layer.data.dtype)
-                    else:
-                        self._cells_input_layer.data = cleaned_cells_array.astype(self._cells_input_layer.data.dtype)
-                else:
-                    self._cells_input_layer.data = (cleaned_cells_array > 0).astype(self._cells_input_layer.data.dtype)
-            self._cells_input_layer.metadata["meas_created_at"] = (
-                meas_created_at
-            )
-            self._cells_input_layer.metadata["sw_version"] = sw_version
-            self._cells_input_layer.metadata["meas_by"] = meas_by
-            # Cells-only parameters, recorded so the run can be reproduced
-            for key in MEASUREMENT_PARAMETER_KEYS:
-                self._cells_input_layer.metadata[key] = self._run_config[key]
-
-            cells_path = self._cells_input_layer.metadata.get("file_path")
-
-
-            if cells_path is None:
-                sample_name = self._cells_input_layer.metadata.get(
-                    "sample_name", self._cells_input_layer.name
-                )
-                cells_path = str(project_dir / f"{sample_name}.cells.png")
-                self._cells_input_layer.metadata["file_path"] = cells_path
-
-            print(f"[Cells] Writing results to: {cells_path}")
-            write_single_layer(
-                path=cells_path,
-                data=self._cells_input_layer.data,
-                meta={
-                    "name": self._cells_input_layer.name,
-                    "metadata": self._cells_input_layer.metadata,
-                    "features": cells_table,
-                },
-            )
-            # Written with the measurements: nothing left to save
-            self._cells_input_layer.metadata["_is_dirty"] = False
-            show_info(f"Cells exported to: {cells_path}")
-
-        # ---------------------------
-        # Export Rings
-        # ---------------------------
-        if not rings_table.empty:
-            print("[Rings] Updating layer features...")
-            self._rings_input_layer.features = rings_table
-            self._rings_input_layer.metadata["meas_created_at"] = (
-                meas_created_at
-            )
-            self._rings_input_layer.metadata["sw_version"] = sw_version
-            self._rings_input_layer.metadata["meas_by"] = meas_by
-
-            rings_path = self._rings_input_layer.metadata.get("file_path")
-
-            if rings_path is None:
-                sample_name = self._rings_input_layer.metadata.get(
-                    "sample_name", self._rings_input_layer.name
-                )
-                rings_path = str(project_dir / f"{sample_name}.rings.png")
-                self._rings_input_layer.metadata["file_path"] = rings_path
-
-            print(f"[Rings] Writing results to: {rings_path}")
-
-            # move RBXY at the end of the table
-            if "RBXY" in rings_table.columns:
-                cols = [c for c in rings_table.columns if c != "RBXY"]
-                cols.append("RBXY")
-                rings_table = rings_table[cols]
-
-            write_single_layer(
-                path=rings_path,
-                data=self._rings_input_layer.data,
-                meta={
-                    "name": self._rings_input_layer.name,
-                    "metadata": self._rings_input_layer.metadata,
-                    "features": rings_table,
-                },
-            )
-            # Written with the measurements: nothing left to save
-            self._rings_input_layer.metadata["_is_dirty"] = False
-            show_info(f"Rings exported to: {rings_path}")
-
-        # ---------------------------
-        # Export Annotated Scan Image
-        # ---------------------------
-        scan_layer = self._scan_layer
-        rings_layer = getattr(self, "_rings_input_layer", None) or self._rings_layer
-        cells_layer = getattr(self, "_cells_input_layer", None) or getattr(self, "_cells_layer", None)
-        cells_data = cells_layer.data if cells_layer is not None and hasattr(cells_layer, "data") else None
-        rings_features = (
-            rings_table
-            if not rings_table.empty
-            else (
-                rings_layer.features
-                if rings_layer is not None and hasattr(rings_layer, "features")
-                else None
-            )
-        )
-
-        if scan_layer is not None and rings_features is not None and not rings_features.empty:
-            scan_path = scan_layer.metadata.get("file_path")
-            sample_name = (
-                scan_layer.metadata.get("sample_name")
-                or (rings_layer.metadata.get("sample_name") if rings_layer and rings_layer.metadata else None)
-                or scan_layer.name.split(".")[0]
-            )
-            annotated_path = str(project_dir / f"{sample_name}_annotated.jpg")
-
-            if scan_path and Path(scan_path).exists():
-                try:
-                    save_annotated_scan_image(
-                        scan_path=scan_path,
-                        annotated_path=annotated_path,
-                        rings_features=rings_features,
-                        cells_data=cells_data,
-                    )
-                    show_info(f"Annotated image exported to: {annotated_path}")
-                except Exception as e:
-                    print(f"Annotated image export failed: {e}")
-
-        show_info("Measurements completed and saved.")
-
-
