@@ -1,3 +1,5 @@
+import gc
+
 from napari.utils.notifications import show_error, show_info, show_warning
 
 from napari_roxas_ai._jobs import (
@@ -113,6 +115,12 @@ class JobRunner:
         worker.finished.connect(lambda: self._on_finished(handle))
         if handle.cancel_requested:
             worker.quit()
+        # Destroy unreferenced Qt objects here in the GUI thread. Left to the
+        # garbage collector, they could be destroyed in the worker thread
+        # while their timers are still registered with the GUI thread, which
+        # crashes napari (workaround taken over from batch measurements;
+        # costs ~100 ms per job start)
+        gc.collect()
         worker.start()
 
     def _run_inline(self, handle: JobHandle) -> None:
