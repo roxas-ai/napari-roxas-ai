@@ -135,8 +135,8 @@ def measuring(monkeypatch):
     """Replace the analysis and the file writing; record what they get."""
     calls = {"measure": [], "saved": [], "annotated": []}
 
-    def fake_measure_sample(config, cells_array, rings_table, cells_table, measurement):
-        calls["measure"].append((measurement, rings_table))
+    def fake_measure_sample(config, measurement, cells_array, rings_table=None):
+        calls["measure"].append(measurement)
         cells = CELLS_TABLE if measurement in ("both", "cells") else pd.DataFrame()
         rings = RINGS_TABLE if measurement in ("both", "rings") else pd.DataFrame()
         cleaned = cells_array if measurement != "rings" else None
@@ -207,20 +207,18 @@ def test_no_annotated_image_without_rings(
     assert measuring["annotated"] == []
 
 
-def test_cells_only_uses_the_loaded_rings(
+def test_cells_only_draws_the_annotated_image_with_the_loaded_rings(
     make_napari_viewer, sync_runner, project, measuring
 ):
     viewer = make_napari_viewer()
     add_sample_layer(viewer, "cells")
-    rings = add_sample_layer(viewer, "rings", RBXY=[[[0, 0], [0, 9]]], YEAR=[2019])
+    add_sample_layer(viewer, "rings", RBXY=[[[0, 0], [0, 9]]], YEAR=[2019])
     widget = SingleSampleMeasurementsWidget(viewer)
     widget._measure_rings_checkbox.value = False
 
     widget._run_analysis_button.press()
 
-    measurement, rings_table = measuring["measure"][0]
-    assert measurement == "cells"
-    pd.testing.assert_frame_equal(rings_table, rings.features)
+    assert measuring["measure"] == ["cells"]
     # Only the cells are written, the annotated image still shows the rings
     assert measuring["saved"] == ["sample_1.cells"]
     assert len(measuring["annotated"]) == 1

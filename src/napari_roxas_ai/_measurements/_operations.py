@@ -20,16 +20,22 @@ from ._sample_measurer import SampleAnalyzer
 
 def measure_sample(
     config: dict[str, Any],
-    cells_array: np.ndarray,
-    rings_table: pd.DataFrame,
-    cells_table: pd.DataFrame,
     measurement: str,
+    cells_array: np.ndarray,
+    rings_table: pd.DataFrame | None = None,
 ):
     """
     Measure the cells and/or rings of a sample ("both", "cells" or "rings").
+
+    Measuring the cells needs the cells array only, measuring the rings needs
+    the rings table and a cells array of the sample's shape (zeros if the
+    cells are not measured).
+
     Returns (cells_table, rings_table, cleaned_cells_array / None)
     """
-    analyzer = SampleAnalyzer(config, cells_array, rings_table, cells_table)
+    if rings_table is None:
+        rings_table = pd.DataFrame()
+    analyzer = SampleAnalyzer(config, cells_array, rings_table)
     cleaned_cells_array = None
     if measurement == "both":
         cells_table, rings_table = analyzer.analyze_sample()
@@ -68,8 +74,7 @@ def measure_and_save(
     cells_layer: LayerSnapshot | None,
     rings_layer: LayerSnapshot | None,
     cells_array: np.ndarray,
-    rings_table: pd.DataFrame,
-    cells_table: pd.DataFrame,
+    rings_table: pd.DataFrame | None,
     project_dir: str,
 ):
     """
@@ -87,10 +92,9 @@ def measure_and_save(
     yield Progress(0, total, "Measuring…")
     cells_table, rings_table, cleaned_cells_array = measure_sample(
         config,
+        measurement,
         cells_array.astype("uint8") * 255,
         rings_table,
-        cells_table,
-        measurement,
     )
 
     # One timestamp per measurement run: cells and rings carry the same value

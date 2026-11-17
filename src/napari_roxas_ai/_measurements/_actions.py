@@ -1,7 +1,6 @@
 from typing import Any
 
 import numpy as np
-import pandas as pd
 from napari.utils.notifications import show_info
 
 from napari_roxas_ai._job_runner import JobHandle, get_runner
@@ -25,23 +24,20 @@ def start_measuring(
         cells_input, rings_input = cells_layer, rings_layer
         cells_array = cells_layer.data
         rings_table = rings_layer.features
-        cells_table = cells_layer.features
     elif measurement == "cells":
         cells_input = cells_layer
         cells_array = cells_layer.data
-        # The ring boundaries help measuring the cells, when available
+        rings_table = None
+        # Not measured: the loaded rings are only drawn on the annotated image
         if rings_layer is not None and not rings_layer.features.empty:
             rings_input = rings_layer
-            rings_table = rings_layer.features
         else:
             rings_input = None
-            rings_table = pd.DataFrame()
-        cells_table = pd.DataFrame()
     elif measurement == "rings":
         cells_input, rings_input = None, rings_layer
+        # The rings need the sample's shape only
         cells_array = np.zeros_like(rings_layer.data)
         rings_table = rings_layer.features
-        cells_table = pd.DataFrame()
     else:
         raise ValueError(f"Unknown measurement {measurement!r}")
 
@@ -59,7 +55,6 @@ def start_measuring(
                 LayerSnapshot.of(rings_input) if rings_input else None,
                 cells_array,
                 rings_table,
-                cells_table,
                 project_dir,
             ),
             tags={JobTag.MEASUREMENTS},
