@@ -3,22 +3,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import napari.layers
-import numpy as np
 from scipy import ndimage as ndi
 import pandas as pd
 from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
-    PushButton,
 )
 from napari.utils.notifications import show_info
 from PIL import Image
-from qtpy.QtCore import QObject, Qt, QThread, Signal
 from qtpy.QtWidgets import QMessageBox
 
 from napari_roxas_ai._assets_files import check_assets_and_download
 from napari_roxas_ai._edition import update_rings_geometries
+from napari_roxas_ai._job_runner import JobButton, JobHandle, get_runner
+from napari_roxas_ai._jobs import Job, JobTag
 from napari_roxas_ai._reader import get_metadata_from_file
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
@@ -27,14 +26,7 @@ from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from .._utils._fix_sample_stem_path import fix_sample_stem_paths_in_project
 from .._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
-from .._utils._segmentation_postprocess import remove_border_touching_components
-from .._utils._torch_device import select_torch_device
-
-# NOTE: torch, torch.package.PackageImporter and ._cells_model.CellsSegmentationModel
-# are intentionally imported lazily inside Worker.run() instead of at module level.
-# They pull in the heavy ML stack (torch / pytorch-lightning /
-# segmentation-models-pytorch) which is the dominant import cost, so deferring it
-# keeps opening this widget fast; the cost is paid only when segmentation runs.
+from ._operations import segment_sample
 
 if TYPE_CHECKING:
     import napari
@@ -197,165 +189,6 @@ def apply_segmentation_results_to_viewer(
             rings_layer.colormap = new_colormap
 
 
-class Worker(QObject):
-    finished = Signal()
-    result_ready = Signal(dict)  # Dictionary with results
-
-    def __init__(
-        self,
-        input_array: np.ndarray,
-        segment_cells: bool = True,
-        cells_model_weights_file: Optional[str] = None,
-        segment_rings: bool = True,
-        rings_model_weights_file: Optional[str] = None,
-        settings: SettingsManager = None,
-        base_name: str = "",
-    ):
-        super().__init__()
-        self.input_array = input_array
-        self.segment_cells = segment_cells
-        self.segment_rings = segment_rings
-        self.cells_model_weights_file = None
-        if cells_model_weights_file:
-            self.cells_model_weights_file = (
-                CELLS_MODELS_PATH / cells_model_weights_file
-            )
-        self.rings_model_weights_file = None
-        if rings_model_weights_file:
-            self.rings_model_weights_file = (
-                RINGS_MODELS_PATH / rings_model_weights_file
-            )
-        self.settings = settings
-        self.base_name = base_name
-
-    def run(self):
-        # Heavy ML imports are deferred to run time (see module-level note).
-        import torch
-        from torch.package import PackageImporter
-
-        from ._cells_model import CellsSegmentationModel
-
-        # Prevent OpenMP crash when running inside a QThread with PyQt6 on macOS
-        torch.set_num_threads(1)
-
-        results = {}
-
-        # Process cells if requested
-        if self.segment_cells:
-
-            # Set up cells model
-            cells_model = CellsSegmentationModel()
-            cells_model.load_weights(self.cells_model_weights_file)
-            cells_model.available_device = select_torch_device(
-                self.settings.get("processing.try_to_use_gpu")
-            )
-            cells_model.to(device=cells_model.available_device)
-            print(f"Cells model running on: {cells_model.available_device}")
-            # Synchronize internal device attribute for models that use it in infer()
-            try:
-                cells_model.device = cells_model.available_device
-            except Exception:
-                try:
-                    setattr(cells_model, "device", cells_model.available_device)
-                except Exception:
-                    if hasattr(cells_model, "__dict__"):
-                        cells_model.__dict__["device"] = cells_model.available_device
-            # Use local device variable for autocast checks to avoid restricted attribute assignment
-            device_obj = torch.device(cells_model.available_device)
-            cells_model.use_autocast = bool(
-                torch.amp.autocast_mode.is_autocast_available(
-                    device_obj.type
-                )
-                and self.settings.get("processing.try_to_use_gpu")
-                and cells_model.available_device != "cpu"
-            )
-
-            # Perform inference
-            cells_labels = cells_model.infer(self.input_array)
-
-            # Add to results (compute layer name first)
-            suffix = self.settings.get("file_extensions.cells_file_extension")[0]
-            name = f"{self.base_name}{suffix}"
-
-            # Normalize to 0/1 and remove border-touching components
-            cells_binary = (cells_labels > 0).astype("uint8")
-            cells_binary = remove_border_touching_components(cells_binary)
-
-            results["cells"] = {
-                "data": cells_binary,
-                "name": name,
-            }
-
-        # Process rings if requested
-        if self.segment_rings:
-
-            # Set up rings model
-            rings_model = PackageImporter(
-                self.rings_model_weights_file
-            ).load_pickle("LinearRingModel", "model.pkl")
-            rings_model.available_device = select_torch_device(
-                self.settings.get("processing.try_to_use_gpu")
-            )
-            rings_model.to(device=rings_model.available_device)
-            print(f"Rings model running on: {rings_model.available_device}")
-            # Synchronize internal device attribute for packaged models
-            try:
-                rings_model.device = rings_model.available_device
-            except Exception:
-                try:
-                    setattr(rings_model, "device", rings_model.available_device)
-                except Exception:
-                    if hasattr(rings_model, "__dict__"):
-                        rings_model.__dict__["device"] = rings_model.available_device
-            # Use local device variable for autocast checks
-            device_obj = torch.device(rings_model.available_device)
-            rings_model.use_autocast = bool(
-                torch.amp.autocast_mode.is_autocast_available(
-                    device_obj.type
-                )
-                and self.settings.get("processing.try_to_use_gpu")
-                and rings_model.available_device != "cpu"
-            )
-
-            # Perform inference
-            rings_labels, rings_boundaries = rings_model.infer(
-                self.input_array
-            )
-
-            # Create a DataFrame from boundaries
-            boundary_data = []
-
-            # Always prepend a dummy boundary at the top (row 0) to mark the uncomplete ring area
-            boundary_data.append(
-                {"RBXY": [[0, 0], [0, self.input_array.shape[1] - 1]]}
-            )
-
-            for _i, boundary in enumerate(rings_boundaries):
-                # Convert to numpy or list, whichever is more appropriate
-                if isinstance(boundary, torch.Tensor):
-                    coords = boundary.cpu().numpy().tolist()
-                else:
-                    coords = boundary
-                boundary_data.append({"RBXY": coords})
-
-            boundaries_df = pd.DataFrame(boundary_data)
-
-            # Add to results
-            suffix = self.settings.get("file_extensions.rings_file_extension")[
-                0
-            ]
-            name = f"{self.base_name}{suffix}"
-            results["rings"] = {
-                "data": rings_labels.astype("int32"),
-                "name": name,
-                "features": boundaries_df,
-            }
-
-        # Emit results
-        self.result_ready.emit(results)
-        self.finished.emit()
-
-
 class SingleSampleSegmentationWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         # The rows bring their own labels, a label column would only indent them
@@ -466,9 +299,10 @@ class SingleSampleSegmentationWidget(Container):
             rings_layout.setSpacing(LABEL_SPACING)
             rings_layout.addStretch()
 
-        # Create a button to launch the analysis
-        self._run_segmentation_button = PushButton(text="Run Segmentation")
-        self._run_segmentation_button.changed.connect(self._run_segmentation)
+        # Create a button to launch the analysis, showing its progress
+        self._run_segmentation_button = JobButton(
+            text="Run Segmentation", start=self._run_segmentation
+        )
 
         # Append the widgets to the container
         self.extend(
@@ -537,8 +371,8 @@ class SingleSampleSegmentationWidget(Container):
             return layer_name[: -len(scan_extension)]
         return layer_name
 
-    def _run_segmentation(self) -> None:
-        """Run the segmentation analysis in a separate thread."""
+    def _run_segmentation(self) -> JobHandle | None:
+        """Run the segmentation in the background."""
 
         # --- FIX OUTDATED METADATA STEMS (silent, filesystem-truth based) ---
         proj = self.settings.get("project_directory")
@@ -587,40 +421,42 @@ class SingleSampleSegmentationWidget(Container):
 
         # Extract base name from input layer
         base_name = self._extract_base_name(self.input_layer.name)
+        cells_extension = self.settings.get(
+            "file_extensions.cells_file_extension"
+        )[0]
+        rings_extension = self.settings.get(
+            "file_extensions.rings_file_extension"
+        )[0]
 
-        # Prepare worker to run the analysis in a separate thread
-        self.worker_thread = QThread()
-        self.worker = Worker(
-            self.input_layer.data,
-            self._segment_cells_checkbox.value,
-            self.cells_model_file,
-            self._segment_rings_checkbox.value,
-            self.rings_model_file,
-            self.settings,
-            base_name,
-        )
-        self.worker.moveToThread(self.worker_thread)
-
-        # Connect signals
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.result_ready.connect(self._add_result_layers)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        # Disable the run button while processing
-        self._run_segmentation_button.enabled = False
-
-        # Restore run segmentation button and show message when finished
-        def on_finished():
-            self._run_segmentation_button.enabled = True
+        def on_segmented(results: Dict[str, Any]) -> None:
+            self._add_result_layers(results)
             show_info("Segmentation complete")
 
-        self.worker_thread.finished.connect(on_finished)
-
         show_info("Segmentation in progress...")
-        # Run the analysis in a separate thread
-        self.worker_thread.start()
+        return get_runner().submit(
+            Job(
+                "Segmentation",
+                segment_sample,
+                args=(
+                    self.input_layer.data,
+                    (
+                        CELLS_MODELS_PATH / self.cells_model_file
+                        if self.cells_model_file
+                        else None
+                    ),
+                    (
+                        RINGS_MODELS_PATH / self.rings_model_file
+                        if self.rings_model_file
+                        else None
+                    ),
+                    self.settings.get("processing.try_to_use_gpu"),
+                    f"{base_name}{cells_extension}",
+                    f"{base_name}{rings_extension}",
+                ),
+                tags={JobTag.SEGMENTATION},
+            ),
+            on_result=on_segmented,
+        )
 
     def _add_result_layers(self, results: Dict[str, Any]) -> None:
         input_scale = self.input_layer.scale
