@@ -18,7 +18,7 @@ from magicgui.widgets import Slider
 from napari_roxas_ai._crossdating._cross_dating_plotter import (
     CrossDatingPlotterWidget,
 )
-from napari_roxas_ai._preparation._worker import Worker
+from napari_roxas_ai._preparation._operations import save_metadata
 from napari_roxas_ai._utils._metadata_keys import NO_REFERENCE_SERIES
 
 
@@ -207,9 +207,7 @@ def test_a_prepared_sample_carries_the_key(tmp_path):
     sample the crossdating widget has yet to touch.
     """
     path = tmp_path / "MEN.FICU_RAL16A.metadata.json"
-    worker = Worker.__new__(Worker)  # _save_metadata needs no state
-
-    worker._save_metadata({"sample_name": "MEN.FICU_RAL16A"}, str(path))
+    save_metadata({"sample_name": "MEN.FICU_RAL16A"}, str(path))
 
     assert _stored(path)["reference_series"] == NO_REFERENCE_SERIES
 
@@ -217,9 +215,7 @@ def test_a_prepared_sample_carries_the_key(tmp_path):
 def test_preparation_keeps_a_reference_series_it_is_given(tmp_path):
     """The default must not overwrite the entry of a re-prepared sample."""
     path = tmp_path / "MEN.FICU_RAL16A.metadata.json"
-    worker = Worker.__new__(Worker)
-
-    worker._save_metadata(
+    save_metadata(
         {"sample_name": "MEN.FICU_RAL16A", "reference_series": "RAL16A"},
         str(path),
     )

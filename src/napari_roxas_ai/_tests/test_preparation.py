@@ -2,8 +2,10 @@
 Tests for the preparation module functionality.
 """
 
+import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -23,7 +25,8 @@ from napari_roxas_ai._preparation._preparation_widget import (
     MIN_VISIBLE_IMAGE_ROWS,
     PreparationWidget,
 )
-from napari_roxas_ai._preparation._worker import Worker
+from napari_roxas_ai._jobs import Job, JobStatus, run_job_sync
+from napari_roxas_ai._preparation import _operations as operations
 
 
 # Helper function to create test image
@@ -149,9 +152,6 @@ def prep_widget(mock_viewer, mock_settings_manager):
     # Mock UI elements that will be accessed during tests
     widget._file_selection_container = MagicMock()
     widget._reverse_selection_button = MagicMock()
-    widget._run_in_thread = MagicMock()
-    widget._cancel_processing = MagicMock()
-    widget._progress_bar = MagicMock()
     widget._image_action_button = MagicMock()
     widget._crossdating_action_button = MagicMock()
     widget._project_dialog_button = MagicMock()
@@ -356,153 +356,208 @@ class TestPreparationWidget:
             text_file_extensions=[".rwl", ".txt"],
         )
 
-    def test_ui_state_during_processing(self, prep_widget):
-        """Test UI state updates during processing."""
-        # Test UI update when processing starts
-        prep_widget._update_ui_for_processing(True)
 
-        assert prep_widget._is_processing is True
-        assert prep_widget._image_action_button.text == "Cancel Processing"
-        assert prep_widget._progress_bar.visible is True
-        assert prep_widget._project_dialog_button.enabled is False
-        assert prep_widget._crossdating_action_button.enabled is False
-
-        # Test UI update when processing ends
-        prep_widget._update_ui_for_processing(False)
-
-        assert prep_widget._is_processing is False
-        assert (
-            prep_widget._image_action_button.text
-            == "Start Processing Image Files"
-        )
-        assert prep_widget._progress_bar.visible is False
-        assert prep_widget._project_dialog_button.enabled is True
-        assert prep_widget._crossdating_action_button.enabled is True
+def _answer(name, apply_to_all=False, roxas_cells=False):
+    """The answer of a metadata dialog."""
+    return (
+        {"sample_name": name, "spatial_resolution": 1.0, "sample_scale": 1.0},
+        apply_to_all,
+        {"load_cells_from_roxas": roxas_cells, "load_rings_from_roxas": False},
+    )
 
 
-class TestWorker:
-    """Tests for the Worker class."""
+def _prepare(project_dir, files, answers):
+    """Run the preparation to the end; returns whether all were prepared."""
+    gen = operations.prepare_files(
+        [str(f) for f in files],
+        answers,
+        str(project_dir),
+        ".scan",
+        ".metadata.json",
+        [".cells", ".png"],
+        [".rings", ".tif"],
+    )
+    while True:
+        try:
+            next(gen)
+        except StopIteration as stop:
+            return stop.value
 
-    @patch("napari_roxas_ai._preparation._worker.shutil")
-    def test_image_processing(self, mock_shutil, temp_dirs):
-        """Test image processing functionality."""
-        # Create sample data
-        project_dir = Path(temp_dirs)
-        test_file = project_dir / "test.jpg"
-        create_test_image(test_file)
 
-        # Create worker instance
-        worker = Worker(
-            project_directory=str(project_dir),
-            scan_content_extension=".scan",
-            metadata_file_extension=".metadata.json",
-            image_file_extensions=[".jpg", ".png"],
-            selected_files=None,
-            process_processed=False,
-            overwrite_files=True,
-        )
-
-        # Mock signals
-        worker.progress = MagicMock()
-        worker.finished = MagicMock()
-        worker.metadata_request = MagicMock()
-
-        # Mock metadata setting to avoid UI interaction
-        worker.set_metadata = MagicMock()
-
-        # Add test file to all_files list
-        worker.all_files = [str(test_file)]
-        worker.current_file_index = 0
-
-        # Run the worker method
-        with patch.object(worker, "_extract_image_metadata", return_value={}):
-            worker._process_next_file()
-
-        # Check that signals were emitted correctly
-        worker.metadata_request.emit.assert_called_once_with("test")
-
-    def test_roxas_classic_import_copies_image_file(self, temp_dirs):
-        """When importing from ROXAS Classic, original image file must not be overwritten or deleted."""
-        project_dir = Path(temp_dirs)
-        test_file = project_dir / "sample_classic.jpg"
-        create_test_image(test_file)
-
-        worker = Worker(
-            project_directory=str(project_dir),
-            scan_content_extension=".scan",
-            metadata_file_extension=".metadata.json",
-            image_file_extensions=[".jpg"],
-            selected_files=None,
-            process_processed=False,
-            overwrite_files=True,
-        )
-
-        metadata = {
-            "sample_name": "sample_classic",
-            "spatial_resolution": 1.0,
-            "sample_scale": 1.0,
-        }
-        loading_params = {
-            "load_cells_from_roxas": True,
-            "load_rings_from_roxas": False,
-        }
-
-        worker.all_files = [str(test_file)]
-        worker.current_file_index = 0
-        worker._current_img_metadata = {"sample_stem_path": "sample_classic"}
-
-        with patch.object(worker, "load_cells_from_roxas_scl"):
-            with patch.object(worker, "_process_next_file"):
-                worker.set_metadata(
-                    metadata, apply_to_all=False, loading_params=loading_params
-                )
-
-        scan_file = project_dir / "sample_classic.scan.jpg"
-        # Original file must still exist
-        assert test_file.exists()
-        # Copied scan file must exist
-        assert scan_file.exists()
+class TestPrepareFiles:
+    """Tests for the preparation of the files."""
 
     def test_standard_preparation_renames_image_file(self, temp_dirs):
         """Standard preparation without ROXAS Classic import moves/renames the image file."""
         project_dir = Path(temp_dirs)
-        test_file = project_dir / "sample_standard.jpg"
-        create_test_image(test_file)
+        test_file = create_test_image(project_dir / "sample_standard.jpg")
 
-        worker = Worker(
-            project_directory=str(project_dir),
-            scan_content_extension=".scan",
-            metadata_file_extension=".metadata.json",
-            image_file_extensions=[".jpg"],
-            selected_files=None,
-            process_processed=False,
-            overwrite_files=True,
-        )
+        _prepare(project_dir, [test_file], [_answer("sample_standard")])
 
-        metadata = {
-            "sample_name": "sample_standard",
-            "spatial_resolution": 1.0,
-            "sample_scale": 1.0,
-        }
-        loading_params = {
-            "load_cells_from_roxas": False,
-            "load_rings_from_roxas": False,
-        }
+        # Renamed to the scan file, with its metadata file
+        assert not test_file.exists()
+        assert (project_dir / "sample_standard.scan.jpg").exists()
+        assert (project_dir / "sample_standard.metadata.json").exists()
 
-        worker.all_files = [str(test_file)]
-        worker.current_file_index = 0
-        worker._current_img_metadata = {"sample_stem_path": "sample_standard"}
+    def test_roxas_classic_import_copies_image_file(self, temp_dirs):
+        """When importing from ROXAS Classic, original image file must not be overwritten or deleted."""
+        project_dir = Path(temp_dirs)
+        test_file = create_test_image(project_dir / "sample_classic.jpg")
 
-        with patch.object(worker, "_process_next_file"):
-            worker.set_metadata(
-                metadata, apply_to_all=False, loading_params=loading_params
+        with patch.object(operations, "load_cells_from_roxas_scl"):
+            _prepare(
+                project_dir,
+                [test_file],
+                [_answer("sample_classic", roxas_cells=True)],
             )
 
-        scan_file = project_dir / "sample_standard.scan.jpg"
-        # Original file must not exist (it was renamed)
-        assert not test_file.exists()
-        # Renamed scan file must exist
-        assert scan_file.exists()
+        # Original file must still exist, next to the copied scan file
+        assert test_file.exists()
+        assert (project_dir / "sample_classic.scan.jpg").exists()
+
+    def test_answer_for_all_prepares_the_remaining_files(self, temp_dirs):
+        project_dir = Path(temp_dirs)
+        files = [
+            create_test_image(project_dir / f"s{i}.jpg") for i in range(3)
+        ]
+
+        assert _prepare(project_dir, files, [_answer("s0", apply_to_all=True)])
+
+        for i in range(3):
+            assert (project_dir / f"s{i}.scan.jpg").exists()
+            metadata = json.loads(
+                (project_dir / f"s{i}.metadata.json").read_text()
+            )
+            # The metadata answered for all, with this sample's name
+            assert metadata["sample_name"] == f"s{i}"
+
+    def test_cancelling_stops_between_files(self, temp_dirs):
+        project_dir = Path(temp_dirs)
+        files = [
+            create_test_image(project_dir / f"s{i}.jpg") for i in range(3)
+        ]
+
+        outcome = run_job_sync(
+            Job(
+                "Preparation",
+                operations.prepare_files,
+                args=(
+                    [str(f) for f in files],
+                    [_answer("s0", apply_to_all=True)],
+                    str(project_dir),
+                    ".scan",
+                    ".metadata.json",
+                    [".cells", ".png"],
+                    [".rings", ".tif"],
+                ),
+            ),
+            should_cancel=lambda: (project_dir / "s0.scan.jpg").exists(),
+        )
+
+        assert outcome.status is JobStatus.CANCELLED
+        # The first file is complete, the next ones are not started
+        assert (project_dir / "s0.metadata.json").exists()
+        assert (project_dir / "s1.jpg").exists()
+        assert not (project_dir / "s1.metadata.json").exists()
+
+
+class FakeMetadataDialog:
+    """Answers the metadata dialogs in turn; None cancels one."""
+
+    answers: list = []
+    asked: list = []
+
+    def __init__(self, filename):
+        FakeMetadataDialog.asked.append(filename)
+        self._answer = FakeMetadataDialog.answers.pop(0)
+
+    def exec_(self):
+        return self._answer is not None
+
+    def get_result(self):
+        return self._answer
+
+
+@pytest.fixture
+def preparing(tmp_path, sync_runner, monkeypatch):
+    """A widget preparing 3 images of a project, with fake dialogs."""
+    from napari_roxas_ai._job_runner import _runner
+    from napari_roxas_ai._preparation import _preparation_widget
+
+    for i in range(3):
+        create_test_image(tmp_path / f"s{i}.jpg")
+    FakeMetadataDialog.answers = []
+    FakeMetadataDialog.asked = []
+    monkeypatch.setattr(
+        _preparation_widget, "MetadataDialog", FakeMetadataDialog
+    )
+    message_box = MagicMock()
+    monkeypatch.setattr(_preparation_widget, "QMessageBox", message_box)
+    notify = MagicMock()
+    monkeypatch.setattr(
+        _preparation_widget, "notify_project_files_changed", notify
+    )
+    errors = []
+    monkeypatch.setattr(_runner, "show_error", errors.append)
+
+    widget = PreparationWidget(MagicMock())
+    widget.project_directory = str(tmp_path)
+    widget._handpick_files_checkbox.value = False
+    widget._refresh_file_list()
+    return SimpleNamespace(
+        widget=widget,
+        project=tmp_path,
+        completed_box=message_box.information,
+        notify=notify,
+        errors=errors,
+    )
+
+
+class TestPreparationWidgetJobs:
+    """The preparation run from the widget."""
+
+    def test_cancelled_dialog_prepares_the_answered_files(self, preparing):
+        FakeMetadataDialog.answers = [_answer("s0"), _answer("s1"), None]
+
+        preparing.widget._image_action_button.press()
+
+        assert (preparing.project / "s1.scan.jpg").exists()
+        assert (preparing.project / "s2.jpg").exists()
+        # Not completed, but the prepared files are announced
+        preparing.completed_box.assert_not_called()
+        preparing.notify.assert_called_once()
+        assert preparing.widget._image_action_button.enabled
+        assert preparing.widget._crossdating_action_button.enabled
+
+    def test_cancelled_first_dialog_prepares_nothing(self, preparing):
+        FakeMetadataDialog.answers = [None]
+
+        preparing.widget._image_action_button.press()
+
+        assert not (preparing.project / "s0.metadata.json").exists()
+        preparing.completed_box.assert_not_called()
+        assert preparing.widget._crossdating_action_button.enabled
+
+    def test_failed_preparation_reports_and_leaves_the_widget_usable(
+        self, preparing, monkeypatch
+    ):
+        from napari_roxas_ai._preparation import _preparation_widget
+
+        def broken_prepare_files(*args):
+            raise OSError("disk full")
+            yield
+
+        monkeypatch.setattr(
+            _preparation_widget, "prepare_files", broken_prepare_files
+        )
+        FakeMetadataDialog.answers = [_answer("s0", apply_to_all=True)]
+
+        preparing.widget._image_action_button.press()
+
+        assert preparing.errors == ["Preparation failed: disk full"]
+        preparing.completed_box.assert_not_called()
+        assert preparing.widget._image_action_button.enabled
+        assert preparing.widget._crossdating_action_button.enabled
 
 
 class TestMetadataDialog:
@@ -900,50 +955,3 @@ class TestCrossdatingHandler:
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
-
-
-def test_worker_prints_info_for_each_processed_file(temp_dirs, capsys):
-    """Each prepared file is reported in the terminal, as in batch detection."""
-    project_dir = Path(temp_dirs)
-    test_file = project_dir / "sample_log.jpg"
-    create_test_image(test_file)
-
-    worker = Worker(
-        project_directory=str(project_dir),
-        scan_content_extension=".scan",
-        metadata_file_extension=".metadata.json",
-        image_file_extensions=[".jpg"],
-    )
-    worker.all_files = [str(test_file)]
-    worker.current_file_index = 0
-    worker._current_img_metadata = {"sample_stem_path": "sample_log"}
-
-    with patch.object(
-        worker, "load_cells_from_roxas_scl", return_value=False
-    ), patch.object(worker, "_process_next_file"):
-        worker.set_metadata(
-            {"sample_name": "sample_log"},
-            loading_params={
-                "load_cells_from_roxas": True,
-                "load_rings_from_roxas": False,
-            },
-        )
-
-    out = capsys.readouterr().out
-    assert (
-        "[Preparation] [1/1] sample_log.jpg: Metadata, "
-        "Cells skipped (no ROXAS SCL), Copied"
-    ) in out
-
-
-def test_worker_prints_a_summary_when_done(temp_dirs, capsys):
-    worker = Worker(
-        project_directory=str(temp_dirs),
-        scan_content_extension=".scan",
-        metadata_file_extension=".metadata.json",
-        image_file_extensions=[".jpg"],
-    )
-    worker.all_files = ["a.jpg", "b.jpg"]
-    worker.current_file_index = 2
-    worker._process_next_file()
-    assert "[Preparation] Completed 2 file(s)." in capsys.readouterr().out

@@ -4,22 +4,23 @@ Widget for preparing sample images and metadata for ROXAS analysis.
 
 import glob
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 from magicgui.widgets import (
     CheckBox,
     Container,
     Label,
-    ProgressBar,
     PushButton,
     Select,
 )
-from qtpy.QtCore import Qt, QThread
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
 
+from napari_roxas_ai._job_runner import JobButton, JobHandle, get_runner
+from napari_roxas_ai._jobs import Job, JobStatus, JobTag
 from napari_roxas_ai._settings._settings_manager import SettingsManager
 from napari_roxas_ai._utils._project_files_events import (
     notify_project_files_changed,
@@ -28,10 +29,13 @@ from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 
 from ._crossdating_handler import process_crossdating_files
 from ._metadata_dialog import MetadataDialog
-from ._worker import (
+from ._operations import (
     ROXAS_CLASSIC_OUTPUT_SUFFIXES,
-    Worker,
+    Answer,
+    discover_files,
     is_roxas_ai_output_file,
+    prepare_files,
+    sample_base_name,
 )
 
 if TYPE_CHECKING:
@@ -91,8 +95,6 @@ class PreparationWidget(Container):
 
         # Initialize state variables
         self.project_directory = None
-        self.worker = None
-        self.worker_thread = None
         self.source_files = []  # List of files in the project directory
         self.selected_files = []  # List of files selected by the user
 
@@ -231,17 +233,11 @@ class PreparationWidget(Container):
             self._reverse_file_selection
         )
 
-        # Progress bar (initially hidden)
-        self._progress_bar = ProgressBar(
-            value=0, min=0, max=100, visible=False, label="Processing Progress"
-        )
-
-        # Image processing button
-        self._image_action_button = PushButton(
-            text="Start Processing Image Files"
-        )
-        self._image_action_button.changed.connect(
-            self._toggle_image_processing
+        # Image processing button: shows the progress while the files are
+        # found and prepared
+        self._image_action_button = JobButton(
+            text="Start Processing Image Files",
+            start=self._start_image_processing,
         )
 
         # Crossdating processing button
@@ -251,8 +247,6 @@ class PreparationWidget(Container):
         self._crossdating_action_button.changed.connect(
             self._process_crossdating_files
         )
-
-        self._is_processing = False
 
         # Append all widgets to the container
         self.extend(
@@ -265,7 +259,6 @@ class PreparationWidget(Container):
                 self._reverse_selection_button,
                 self._image_action_button,
                 self._crossdating_action_button,
-                self._progress_bar,
             ]
         )
         self.native.layout().setAlignment(Qt.AlignTop)
@@ -466,31 +459,96 @@ class PreparationWidget(Container):
 
         return selected_paths
 
-    def _toggle_image_processing(self):
-        """Toggle between starting and canceling image processing."""
-        if not self._is_processing:
-            self._start_image_processing()
-        else:
-            self._cancel_processing()
-
-    def _start_image_processing(self):
-        """Start the image file processing in a separate thread."""
-        # Validate inputs
+    def _start_image_processing(self) -> JobHandle | None:
+        """
+        Prepare the image files: they are found in the background, then the
+        metadata dialogs are answered, then the files are prepared in the
+        background. (2 Jobs)
+        """
         if not self._validate_inputs():
-            return
+            return None
 
-        # Update UI for processing
         self._update_ui_for_processing(True)
 
-        # Get selected files if in handpick mode
-        selected_files = self._get_selected_file_paths()
+        def on_found(files: List[str]) -> None:
+            if not files:
+                self._processing_finished(completed=True)
+                return
+            answers = self._ask_metadata(files)
+            if not answers:
+                # Cancelled at the first dialog: nothing to prepare
+                self._processing_finished(completed=False)
+                return
 
-        # Start processing in a separate thread
-        self._run_in_thread(
-            self.project_directory,
-            selected_files,
-            self._process_processed_checkbox.value,
+            def on_prepared(handle: JobHandle) -> None:
+                # Not completed if cancelled or a dialog was cancelled
+                self._processing_finished(
+                    completed=handle.status is JobStatus.SUCCEEDED
+                    and handle.result
+                )
+
+            self._image_action_button.track(
+                get_runner().submit(
+                    Job(
+                        "Preparation",
+                        prepare_files,
+                        args=(
+                            files,
+                            answers,
+                            self.project_directory,
+                            self.scan_content_extension,
+                            self.metadata_file_extension,
+                            self.settings_manager.get(
+                                "file_extensions.cells_file_extension"
+                            ),
+                            self.settings_manager.get(
+                                "file_extensions.rings_file_extension"
+                            ),
+                        ),
+                        tags={JobTag.PREPARATION},
+                    ),
+                    on_finished=on_prepared,
+                )
+            )
+
+        def on_search_finished(handle: JobHandle) -> None:
+            # Failed or cancelled: nothing was prepared
+            if handle.status is not JobStatus.SUCCEEDED:
+                self._update_ui_for_processing(False)
+
+        return get_runner().submit(
+            Job(
+                "Finding the image files",
+                discover_files,
+                args=(
+                    self.project_directory,
+                    self.image_file_extensions,
+                    self.scan_content_extension,
+                    self._get_selected_file_paths(),
+                    self._process_processed_checkbox.value,
+                ),
+                tags={JobTag.PREPARATION},
+            ),
+            on_result=on_found,
+            on_finished=on_search_finished,
         )
+
+    def _ask_metadata(self, files: List[str]) -> List[Answer]:
+        """
+        Ask the metadata of the files, one dialog per file until one applies
+        to all the remaining files.
+        """
+        answers = []
+        for file_path in files:
+            dialog = MetadataDialog(
+                sample_base_name(file_path, self.scan_content_extension)
+            )
+            if not dialog.exec_():
+                break
+            answers.append(dialog.get_result())
+            if answers[-1][1]:  # apply to all
+                break
+        return answers
 
     def _process_crossdating_files(self):
         """Handle the selection and processing of crossdating files."""
@@ -536,72 +594,19 @@ class PreparationWidget(Container):
         return True
 
     def _update_ui_for_processing(self, is_processing: bool):
-        """Update UI elements based on processing state."""
-        self._is_processing = is_processing
+        """Lock the controls while the files are prepared."""
+        for control in (
+            self._project_dialog_button,
+            self._process_processed_checkbox,
+            self._handpick_files_checkbox,
+            self._file_selection_container,
+            self._reverse_selection_button,
+            self._crossdating_action_button,
+        ):
+            control.enabled = not is_processing
 
-        if is_processing:
-            self._image_action_button.text = "Cancel Processing"
-            self._progress_bar.visible = True
-            self._progress_bar.value = 0
-            self._project_dialog_button.enabled = False
-            self._process_processed_checkbox.enabled = False
-            self._handpick_files_checkbox.enabled = False
-            self._file_selection_container.enabled = False
-            self._reverse_selection_button.enabled = False
-            self._crossdating_action_button.enabled = False
-        else:
-            self._image_action_button.text = "Start Processing Image Files"
-            self._progress_bar.visible = False
-            self._project_dialog_button.enabled = True
-            self._process_processed_checkbox.enabled = True
-            self._handpick_files_checkbox.enabled = True
-            self._file_selection_container.enabled = True
-            self._reverse_selection_button.enabled = True
-            self._crossdating_action_button.enabled = True
-
-    def _cancel_processing(self):
-        """Cancel the current processing job."""
-        if self.worker:
-            self.worker.stop()
-
-            # Wait for the thread to finish properly
-            if self.worker_thread and self.worker_thread.isRunning():
-                self.worker_thread.quit()
-                self.worker_thread.wait()
-
-        self._update_ui_for_processing(False)
-
-    def _update_progress(self, current, total):
-        """Update the progress bar."""
-        if total > 0:
-            percentage = int(100 * current / total)
-            self._progress_bar.value = percentage
-
-    def _request_metadata(self, filename):
-        """
-        Show dialog to request metadata for a file.
-
-        Args:
-            filename: Base filename (without extension) for the current file
-        """
-        # Show dialog to get metadata
-        metadata_dialog = MetadataDialog(filename)
-        result = metadata_dialog.exec_()
-
-        if result:
-            # User confirmed the dialog - get metadata and apply_to_all flag
-            metadata, apply_to_all, loading_params = (
-                metadata_dialog.get_result()
-            )
-
-            # Send metadata back to worker
-            self.worker.set_metadata(metadata, apply_to_all, loading_params)
-        else:
-            # User cancelled - stop processing
-            self._cancel_processing()
-
-    def _processing_finished(self):
-        """Handle the completion of processing."""
+    def _processing_finished(self, completed: bool):
+        """Handle the end of the preparation (completed or not)."""
         # Reset UI
         self._update_ui_for_processing(False)
 
@@ -609,48 +614,7 @@ class PreparationWidget(Container):
         # also after a cancel: the files prepared until then are on disk
         notify_project_files_changed(self.project_directory, source=self)
 
-        # Show completion message if not canceled
-        if not (self.worker and self.worker.should_stop):
+        if completed:
             QMessageBox.information(
                 None, "Complete", "File processing completed successfully."
             )
-
-    def _run_in_thread(
-        self,
-        project_directory: str,
-        selected_files: Optional[List[str]] = None,
-        process_processed: bool = False,
-    ):
-        """
-        Run the processing in a separate thread.
-
-        Args:
-            project_directory: Directory to process
-            selected_files: Optional list of specific files to process
-            process_processed: Whether to process files that are already processed
-        """
-        # Create thread and worker
-        self.worker_thread = QThread()
-
-        self.worker = Worker(
-            project_directory=project_directory,
-            scan_content_extension=self.scan_content_extension,
-            metadata_file_extension=self.metadata_file_extension,
-            image_file_extensions=self.image_file_extensions,
-            selected_files=selected_files,
-            process_processed=process_processed,
-            overwrite_files=self._overwrite_files_checkbox.value,
-        )
-        self.worker.moveToThread(self.worker_thread)
-
-        # Connect signals
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-        self.worker_thread.finished.connect(self._processing_finished)
-        self.worker.progress.connect(self._update_progress)
-        self.worker.metadata_request.connect(self._request_metadata)
-
-        # Start the thread
-        self.worker_thread.start()
