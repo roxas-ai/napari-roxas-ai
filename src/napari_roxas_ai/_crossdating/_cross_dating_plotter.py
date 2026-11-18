@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -272,6 +273,13 @@ def compute_alignment_candidates(
     """
     Find the positions of the sample series along the reference (or average)
     series with the highest Pearson correlation, best first.
+
+    The sample may stick out beyond either end of the reference (e.g. extra
+    rings near the bark or pith that the reference lacks), as long as at
+    least max(5, ceil(2/3 * n_sample)) of its values overlap with the
+    reference. Pearson correlation and glk are computed over the overlap.
+    Each candidate's start_year/end_year are the years of the whole (shifted)
+    sample series, which may lie outside the reference's years.
     """
     sample_series = (
         plot_df["layer_series"]
@@ -295,71 +303,57 @@ def compute_alignment_candidates(
     n_sample = len(sample_vals)
     n_ref = len(ref_vals)
 
-    if n_sample < 5 or n_ref < n_sample:
+    min_overlap = max(5, math.ceil(2 * n_sample / 3))
+    if n_sample < 5 or n_ref < min_overlap:
         return []
 
-    # Pearson correlation vectorized:
-    # r = sum((x - mx) * (y - my)) / sqrt(sum((x - mx)^2) * sum((y - my)^2))
-    #   = sum(x' * y) / sqrt(sum(x'^2) * sum((y - my)^2))
-    # where x' = x - mx (demeaned sample)
-    # my is the rolling mean of y (reference window)
+    def year_at(position: int) -> int:
+        # Year at a position along the reference, extended past either end
+        if position < 0:
+            return int(ref_years[0]) + position
+        if position >= n_ref:
+            return int(ref_years[-1]) + position - (n_ref - 1)
+        return int(ref_years[position])
 
-    x = sample_vals
-    mx = np.mean(x)
-    x_prime = x - mx
-    sum_x_prime_sq = np.sum(x_prime ** 2)
-
-    if sum_x_prime_sq == 0:
-        return []
-
-    # Numerator: sum(x' * y)
-    # np.correlate(ref, sample_demeaned, mode='valid') gives sum(ref[i:i+W] * x_prime)
-    numerator = np.correlate(ref_vals, x_prime, mode='valid')
-
-    # Denominator: sqrt(sum_x_prime_sq * sum((y - my)^2))
-    # sum((y - my)^2) = sum(y^2) - n_sample * my^2
-    # where my = sum(y) / n_sample
-
-    # Use rolling sums for y and y^2
-    cumsum_y = np.cumsum(np.insert(ref_vals, 0, 0))
-    cumsum_y_sq = np.cumsum(np.insert(ref_vals ** 2, 0, 0))
-
-    sum_y = cumsum_y[n_sample:] - cumsum_y[:-n_sample]
-    sum_y_sq = cumsum_y_sq[n_sample:] - cumsum_y_sq[:-n_sample]
-
-    my = sum_y / n_sample
-    sum_y_centered_sq = sum_y_sq - n_sample * (my ** 2)
-
-    # Handle numerical precision issues (e.g. slightly negative due to floating point)
-    sum_y_centered_sq = np.maximum(sum_y_centered_sq, 0)
-
-    denominator = np.sqrt(sum_x_prime_sq * sum_y_centered_sq)
-
-    # Avoid division by zero
-    with np.errstate(divide='ignore', invalid='ignore'):
-        corrs = numerator / denominator
-
-    # Build candidates
+    # Position of the sample's first value along the reference: from
+    # sticking out at the start to sticking out at the end
     candidates = []
-    for i, corr in enumerate(corrs):
-        if np.isnan(corr):
+    for start in range(min_overlap - n_sample, n_ref - min_overlap + 1):
+        ref_lo = max(start, 0)
+        ref_hi = min(start + n_sample, n_ref)
+        if ref_hi - ref_lo < min_overlap:
             continue
 
-        # Calculate GLK for this candidate
-        # ref_vals[i : i + n_sample] is the window of the reference
-        ref_window = ref_vals[i: i + n_sample]
-        glk = calculate_glk(ref_window, sample_vals)
+        ref_window = ref_vals[ref_lo:ref_hi]
+        sample_window = sample_vals[ref_lo - start:ref_hi - start]
+
+        ref_centered = ref_window - ref_window.mean()
+        sample_centered = sample_window - sample_window.mean()
+        denominator = np.sqrt(
+            np.sum(ref_centered ** 2) * np.sum(sample_centered ** 2)
+        )
+        if denominator == 0:
+            continue
+        corr = np.sum(ref_centered * sample_centered) / denominator
 
         candidates.append({
-            "start_index": i,
-            "start_year": int(ref_years[i]),
-            "end_year": int(ref_years[i + n_sample - 1]),
+            "start_index": start,
+            "start_year": year_at(start),
+            "end_year": year_at(start + n_sample - 1),
             "corr": float(corr),
-            "glk": float(glk),
+            "glk": float(calculate_glk(ref_window, sample_window)),
         })
 
     candidates.sort(key=lambda x: x["corr"], reverse=True)
     return candidates[:top_k]
+
+
+def roxas_period(shifted_layer_series: pd.Series) -> str:
+    """Year range of the (shifted) ROXAS series for the plot legend."""
+    roxas_years = shifted_layer_series.dropna().index
+    if len(roxas_years) == 0:
+        return "no data"
+    return f"{int(roxas_years.min())}-{int(roxas_years.max())}"
 
 
 def reference_plot_path(out_dir: Union[str, Path], sample_name: str) -> Path:
@@ -399,14 +393,16 @@ def save_crossdating_plot(
     overlap_years_ref = corr_df.index[mask_ref].tolist()
 
     if overlap_years_ref:
-        overlap_min_ref = min(overlap_years_ref)
-        overlap_max_ref = max(overlap_years_ref)
+        # Span the whole (shifted) ROXAS series, which may stick out of
+        # the reference beyond the overlap
+        plotted_years = overlap_years_ref + shifted_layer_series.dropna().index.tolist()
+        overlap_min_ref = min(plotted_years)
+        overlap_max_ref = max(plotted_years)
         r_ref = corr_df["reference"].corr(corr_df["roxas"])
         glk_ref = calculate_glk(
             corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
             corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
         )
-        period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
     else:
         # Fallback if no overlap exists
         valid_ref_years = corr_df.index[corr_df["reference"].notna()].tolist()
@@ -420,7 +416,6 @@ def save_crossdating_plot(
             overlap_max_ref = 0
         r_ref = np.nan
         glk_ref = np.nan
-        period_ref = "no overlap"
 
     mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
     overlap_years_avg = corr_df.index[mask_avg].tolist()
@@ -444,7 +439,7 @@ def save_crossdating_plot(
     )
 
     # Build labels
-    roxas_label = f"RXS: {image_id} ({period_ref})"
+    roxas_label = f"RXS: {image_id} ({roxas_period(shifted_layer_series)})"
 
     ref_name = str(reference_name)
     glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""
@@ -520,7 +515,7 @@ def save_crossdating_plot(
     ax.grid(True, which='minor', axis='x', linestyle='--', alpha=0.3, color='lightgrey', linewidth=1.0)
     ax.grid(True, which='major', axis='y', linestyle='-', alpha=0.3, color='lightgrey', linewidth=1.5)
 
-    # Set x limits standard to overlap window +- 10 years
+    # Set x limits standard to the ROXAS series (or overlap window) +- 10 years
     x_min = overlap_min_ref - 10
     x_max = overlap_max_ref + 10
     ax.set_xlim(x_min, x_max)
@@ -1550,18 +1545,14 @@ class CrossDatingPlotterWidget(Container):
         overlap_years_ref = corr_df.index[mask_ref].tolist()
 
         if overlap_years_ref:
-            overlap_min_ref = min(overlap_years_ref)
-            overlap_max_ref = max(overlap_years_ref)
             r_ref = corr_df["reference"].corr(corr_df["roxas"])
             glk_ref = self.calculate_glk(
                 corr_df.loc[overlap_years_ref, "reference"].to_numpy(),
                 corr_df.loc[overlap_years_ref, "roxas"].to_numpy()
             )
-            period_ref = f"{overlap_min_ref}-{overlap_max_ref}"
         else:
             r_ref = np.nan
             glk_ref = np.nan
-            period_ref = "no overlap"
 
         # Calculate for Average
         mask_avg = corr_df["average"].notna() & corr_df["roxas"].notna()
@@ -1582,7 +1573,7 @@ class CrossDatingPlotterWidget(Container):
         # Build labels
         layer = self._input_layer
         image_id = (layer.metadata.get("sample_name") or layer.name) if layer is not None else "Sample"
-        roxas_label = f"RXS: {image_id} ({period_ref})"
+        roxas_label = f"RXS: {image_id} ({roxas_period(shifted_layer_series)})"
 
         ref_name = str(self._crossdating_column_combo.value)
         glk_ref_text = f", glk={glk_ref:.0f}" if not np.isnan(glk_ref) else ""

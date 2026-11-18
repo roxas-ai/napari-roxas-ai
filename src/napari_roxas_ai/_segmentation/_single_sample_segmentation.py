@@ -19,6 +19,7 @@ from napari_roxas_ai._edition import update_rings_geometries
 from napari_roxas_ai._job_runner import JobButton, JobHandle, get_runner
 from napari_roxas_ai._jobs import Job, JobTag
 from napari_roxas_ai._reader import get_metadata_from_file
+from napari_roxas_ai._saving import install_unsaved_changes_guard
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_binary_labels_colormap
 from napari_roxas_ai._writer._writer import save_layers_annotated_image
@@ -197,6 +198,7 @@ class SingleSampleSegmentationWidget(Container):
         prevent_duplicate_dock_if_already_present(
             self, viewer, "3A - Detect cells & rings (individual image)"
         )
+        install_unsaved_changes_guard(viewer)
         self.settings = SettingsManager()
 
         # Ensure model weights are present before listing them below.

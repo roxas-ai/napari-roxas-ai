@@ -72,6 +72,10 @@ contributions:
       python_name: napari_roxas_ai:close_all_dock_widgets
       title: Close All Open Widgets
 
+    - id: napari-roxas-ai.open_user_documentation
+      python_name: napari_roxas_ai:open_user_documentation
+      title: Open User Documentation
+
     # Readers contributions
     - id: napari-roxas-ai.napari_get_reader
       python_name: napari_roxas_ai:napari_get_reader
@@ -154,3 +158,6 @@ contributions:
 
     - command: napari-roxas-ai.make_settings_widget
       display_name: ZZ - Settings
+
+    - command: napari-roxas-ai.open_user_documentation
+      display_name: "── USER DOCUMENTATION (online) ──"

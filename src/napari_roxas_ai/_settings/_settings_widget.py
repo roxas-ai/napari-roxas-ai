@@ -49,7 +49,7 @@ from qtpy.QtWidgets import (
 )
 from superqt import QCollapsible
 
-from ._settings_manager import SettingsManager
+from ._settings_manager import FLOAT_SETTING_SPECS, SettingsManager
 
 if TYPE_CHECKING:
     import napari
@@ -199,8 +199,24 @@ SETTING_HINTS: Dict[str, str] = {
     "measurements.opposite_cwt_ratio_limit": (
         "Max CWT ratio between opposite cell sides"
     ),
+    "measurements.opposite_cwt_percentile_exception": (
+        "Percentile threshold to exempt thin walls from opposite ratio filtering"
+    ),
     "measurements.adjacent_cwt_ratio_limit": (
         "Max CWT ratio between a side and its adjacent sides"
+    ),
+    "cwt_visualization.enabled": "Enable CWT Circle Visualization",
+    "cwt_visualization.sample_interval": (
+        "Sample Interval (every N-th cell)"
+    ),
+    "cwt_visualization.included_color": (
+        "Color for included CWT measurement circles"
+    ),
+    "cwt_visualization.excluded_color": (
+        "Color for excluded CWT measurement circles"
+    ),
+    "cwt_visualization.edge_width": (
+        "Circle edge width in pixels"
     ),
     "project_directory": "Current project directory",
     "annotated_image.cell_opacity": (
@@ -218,17 +234,13 @@ SETTING_HINTS: Dict[str, str] = {
     ),
 }
 
-# Specific (single_step, decimals) for float settings by dotted path.
-# Float settings not listed here fall back to (1.0, _decimals_for(value)).
-FLOAT_SETTING_SPECS: Dict[str, Tuple[float, int]] = {
-    "measurements.cluster_dbl_cwt_threshold": (0.1, 2),
-    "measurements.relwidth_cwt_integration": (0.05, 2),
-    "measurements.cells_tangential_angle": (1.0, 2),
-    "measurements.lower_limit_cwt_iqr_multiplier": (0.1, 2),
-    "measurements.upper_limit_cwt_iqr_multiplier": (0.1, 2),
-    "measurements.opposite_cwt_ratio_limit": (0.1, 2),
-    "measurements.adjacent_cwt_ratio_limit": (0.1, 2),
-    "annotated_image.scale_factor": (0.01, 2),
+FLOAT_SETTING_RANGES: Dict[str, Tuple[float, float]] = {
+    "measurements.opposite_cwt_percentile_exception": (0.0, 1.0),
+    "cwt_visualization.edge_width": (0.5, 10.0),
+}
+
+INT_SETTING_SPECS: Dict[str, Tuple[int, int, int]] = {
+    "cwt_visualization.sample_interval": (1, 10000, 25),
 }
 
 # Marker for a setting that has an explanation. A character rather than an
@@ -317,6 +329,8 @@ def _make_editor(
     read_only: bool = False,
     step: Optional[float] = None,
     decimals: Optional[int] = None,
+    val_range: Optional[Tuple[float, float]] = None,
+    int_spec: Optional[Tuple[int, int, int]] = None,
 ) -> Tuple[QWidget, Callable[[], Any]]:
     """
     Build an editor for a single settings value.
@@ -334,20 +348,31 @@ def _make_editor(
 
     if isinstance(value, int):
         spin_box = QSpinBox()
-        spin_box.setRange(INT_MIN, INT_MAX)
+        if int_spec is not None:
+            min_val, max_val, step_val = int_spec
+            spin_box.setRange(min_val, max_val)
+            spin_box.setSingleStep(step_val)
+        else:
+            spin_box.setRange(INT_MIN, INT_MAX)
         spin_box.setValue(value)
         return spin_box, spin_box.value
 
     if isinstance(value, float):
         float_spin_box = QDoubleSpinBox()
-        float_spin_box.setDecimals(
+        effective_decimals = (
             decimals if decimals is not None else _decimals_for(value)
         )
+        float_spin_box.setDecimals(effective_decimals)
         if step is not None:
             float_spin_box.setSingleStep(step)
-        float_spin_box.setRange(-FLOAT_LIMIT, FLOAT_LIMIT)
+        if val_range is not None:
+            float_spin_box.setRange(val_range[0], val_range[1])
+        else:
+            float_spin_box.setRange(-FLOAT_LIMIT, FLOAT_LIMIT)
         float_spin_box.setValue(value)
-        return float_spin_box, lambda: float(float_spin_box.value())
+        return float_spin_box, lambda: round(
+            float(float_spin_box.value()), effective_decimals
+        )
 
     if isinstance(value, str):
         line_edit = QLineEdit(value)
@@ -561,11 +586,15 @@ def _build_group(
             full_key = f"{path}{key}"
             spec = FLOAT_SETTING_SPECS.get(full_key)
             step, decimals = spec if spec is not None else (None, None)
+            val_range = FLOAT_SETTING_RANGES.get(full_key)
+            int_spec = INT_SETTING_SPECS.get(full_key)
             editor, getter = _make_editor(
                 value,
                 read_only=key in read_only_keys,
                 step=step,
                 decimals=decimals,
+                val_range=val_range,
+                int_spec=int_spec,
             )
             hint = SETTING_HINTS.get(full_key, "")
             label = _row_label(key, hint)
