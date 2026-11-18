@@ -787,3 +787,36 @@ def test_mutual_editing_exclusion_cells_and_rings(make_napari_viewer):
     assert "Cells Modification" not in viewer.layers
     assert rings_widget._edit_rings_geometries_button.enabled
     assert not rings_widget._edit_rings_geometries_button.tooltip
+
+
+def test_failed_vectorization_reports_and_leaves_the_editor_usable(
+    make_napari_viewer, sync_runner, monkeypatch
+):
+    from napari_roxas_ai._job_runner import _runner
+
+    viewer = make_napari_viewer()
+    viewer.add_labels(np.zeros((20, 20), dtype=np.uint8), name="sample.cells")
+    rings = viewer.add_labels(
+        np.zeros((20, 20), dtype=np.uint8), name="sample.rings"
+    )
+    widget = CellsLayerEditorWidget(viewer)
+
+    def broken_vectorize_cells(layer_data, tolerance):
+        raise ValueError("no contours")
+        yield
+
+    monkeypatch.setattr(
+        _cells_layer_editor, "vectorize_cells", broken_vectorize_cells
+    )
+    errors = []
+    monkeypatch.setattr(_runner, "show_error", errors.append)
+
+    widget._edition_mode_combo.value = "Vector"
+    widget._edit_cells_geometries_button.press()
+
+    assert errors == ["Vectorization failed: no contours"]
+    assert "Cells Modification" not in viewer.layers
+    # The rings hidden for editing are shown again
+    assert rings.visible
+    assert widget._edit_cells_geometries_button.enabled
+    assert widget._edition_mode_combo.enabled
