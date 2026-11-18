@@ -15,7 +15,10 @@ from napari_roxas_ai._jobs import Progress
 
 from .._edition import update_rings_geometries
 from .._settings._settings_manager import SettingsManager
-from .._utils._metadata_keys import NO_REFERENCE_SERIES
+from .._utils._metadata_keys import (
+    NO_REFERENCE_SERIES,
+    sanitize_metadata_floats,
+)
 from .._utils._ringtraces_utils import (
     get_instance_labels_linear,
     ring_labels_from_roxas,
@@ -601,6 +604,7 @@ def save_metadata(metadata: dict, metadata_path) -> None:
 
         # Ensure all data is JSON serializable
         sanitized_metadata = _sanitize_for_json(metadata)
+        sanitized_metadata = sanitize_metadata_floats(sanitized_metadata)
 
         with open(metadata_path, "w") as f:
             json.dump(sanitized_metadata, f, indent=4)

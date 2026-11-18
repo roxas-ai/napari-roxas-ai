@@ -45,8 +45,6 @@ MAX_BRUSH_SIZE = 100
 BRUSH_SHORTCUT_MODIFIER = "Meta" if sys.platform == "darwin" else "Control"
 
 
-<<<<<<< HEAD
-=======
 def fill_cells_holes(cells_raster: np.ndarray) -> np.ndarray:
     """
     Fill internal holes of the cells in a binary cells raster.
@@ -70,30 +68,6 @@ def fill_cells_holes(cells_raster: np.ndarray) -> np.ndarray:
     return result
 
 
-@thread_worker
-def vectorize_cells_worker(layer_data: np.ndarray, tolerance: float):
-    """
-    Extract polygons from binary cells mask in a background worker thread.
-    """
-    contours, _ = cv2.findContours(
-        layer_data.astype("uint8"),
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE,
-    )
-    cells_polygons = []
-    for contour in contours:
-        if len(contour) < 3:
-            continue
-        if tolerance > 0:
-            poly = cv2.approxPolyDP(contour, epsilon=tolerance, closed=True)
-        else:
-            poly = contour
-        if poly.shape[0] > 2:
-            cells_polygons.append(poly.squeeze(axis=1)[:, ::-1])
-    return cells_polygons
-
-
->>>>>>> develop
 class CellsLayerEditorWidget(Container):
     @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
@@ -797,7 +771,6 @@ class CellsLayerEditorWidget(Container):
             tolerance = float(settings.get("vectorization.cells_tolerance") or 0)
 
             def _on_vectorization_finished(cells_polygons):
-<<<<<<< HEAD
                 work_layer = napari.layers.Shapes(
                     cells_polygons,
                     shape_type="polygon",
@@ -814,34 +787,11 @@ class CellsLayerEditorWidget(Container):
                     },
                 )
                 self._viewer.add_layer(work_layer)
+                self._is_editing = True
                 if sample_name is not None:
                     work_layer.metadata["sample_name"] = sample_name
                 if sample_stem_path is not None:
                     work_layer.metadata["sample_stem_path"] = sample_stem_path
-=======
-                try:
-                    work_layer = napari.layers.Shapes(
-                        cells_polygons,
-                        shape_type="polygon",
-                        face_color=settings.get("vectorization.cells_face_color"),
-                        edge_color=settings.get("vectorization.cells_edge_color"),
-                        edge_width=settings.get("vectorization.cells_edge_width"),
-                        opacity=1,
-                        name="Cells Modification",
-                        scale=self.input_layer.scale,
-                        ndim=2,
-                        metadata={
-                            "sample_name": sample_name,
-                            "sample_stem_path": sample_stem_path,
-                        },
-                    )
-                    self._viewer.add_layer(work_layer)
-                    self._is_editing = True
-                    if sample_name is not None:
-                        work_layer.metadata["sample_name"] = sample_name
-                    if sample_stem_path is not None:
-                        work_layer.metadata["sample_stem_path"] = sample_stem_path
->>>>>>> develop
 
                 # Update button visibility for vector editing
                 self._edition_mode_combo.visible = False

@@ -33,6 +33,7 @@ from .._utils._version_utils import (
     get_software_version,
 )
 from ._operations import _cells_layer_data, measure_sample
+from ._sample_measurer import save_cwt_visualization_json
 
 # Disable DecompressionBomb warnings for large images
 Image.MAX_IMAGE_PIXELS = None
@@ -187,11 +188,13 @@ class BatchMeasurer:
         else:
             # The rings need the sample's shape only
             cells_array = np.zeros_like(rings_data, dtype="uint8")
-        cells_table, rings_table, cleaned_cells_array = measure_sample(
-            self.config,
-            measurement,
-            cells_array,
-            rings_add_kwargs["features"] if self.measure_rings else None,
+        cells_table, rings_table, cleaned_cells_array, cwt_data = (
+            measure_sample(
+                self.config,
+                measurement,
+                cells_array,
+                rings_add_kwargs["features"] if self.measure_rings else None,
+            )
         )
 
         # One timestamp per sample, shared by its cells and rings output
@@ -209,6 +212,19 @@ class BatchMeasurer:
             # Cells-only parameters, recorded so the run can be reproduced
             for key in MEASUREMENT_PARAMETER_KEYS:
                 cells_add_kwargs["metadata"][key] = self.config[key]
+
+            # Save CWT visualization JSON
+            sample_name = (
+                (cells_add_kwargs.get("metadata") or {}).get("sample_name")
+                or (
+                    (rings_add_kwargs or {}).get("metadata") or {}
+                ).get("sample_name")
+                or Path(cells_file_path).stem.replace(".cells", "")
+            )
+            cwt_data["sample_name"] = sample_name
+            cwt_path = Path(cells_file_path).parent / f"{sample_name}.cwt.json"
+            save_cwt_visualization_json(cwt_path, cwt_data)
+
             # Save to file (the file extension in the path argument is ignored)
             write_single_layer(
                 path=cells_file_path, data=cells_data, meta=cells_add_kwargs

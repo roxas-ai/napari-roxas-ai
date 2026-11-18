@@ -239,19 +239,44 @@ def test_cwt_json_save_load_roundtrip(tmp_path):
         load_cwt_visualization_json(tmp_path / "non_existent.cwt.json")
 
 
-def test_single_sample_measurements_cwt_layer_and_json(make_napari_viewer, tmp_path, monkeypatch):
+def _measure_cells_with(viewer, monkeypatch, cells_table, cwt_vis_data):
+    """
+    Measure the cells of the viewer through the widget's button, with the
+    given measurement result; the layers' files are not written.
+    """
+    from copy import deepcopy
+
+    from napari_roxas_ai._measurements import _operations
+    from napari_roxas_ai._measurements._single_sample_measurements import (
+        SingleSampleMeasurementsWidget,
+    )
+
+    def fake_measure_sample(config, measurement, cells_array, rings_table=None):
+        return cells_table, pd.DataFrame(), None, deepcopy(cwt_vis_data)
+
+    def fake_save_layers(snapshots, project_dir):
+        yield from ()
+
+    monkeypatch.setattr(_operations, "measure_sample", fake_measure_sample)
+    monkeypatch.setattr(_operations, "save_layers", fake_save_layers)
+    widget = SingleSampleMeasurementsWidget(viewer)
+    widget._measure_rings_checkbox.value = False
+    widget._run_analysis_button.press()
+    return widget
+
+
+def test_single_sample_measurements_cwt_layer_and_json(
+    make_napari_viewer, tmp_path, monkeypatch, sync_runner
+):
     from copy import deepcopy
     from napari_roxas_ai._measurements import _single_sample_measurements as single_module
     from napari_roxas_ai._measurements._single_sample_measurements import (
-        SingleSampleMeasurementsWidget,
         on_cwt_mouse_move,
     )
     from napari_roxas_ai._settings import DEFAULT_SETTINGS
-    from napari_roxas_ai._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
     import napari.layers
 
     viewer = make_napari_viewer()
-    widget = SingleSampleMeasurementsWidget(viewer)
 
     settings_dict = deepcopy(DEFAULT_SETTINGS)
     settings_dict["project_directory"] = str(tmp_path)
@@ -276,7 +301,7 @@ def test_single_sample_measurements_cwt_layer_and_json(make_napari_viewer, tmp_p
     cells_file = tmp_path / "tree1.cells.png"
     cells_file.touch()
 
-    cells_layer = viewer.add_labels(
+    viewer.add_labels(
         np.zeros((50, 50), dtype=np.uint8),
         name="tree1.cells",
         metadata={
@@ -286,13 +311,6 @@ def test_single_sample_measurements_cwt_layer_and_json(make_napari_viewer, tmp_p
             "sample_type": "conifer",
         },
     )
-    widget._cells_input_layer = cells_layer
-    widget._run_config = {key: 1.0 for key in MEASUREMENT_PARAMETER_KEYS}
-    widget._run_config.update({
-        "spatial_resolution": 1.0,
-        "sample_type": "conifer",
-        "sample_interval": 100,
-    })
 
     cells_table = pd.DataFrame({
         "id": [1, 2],
@@ -329,12 +347,7 @@ def test_single_sample_measurements_cwt_layer_and_json(make_napari_viewer, tmp_p
         ],
     }
 
-    widget._add_result_layers(
-        cells_table=cells_table,
-        rings_table=pd.DataFrame(),
-        cleaned_cells_array=None,
-        cwt_vis_data=cwt_vis_data,
-    )
+    widget = _measure_cells_with(viewer, monkeypatch, cells_table, cwt_vis_data)
 
     # Verify JSON was saved
     cwt_json_path = tmp_path / "tree1.cwt.json"
@@ -366,12 +379,7 @@ def test_single_sample_measurements_cwt_layer_and_json(make_napari_viewer, tmp_p
     settings_dict["cwt_visualization"]["edge_width"] = 4.0
     settings_dict["cwt_visualization"]["included_color"] = "blue"
 
-    widget._add_result_layers(
-        cells_table=cells_table,
-        rings_table=pd.DataFrame(),
-        cleaned_cells_array=None,
-        cwt_vis_data=cwt_vis_data,
-    )
+    widget._run_analysis_button.press()
 
     # Must update layer in-place (same layer instance)
     updated_layer = viewer.layers[layer_name]
@@ -379,15 +387,14 @@ def test_single_sample_measurements_cwt_layer_and_json(make_napari_viewer, tmp_p
     assert updated_layer.edge_width[0] == 4.0
 
 
-def test_single_sample_measurements_cwt_layer_disabled(make_napari_viewer, tmp_path, monkeypatch):
+def test_single_sample_measurements_cwt_layer_disabled(
+    make_napari_viewer, tmp_path, monkeypatch, sync_runner
+):
     from copy import deepcopy
     from napari_roxas_ai._measurements import _single_sample_measurements as single_module
-    from napari_roxas_ai._measurements._single_sample_measurements import SingleSampleMeasurementsWidget
     from napari_roxas_ai._settings import DEFAULT_SETTINGS
-    from napari_roxas_ai._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
 
     viewer = make_napari_viewer()
-    widget = SingleSampleMeasurementsWidget(viewer)
 
     settings_dict = deepcopy(DEFAULT_SETTINGS)
     settings_dict["project_directory"] = str(tmp_path)
@@ -408,7 +415,7 @@ def test_single_sample_measurements_cwt_layer_disabled(make_napari_viewer, tmp_p
     cells_file = tmp_path / "tree2.cells.png"
     cells_file.touch()
 
-    cells_layer = viewer.add_labels(
+    viewer.add_labels(
         np.zeros((50, 50), dtype=np.uint8),
         name="tree2.cells",
         metadata={
@@ -418,13 +425,6 @@ def test_single_sample_measurements_cwt_layer_disabled(make_napari_viewer, tmp_p
             "sample_type": "conifer",
         },
     )
-    widget._cells_input_layer = cells_layer
-    widget._run_config = {key: 1.0 for key in MEASUREMENT_PARAMETER_KEYS}
-    widget._run_config.update({
-        "spatial_resolution": 1.0,
-        "sample_type": "conifer",
-        "sample_interval": 100,
-    })
 
     cwt_vis_data = {
         "sample_name": "tree2",
@@ -444,11 +444,8 @@ def test_single_sample_measurements_cwt_layer_disabled(make_napari_viewer, tmp_p
         ],
     }
 
-    widget._add_result_layers(
-        cells_table=pd.DataFrame({"id": [0]}),
-        rings_table=pd.DataFrame(),
-        cleaned_cells_array=None,
-        cwt_vis_data=cwt_vis_data,
+    _measure_cells_with(
+        viewer, monkeypatch, pd.DataFrame({"id": [0]}), cwt_vis_data
     )
 
     # JSON should still be saved
@@ -458,7 +455,7 @@ def test_single_sample_measurements_cwt_layer_disabled(make_napari_viewer, tmp_p
 
 
 def test_batch_sample_measurements_cwt_json_saved(tmp_path, monkeypatch):
-    from napari_roxas_ai._measurements._batch_sample_measurements import Worker as BatchWorker
+    from napari_roxas_ai._measurements._batch_operations import measure_samples
     from napari_roxas_ai._writer import write_single_layer
 
     sample_name = "batch_sample_01"
@@ -504,9 +501,9 @@ def test_batch_sample_measurements_cwt_json_saved(tmp_path, monkeypatch):
         "sample_interval": 1,
     }
 
-    worker = BatchWorker(
-        config=config,
-        samples={
+    for _event in measure_samples(
+        config,
+        {
             str(tmp_path / sample_name): {
                 "cells": str(cells_file),
                 "rings": str(rings_file),
@@ -516,9 +513,8 @@ def test_batch_sample_measurements_cwt_json_saved(tmp_path, monkeypatch):
         measure_rings=True,
         update_annotated_images=False,
         update_reference_plots=False,
-    )
-
-    worker.run()
+    ):
+        pass
 
     cwt_path = tmp_path / f"{sample_name}.cwt.json"
     assert cwt_path.exists()
@@ -528,26 +524,16 @@ def test_batch_sample_measurements_cwt_json_saved(tmp_path, monkeypatch):
     assert "circles" in loaded_data
 
 
-def test_single_sample_measurements_worker_emits_cwt_data(default_config):
-    from napari_roxas_ai._measurements._single_sample_measurements import Worker
+def test_single_sample_measurement_returns_cwt_data(default_config):
+    from napari_roxas_ai._measurements._operations import measure_sample
 
     cells_img = np.zeros((30, 30), dtype=np.uint8)
     cells_img[5:25, 5:25] = 255
 
-    worker = Worker(
-        config=default_config,
-        cells_array=cells_img,
-        rings_table=pd.DataFrame(),
-        cells_table=pd.DataFrame(),
-        measurement="cells",
+    cells_table, rings_table, cleaned_cells_array, cwt_vis_data = (
+        measure_sample(default_config, "cells", cells_img)
     )
 
-    emitted_results = []
-    worker.result_ready.connect(lambda *args: emitted_results.append(args))
-    worker.run()
-
-    assert len(emitted_results) == 1
-    cells_table, rings_table, cleaned_cells_array, cwt_vis_data = emitted_results[0]
     assert not cells_table.empty
     assert isinstance(cwt_vis_data, dict)
     assert "circles" in cwt_vis_data

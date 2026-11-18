@@ -15,7 +15,7 @@ from .._utils._version_utils import (
     get_measurement_operator,
     get_software_version,
 )
-from ._sample_measurer import SampleAnalyzer
+from ._sample_measurer import SampleAnalyzer, save_cwt_visualization_json
 
 
 def measure_sample(
@@ -31,25 +31,28 @@ def measure_sample(
     the rings table and a cells array of the sample's shape (zeros if the
     cells are not measured).
 
-    Returns (cells_table, rings_table, cleaned_cells_array / None)
+    Returns (cells_table, rings_table, cleaned_cells_array / None,
+    cwt_visualization_data / None): the last two when the cells are measured.
     """
     if rings_table is None:
         rings_table = pd.DataFrame()
     analyzer = SampleAnalyzer(config, cells_array, rings_table)
-    cleaned_cells_array = None
+    cleaned_cells_array = cwt_vis_data = None
     if measurement == "both":
         cells_table, rings_table = analyzer.analyze_sample()
         cleaned_cells_array = analyzer.cells_array
+        cwt_vis_data = analyzer.get_cwt_visualization_data()
     elif measurement == "cells":
         cells_table = analyzer.analyze_cells()
         cleaned_cells_array = analyzer.cells_array
+        cwt_vis_data = analyzer.get_cwt_visualization_data()
         rings_table = pd.DataFrame()
     elif measurement == "rings":
         cells_table = pd.DataFrame()
         rings_table = analyzer.analyze_rings()
     else:
         raise ValueError(f"Unknown measurement {measurement!r}")
-    return cells_table, rings_table, cleaned_cells_array
+    return cells_table, rings_table, cleaned_cells_array, cwt_vis_data
 
 
 @dataclass
@@ -66,6 +69,8 @@ class MeasurementResult:
     cells: MeasuredLayer | None = None
     rings: MeasuredLayer | None = None
     annotated_path: str | None = None
+    # The CWT circles of the measured cells: (sample name, data, json path)
+    cwt: tuple[str, dict, str] | None = None
 
 
 def measure_and_save(
@@ -90,11 +95,13 @@ def measure_and_save(
     total = 2 + int(has_rings)
 
     yield Progress(0, total, "Measuring…")
-    cells_table, rings_table, cleaned_cells_array = measure_sample(
+    cells_table, rings_table, cleaned_cells_array, cwt_vis_data = (
+        measure_sample(
         config,
         measurement,
         cells_array.astype("uint8") * 255,
         rings_table,
+        )
     )
 
     # One timestamp per measurement run: cells and rings carry the same value
@@ -106,6 +113,7 @@ def measure_and_save(
     project_path = Path(project_dir)
     result = MeasurementResult()
     to_save = []
+    cwt = None
 
     if not cells_table.empty:
         data = cells_layer.data
@@ -115,11 +123,28 @@ def measure_and_save(
             **cells_layer.kwargs["metadata"],
             **run_metadata,
             # Cells-only parameters, recorded so the run can be reproduced
-            **{key: config[key] for key in MEASUREMENT_PARAMETER_KEYS},
+            **{
+                key: config[key]
+                for key in MEASUREMENT_PARAMETER_KEYS
+                if key in config
+            },
         }
+        had_file_path = metadata.get("file_path") is not None
         _default_file_path(
             metadata, cells_layer.name, project_path, ".cells.png"
         )
+        if cwt_vis_data is not None:
+            # CWT circles, written next to the cells file
+            cells_path = metadata["file_path"]
+            if had_file_path:
+                sample_name = metadata.get("sample_name") or Path(
+                    cells_path
+                ).stem.replace(".cells", "")
+            else:
+                sample_name = metadata.get("sample_name", cells_layer.name)
+            cwt_vis_data["sample_name"] = sample_name
+            cwt_path = Path(cells_path).parent / f"{sample_name}.cwt.json"
+            cwt = (sample_name, cwt_vis_data, str(cwt_path))
         result.cells = MeasuredLayer(
             features=cells_table,
             metadata=metadata,
@@ -169,6 +194,9 @@ def measure_and_save(
     yield Progress(1, total, "Saving…")
     for _event in save_layers(to_save, project_dir):
         pass
+    if cwt is not None:
+        save_cwt_visualization_json(cwt[2], cwt[1])
+        result.cwt = cwt
 
     if draw_annotated:
         yield Progress(2, total, "Drawing the annotated image…")

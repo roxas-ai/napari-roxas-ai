@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+from pathlib import Path
 import napari.layers
 from magicgui.widgets import (
     CheckBox,
@@ -6,33 +7,18 @@ from magicgui.widgets import (
     PushButton,
 )
 from napari.utils.notifications import show_info
-<<<<<<< HEAD
-from qtpy.QtWidgets import QInputDialog
+from qtpy.QtCore import QPoint
+from qtpy.QtGui import QTextDocument
+from qtpy.QtWidgets import QInputDialog, QToolTip
 from napari_roxas_ai._job_runner import JobButton, JobHandle
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._settings._settings_widget import SettingsWidget
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
 from ._actions import start_measuring
-=======
-from qtpy.QtCore import QObject, QPoint, QThread, QTimer, Signal
-from qtpy.QtGui import QTextDocument
-from qtpy.QtWidgets import QInputDialog, QToolTip
-from napari_roxas_ai._settings import SettingsManager
-from napari_roxas_ai._settings._settings_widget import SettingsWidget
-from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
-from ._sample_measurer import SampleAnalyzer, save_cwt_visualization_json
-from .._utils._metadata_keys import MEASUREMENT_PARAMETER_KEYS
-from .._utils._version_utils import (
-    get_measurement_operator,
-    get_software_version,
-)
-from napari_roxas_ai._writer import write_single_layer
-from napari_roxas_ai._writer._writer import save_annotated_scan_image
-
+from ._operations import MeasurementResult
 
 import numpy as np
 import pandas as pd
->>>>>>> develop
 
 
 settings = SettingsManager()
@@ -41,8 +27,6 @@ if TYPE_CHECKING:
     import napari
 
 
-<<<<<<< HEAD
-=======
 def format_cwt_tooltip(circle: Dict[str, Any]) -> str:
     cell_id = circle.get("cell_id", "")
     wall = str(circle.get("wall", "")).capitalize()
@@ -384,49 +368,6 @@ def create_or_update_cwt_circles_layer(
     return cwt_layer
 
 
-class Worker(QObject):
-    finished = Signal()
-    result_ready = Signal(object, object, object, object)
-
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        cells_array: np.array,
-        rings_table: pd.DataFrame,
-        cells_table: pd.DataFrame,
-        measurement: str,
-    ):
-        super().__init__()
-
-        self.analyzer = SampleAnalyzer(
-            config, cells_array, rings_table, cells_table
-        )
-        self.measurement = measurement
-
-    def run(self):
-        cleaned_cells_array = None
-        cwt_vis_data = None
-        if self.measurement == "both":
-            cells_table, rings_table = self.analyzer.analyze_sample()
-            cleaned_cells_array = self.analyzer.cells_array
-            cwt_vis_data = self.analyzer.get_cwt_visualization_data()
-        elif self.measurement == "cells":
-            cells_table = self.analyzer.analyze_cells()
-            cleaned_cells_array = self.analyzer.cells_array
-            rings_table = pd.DataFrame()
-            cwt_vis_data = self.analyzer.get_cwt_visualization_data()
-        elif self.measurement == "rings":
-            cells_table = pd.DataFrame()
-            rings_table = self.analyzer.analyze_rings()
-        # Emit results to be added as layers
-        self.result_ready.emit(
-            cells_table, rings_table, cleaned_cells_array, cwt_vis_data
-        )
-
-        self.finished.emit()
-
-
->>>>>>> develop
 class SingleSampleMeasurementsWidget(Container):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
@@ -563,29 +504,34 @@ class SingleSampleMeasurementsWidget(Container):
             )
             return None
 
-<<<<<<< HEAD
-        if measure_cells and measure_rings:
-=======
-        # Ensure a target directory can be determined if any layer lacks a file_path
-        proj = settings.get("project_directory")
+        # Ensure a target directory can be determined if any layer lacks a
+        # file_path
+        project_dir = settings.get("project_directory")
         has_file_path = any(
             layer is not None and layer.metadata.get("file_path")
             for layer in (cells_layer, rings_layer, self._scan_layer)
         )
-        if not proj and not has_file_path:
+        if not project_dir and not has_file_path:
             show_info(
                 "Project directory is not configured. Please define a project directory before running measurements."
             )
-            self._spinner_timer.stop()
-            self._run_analysis_button.text = "Measure"
-            self._run_analysis_button.enabled = True
-            return
+            return None
+        if not project_dir:
+            # Next to the measured layers' files
+            used_rings = measure_rings or (
+                rings_layer is not None and not rings_layer.features.empty
+            )
+            project_dir = next(
+                str(Path(layer.metadata["file_path"]).parent)
+                for layer in (
+                    cells_layer if measure_cells else None,
+                    rings_layer if used_rings else None,
+                    self._scan_layer,
+                )
+                if layer is not None and layer.metadata.get("file_path")
+            )
 
-        if (
-            self._measure_cells_checkbox.value
-            and self._measure_rings_checkbox.value
-        ):
->>>>>>> develop
+        if measure_cells and measure_rings:
             measurement = "both"
         elif measure_cells:
             measurement = "cells"
@@ -623,245 +569,31 @@ class SingleSampleMeasurementsWidget(Container):
             "adjacent_cwt_ratio_limit": settings.get(
                 "measurements.adjacent_cwt_ratio_limit"
             ),
-<<<<<<< HEAD
-            "sample_type": reference_layer.metadata["sample_type"],
-=======
             "sample_interval": settings.get(
                 "cwt_visualization.sample_interval", 25
             ),
-            "sample_type": sample_type,
->>>>>>> develop
+            "sample_type": reference_layer.metadata["sample_type"],
         }
 
-        return start_measuring(
+        handle = start_measuring(
             measurement,
             config,
             cells_layer,
             rings_layer,
-            settings.get("project_directory"),
-        )
-<<<<<<< HEAD
-=======
-        self.worker.moveToThread(self.worker_thread)
-
-        # Connect signals
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.result_ready.connect(self._add_result_layers)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        self.worker_thread.finished.connect(self._spinner_timer.stop)
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._run_analysis_button, "text", "Measure")
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._run_analysis_button, "enabled", True)
+            project_dir,
         )
 
-        self.worker_thread.start()
-
-
-    def _add_result_layers(
-        self,
-        cells_table,
-        rings_table,
-        cleaned_cells_array=None,
-        cwt_vis_data=None,
-    ):
-
-        proj_setting = settings.get("project_directory")
-        fallback_dir = None
-        for layer in (
-            getattr(self, "_cells_input_layer", None),
-            getattr(self, "_rings_input_layer", None),
-            getattr(self, "_scan_layer", None),
-        ):
-            if layer is not None and layer.metadata.get("file_path"):
-                fallback_dir = Path(layer.metadata["file_path"]).parent
-                break
-
-        if proj_setting:
-            project_dir = Path(proj_setting)
-            project_dir.mkdir(parents=True, exist_ok=True)
-        elif fallback_dir is not None:
-            project_dir = fallback_dir
-        else:
-            project_dir = None
-
-        # One timestamp per measurement run, so that cells and rings written by
-        # the same run carry the identical value.
-        meas_created_at = datetime.now().isoformat()
-        sw_version = get_software_version()
-        meas_by = get_measurement_operator()
-
-        # ---------------------------
-        # Export Cells
-        # ---------------------------
-        if not cells_table.empty:
-            print("[Cells] Updating layer features...")
-            self._cells_input_layer.features = cells_table
-            if cleaned_cells_array is not None and hasattr(self._cells_input_layer, "data"):
-                if self._cells_input_layer.data.dtype == bool:
-                    self._cells_input_layer.data = cleaned_cells_array > 0
-                elif np.issubdtype(self._cells_input_layer.data.dtype, np.integer):
-                    if self._cells_input_layer.data.max() <= 1:
-                        self._cells_input_layer.data = (cleaned_cells_array > 0).astype(self._cells_input_layer.data.dtype)
-                    else:
-                        self._cells_input_layer.data = cleaned_cells_array.astype(self._cells_input_layer.data.dtype)
-                else:
-                    self._cells_input_layer.data = (cleaned_cells_array > 0).astype(self._cells_input_layer.data.dtype)
-            self._cells_input_layer.metadata["meas_created_at"] = (
-                meas_created_at
+        def show_cwt_circles(result: MeasurementResult) -> None:
+            if result.cwt is None:
+                return
+            sample_name, cwt_vis_data, cwt_path = result.cwt
+            create_or_update_cwt_circles_layer(
+                viewer=self._viewer,
+                sample_name=sample_name,
+                cwt_vis_data=cwt_vis_data,
+                scale=getattr(cells_layer, "scale", None),
+                file_path=cwt_path,
             )
-            self._cells_input_layer.metadata["sw_version"] = sw_version
-            self._cells_input_layer.metadata["meas_by"] = meas_by
-            # Cells-only parameters, recorded so the run can be reproduced
-            if getattr(self, "_run_config", None):
-                for key in MEASUREMENT_PARAMETER_KEYS:
-                    if key in self._run_config:
-                        self._cells_input_layer.metadata[key] = self._run_config[key]
 
-            cells_path = self._cells_input_layer.metadata.get("file_path")
-
-
-            if cells_path is None:
-                if project_dir is None:
-                    show_info(
-                        "Project directory is not configured. Please define a project directory to save results."
-                    )
-                    return
-                sample_name = self._cells_input_layer.metadata.get(
-                    "sample_name", self._cells_input_layer.name
-                )
-                cells_path = str(project_dir / f"{sample_name}.cells.png")
-                self._cells_input_layer.metadata["file_path"] = cells_path
-            else:
-                sample_name = self._cells_input_layer.metadata.get(
-                    "sample_name"
-                ) or (
-                    Path(cells_path).stem.replace(".cells", "")
-                    if cells_path
-                    else self._cells_input_layer.name
-                )
-
-            print(f"[Cells] Writing results to: {cells_path}")
-            write_single_layer(
-                path=cells_path,
-                data=self._cells_input_layer.data,
-                meta={
-                    "name": self._cells_input_layer.name,
-                    "metadata": self._cells_input_layer.metadata,
-                    "features": cells_table,
-                },
-            )
-            # Written with the measurements: nothing left to save
-            self._cells_input_layer.metadata["_is_dirty"] = False
-            show_info(f"Cells exported to: {cells_path}")
-
-            # ---------------------------
-            # Export CWT Circle Visualization (Shapes Layer & JSON)
-            # ---------------------------
-            if cwt_vis_data is not None:
-                cwt_path = Path(cells_path).parent / f"{sample_name}.cwt.json"
-                cwt_vis_data["sample_name"] = sample_name
-                save_cwt_visualization_json(cwt_path, cwt_vis_data)
-                scale = getattr(self._cells_input_layer, "scale", None)
-                create_or_update_cwt_circles_layer(
-                    viewer=self._viewer,
-                    sample_name=sample_name,
-                    cwt_vis_data=cwt_vis_data,
-                    scale=scale,
-                    file_path=str(cwt_path),
-                )
-
-        # ---------------------------
-        # Export Rings
-        # ---------------------------
-        if not rings_table.empty:
-            print("[Rings] Updating layer features...")
-            self._rings_input_layer.features = rings_table
-            self._rings_input_layer.metadata["meas_created_at"] = (
-                meas_created_at
-            )
-            self._rings_input_layer.metadata["sw_version"] = sw_version
-            self._rings_input_layer.metadata["meas_by"] = meas_by
-
-            rings_path = self._rings_input_layer.metadata.get("file_path")
-
-            if rings_path is None:
-                if project_dir is None:
-                    show_info(
-                        "Project directory is not configured. Please define a project directory to save results."
-                    )
-                    return
-                sample_name = self._rings_input_layer.metadata.get(
-                    "sample_name", self._rings_input_layer.name
-                )
-                rings_path = str(project_dir / f"{sample_name}.rings.png")
-                self._rings_input_layer.metadata["file_path"] = rings_path
-
-            print(f"[Rings] Writing results to: {rings_path}")
-
-            # move RBXY at the end of the table
-            if "RBXY" in rings_table.columns:
-                cols = [c for c in rings_table.columns if c != "RBXY"]
-                cols.append("RBXY")
-                rings_table = rings_table[cols]
-
-            write_single_layer(
-                path=rings_path,
-                data=self._rings_input_layer.data,
-                meta={
-                    "name": self._rings_input_layer.name,
-                    "metadata": self._rings_input_layer.metadata,
-                    "features": rings_table,
-                },
-            )
-            # Written with the measurements: nothing left to save
-            self._rings_input_layer.metadata["_is_dirty"] = False
-            show_info(f"Rings exported to: {rings_path}")
-
-        # ---------------------------
-        # Export Annotated Scan Image
-        # ---------------------------
-        scan_layer = self._scan_layer
-        rings_layer = getattr(self, "_rings_input_layer", None) or self._rings_layer
-        cells_layer = getattr(self, "_cells_input_layer", None) or getattr(self, "_cells_layer", None)
-        cells_data = cells_layer.data if cells_layer is not None and hasattr(cells_layer, "data") else None
-        rings_features = (
-            rings_table
-            if not rings_table.empty
-            else (
-                rings_layer.features
-                if rings_layer is not None and hasattr(rings_layer, "features")
-                else None
-            )
-        )
-
-        if scan_layer is not None and rings_features is not None and not rings_features.empty:
-            scan_path = scan_layer.metadata.get("file_path")
-            sample_name = (
-                scan_layer.metadata.get("sample_name")
-                or (rings_layer.metadata.get("sample_name") if rings_layer and rings_layer.metadata else None)
-                or scan_layer.name.split(".")[0]
-            )
-            annotated_dir = project_dir or (Path(scan_path).parent if scan_path else None)
-
-            if annotated_dir and scan_path and Path(scan_path).exists():
-                annotated_path = str(annotated_dir / f"{sample_name}_annotated.jpg")
-                try:
-                    save_annotated_scan_image(
-                        scan_path=scan_path,
-                        annotated_path=annotated_path,
-                        rings_features=rings_features,
-                        cells_data=cells_data,
-                    )
-                    show_info(f"Annotated image exported to: {annotated_path}")
-                except Exception as e:
-                    print(f"Annotated image export failed: {e}")
-
-        show_info("Measurements completed and saved.")
-
-
->>>>>>> develop
+        handle.connect(on_result=show_cwt_circles)
+        return handle

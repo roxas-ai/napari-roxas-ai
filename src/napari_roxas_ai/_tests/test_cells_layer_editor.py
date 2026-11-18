@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-=======
 import pytest
 from unittest.mock import MagicMock
->>>>>>> develop
 from types import SimpleNamespace
 
 import numpy as np
@@ -794,7 +791,6 @@ def test_mutual_editing_exclusion_cells_and_rings(make_napari_viewer):
     assert not rings_widget._edit_rings_geometries_button.tooltip
 
 
-<<<<<<< HEAD
 def test_failed_vectorization_reports_and_leaves_the_editor_usable(
     make_napari_viewer, sync_runner, monkeypatch
 ):
@@ -826,7 +822,8 @@ def test_failed_vectorization_reports_and_leaves_the_editor_usable(
     assert rings.visible
     assert widget._edit_cells_geometries_button.enabled
     assert widget._edition_mode_combo.enabled
-=======
+
+
 def test_fill_cells_holes_fills_only_internal_holes():
     from napari_roxas_ai._edition._cells_layer_editor import fill_cells_holes
 
@@ -905,4 +902,3 @@ def test_removing_all_layers_during_edit_session(make_napari_viewer, qtbot):
     assert len(viewer.layers) == 0
     assert widget._edit_cells_geometries_button.visible
     assert not widget._apply_cells_geometries_button.visible
->>>>>>> develop

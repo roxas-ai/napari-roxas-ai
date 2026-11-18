@@ -358,7 +358,7 @@ class SamplesLoadingWidget(Container):
             )
             return None
 
-        return start_loading(
+        handle = start_loading(
             self._viewer,
             [
                 str(Path(self.project_directory) / sample)
@@ -366,64 +366,11 @@ class SamplesLoadingWidget(Container):
             ],
             self.project_directory,
         )
-<<<<<<< HEAD
-=======
-        self.worker.moveToThread(self.worker_thread)
-
-        # Connect signals
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        # Connect progress signal
-        self.worker.progress.connect(self._update_progress)
-
-        # Reset buttons and progress after processing
-        self.worker_thread.finished.connect(
-            lambda: setattr(self, "_is_loading", False)
+        # Then the CWT visualization of the samples, if any
+        handle.connect(
+            on_finished=lambda _handle: self._on_sample_loading_finished()
         )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._load_samples_button, "enabled", True)
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._load_samples_button, "visible", True)
-        )
-        self.worker_thread.finished.connect(
-            lambda: setattr(self._progress_bar, "visible", False)
-        )
-
-        # Connect layer data signal to add layers to the viewer
-        self.worker.layer_data.connect(self._add_loaded_layer)
-
-        # Connect CWT visualization layer loader
-        self.worker_thread.finished.connect(self._on_sample_loading_finished)
-
-        # Run the analysis in a separate thread
-        self.worker_thread.start()
-
-    def _add_loaded_layer(self, layer_data_tuple):
-        data, add_kwargs, layer_type = layer_data_tuple
-
-        layer = napari.layers.Layer.create(data, add_kwargs, layer_type)
-
-        original_path = add_kwargs.get("metadata", {}).get("path")
-
-        if original_path:
-            print(f"[Loader] Setting file_path = {original_path}")
-            layer.metadata["file_path"] = original_path
-        else:
-            print("[Loader] WARNING: no file_path in reader metadata")
-
-        self._viewer.add_layer(layer)
-
-    def _update_progress(self, current, total):
-        """Update the progress bar."""
-        if total > 0:
-            percentage = int(100 * current / total)
-            self._progress_bar.value = percentage
-            self._load_samples_button.visible = False
-            self._progress_bar.visible = True
+        return handle
 
     def _on_sample_loading_finished(self):
         """Check for and load any existing .cwt.json files for loaded samples."""
@@ -481,4 +428,3 @@ class SamplesLoadingWidget(Container):
                     print(
                         f"[Loader] Failed to load CWT circles from {cwt_path}: {e}"
                     )
->>>>>>> develop

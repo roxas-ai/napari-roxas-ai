@@ -217,7 +217,9 @@ def test_double_click_loads_the_image(widget):
     widget._sample_select_widget.value = "sample_1"  # selected by the click
     list_widget = widget._sample_select_widget.native
     with patch.object(
-        _samples_loading_widget, "start_loading", return_value=None
+        _samples_loading_widget,
+        "start_loading",
+        return_value=JobHandle(Job("Loading", lambda: None)),
     ) as mock_start:
         list_widget.itemDoubleClicked.emit(list_widget.item(0))
 
