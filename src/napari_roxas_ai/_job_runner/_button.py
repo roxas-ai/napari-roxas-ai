@@ -52,9 +52,8 @@ class JobButton(Container):
 
         self._bar = ProgressBar(value=0, min=0, max=100)
         self._bar.native.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cancel_button = PushButton(
-            text="✕", tooltip="Cancel", visible=cancellable
-        )
+        # Not shown before it has a parent: Qt would open it as a window
+        self._cancel_button = PushButton(text="✕", tooltip="Cancel")
         self._cancel_button.changed.connect(self.cancel)
         self._progress_row = Container(
             widgets=[self._bar, self._cancel_button],
@@ -62,6 +61,8 @@ class JobButton(Container):
             labels=False,
             visible=False,
         )
+        if not cancellable:
+            self._cancel_button.visible = False
         self._progress_row.margins = (0, 0, 0, 0)
         # Takes the button's width: the layout must not grow for it
         self._progress_row.native.setSizePolicy(

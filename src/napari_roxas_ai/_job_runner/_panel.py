@@ -21,13 +21,15 @@ class JobProgressPanel(Container):
         self._status = Label(value="")
         self._bar = ProgressBar(value=0, min=0, max=100, label="Progress")
         self._cancel_button = PushButton(text="Cancel")
-        self._cancel_button.visible = cancellable
         self._cancel_button.changed.connect(self.cancel)
         self._row = Container(
             widgets=[self._bar, self._cancel_button],
             layout="horizontal",
             labels=False,
         )
+        # Only once it has a parent: Qt would show it as a window
+        if not cancellable:
+            self._cancel_button.visible = False
         self._row.margins = (0, 0, 0, 0)
         # Aligned with the widgets around it
         self.margins = (0, 0, 0, 0)
