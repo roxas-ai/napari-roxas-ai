@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from qtpy.QtWidgets import QMessageBox
 
-from napari_roxas_ai._saving._samples_saving_widget import Worker
+from napari_roxas_ai._saving._operations import LayerSnapshot, save_layers
 from napari_roxas_ai._settings._settings_manager import SettingsManager
 
 if TYPE_CHECKING:
@@ -81,7 +81,11 @@ def _confirm_removal(viewer, removed_layers) -> bool:
     clicked = box.clickedButton()
     if save_button is not None and clicked is save_button:
         # Saved synchronously: the layers must be written before removal
-        Worker(dirty_layers).run()
+        for _event in save_layers(
+            [LayerSnapshot.of(layer) for layer in dirty_layers],
+            settings.get("project_directory"),
+        ):
+            pass
         for layer in dirty_layers:
             layer.metadata["_is_dirty"] = False
         return True

@@ -1,8 +1,16 @@
+import json
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import MagicMock, patch
+import pytest
 
-from napari_roxas_ai._measurements import SingleSampleMeasurementsWidget
+from napari_roxas_ai._job_runner import _runner
+from napari_roxas_ai._jobs import Progress
+from napari_roxas_ai._measurements import (
+    SingleSampleMeasurementsWidget,
+    _single_sample_measurements,
+)
 
 
 def test_single_sample_measurements_widget_structure(make_napari_viewer):
@@ -60,142 +68,6 @@ def test_single_sample_measurements_layer_resolution(make_napari_viewer):
     assert widget._scan_layer == scan_layer
 
 
-def test_single_sample_measurements_add_result_layers_exports_annotated_image(
-    make_napari_viewer, tmp_path
-):
-    viewer = make_napari_viewer()
-    widget = SingleSampleMeasurementsWidget(viewer)
-
-    scan_file = tmp_path / "sample_1.scan.jpg"
-    scan_file.write_bytes(b"dummy")
-
-    scan_layer = viewer.add_image(
-        np.zeros((10, 10)),
-        name="sample_1.scan",
-        metadata={"file_path": str(scan_file), "sample_name": "sample_1"},
-    )
-    rings_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=np.uint8),
-        name="sample_1.rings",
-        metadata={
-            "file_path": str(tmp_path / "sample_1.rings.png"),
-            "sample_name": "sample_1",
-            "spatial_resolution": 1.0,
-            "sample_type": "conifer",
-            "_is_dirty": True,
-        },
-    )
-    widget._rings_input_layer = rings_layer
-    widget._run_config = {}
-
-    rings_table = pd.DataFrame(
-        {"RBXY": [[[0, 0], [0, 9]]], "YEAR": [2020]}
-    )
-
-    with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.write_single_layer"
-    ), patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.save_annotated_scan_image"
-    ) as mock_save_annotated, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.settings"
-    ) as mock_settings:
-        mock_settings.get.side_effect = lambda key: {
-            "project_directory": str(tmp_path),
-            "file_extensions.scan_file_extension": [".scan"],
-            "file_extensions.rings_file_extension": [".rings"],
-            "file_extensions.cells_file_extension": [".cells"],
-        }.get(key, "")
-
-        widget._add_result_layers(cells_table=pd.DataFrame(), rings_table=rings_table)
-
-        mock_save_annotated.assert_called_once()
-        call_kwargs = mock_save_annotated.call_args[1]
-        assert call_kwargs["scan_path"] == str(scan_file)
-        assert call_kwargs["annotated_path"] == str(tmp_path / "sample_1_annotated.jpg")
-        # Written with the measurements: nothing left to save
-        assert rings_layer.metadata["_is_dirty"] is False
-
-
-def test_single_sample_measurements_add_result_layers_skips_annotated_if_rings_missing(
-    make_napari_viewer, tmp_path
-):
-    viewer = make_napari_viewer()
-    widget = SingleSampleMeasurementsWidget(viewer)
-
-    scan_file = tmp_path / "sample_1.scan.jpg"
-    scan_file.write_bytes(b"dummy")
-
-    viewer.add_image(
-        np.zeros((10, 10)),
-        name="sample_1.scan",
-        metadata={"file_path": str(scan_file), "sample_name": "sample_1"},
-    )
-    widget._rings_input_layer = None
-    widget._run_config = {}
-
-    with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.save_annotated_scan_image"
-    ) as mock_save_annotated, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.settings"
-    ) as mock_settings:
-        mock_settings.get.side_effect = lambda key: {
-            "project_directory": str(tmp_path),
-            "file_extensions.scan_file_extension": [".scan"],
-            "file_extensions.rings_file_extension": [".rings"],
-            "file_extensions.cells_file_extension": [".cells"],
-        }.get(key, "")
-
-        widget._add_result_layers(cells_table=pd.DataFrame(), rings_table=pd.DataFrame())
-
-        mock_save_annotated.assert_not_called()
-
-
-def test_single_sample_measurements_cells_only_passes_rings_when_available(
-    make_napari_viewer, tmp_path
-):
-    viewer = make_napari_viewer()
-    widget = SingleSampleMeasurementsWidget(viewer)
-
-    cells_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=np.uint8),
-        name="sample_1.cells",
-        metadata={
-            "file_path": str(tmp_path / "sample_1.cells.png"),
-            "sample_name": "sample_1",
-            "spatial_resolution": 1.0,
-            "sample_type": "conifer",
-        },
-    )
-    rings_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=np.uint8),
-        name="sample_1.rings",
-        metadata={
-            "file_path": str(tmp_path / "sample_1.rings.png"),
-            "sample_name": "sample_1",
-            "spatial_resolution": 1.0,
-            "sample_type": "conifer",
-        },
-    )
-    rings_df = pd.DataFrame({"RBXY": [[[0, 0], [0, 9]]], "YEAR": [2020]})
-    rings_layer.features = rings_df
-
-    widget._measure_cells_checkbox.value = True
-    widget._measure_rings_checkbox.value = False
-
-    with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.Worker"
-    ) as mock_worker_cls, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.QThread"
-    ):
-        widget._run_analysis()
-
-        mock_worker_cls.assert_called_once()
-        args = mock_worker_cls.call_args[0]
-        # args: config, cells_array, rings_table, cells_table, measurement
-        assert args[4] == "cells"
-        pd.testing.assert_frame_equal(args[2], rings_df)
-
-
 def test_single_sample_measurements_run_analysis_missing_layers(make_napari_viewer):
     viewer = make_napari_viewer()
     widget = SingleSampleMeasurementsWidget(viewer)
@@ -235,9 +107,176 @@ def test_single_sample_measurements_asks_for_sample_if_several_loaded(
     assert widget._scan_layer is scan_2
 
 
-def test_single_sample_measurements_cancelled_sample_choice_does_nothing(
-    make_napari_viewer,
+
+# --- Measuring ---
+
+OPERATIONS = "napari_roxas_ai._measurements._operations"
+WIDGET = "napari_roxas_ai._measurements._single_sample_measurements"
+RINGS_TABLE = pd.DataFrame({"RBXY": [[[0, 0], [0, 9]]], "YEAR": [2020]})
+CELLS_TABLE = pd.DataFrame({"CA": [12.0]})
+CWT_DATA = {
+    "circles": [
+        {
+            "cell_id": 1,
+            "wall": "pith",
+            "center_yx": [5.0, 5.0],
+            "radius_px": 2.0,
+            "radius_um": 2.0,
+            "status": "included",
+        }
+    ]
+}
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    """Point the project directory (settings singleton) to a temp dir."""
+    settings = _single_sample_measurements.settings
+    original_get = settings.get
+    monkeypatch.setattr(
+        settings,
+        "get",
+        lambda key, *args: (
+            str(tmp_path) if key == "project_directory" else original_get(key, *args)
+        ),
+    )
+    return tmp_path
+
+
+@pytest.fixture
+def measuring(monkeypatch):
+    """Replace the analysis and the file writing; record what they get."""
+    calls = {"measure": [], "saved": [], "annotated": []}
+
+    def fake_measure_sample(config, measurement, cells_array, rings_table=None):
+        calls["measure"].append(measurement)
+        cells = CELLS_TABLE if measurement in ("both", "cells") else pd.DataFrame()
+        rings = RINGS_TABLE if measurement in ("both", "rings") else pd.DataFrame()
+        cleaned = cells_array if measurement != "rings" else None
+        cwt = dict(CWT_DATA) if measurement != "rings" else None
+        return cells, rings, cleaned, cwt
+
+    def fake_save_layers(snapshots, project_dir):
+        calls["saved"].extend(snapshot.name for snapshot in snapshots)
+        yield Progress(1, 1)
+
+    def fake_annotated(sample_path, rings_features):
+        calls["annotated"].append(sample_path)
+        return f"{sample_path}_annotated.jpg"
+
+    monkeypatch.setattr(f"{OPERATIONS}.measure_sample", fake_measure_sample)
+    monkeypatch.setattr(f"{OPERATIONS}.save_layers", fake_save_layers)
+    monkeypatch.setattr(f"{OPERATIONS}.save_sample_annotated_image", fake_annotated)
+    return calls
+
+
+def add_sample_layer(viewer, kind, **features):
+    layer = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8),
+        name=f"sample_1.{kind}",
+        metadata={
+            "sample_name": "sample_1",
+            "sample_stem_path": "sample_1",
+            "spatial_resolution": 1.0,
+            "sample_type": "conifer",
+        },
+    )
+    if features:
+        layer.features = pd.DataFrame(features)
+    return layer
+
+
+def test_measured_layers_are_written_and_marked_saved(
+    make_napari_viewer, sync_runner, project, measuring
 ):
+    viewer = make_napari_viewer()
+    cells = add_sample_layer(viewer, "cells")
+    rings = add_sample_layer(viewer, "rings", RBXY=[[[0, 0], [0, 9]]], YEAR=[2019])
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    widget._run_analysis_button.press()
+
+    assert measuring["saved"] == ["sample_1.cells", "sample_1.rings"]
+    pd.testing.assert_frame_equal(cells.features, CELLS_TABLE)
+    pd.testing.assert_frame_equal(rings.features, RINGS_TABLE)
+    assert cells.metadata["_is_dirty"] is False
+    assert rings.metadata["_is_dirty"] is False
+    assert "meas_created_at" in rings.metadata
+    # One annotated image, next to the sample
+    assert len(measuring["annotated"]) == 1
+    assert widget._run_analysis_button.enabled
+
+
+def test_measured_cells_show_their_cwt_circles(
+    make_napari_viewer, sync_runner, project, measuring
+):
+    viewer = make_napari_viewer()
+    add_sample_layer(viewer, "cells")
+    widget = SingleSampleMeasurementsWidget(viewer)
+    widget._measure_rings_checkbox.value = False
+
+    widget._run_analysis_button.press()
+
+    # Written next to the cells file, and shown on the cells
+    cwt_file = project / "sample_1.cwt.json"
+    assert json.loads(cwt_file.read_text())["sample_name"] == "sample_1"
+    assert "sample_1.cwt_circles" in viewer.layers
+
+
+def test_no_annotated_image_without_rings(
+    make_napari_viewer, sync_runner, project, measuring
+):
+    viewer = make_napari_viewer()
+    add_sample_layer(viewer, "cells")
+    widget = SingleSampleMeasurementsWidget(viewer)
+    widget._measure_rings_checkbox.value = False
+
+    widget._run_analysis_button.press()
+
+    assert measuring["saved"] == ["sample_1.cells"]
+    assert measuring["annotated"] == []
+
+
+def test_cells_only_draws_the_annotated_image_with_the_loaded_rings(
+    make_napari_viewer, sync_runner, project, measuring
+):
+    viewer = make_napari_viewer()
+    add_sample_layer(viewer, "cells")
+    add_sample_layer(viewer, "rings", RBXY=[[[0, 0], [0, 9]]], YEAR=[2019])
+    widget = SingleSampleMeasurementsWidget(viewer)
+    widget._measure_rings_checkbox.value = False
+
+    widget._run_analysis_button.press()
+
+    assert measuring["measure"] == ["cells"]
+    # Only the cells are written, the annotated image still shows the rings
+    assert measuring["saved"] == ["sample_1.cells"]
+    assert len(measuring["annotated"]) == 1
+
+
+def test_failed_measurement_reports_and_leaves_the_widget_usable(
+    make_napari_viewer, sync_runner, project, monkeypatch
+):
+    viewer = make_napari_viewer()
+    cells = add_sample_layer(viewer, "cells")
+    add_sample_layer(viewer, "rings", RBXY=[[[0, 0], [0, 9]]], YEAR=[2019])
+    widget = SingleSampleMeasurementsWidget(viewer)
+
+    def failing_measure_sample(*args):
+        raise ValueError("no rings found")
+
+    monkeypatch.setattr(f"{OPERATIONS}.measure_sample", failing_measure_sample)
+    errors = []
+    monkeypatch.setattr(_runner, "show_error", errors.append)
+
+    widget._run_analysis_button.press()
+
+    assert errors == ["Measuring failed: no rings found"]
+    assert cells.metadata.get("_is_dirty", True)  # nothing was written
+    assert widget._run_analysis_button.enabled
+
+
+def test_cancelled_sample_choice_does_nothing(make_napari_viewer):
     viewer = make_napari_viewer()
     widget = SingleSampleMeasurementsWidget(viewer)
 
@@ -245,147 +284,59 @@ def test_single_sample_measurements_cancelled_sample_choice_does_nothing(
     viewer.add_labels(np.zeros((10, 10), dtype=np.uint8), name="sample_2.cells")
 
     with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.QInputDialog.getItem",
-        return_value=("", False),
-    ), patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.Worker"
-    ) as mock_worker_cls:
-        widget._run_analysis()
+        f"{WIDGET}.QInputDialog.getItem", return_value=("", False)
+    ), patch(f"{WIDGET}.start_measuring") as mock_start:
+        widget._run_analysis_button.press()
 
-    mock_worker_cls.assert_not_called()
+    mock_start.assert_not_called()
     assert widget._run_analysis_button.enabled
-    assert widget._run_analysis_button.text == "Measure"
 
 
-def test_single_sample_measurements_add_result_layers_project_dir_none_uses_fallback(
-    make_napari_viewer, tmp_path
+@pytest.fixture
+def no_project(monkeypatch):
+    """No project directory in the settings."""
+    settings = _single_sample_measurements.settings
+    original_get = settings.get
+    monkeypatch.setattr(
+        settings,
+        "get",
+        lambda key, *args: (
+            None if key == "project_directory" else original_get(key, *args)
+        ),
+    )
+
+
+def test_without_project_directory_writes_next_to_the_layer_files(
+    make_napari_viewer, sync_runner, no_project, measuring, tmp_path
 ):
     viewer = make_napari_viewer()
+    rings = add_sample_layer(viewer, "rings", RBXY=[[[0, 0], [0, 9]]], YEAR=[2019])
+    rings.metadata["file_path"] = str(tmp_path / "sample_1.rings.tif")
     widget = SingleSampleMeasurementsWidget(viewer)
+    widget._measure_cells_checkbox.value = False
 
-    scan_file = tmp_path / "sample_1.scan.jpg"
-    scan_file.write_bytes(b"dummy")
+    widget._run_analysis_button.press()
 
-    viewer.add_image(
-        np.zeros((10, 10)),
-        name="sample_1.scan",
-        metadata={"file_path": str(scan_file), "sample_name": "sample_1"},
-    )
-    rings_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=np.uint8),
-        name="sample_1.rings",
-        metadata={
-            "file_path": str(tmp_path / "sample_1.rings.png"),
-            "sample_name": "sample_1",
-            "spatial_resolution": 1.0,
-            "sample_type": "conifer",
-            "_is_dirty": True,
-        },
-    )
-    widget._rings_input_layer = rings_layer
-    widget._run_config = {}
-
-    rings_table = pd.DataFrame(
-        {"RBXY": [[[0, 0], [0, 9]]], "YEAR": [2020]}
-    )
-
-    with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.write_single_layer"
-    ), patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.save_annotated_scan_image"
-    ) as mock_save_annotated, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.settings"
-    ) as mock_settings:
-        mock_settings.get.side_effect = lambda key: {
-            "project_directory": None,
-            "file_extensions.scan_file_extension": [".scan"],
-            "file_extensions.rings_file_extension": [".rings"],
-            "file_extensions.cells_file_extension": [".cells"],
-        }.get(key, "")
-
-        widget._add_result_layers(cells_table=pd.DataFrame(), rings_table=rings_table)
-
-        mock_save_annotated.assert_called_once()
-        call_kwargs = mock_save_annotated.call_args[1]
-        assert call_kwargs["scan_path"] == str(scan_file)
-        assert call_kwargs["annotated_path"] == str(tmp_path / "sample_1_annotated.jpg")
-        assert rings_layer.metadata["_is_dirty"] is False
+    assert measuring["saved"] == ["sample_1.rings"]
+    assert rings.metadata["_is_dirty"] is False
+    assert len(measuring["annotated"]) == 1
 
 
-def test_single_sample_measurements_add_result_layers_project_dir_none_no_fallback(
-    make_napari_viewer,
+def test_without_project_directory_nor_file_paths_nothing_is_measured(
+    make_napari_viewer, no_project
 ):
     viewer = make_napari_viewer()
+    add_sample_layer(viewer, "cells")
     widget = SingleSampleMeasurementsWidget(viewer)
-
-    cells_layer = viewer.add_labels(
-        np.zeros((10, 10), dtype=np.uint8),
-        name="sample_1.cells",
-        metadata={
-            "sample_name": "sample_1",
-            "spatial_resolution": 1.0,
-            "sample_type": "conifer",
-        },
-    )
-    widget._cells_input_layer = cells_layer
-    widget._run_config = {}
-
-    cells_table = pd.DataFrame({"id": [1], "area": [50.0]})
-
-    with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.show_info"
-    ) as mock_show_info, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.settings"
-    ) as mock_settings:
-        mock_settings.get.side_effect = lambda key: {
-            "project_directory": None,
-            "file_extensions.scan_file_extension": [".scan"],
-            "file_extensions.rings_file_extension": [".rings"],
-            "file_extensions.cells_file_extension": [".cells"],
-        }.get(key, "")
-
-        widget._add_result_layers(cells_table=cells_table, rings_table=pd.DataFrame())
-
-        mock_show_info.assert_called_once()
-        assert "Project directory is not configured" in mock_show_info.call_args[0][0]
-
-
-def test_single_sample_measurements_run_analysis_warns_when_project_dir_none_and_no_file_path(
-    make_napari_viewer,
-):
-    viewer = make_napari_viewer()
-    widget = SingleSampleMeasurementsWidget(viewer)
-
-    viewer.add_labels(
-        np.zeros((10, 10), dtype=np.uint8),
-        name="sample_1.cells",
-        metadata={
-            "sample_name": "sample_1",
-            "spatial_resolution": 1.0,
-            "sample_type": "conifer",
-        },
-    )
-    widget._measure_cells_checkbox.value = True
     widget._measure_rings_checkbox.value = False
 
-    with patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.show_info"
-    ) as mock_show_info, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.Worker"
-    ) as mock_worker_cls, patch(
-        "napari_roxas_ai._measurements._single_sample_measurements.settings"
-    ) as mock_settings:
-        mock_settings.get.side_effect = lambda key: {
-            "project_directory": None,
-            "file_extensions.scan_file_extension": [".scan"],
-            "file_extensions.rings_file_extension": [".rings"],
-            "file_extensions.cells_file_extension": [".cells"],
-        }.get(key, "")
+    with patch(f"{WIDGET}.show_info") as mock_show_info, patch(
+        f"{WIDGET}.start_measuring"
+    ) as mock_start:
+        widget._run_analysis_button.press()
 
-        widget._run_analysis()
-
-        mock_worker_cls.assert_not_called()
-        mock_show_info.assert_called_once()
-        assert "Project directory is not configured" in mock_show_info.call_args[0][0]
-        assert widget._run_analysis_button.enabled
-        assert widget._run_analysis_button.text == "Measure"
+    mock_start.assert_not_called()
+    assert "Project directory is not configured" in (
+        mock_show_info.call_args[0][0]
+    )
+    assert widget._run_analysis_button.enabled

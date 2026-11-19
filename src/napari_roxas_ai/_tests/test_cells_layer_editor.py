@@ -9,11 +9,14 @@ from napari.layers import Shapes, Labels
 from napari_roxas_ai._edition import CellsLayerEditorWidget, RingsLayerEditorWidget
 from napari.components._viewer_mouse_bindings import dims_scroll
 
+from napari_roxas_ai._edition import _cells_layer_editor
 from napari_roxas_ai._edition._cells_layer_editor import (
     BRUSH_SHORTCUT_MODIFIER,
     MAX_BRUSH_SIZE,
     UNDO_HISTORY_LIMIT,
 )
+from napari_roxas_ai._job_runner import JobHandle
+from napari_roxas_ai._jobs import Job
 
 
 def test_cells_layer_editor_lasso_selection_and_deletion(make_napari_viewer, qtbot):
@@ -391,20 +394,15 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert hasattr(widget, "_save_all_layers_button")
     assert widget._save_all_layers_button.text == "Save All Layers"
     assert widget._save_all_layers_button.visible
-    assert hasattr(widget, "_progress_bar")
-    assert not widget._progress_bar.visible
-    assert widget._progress_bar.label == "Progress"
     assert widget._edition_mode_combo.label == "Editing Mode"
     assert tuple(widget._edition_mode_combo.choices) == ("Vector", "Raster")
     assert widget._edition_mode_combo.value == "Vector"
 
-    # Layout order: save button is after edition mode row, progress bar is after save button
+    # Layout order: save button is after edition mode row
     widget_list = list(widget)
     combo_idx = widget_list.index(widget._edition_mode_row)
     save_btn_idx = widget_list.index(widget._save_all_layers_button)
-    prog_bar_idx = widget_list.index(widget._progress_bar)
     assert save_btn_idx == combo_idx + 1
-    assert prog_bar_idx == save_btn_idx + 1
 
     # 2. Check delegate callback when clicked and disabled controls
     assert widget._save_all_layers_button.enabled
@@ -412,42 +410,34 @@ def test_save_all_layers_button_lifecycle_and_callback(make_napari_viewer, qtbot
     assert widget._edition_mode_combo.enabled
     assert widget._edition_mode_row.enabled
 
-    saved_how = None
-    worker_thread = MagicMock()
+    # A running save, finished by hand below
+    save = JobHandle(Job("Saving", lambda: None))
+    saved = []
 
-    def fake_save_layers(how):
-        nonlocal saved_how
-        saved_how = how
-        widget._saving_widget.worker = MagicMock()
-        widget._saving_widget.worker_thread = worker_thread
+    def fake_start_saving(layers, only_unsaved):
+        saved.append(only_unsaved)
+        return save
 
-    monkeypatch.setattr(widget._saving_widget, "_save_layers", fake_save_layers)
-    widget._save_all_layers_button.native.click()
-    assert saved_how == "all"
+    monkeypatch.setattr(_cells_layer_editor, "start_saving", fake_start_saving)
+    widget._save_all_layers_button._button.native.click()
+    assert saved == [True]  # only the unsaved layers
     assert not widget._save_all_layers_button.enabled
     assert not widget._edit_cells_geometries_button.enabled
     assert not widget._edition_mode_combo.enabled
     assert not widget._edition_mode_row.enabled
 
-    # Simulate worker completion: the controls are enabled again
-    for call in worker_thread.finished.connect.call_args_list:
-        call.args[0]()
+    # Save done: the controls are enabled again
+    save._on_succeeded(1)
+    save._on_finished()
     assert widget._save_all_layers_button.enabled
     assert widget._edit_cells_geometries_button.enabled
     assert widget._edition_mode_combo.enabled
     assert widget._edition_mode_row.enabled
-    assert not widget._progress_bar.visible
-
-    # Progress bar updates
-    widget._update_progress(1, 2)
-    assert widget._progress_bar.value == 50
-    assert widget._progress_bar.visible
 
     # 3. Enter raster edit mode -> button should be hidden
     widget._edition_mode_combo.value = "Raster"
     widget._edit_cells_geometries()
     assert not widget._save_all_layers_button.visible
-    assert not widget._progress_bar.visible
 
     # Cancel -> button visible again
     widget._cancel_cells_geometries()
@@ -799,6 +789,39 @@ def test_mutual_editing_exclusion_cells_and_rings(make_napari_viewer):
     assert "Cells Modification" not in viewer.layers
     assert rings_widget._edit_rings_geometries_button.enabled
     assert not rings_widget._edit_rings_geometries_button.tooltip
+
+
+def test_failed_vectorization_reports_and_leaves_the_editor_usable(
+    make_napari_viewer, sync_runner, monkeypatch
+):
+    from napari_roxas_ai._job_runner import _runner
+
+    viewer = make_napari_viewer()
+    viewer.add_labels(np.zeros((20, 20), dtype=np.uint8), name="sample.cells")
+    rings = viewer.add_labels(
+        np.zeros((20, 20), dtype=np.uint8), name="sample.rings"
+    )
+    widget = CellsLayerEditorWidget(viewer)
+
+    def broken_vectorize_cells(layer_data, tolerance):
+        raise ValueError("no contours")
+        yield
+
+    monkeypatch.setattr(
+        _cells_layer_editor, "vectorize_cells", broken_vectorize_cells
+    )
+    errors = []
+    monkeypatch.setattr(_runner, "show_error", errors.append)
+
+    widget._edition_mode_combo.value = "Vector"
+    widget._edit_cells_geometries_button.press()
+
+    assert errors == ["Vectorization failed: no contours"]
+    assert "Cells Modification" not in viewer.layers
+    # The rings hidden for editing are shown again
+    assert rings.visible
+    assert widget._edit_cells_geometries_button.enabled
+    assert widget._edition_mode_combo.enabled
 
 
 def test_fill_cells_holes_fills_only_internal_holes():

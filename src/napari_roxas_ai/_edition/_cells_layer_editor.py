@@ -10,20 +10,22 @@ from magicgui.widgets import (
     CheckBox,
     ComboBox,
     Container,
-    ProgressBar,
     PushButton,
 )
 from napari.components._viewer_mouse_bindings import dims_scroll
 from napari.layers.base._base_constants import ActionType
-from napari.qt.threading import thread_worker
 from napari.utils.notifications import show_info, show_warning
 from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
 
-from napari_roxas_ai._saving._samples_saving_widget import SamplesSavingWidget
+from napari_roxas_ai._job_runner import JobButton, JobHandle, get_runner
+from napari_roxas_ai._jobs import Job, JobTag
+from napari_roxas_ai._saving import start_saving
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
+
+from ._operations import vectorize_cells
 
 if TYPE_CHECKING:
     import napari
@@ -66,41 +68,7 @@ def fill_cells_holes(cells_raster: np.ndarray) -> np.ndarray:
     return result
 
 
-@thread_worker
-def vectorize_cells_worker(layer_data: np.ndarray, tolerance: float):
-    """
-    Extract polygons from binary cells mask in a background worker thread.
-    """
-    contours, _ = cv2.findContours(
-        layer_data.astype("uint8"),
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE,
-    )
-    cells_polygons = []
-    for contour in contours:
-        if len(contour) < 3:
-            continue
-        if tolerance > 0:
-            poly = cv2.approxPolyDP(contour, epsilon=tolerance, closed=True)
-        else:
-            poly = contour
-        if poly.shape[0] > 2:
-            cells_polygons.append(poly.squeeze(axis=1)[:, ::-1])
-    return cells_polygons
-
-
 class CellsLayerEditorWidget(Container):
-    @property
-    def _saving_widget(self) -> SamplesSavingWidget:
-        """Lazily initialize the background saving helper widget."""
-        if getattr(self, "_saving_widget_instance", None) is None:
-            self._saving_widget_instance = SamplesSavingWidget(self._viewer)
-        return self._saving_widget_instance
-
-    @_saving_widget.setter
-    def _saving_widget(self, value):
-        self._saving_widget_instance = value
-
     @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
         """Get the single valid cells layer currently in the viewer."""
@@ -169,12 +137,12 @@ class CellsLayerEditorWidget(Container):
                 layout.setContentsMargins(0, 0, 0, 0)
                 layout.setSpacing(10)
 
-        # Create a button to create the cells working layer
-        self._edit_cells_geometries_button = PushButton(
-            text="Edit Cells"
-        )
-        self._edit_cells_geometries_button.changed.connect(
-            self._edit_cells_geometries
+        # Create a button to create the cells working layer (shows the
+        # progress of the vectorization in vector mode)
+        self._edit_cells_geometries_button = JobButton(
+            text="Edit Cells",
+            start=self._edit_cells_geometries,
+            cancellable=False,
         )
 
         # Create an edition mode combo box
@@ -193,18 +161,9 @@ class CellsLayerEditorWidget(Container):
             if layout is not None:
                 layout.setContentsMargins(0, 0, 0, 0)
 
-        # Create a button to save all layers
-        self._saving_widget_instance = None
-        self._save_all_layers_button = PushButton(
-            text="Save All Layers"
-        )
-        self._save_all_layers_button.changed.connect(
-            self._save_all_layers
-        )
-
-        # Add a progress bar with a description
-        self._progress_bar = ProgressBar(
-            value=0, min=0, max=100, visible=False, label="Progress"
+        # Create a button to save all layers (shows the save's progress)
+        self._save_all_layers_button = JobButton(
+            text="Save All Layers", start=self._save_all_layers
         )
 
         # Create a button to cancel the changes
@@ -236,7 +195,6 @@ class CellsLayerEditorWidget(Container):
                 self._edit_cells_geometries_button,
                 self._edition_mode_row,
                 self._save_all_layers_button,
-                self._progress_bar,
                 self._cancel_cells_geometries_button,
                 self._apply_cells_geometries_button,
                 self._undo_button,
@@ -703,47 +661,32 @@ class CellsLayerEditorWidget(Container):
         except Exception:
             pass
 
-    def _save_all_layers(self) -> None:
-        """Save all layers using the saving widget logic with progress bar."""
-        self._save_all_layers_button.enabled = False
-        self._edit_cells_geometries_button.enabled = False
-        self._edition_mode_combo.enabled = False
-        self._edition_mode_row.enabled = False
-        self._saving_widget._save_layers(how="all")
-        if self._saving_widget.worker is None or self._saving_widget.worker_thread is None:
-            # Nothing to save (the saving widget reported it): no worker was started
-            self._save_all_layers_button.enabled = True
-            self._edit_cells_geometries_button.enabled = True
-            self._edition_mode_combo.enabled = True
-            self._edition_mode_row.enabled = True
-            self._progress_bar.visible = False
-            return
-        self._progress_bar.value = 0
-        self._saving_widget.worker.progress.connect(self._update_progress)
-        worker_thread = self._saving_widget.worker_thread
-        for button in (
-            self._save_all_layers_button,
+    def _save_all_layers(self) -> JobHandle | None:
+        """Save the unsaved layers; editing is locked meanwhile."""
+        handle = start_saving(self._viewer.layers, only_unsaved=True)
+        if handle is None:
+            return None  # nothing to save (reported to the user)
+
+        controls = (
             self._edit_cells_geometries_button,
             self._edition_mode_combo,
             self._edition_mode_row,
-        ):
-            worker_thread.finished.connect(
-                lambda button=button: setattr(button, "enabled", True)
-            )
-        worker_thread.finished.connect(self._update_edit_button_state)
-        worker_thread.finished.connect(
-            lambda: setattr(self._progress_bar, "visible", False)
         )
+        for control in controls:
+            control.enabled = False
 
-    def _update_progress(self, current: int, total: int) -> None:
-        """Update the progress bar."""
-        if total > 0:
-            percentage = int(100 * current / total)
-            self._progress_bar.value = percentage
-            self._progress_bar.visible = True
+        def restore(_handle) -> None:
+            for control in controls:
+                control.enabled = True
+            self._update_edit_button_state()
 
-    def _edit_cells_geometries(self) -> None:
-        """Run the segmentation analysis / vectorization."""
+        handle.connect(on_finished=restore)
+        return handle
+
+    def _edit_cells_geometries(self) -> JobHandle | None:
+        """
+        Start editing, when in vector mode, returns a JobHandle
+        """
         if "Rings Modification" in self._viewer.layers:
             show_warning("Please apply or cancel active ring edits before editing cells.")
             return
@@ -779,7 +722,6 @@ class CellsLayerEditorWidget(Container):
             self._edition_mode_row.visible = False
             self._edit_cells_geometries_button.visible = False
             self._save_all_layers_button.visible = False
-            self._progress_bar.visible = False
             self._cancel_cells_geometries_button.visible = True
             self._apply_cells_geometries_button.visible = True
             self._lasso_container.visible = False
@@ -816,79 +758,84 @@ class CellsLayerEditorWidget(Container):
             self._update_undo_button_state()
 
         elif self._edition_mode == "Vector":
-            # Disable controls while background worker is running
-            self._edit_cells_geometries_button.enabled = False
-            self._edition_mode_combo.enabled = False
-            self._edition_mode_row.enabled = False
-            self._save_all_layers_button.enabled = False
-            show_info("Vectorizing cells, please wait...")
+            # Disable controls while the cells are vectorized
+            controls = (
+                self._edit_cells_geometries_button,
+                self._edition_mode_combo,
+                self._edition_mode_row,
+                self._save_all_layers_button,
+            )
+            for control in controls:
+                control.enabled = False
 
             tolerance = float(settings.get("vectorization.cells_tolerance") or 0)
 
             def _on_vectorization_finished(cells_polygons):
-                try:
-                    work_layer = napari.layers.Shapes(
-                        cells_polygons,
-                        shape_type="polygon",
-                        face_color=settings.get("vectorization.cells_face_color"),
-                        edge_color=settings.get("vectorization.cells_edge_color"),
-                        edge_width=settings.get("vectorization.cells_edge_width"),
-                        opacity=1,
-                        name="Cells Modification",
-                        scale=self.input_layer.scale,
-                        ndim=2,
-                        metadata={
-                            "sample_name": sample_name,
-                            "sample_stem_path": sample_stem_path,
-                        },
-                    )
-                    self._viewer.add_layer(work_layer)
-                    self._is_editing = True
-                    if sample_name is not None:
-                        work_layer.metadata["sample_name"] = sample_name
-                    if sample_stem_path is not None:
-                        work_layer.metadata["sample_stem_path"] = sample_stem_path
+                work_layer = napari.layers.Shapes(
+                    cells_polygons,
+                    shape_type="polygon",
+                    face_color=settings.get("vectorization.cells_face_color"),
+                    edge_color=settings.get("vectorization.cells_edge_color"),
+                    edge_width=settings.get("vectorization.cells_edge_width"),
+                    opacity=1,
+                    name="Cells Modification",
+                    scale=self.input_layer.scale,
+                    ndim=2,
+                    metadata={
+                        "sample_name": sample_name,
+                        "sample_stem_path": sample_stem_path,
+                    },
+                )
+                self._viewer.add_layer(work_layer)
+                self._is_editing = True
+                if sample_name is not None:
+                    work_layer.metadata["sample_name"] = sample_name
+                if sample_stem_path is not None:
+                    work_layer.metadata["sample_stem_path"] = sample_stem_path
 
-                    # Update button visibility for vector editing
-                    self._edition_mode_combo.visible = False
-                    self._edition_mode_row.visible = False
-                    self._edit_cells_geometries_button.visible = False
-                    self._save_all_layers_button.visible = False
-                    self._progress_bar.visible = False
-                    self._cancel_cells_geometries_button.visible = True
-                    self._apply_cells_geometries_button.visible = True
+                # Update button visibility for vector editing
+                self._edition_mode_combo.visible = False
+                self._edition_mode_row.visible = False
+                self._edit_cells_geometries_button.visible = False
+                self._save_all_layers_button.visible = False
+                self._cancel_cells_geometries_button.visible = True
+                self._apply_cells_geometries_button.visible = True
 
-                    self._lasso_container.visible = True
-                    self._lasso_selection_checkbox.visible = True
-                    self._lasso_selection_checkbox.value = False
-                    self._delete_lasso_cells_button.visible = False
+                self._lasso_container.visible = True
+                self._lasso_selection_checkbox.visible = True
+                self._lasso_selection_checkbox.value = False
+                self._delete_lasso_cells_button.visible = False
 
-                    # Track the edit session history for undo (button and Ctrl/Cmd+Z)
-                    self._reset_undo_history(work_layer)
-                    work_layer.events.data.connect(self._on_edit_layer_data_change)
-                    work_layer.bind_key(
-                        "Control-Z", lambda _layer: self._undo_last_change(), overwrite=True
-                    )
-                    self._undo_button.visible = True
-                    self._update_undo_button_state()
-                finally:
-                    self._edit_cells_geometries_button.enabled = True
-                    self._edition_mode_combo.enabled = True
-                    self._edition_mode_row.enabled = True
-                    self._save_all_layers_button.enabled = True
+                # Track the edit session history for undo (button and Ctrl/Cmd+Z)
+                self._reset_undo_history(work_layer)
+                work_layer.events.data.connect(self._on_edit_layer_data_change)
+                work_layer.bind_key(
+                    "Control-Z",
+                    lambda _layer: self._undo_last_change(),
+                    overwrite=True,
+                )
+                self._undo_button.visible = True
+                self._update_undo_button_state()
 
-            def _on_vectorization_errored(error):
-                self._edit_cells_geometries_button.enabled = True
-                self._edition_mode_combo.enabled = True
-                self._edition_mode_row.enabled = True
-                self._save_all_layers_button.enabled = True
+            def _on_vectorization_errored(_error):
+                # The error itself is shown by the runner
                 self._restore_original_visibility()
-                show_info(f"Vectorization failed: {error}")
 
-            worker = vectorize_cells_worker(self.input_layer.data, tolerance)
-            worker.returned.connect(_on_vectorization_finished)
-            worker.errored.connect(_on_vectorization_errored)
-            worker.start()
+            def _restore_controls(_handle):
+                for control in controls:
+                    control.enabled = True
+
+            return get_runner().submit(
+                Job(
+                    "Vectorization",
+                    vectorize_cells,
+                    args=(self.input_layer.data, tolerance),
+                    tags={JobTag.VECTORIZATION},
+                ),
+                on_result=_on_vectorization_finished,
+                on_error=_on_vectorization_errored,
+                on_finished=_restore_controls,
+            )
 
         else:
             QMessageBox.warning(None, "Error", "Unknown edition mode selected")
@@ -916,7 +863,6 @@ class CellsLayerEditorWidget(Container):
         self._edition_mode_row.visible = True
         self._edit_cells_geometries_button.visible = True
         self._save_all_layers_button.visible = True
-        self._progress_bar.visible = False
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
         self._undo_button.visible = False
@@ -986,7 +932,6 @@ class CellsLayerEditorWidget(Container):
         self._edition_mode_row.visible = True
         self._edit_cells_geometries_button.visible = True
         self._save_all_layers_button.visible = True
-        self._progress_bar.visible = False
         self._cancel_cells_geometries_button.visible = False
         self._apply_cells_geometries_button.visible = False
         self._undo_button.visible = False

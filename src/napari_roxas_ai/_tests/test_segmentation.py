@@ -7,19 +7,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pandas as pd
 import pytest
 import torch
 from PIL import Image
 
-from napari_roxas_ai._segmentation._batch_sample_segmentation import (
-    Worker as BatchWorker,
-)
-from qtpy.QtWidgets import QSizePolicy
-from napari_roxas_ai._segmentation._single_sample_segmentation import (
-    Worker as SingleWorker,
-)
-from napari_roxas_ai._utils._metadata_keys import SAMPLE_METADATA_PREFIXES
+from napari_roxas_ai._jobs import Job, JobStatus, Message, run_job_sync
 
 
 # Helper function to create a test image
@@ -312,128 +304,170 @@ class TestSingleSampleSegmentation:
             assert valid == [image_layer]
 
 
-class TestSingleWorkerFunctionality:
-    """Test the SingleWorker class functionality directly."""
+class FakeCellsModel:
+    """Finds one cell in the middle of the image, in two patches."""
 
-    def test_cells_segmentation(
-        self, test_image, mock_cells_model, mock_settings
+    def infer_steps(self, img):
+        labels = np.zeros(img.shape[:2])
+        labels[40:60, 40:60] = 255
+        yield 1, 2
+        yield 2, 2
+        return labels
+
+    def infer(self, img):
+        steps = self.infer_steps(img)
+        while True:
+            try:
+                next(steps)
+            except StopIteration as stop:
+                return stop.value
+
+
+class FakeRingsModel:
+    """Finds two horizontal ring boundaries."""
+
+    def infer(self, img):
+        width = img.shape[1]
+        boundaries = [
+            torch.tensor([[30, 0], [30, width - 1]]),
+            [[60, 0], [60, width - 1]],
+        ]
+        return np.zeros(img.shape[:2], dtype=np.uint8), boundaries
+
+
+@pytest.fixture
+def fake_models(monkeypatch):
+    """Replace the model loading by the fake models."""
+    from napari_roxas_ai._segmentation import _operations
+
+    monkeypatch.setattr(
+        _operations, "load_cells_model", lambda path, try_gpu: FakeCellsModel()
+    )
+    monkeypatch.setattr(
+        _operations, "load_rings_model", lambda path, try_gpu: FakeRingsModel()
+    )
+
+
+def _run(generator):
+    """The events and the result of an operation."""
+    events = []
+    while True:
+        try:
+            events.append(next(generator))
+        except StopIteration as stop:
+            return events, stop.value
+
+
+class TestSingleSegmentationOperation:
+    def test_cells_and_rings_are_segmented(self, test_image, fake_models):
+        from napari_roxas_ai._segmentation._operations import segment_sample
+
+        _, results = _run(
+            segment_sample(
+                test_image,
+                Path("cells.pth"),
+                Path("rings.pth"),
+                False,
+                "s.cells",
+                "s.rings",
+            )
+        )
+
+        cells = results["cells"]
+        assert cells["name"] == "s.cells"
+        assert set(np.unique(cells["data"])) == {0, 1}
+        rings = results["rings"]
+        assert rings["name"] == "s.rings"
+        assert rings["data"].dtype == np.int32
+        # The dummy top boundary first, then the found ones as lists
+        assert rings["features"]["RBXY"].tolist() == [
+            [[0, 0], [0, 99]],
+            [[30, 0], [30, 99]],
+            [[60, 0], [60, 99]],
+        ]
+
+    def test_only_the_chosen_parts_are_segmented(
+        self, test_image, fake_models
     ):
-        """Test cells segmentation functionality."""
-        with patch(
-            "napari_roxas_ai._segmentation._cells_model.CellsSegmentationModel",
-            return_value=mock_cells_model,
-        ):
-            # We'll test the worker without QObject initialization
-            with patch.object(SingleWorker, "__init__", return_value=None):
-                worker = SingleWorker(None, None, None, None, None, None, None)
+        from napari_roxas_ai._segmentation._operations import segment_sample
 
-                # Manually setup worker attributes
-                worker.input_array = test_image
-                worker.segment_cells = True
-                worker.segment_rings = False
-                worker.cells_model_weights_file = "/path/to/cells_model.pth"
-                worker.settings = mock_settings
-                worker.base_name = "test_sample"
+        _, results = _run(
+            segment_sample(
+                test_image,
+                None,
+                Path("rings.pth"),
+                False,
+                "s.cells",
+                "s.rings",
+            )
+        )
+        assert list(results) == ["rings"]
 
-                # Mock the signals
-                worker.result_ready = MagicMock()
-                worker.finished = MagicMock()
 
-                # Mock CellsSegmentationModel instance
-                worker_cells_model = mock_cells_model
+SINGLE = "napari_roxas_ai._segmentation._single_sample_segmentation"
 
-                # Call the functional parts without using run()
-                # Set up cells model
-                mock_settings.get.return_value = [".cells"]
-                worker_cells_model.load_weights.return_value = None
 
-                # Perform inference
-                cells_labels = worker_cells_model.infer(test_image)
+@pytest.fixture
+def single_widget(make_napari_viewer, sync_runner):
+    """The widget with a scan in the viewer; the project is left alone."""
+    from napari_roxas_ai._segmentation._single_sample_segmentation import (
+        SingleSampleSegmentationWidget,
+    )
 
-                # Add to results
-                suffix = worker.settings.get(
-                    "file_extensions.cells_file_extension"
-                )[0]
-                name = f"{worker.base_name}{suffix}"
-                results = {
-                    "cells": {
-                        "data": (cells_labels / 255).astype("uint8"),
-                        "name": name,
-                    }
-                }
-
-                # Verify cells segmentation operation
-                mock_cells_model.infer.assert_called_with(test_image)
-                assert "cells" in results
-                assert results["cells"]["name"] == "test_sample.cells"
-
-    def test_rings_segmentation(
-        self, test_image, mock_rings_model, mock_settings
+    viewer = make_napari_viewer()
+    viewer.add_image(
+        create_test_image(),
+        name="sample_01.scan",
+        metadata={"sample_name": "sample_01"},
+    )
+    with (
+        patch(f"{SINGLE}.check_assets_and_download"),
+        patch.object(
+            SingleSampleSegmentationWidget,
+            "_get_model_files",
+            return_value=("linear_rings_model.pth",),
+        ),
     ):
-        """Test rings segmentation functionality."""
-        with patch("torch.package.PackageImporter") as mock_package_importer:
-            # Configure the mock package importer
-            mock_importer = MagicMock()
-            mock_importer.load_pickle.return_value = mock_rings_model
-            mock_package_importer.return_value = mock_importer
+        widget = SingleSampleSegmentationWidget(viewer)
+    with (
+        patch(f"{SINGLE}.fix_sample_stem_paths_in_project"),
+        patch(f"{SINGLE}.save_layers_annotated_image"),
+    ):
+        yield viewer, widget
 
-            # We'll test the worker without QObject initialization
-            with patch.object(SingleWorker, "__init__", return_value=None):
-                worker = SingleWorker(None, None, None, None, None, None, None)
 
-                # Manually setup worker attributes
-                worker.input_array = test_image
-                worker.segment_cells = False
-                worker.segment_rings = True
-                worker.rings_model_weights_file = "/path/to/rings_model.pt"
-                worker.settings = mock_settings
-                worker.base_name = "test_sample"
+class TestSingleSegmentationWidget:
+    def test_segmented_layers_are_added(self, single_widget, fake_models):
+        viewer, widget = single_widget
 
-                # Mock the signals
-                worker.result_ready = MagicMock()
-                worker.finished = MagicMock()
+        widget._run_segmentation_button.press()
 
-                # Mock settings
-                mock_settings.get.return_value = [".rings"]
+        assert viewer.layers["sample_01.cells"].metadata["_is_dirty"] is True
+        # The two found ring boundaries
+        rings = viewer.layers["sample_01.rings"]
+        assert len(rings.features) == 2
+        assert widget._run_segmentation_button.enabled
 
-                # Set up rings model
-                imp = mock_package_importer()
-                package_name = "LinearRingModel"
-                resource_name = "model.pkl"
-                loaded_model = imp.load_pickle(package_name, resource_name)
+    def test_failed_segmentation_reports_and_leaves_the_widget_usable(
+        self, single_widget, monkeypatch
+    ):
+        from napari_roxas_ai._job_runner import _runner
+        from napari_roxas_ai._segmentation import _operations
 
-                # Perform inference
-                rings_labels, rings_boundaries = loaded_model.infer(test_image)
+        viewer, widget = single_widget
 
-                # Create a DataFrame from boundaries
-                boundary_data = []
-                for _i, _boundary in enumerate(rings_boundaries):
-                    # Since we're using mock data, simplify this part
-                    boundary_data.append({"RBXY": []})
+        def broken(path, try_gpu):
+            raise RuntimeError("no GPU memory")
 
-                boundaries_df = pd.DataFrame(boundary_data)
+        monkeypatch.setattr(_operations, "load_cells_model", broken)
+        errors = []
+        monkeypatch.setattr(_runner, "show_error", errors.append)
 
-                # Add to results
-                suffix = worker.settings.get(
-                    "file_extensions.rings_file_extension"
-                )[0]
-                name = f"{worker.base_name}{suffix}"
-                results = {
-                    "rings": {
-                        "data": rings_labels.astype("int32"),
-                        "name": name,
-                        "features": boundaries_df,
-                    }
-                }
+        widget._run_segmentation_button.press()
 
-                # Verify rings segmentation operation
-                mock_importer.load_pickle.assert_called_with(
-                    package_name, resource_name
-                )
-                loaded_model.infer.assert_called_with(test_image)
-                assert "rings" in results
-                assert results["rings"]["name"] == "test_sample.rings"
-                assert "features" in results["rings"]
+        assert errors == ["Segmentation failed: no GPU memory"]
+        assert "sample_01.cells" not in viewer.layers
+        assert widget._run_segmentation_button.enabled
 
 
 class TestBatchSampleSegmentation:
@@ -489,7 +523,6 @@ class TestBatchSampleSegmentation:
             assert widget[5] is widget._cells_row
             assert widget[6] is widget._rings_row
             assert widget[7] is widget._run_segmentation_button
-            assert widget[8] is widget.progress_bar
 
             # Check checkbox labels and tooltips
             assert (
@@ -537,7 +570,9 @@ class TestBatchSampleSegmentation:
             assert not widget._cells_model_weights_file.native.isHidden()
             assert widget._run_segmentation_button.enabled is True
 
-    def test_run_segmentation_picks_up_files_added_after_opening(self, tmp_path):
+    def test_run_segmentation_picks_up_files_added_after_opening(
+        self, tmp_path, sync_runner
+    ):
         """Images prepared while the widget is open are found when running."""
         from napari_roxas_ai._segmentation import _batch_sample_segmentation
         from napari_roxas_ai._segmentation._batch_sample_segmentation import (
@@ -561,17 +596,26 @@ class TestBatchSampleSegmentation:
             scan = tmp_path / "sample1.scan.jpg"
             scan.touch()
 
-            with patch.object(
-                _batch_sample_segmentation, "Worker"
-            ) as mock_worker, patch.object(
-                _batch_sample_segmentation, "QThread"
-            ), patch.object(
-                _batch_sample_segmentation, "show_warning"
-            ) as mock_warning:
-                widget._run_segmentation()
+            segmented = []
+
+            def fake_segment_samples(scan_file_paths, *args):
+                segmented.extend(scan_file_paths)
+                yield from ()
+
+            with (
+                patch.object(
+                    _batch_sample_segmentation,
+                    "segment_samples",
+                    fake_segment_samples,
+                ),
+                patch.object(
+                    _batch_sample_segmentation, "show_warning"
+                ) as mock_warning,
+            ):
+                widget._run_segmentation_button.press()
 
             mock_warning.assert_not_called()
-            assert mock_worker.call_args.kwargs["scan_file_paths"] == [str(scan)]
+            assert segmented == [str(scan)]
 
             # Ticking the manual selection lists it as well
             scan2 = tmp_path / "sample2.scan.jpg"
@@ -620,7 +664,10 @@ class TestBatchSampleSegmentation:
             notify_project_files_changed(tmp_path / "other")
             assert "sample3.scan.jpg" not in widget._file_select_widget.choices
 
-    def test_batch_segmentation_tells_the_listeners_when_done(self, tmp_path):
+    def test_failed_batch_tells_the_listeners_and_leaves_the_widget_usable(
+        self, tmp_path, sync_runner, monkeypatch
+    ):
+        from napari_roxas_ai._job_runner import _runner
         from napari_roxas_ai._segmentation import _batch_sample_segmentation
         from napari_roxas_ai._segmentation._batch_sample_segmentation import (
             BatchSampleSegmentationWidget,
@@ -638,21 +685,32 @@ class TestBatchSampleSegmentation:
             widget._handpick_files_checkbox.value = False
             widget.input_directory_path = str(tmp_path)
 
-            thread = MagicMock()
-            with patch.object(_batch_sample_segmentation, "Worker"), patch.object(
-                _batch_sample_segmentation, "QThread", return_value=thread
-            ), patch.object(
-                _batch_sample_segmentation, "notify_project_files_changed"
-            ) as notify:
-                widget._run_segmentation()
-                notify.assert_not_called()
-                # The run ends
-                for call in thread.finished.connect.call_args_list:
-                    call.args[0]()
+            def failing_segment_samples(*args):
+                raise RuntimeError("no models")
+                yield
 
+            errors = []
+            monkeypatch.setattr(_runner, "show_error", errors.append)
+            with (
+                patch.object(
+                    _batch_sample_segmentation,
+                    "segment_samples",
+                    failing_segment_samples,
+                ),
+                patch.object(
+                    _batch_sample_segmentation, "notify_project_files_changed"
+                ) as notify,
+            ):
+                widget._run_segmentation_button.press()
+
+            # Also told after a failure: some samples may have been written
             notify.assert_called_once_with(str(tmp_path), source=widget)
+            assert errors == ["Batch segmentation failed: no models"]
+            assert widget._run_segmentation_button.enabled
 
-    def test_batch_segmentation_widget_file_selection_and_filtering(self, tmp_path):
+    def test_batch_segmentation_widget_file_selection_and_filtering(
+        self, tmp_path
+    ):
         """Test file list filtering, handpicking and reverse selection in BatchSampleSegmentationWidget."""
         from napari_roxas_ai._segmentation._batch_sample_segmentation import (
             BatchSampleSegmentationWidget,
@@ -722,240 +780,128 @@ class TestBatchSampleSegmentation:
             assert widget._get_selected_file_paths() == [str(scan2)]
 
 
-class TestBatchWorkerFunctionality:
-    """Test the BatchWorker class functionality directly."""
+class TestBatchSegmentationOperation:
+    """The batch operation, with fake models and file access."""
 
-    def test_file_discovery(self, sample_image_dir):
-        """Test file discovery in batch worker."""
-        with patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
-        ) as mock_settings:
-            # Configure mock settings
-            mock_settings.get.return_value = [".scan"]
+    @pytest.fixture
+    def scans(self, sample_image_dir, fake_models):
+        from napari_roxas_ai._segmentation import _operations
 
-            # Mock glob to return our scan files
-            expected_files = [
-                str(sample_image_dir / f"sample_{i}.scan.tif")
-                for i in range(3)
-            ]
-            with patch("glob.glob", return_value=expected_files):
-                # We'll test the worker without full initialization
-                # This block is just to test file discovery
-                with patch.object(BatchWorker, "__init__", return_value=None):
-                    worker = BatchWorker(None, None, None, None, None)
-
-                    # Manually setup the attributes
-                    worker.input_directory_path = str(sample_image_dir)
-                    worker.scan_content_ext = ".scan"
-
-                    # Manually run the file discovery logic
-                    worker.scan_file_paths = expected_files
-
-                    # Test that the files were found
-                    assert len(worker.scan_file_paths) == 3
-                    for file_path in expected_files:
-                        assert file_path in worker.scan_file_paths
-
-    def test_segmentation_logic(
-        self, sample_image_dir, mock_cells_model, mock_rings_model
-    ):
-        """Test segmentation logic in batch worker."""
-        with patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
-        ) as mock_settings, patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_scan_file"
-        ) as mock_read_image:
-            # Configure mock settings
-            mock_settings.get.side_effect = lambda key, default=None: {
-                "file_extensions.scan_file_extension": [".scan"],
-                "file_extensions.cells_file_extension": [".cells"],
-                "file_extensions.rings_file_extension": [".rings"],
-            }.get(key, default)
-
-            # Mock the read_scan_file function
-            mock_read_image.return_value = (
-                create_test_image(),
-                {
-                    "metadata": {"sample_name": "test_sample"},
-                    "scale": (1.0, 1.0),
-                },
-                "image",
-            )
-
-            # We'll test the worker without QObject initialization
-            with patch.object(BatchWorker, "__init__", return_value=None):
-                worker = BatchWorker(None, None, None, None, None)
-
-                # Manually setup worker attributes
-                worker.input_directory_path = str(sample_image_dir)
-                worker.segment_cells = True
-                worker.segment_rings = True
-                worker.cells_model_weights_file = "/path/to/cells_model.pth"
-                worker.rings_model_weights_file = "/path/to/rings_model.pt"
-                worker.scan_file_paths = [
-                    str(sample_image_dir / "test1.scan.tif")
-                ]
-
-                # Setup mock models
-                worker.cells_model = mock_cells_model
-                worker.rings_model = mock_rings_model
-
-                # Setup content extensions
-                worker.cells_content_ext = ".cells"
-                worker.rings_content_ext = ".rings"
-
-                # Mock progress and finished signals
-                worker.progress = MagicMock()
-                worker.finished = MagicMock()
-
-                # Mock read_scan_file to get sample data
-                scan_data, scan_add_kwargs, _ = mock_read_image.return_value
-
-                # Extract sample metadata
-                sample_metadata = {
-                    k: v
-                    for k, v in scan_add_kwargs["metadata"].items()
-                    if isinstance(k, str)
-                    and k.startswith(SAMPLE_METADATA_PREFIXES)
-                }
-
-                # Process cells and verify
-                mock_cells_model.infer(scan_data)
-                mock_cells_model.infer.assert_called_with(scan_data)
-
-                # Create cells outputs placeholder (not using result directly)
-                cells_layer_name = f"{sample_metadata['sample_name']}{worker.cells_content_ext}"
-                cells_add_kwargs = {
-                    "name": cells_layer_name,
-                    "scale": scan_add_kwargs["scale"],
-                    "features": pd.DataFrame(),
-                    "metadata": {},
-                }
-                cells_add_kwargs["metadata"].update(sample_metadata)
-
-                # Process rings and verify
-                mock_rings_model.infer(scan_data)
-                mock_rings_model.infer.assert_called_with(scan_data)
-
-    def test_worker_run_terminal_logging(
-        self, sample_image_dir, mock_cells_model, mock_rings_model, capsys
-    ):
-        """Test terminal output logging during worker run."""
-        with patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
-        ) as mock_settings, patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_scan_file"
-        ) as mock_read_image, patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.write_single_layer"
-        ), patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.update_rings_geometries",
-            return_value=(pd.DataFrame(), np.zeros((10, 10)), None),
-        ), patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.get_metadata_from_file",
-            return_value={"rings_outmost_complete_year": 2020},
-        ):
-            mock_settings.get.side_effect = lambda key, default=None: {
-                "file_extensions.scan_file_extension": [".scan"],
-                "file_extensions.cells_file_extension": [".cells"],
-                "file_extensions.rings_file_extension": [".rings"],
-                "samples_metadata.fields": [{"id": "rings_outmost_complete_year", "default": 2020}],
-            }.get(key, default)
-
-            # The second file cannot be read and must not count as done
-            mock_read_image.side_effect = [
+        written = []
+        read = MagicMock(
+            side_effect=[
                 (
                     create_test_image(),
                     {
-                        "metadata": {"sample_name": "sample_01"},
+                        "metadata": {
+                            "sample_name": "sample_01",
+                            "sample_stem_path": "sample_01",
+                        },
                         "scale": (1.0, 1.0),
                     },
                     "image",
                 ),
                 OSError("broken"),
-            ]
-
-            with patch.object(BatchWorker, "__init__", return_value=None):
-                worker = BatchWorker(None, None, None, None, None)
-                worker.input_directory_path = str(sample_image_dir)
-                worker.segment_cells = True
-                worker.segment_rings = True
-                worker.cells_model_weights_file = Path("/path/to/linear_cells_model.pth")
-                worker.rings_model_weights_file = Path("/path/to/linear_rings_model.pth")
-                worker.scan_file_paths = [
-                    str(sample_image_dir / "sample_01.scan.tif"),
-                    str(sample_image_dir / "sample_02.scan.tif"),
-                ]
-                worker.cells_model = mock_cells_model
-                worker.rings_model = mock_rings_model
-                worker.cells_content_ext = ".cells.png"
-                worker.rings_content_ext = ".rings.tif"
-                worker.progress = MagicMock()
-                worker.finished = MagicMock()
-                worker.message = MagicMock()
-
-                worker.run()
-
-                captured = capsys.readouterr()
-                assert "[Batch Segmentation] [1/2] sample_01.scan.tif: Cells (linear_cells_model.pth), Rings (linear_rings_model.pth)" in captured.out
-                assert "[Batch Segmentation] [2/2] Error processing sample_02.scan.tif: broken" in captured.out
-                assert "[Batch Segmentation] Completed 1 of 2 file(s) successfully." in captured.out
-                worker.message.emit.assert_called_once_with(
-                    "[Batch Segmentation] Completed 1 of 2 file(s) successfully."
-                )
-
-    def test_worker_run_cells_only_writes_annotated_image(
-        self, sample_image_dir, mock_cells_model
-    ):
-        """Cells-only runs also write the annotated image, as an extra progress step."""
-        scan_data = create_test_image()
-        with patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.settings"
-        ) as mock_settings, patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.read_scan_file",
-            return_value=(
-                scan_data,
-                {
-                    "metadata": {
-                        "sample_name": "sample_01",
-                        "sample_stem_path": "sample_01",
+                (
+                    create_test_image(),
+                    {
+                        "metadata": {"sample_name": "sample_03"},
+                        "scale": (1, 1),
                     },
-                    "scale": (1.0, 1.0),
-                },
-                "image",
+                    "image",
+                ),
+            ]
+        )
+        with (
+            patch.object(_operations, "read_scan_file", read),
+            patch.object(
+                _operations,
+                "write_single_layer",
+                side_effect=lambda path, data, meta, **kw: written.append(
+                    meta["name"]
+                ),
             ),
-        ), patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.write_single_layer"
-        ), patch(
-            "napari_roxas_ai._segmentation._batch_sample_segmentation.save_sample_annotated_image"
-        ) as mock_annotate:
-            mock_settings.get.side_effect = lambda key, default=None: {
-                "project_directory": str(sample_image_dir),
-                "samples_metadata.fields": [{"id": "rings_outmost_complete_year", "default": 2020}],
-            }.get(key, default)
+            patch.object(
+                _operations,
+                "get_metadata_from_file",
+                return_value={"rings_outmost_complete_year": 2020},
+            ),
+            patch.object(
+                _operations, "save_sample_annotated_image"
+            ) as annotate,
+        ):
+            yield written, annotate
 
-            with patch.object(BatchWorker, "__init__", return_value=None):
-                worker = BatchWorker(None, None, None, None, None)
-                worker.segment_cells = True
-                worker.segment_rings = False
-                worker.cells_model_weights_file = Path("/path/to/linear_cells_model.pth")
-                worker.rings_model_weights_file = None
-                worker.scan_file_paths = [str(sample_image_dir / "sample_01.scan.tif")]
-                worker.cells_model = mock_cells_model
-                worker.cells_content_ext = ".cells"
-                worker.progress = MagicMock()
-                worker.finished = MagicMock()
-                worker.message = MagicMock()
+    def _segment(self, sample_image_dir, cells=True, rings=True):
+        from napari_roxas_ai._segmentation._operations import segment_samples
 
-                worker.run()
+        return segment_samples(
+            [
+                str(sample_image_dir / f"sample_0{i}.scan.tif")
+                for i in (1, 2, 3)
+            ],
+            Path("/m/linear_cells_model.pth") if cells else None,
+            Path("/m/linear_rings_model.pth") if rings else None,
+            False,
+            ".cells",
+            ".rings",
+            2020,
+            str(sample_image_dir),
+        )
 
-        mock_annotate.assert_called_once()
-        args, kwargs = mock_annotate.call_args
+    def test_samples_are_written_and_failures_skipped(
+        self, sample_image_dir, scans, capsys
+    ):
+        written, annotate = scans
+
+        events, _ = _run(self._segment(sample_image_dir))
+
+        assert written == [
+            "sample_01.cells",
+            "sample_01.rings",
+            "sample_03.cells",
+            "sample_03.rings",
+        ]
+        assert annotate.call_count == 2
+        out = capsys.readouterr().out
+        assert (
+            "[Batch Segmentation] [1/3] sample_01.scan.tif: "
+            "Cells (linear_cells_model.pth), Rings (linear_rings_model.pth)"
+        ) in out
+        assert (
+            "[Batch Segmentation] [2/3] Error processing sample_02.scan.tif: "
+            "broken"
+        ) in out
+        # Only the summary is shown
+        messages = [e.text for e in events if isinstance(e, Message)]
+        assert messages == [
+            "[Batch Segmentation] Completed 2 of 3 file(s) successfully."
+        ]
+
+    def test_cells_only_writes_the_annotated_image(
+        self, sample_image_dir, scans
+    ):
+        written, annotate = scans
+
+        _run(self._segment(sample_image_dir, rings=False))
+
+        assert written == ["sample_01.cells", "sample_03.cells"]
+        args, kwargs = annotate.call_args_list[0]
         assert args[0] == (sample_image_dir / "sample_01").resolve()
         assert args[1].empty
         assert kwargs["cells_data"] is not None
-        assert kwargs["scan_data"] is scan_data
-        # Cells and annotated image: two steps
-        assert worker.progress.emit.call_args_list[-1].args == (2, 2)
+
+    def test_cancelling_stops_between_samples(self, sample_image_dir, scans):
+        written, _ = scans
+
+        outcome = run_job_sync(
+            Job("Batch segmentation", lambda: self._segment(sample_image_dir)),
+            should_cancel=lambda: len(written) > 0,
+        )
+
+        assert outcome.status is JobStatus.CANCELLED
+        # The first sample is complete, the next ones are not started
+        assert written == ["sample_01.cells", "sample_01.rings"]
 
 
 if __name__ == "__main__":

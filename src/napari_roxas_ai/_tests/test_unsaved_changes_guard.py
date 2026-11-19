@@ -59,14 +59,11 @@ def test_dirty_layer_cancel_or_discard(make_napari_viewer, cells_name, answer, b
 def test_dirty_layer_save_then_remove(make_napari_viewer, cells_name, answer, monkeypatch):
     saved = []
 
-    class FakeWorker:
-        def __init__(self, layers):
-            self.layers = layers
+    def fake_save_layers(snapshots, project_dir):
+        saved.extend(snapshot.name for snapshot in snapshots)
+        yield from ()
 
-        def run(self):
-            saved.extend(l.name for l in self.layers)
-
-    monkeypatch.setattr(guard, "Worker", FakeWorker)
+    monkeypatch.setattr(guard, "save_layers", fake_save_layers)
     viewer = _viewer_with_cells(make_napari_viewer, cells_name, dirty=True)
     answer["button"] = "Save"
     viewer.layers.remove_selected()

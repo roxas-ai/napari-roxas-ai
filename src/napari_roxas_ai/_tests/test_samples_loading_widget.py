@@ -1,11 +1,14 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from qtpy.QtWidgets import QAbstractItemView
 
-from napari_roxas_ai._loading import _samples_loading_widget
+from napari_roxas_ai._job_runner import JobHandle, _runner
+from napari_roxas_ai._jobs import Job, Progress
+from napari_roxas_ai._loading import _actions, _samples_loading_widget
 from napari_roxas_ai._loading._samples_loading_widget import (
     MAX_PROJECT_DIRECTORY_CHARS,
     MAX_VISIBLE_IMAGE_ROWS,
@@ -193,28 +196,88 @@ def test_loading_is_refused_while_an_image_is_open(widget):
 
     with patch.object(
         _samples_loading_widget.QMessageBox, "information"
-    ) as mock_info, patch.object(_samples_loading_widget, "Worker") as mock_worker:
-        widget._load_selected_samples()
+    ) as mock_info, patch.object(
+        _samples_loading_widget, "start_loading"
+    ) as mock_start:
+        widget._load_samples_button.press()
 
     mock_info.assert_called_once()
     assert "sample_1" in mock_info.call_args.args[2]
-    mock_worker.assert_not_called()
+    mock_start.assert_not_called()
 
 
 def test_loading_without_selection_does_nothing(widget):
-    with patch.object(_samples_loading_widget, "Worker") as mock_worker:
-        widget._load_selected_samples()
+    with patch.object(_samples_loading_widget, "start_loading") as mock_start:
+        widget._load_samples_button.press()
 
-    mock_worker.assert_not_called()
+    mock_start.assert_not_called()
 
 
 def test_double_click_loads_the_image(widget):
+    widget._sample_select_widget.value = "sample_1"  # selected by the click
     list_widget = widget._sample_select_widget.native
-    widget._load_selected_samples = MagicMock()
+    with patch.object(
+        _samples_loading_widget,
+        "start_loading",
+        return_value=JobHandle(Job("Loading", lambda: None)),
+    ) as mock_start:
+        list_widget.itemDoubleClicked.emit(list_widget.item(0))
 
-    list_widget.itemDoubleClicked.emit(list_widget.item(0))
+    mock_start.assert_called_once()
 
-    widget._load_selected_samples.assert_called_once_with()
+
+def test_double_click_while_loading_does_not_load_again(widget):
+    loading = JobHandle(Job("Loading", lambda: None))  # still running
+    widget._sample_select_widget.value = "sample_1"  # selected by the click
+    list_widget = widget._sample_select_widget.native
+    with patch.object(
+        _samples_loading_widget, "start_loading", return_value=loading
+    ) as mock_start:
+        list_widget.itemDoubleClicked.emit(list_widget.item(0))
+        list_widget.itemDoubleClicked.emit(list_widget.item(0))
+
+    mock_start.assert_called_once()
+
+SAMPLE_DATA = (
+    Path(_samples_loading_widget.__file__).parents[1]
+    / "_sample_data"
+    / "sample_data"
+)
+
+
+def test_loading_adds_the_sample_layers(
+    make_napari_viewer, settings, sync_runner
+):
+    settings.set("project_directory", str(SAMPLE_DATA))
+    widget = SamplesLoadingWidget(make_napari_viewer())
+    widget._sample_select_widget.value = (
+        widget._sample_select_widget.choices[0]
+    )
+
+    widget._load_samples_button.press()
+
+    names = [layer.name for layer in widget._viewer.layers]
+    for kind in ("scan", "cells", "rings"):
+        assert f"conifer_sample.{kind}" in names
+    assert widget._load_samples_button.enabled
+
+
+def test_failed_loading_reports_and_leaves_the_widget_usable(
+    widget, sync_runner, monkeypatch
+):
+    def failing_load_samples(sample_stem_paths, project_directory):
+        yield Progress(0, 3)
+        raise OSError("damaged file")
+
+    monkeypatch.setattr(_actions, "load_samples", failing_load_samples)
+    errors = []
+    monkeypatch.setattr(_runner, "show_error", errors.append)
+    widget._sample_select_widget.value = "sample_1"
+
+    widget._load_samples_button.press()
+
+    assert errors == ["Loading failed: damaged file"]
+    assert widget._load_samples_button.enabled
 
 
 def test_image_list_is_at_least_five_rows_high(widget):

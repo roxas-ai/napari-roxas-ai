@@ -13,7 +13,6 @@ from magicgui.widgets import (
     ComboBox,
     Container,
     Label,
-    ProgressBar,
     PushButton,
     SpinBox,
 )
@@ -23,7 +22,8 @@ from qtpy.QtCore import QObject, QThread, QTimer, Signal
 from qtpy.QtWidgets import QMessageBox, QSizePolicy
 
 from napari_roxas_ai._assets_files import check_assets_and_download
-from napari_roxas_ai._saving import SamplesSavingWidget
+from napari_roxas_ai._job_runner import JobButton, JobHandle
+from napari_roxas_ai._saving import start_saving
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai._utils import make_rings_colormap
 from napari_roxas_ai._utils._torch_device import select_torch_device
@@ -620,17 +620,6 @@ class RerunWorker(QObject):
 
 class RingsLayerEditorWidget(Container):
     @property
-    def _saving_widget(self) -> SamplesSavingWidget:
-        """Lazily initialize the background saving helper widget."""
-        if getattr(self, "_saving_widget_instance", None) is None:
-            self._saving_widget_instance = SamplesSavingWidget(self._viewer)
-        return self._saving_widget_instance
-
-    @_saving_widget.setter
-    def _saving_widget(self, value):
-        self._saving_widget_instance = value
-
-    @property
     def _input_layer(self) -> Optional["napari.layers.Labels"]:
         """Get the single valid ring layer currently in the viewer."""
         valid_layers = self._get_valid_layers()
@@ -860,14 +849,9 @@ class RingsLayerEditorWidget(Container):
         )
         self._undo_button.changed.connect(self._undo_last_change)
 
-        # Create a button to save all layers
-        self._saving_widget_instance = None
-        self._save_all_layers_button = PushButton(text="Save All Layers")
-        self._save_all_layers_button.changed.connect(self._save_all_layers)
-
-        # Add a progress bar with a description
-        self._progress_bar = ProgressBar(
-            value=0, min=0, max=100, visible=False, label="Progress"
+        # Create a button to save all layers (shows the save's progress)
+        self._save_all_layers_button = JobButton(
+            text="Save All Layers", start=self._save_all_layers
         )
 
         # Create a button to open the visual crossdating widget
@@ -994,7 +978,6 @@ class RingsLayerEditorWidget(Container):
                 self._edit_rings_geometries_button,
                 self._last_year_row,
                 self._save_all_layers_button,
-                self._progress_bar,
                 self._visual_crossdating_button,
                 self._cancel_rings_geometries_button,
                 self._apply_rings_geometries_button,
@@ -1023,35 +1006,17 @@ class RingsLayerEditorWidget(Container):
         self._years_update_timer.start(500)
         QTimer.singleShot(1000, lambda: self._years_update_timer.start(10))
 
-    def _save_all_layers(self) -> None:
-        """Save all layers using the saving widget logic with progress bar."""
-        self._save_all_layers_button.enabled = False
+    def _save_all_layers(self) -> JobHandle | None:
+        """Save the unsaved layers; editing is locked meanwhile."""
+        handle = start_saving(self._viewer.layers, only_unsaved=True)
+        if handle is None:
+            return None  # nothing to save (reported to the user)
+
         self._edit_rings_geometries_button.enabled = False
-        self._saving_widget._save_layers(how="all")
-        worker = self._saving_widget.worker
-        worker_thread = self._saving_widget.worker_thread
-        if worker is None or worker_thread is None:
-            # Nothing to save (the saving widget reported it): no worker was started
-            self._save_all_layers_button.enabled = True
-            self._edit_rings_geometries_button.enabled = True
-            self._progress_bar.visible = False
-            return
-
-        self._progress_bar.value = 0
-        worker.progress.connect(self._update_progress)
-        worker_thread.finished.connect(
-            lambda: setattr(self._save_all_layers_button, "enabled", True)
+        handle.connect(
+            on_finished=lambda _: self._update_edit_button_state()
         )
-        worker_thread.finished.connect(self._update_edit_button_state)
-        worker_thread.finished.connect(
-            lambda: setattr(self._progress_bar, "visible", False)
-        )
-
-    def _update_progress(self, current: int, total: int) -> None:
-        """Update the progress bar."""
-        if total > 0:
-            self._progress_bar.value = int(100 * current / total)
-            self._progress_bar.visible = True
+        return handle
 
     def _open_visual_crossdating(self) -> None:
         """Open the visual crossdating widget as a floating, maximized dock widget."""

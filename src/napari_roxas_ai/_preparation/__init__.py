@@ -8,11 +8,9 @@ from ._crossdating_handler import (
 )
 from ._metadata_dialog import MetadataDialog
 from ._preparation_widget import PreparationWidget
-from ._worker import Worker
 
 __all__ = (
     "PreparationWidget",
-    "Worker",
     "MetadataDialog",
     "CrossdatingSelectionDialog",
     "process_crossdating_files",
