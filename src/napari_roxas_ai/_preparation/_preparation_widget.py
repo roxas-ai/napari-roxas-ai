@@ -13,6 +13,7 @@ from magicgui.widgets import (
     PushButton,
     Select,
 )
+from napari.utils.notifications import show_info
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QFileDialog,
@@ -615,6 +616,4 @@ class PreparationWidget(Container):
         notify_project_files_changed(self.project_directory, source=self)
 
         if completed:
-            QMessageBox.information(
-                None, "Complete", "File processing completed successfully."
-            )
+            show_info("File processing completed successfully.")

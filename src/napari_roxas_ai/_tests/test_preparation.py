@@ -493,6 +493,8 @@ def preparing(tmp_path, sync_runner, monkeypatch):
     )
     message_box = MagicMock()
     monkeypatch.setattr(_preparation_widget, "QMessageBox", message_box)
+    completed = MagicMock()
+    monkeypatch.setattr(_preparation_widget, "show_info", completed)
     notify = MagicMock()
     monkeypatch.setattr(
         _preparation_widget, "notify_project_files_changed", notify
@@ -507,7 +509,7 @@ def preparing(tmp_path, sync_runner, monkeypatch):
     return SimpleNamespace(
         widget=widget,
         project=tmp_path,
-        completed_box=message_box.information,
+        completed_box=completed,
         notify=notify,
         errors=errors,
     )
