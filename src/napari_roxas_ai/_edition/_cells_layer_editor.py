@@ -21,9 +21,16 @@ from PIL import Image
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QMessageBox
 
+from napari_roxas_ai._napari_patches import (
+    apply_shapes_patches,
+    enable_view_culling,
+)
 from napari_roxas_ai._saving._samples_saving_widget import SamplesSavingWidget
 from napari_roxas_ai._settings import SettingsManager
 from napari_roxas_ai.shortcuts import prevent_duplicate_dock_if_already_present
+
+# Faster Shapes editing for large cell layers (napari internals, version-guarded)
+apply_shapes_patches()
 
 if TYPE_CHECKING:
     import napari
@@ -843,6 +850,8 @@ class CellsLayerEditorWidget(Container):
                         },
                     )
                     self._viewer.add_layer(work_layer)
+                    # Only the cells near the view are drawn and uploaded
+                    enable_view_culling(work_layer)
                     self._is_editing = True
                     if sample_name is not None:
                         work_layer.metadata["sample_name"] = sample_name
