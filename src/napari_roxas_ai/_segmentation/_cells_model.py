@@ -45,6 +45,17 @@ class CellsSegmentationModel(pl.LightningModule):
         return out
 
     def infer(self, img):
+        steps = self.infer_steps(img)
+        while True:
+            try:
+                next(steps)
+            except StopIteration as stop:
+                return stop.value
+
+    def infer_steps(self, img):
+        """
+        Inference, yielding progress steps.
+        """
 
         # Patch size and stride
         patch_size = 1024
@@ -115,5 +126,6 @@ class CellsSegmentationModel(pl.LightningModule):
                     pad_size : update_zone_shape[0] + pad_size,
                     pad_size : update_zone_shape[1] + pad_size,
                 ]
+                yield i * n_cols + j + 1, n_rows * n_cols
 
         return labels_padded[pad_size:-pad_size, pad_size:-pad_size]

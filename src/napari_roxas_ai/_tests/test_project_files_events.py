@@ -86,10 +86,11 @@ def test_preparation_tells_the_listeners_when_done(tmp_path):
 
     widget = MagicMock()
     widget.project_directory = str(tmp_path)
-    widget.worker.should_stop = False
     with patch.object(_preparation_widget, "QMessageBox"), patch.object(
         _preparation_widget, "notify_project_files_changed"
     ) as notify:
-        _preparation_widget.PreparationWidget._processing_finished(widget)
+        _preparation_widget.PreparationWidget._processing_finished(
+            widget, completed=True
+        )
 
     notify.assert_called_once_with(str(tmp_path), source=widget)
