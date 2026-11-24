@@ -794,7 +794,8 @@ def write_cells_file(
         )
         features.to_csv(
             cells_table_file_path,
-            sep=settings.get("tables.separator"),
+            sep=";",
+            encoding="utf-8-sig",
             index=False,
         )
         written_file_paths.append(cells_table_file_path)
@@ -899,7 +900,8 @@ def write_rings_file(
         )
         features.to_csv(
             rings_table_file_path,
-            sep=settings.get("tables.separator"),
+            sep=";",
+            encoding="utf-8-sig",
             index=False,
         )
         written_file_paths.append(rings_table_file_path)

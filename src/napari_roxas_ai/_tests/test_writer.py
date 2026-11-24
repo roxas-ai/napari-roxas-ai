@@ -75,8 +75,6 @@ def mock_settings():
             "file_extensions.cells_table_file_extension": [".cells", ".csv"],
             "file_extensions.rings_table_file_extension": [".rings", ".csv"],
             "file_extensions.image_file_extensions": [".jpg", ".jpeg", ".png"],
-            "tables.separator": "\t",
-            "tables.index_column": "index",
         }.get(key, default)
 
         yield mock_settings

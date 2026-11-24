@@ -44,6 +44,95 @@ The output tables (`.cells_table.csv` and `.rings_table.csv`) use standardized a
 ### Missing Values & Error Codes
 Missing values or empty fields are left **blank (NA)** in the CSV output to ensure compatibility with modern data analysis tools like R and Python.
 
+---
+
+## CSV Table Formatting & Regional Settings {: #csv-table-formatting-regional-settings }
+
+To ensure scientific reproducibility and seamless exchange between different research groups, operating systems, and scripting pipelines (R, Python, GIS, dendrochronology software), ROXAS AI writes all tabular files using an **invariant scientific standard**:
+
+* **Decimal Separator**: Period (`.`) for all floating-point numbers.
+* **Column Delimiter**: Semicolon (`;`) for all table columns.
+* **Text Encoding**: UTF-8 with Byte Order Mark (`utf-8-sig`) to ensure special characters (e.g. $\mu\text{m}$, °, $\text{mm}^2$) render without corruption.
+
+??? warning "Why do numbers look strange (`XXX.XXX.XXX`) in Excel or spreadsheet software?"
+    In regional operating system settings where comma (`,`) is the decimal separator and period (`.`) is the **digit grouping / thousands separator**, Microsoft Excel interprets the decimal periods (`.`) in standard CSV files as thousands grouping symbols when opened directly (e.g. parsing `123.456` as `123456` or `123.456.000`).
+    
+    To resolve this, you can either **import files cleanly** or **permanently adjust your system/Excel settings** as described below.
+
+=== "Option 1: Quick Import (File-by-File)"
+
+    Use this method if you do not wish to modify any global system or Excel settings.
+
+    === "Microsoft Excel (Power Query Import)"
+        1. Open Excel and open a blank workbook.
+        2. Navigate to the **Data** tab $\rightarrow$ click **From Text/CSV** (or *Get Data $\rightarrow$ From File $\rightarrow$ From Text/CSV*).
+        3. Select your `<sample>.cells_table.csv` or `<sample>.rings_table.csv` file.
+        4. In the preview window, verify that **Delimiter** is set to **Semicolon**.
+        5. If Excel defaults to comma decimals, click **Transform Data**:
+            * Select the numerical columns $\rightarrow$ right-click any column header.
+            * Choose **Change Type $\rightarrow$ Using Locale...**.
+            * Select Data Type: **Decimal Number**, Locale: **English (United States)**.
+        6. Click **Close & Load**.
+
+    === "LibreOffice Calc (Free & Open Source)"
+        1. In LibreOffice Calc, go to **File $\rightarrow$ Open** and choose your `.csv` file.
+        2. In the automatic **Text Import** dialog:
+            * Under *Separator Options*, check **Semicolon** (uncheck *Comma*).
+            * Under *Fields*, the preview table displays columns. Numbers with period decimals will be recognized cleanly.
+        3. Click **OK**.
+
+    === "R / Python Pipelines"
+        Scientific data packages load invariant CSV files with standard one-line commands:
+
+        ```r
+        # R (semicolon delimiter with standard period decimal)
+        cells_df <- read.csv2("sample_01.cells_table.csv", dec = ".")
+        rings_df <- read.csv2("sample_01.rings_table.csv", dec = ".")
+        ```
+
+        ```python
+        # Python / pandas
+        import pandas as pd
+        cells_df = pd.read_csv("sample_01.cells_table.csv", sep=";")
+        rings_df = pd.read_csv("sample_01.rings_table.csv", sep=";")
+        ```
+
+=== "Option 2: Permanent Setup (Double-Click Ready)"
+
+    Configure your system once so that double-clicking **any** ROXAS AI CSV output file immediately opens in Excel with correctly aligned columns and true decimal numbers.
+
+    === "A: Windows Regional Settings (System-Wide)"
+        Windows passes its regional list and decimal separators directly to Excel when files are opened by double-clicking:
+        
+        1. Press <kbd>Win</kbd> + <kbd>R</kbd>, type `intl.cpl`, and press **Enter** (opens Windows *Region* settings).
+        2. On the *Formats* tab, click **Additional settings...** (bottom right).
+        3. Under the **Numbers** tab, configure:
+            * **Decimal symbol**: `.` (Period)
+            * **Digit grouping symbol**: `'` (Apostrophe), `,` (Comma), or space (using an apostrophe or space avoids any symbol collision with period decimals)
+            * **List separator**: `;` (Semicolon — matches ROXAS AI's standard table delimiter)
+        4. Click **Apply** and **OK**.
+        5. *Result*: Double-clicking any `.cells_table.csv` or `.rings_table.csv` in Windows Explorer opens directly in Excel with proper column separation and true decimal values.
+
+    === "B: Excel-Only Settings (Leaves Windows Intact)"
+        If you want to keep Windows regional dates/currency unchanged but want Excel to always use standard decimal points:
+
+        1. In Microsoft Excel, open **File $\rightarrow$ Options**.
+        2. Click **Advanced** in the left sidebar.
+        3. Under **Editing options**, uncheck **"Use system separators"**.
+        4. Set:
+            * **Decimal separator**: `.` (Period)
+            * **Thousands separator**: `,` (Comma) or `'` (Apostrophe)
+        5. Click **OK**.
+
+    === "C: LibreOffice Calc (Persistent Memory)"
+        LibreOffice remembers your import settings automatically:
+        
+        1. Open any `.csv` file once and check **Semicolon** in the *Text Import* dialog.
+        2. Ensure *Locale setting* under **Tools $\rightarrow$ Options $\rightarrow$ Language Settings $\rightarrow$ Languages** is set to standard decimal formatting.
+        3. LibreOffice will retain these settings for all future file openings.
+
+---
+
 ### Ring-Level Output (`.rings_table.csv`)
 
 | Acronym | Description | Unit | Details |
@@ -395,7 +484,7 @@ The settings are organized into several logical blocks:
 
 Defines how ROXAS AI recognizes and names files:
 
-- **`scan_file_extension`**: File suffix for prepared scan images. (*Default:* `[".scan", ".jpg"]`)
+- **`scan_file_extension`**: File prefix tag and default fallback extension for scan images. (*Default:* `[".scan", ".jpg"]`). During sample preparation, raw images retain their original container format and extension without re-encoding (e.g., `sample.tif` becomes `sample.scan.tif`).
 - **`cells_file_extension`**: File suffix for cell segmentation label masks. (*Default:* `[".cells", ".png"]`)
 - **`cells_table_file_extension`**: File suffix for cell-level measurement tables. (*Default:* `[".cells_table", ".csv"]`)
 - **`rings_file_extension`**: File suffix for ring boundary label masks. (*Default:* `[".rings", ".tif"]`)
@@ -414,14 +503,7 @@ Allows configuring hardware acceleration and memory optimization:
 - **`try_to_use_gpu`**: Set to `true` to enable GPU acceleration if a compatible CUDA-enabled graphics card, Apple Silicon (MPS), or Intel GPU (XPU) is available. (*Default:* `false`)
 - **`try_to_use_autocast`**: Set to `true` for mixed precision acceleration during deep learning inference. (*Default:* `false`)
 
-### 3. Tables (`tables`)
-
-Defines the output format for tabular data:
-
-- **`separator`**: Column delimiter for output tables. (*Default:* `";"`)
-- **`index_column`**: Column identifier name. (*Default:* `"id"`)
-
-### 4. Visualization (Vectorization & Rasterization) {: #4-visualization-vectorization-rasterization }
+### 3. Visualization (Vectorization & Rasterization) {: #3-visualization-vectorization-rasterization }
 
 Controls geometric conversion algorithms, contour simplification tolerances, layer styling, and colormaps in the napari viewer:
 
@@ -445,7 +527,7 @@ Controls how edited vector shapes are rasterized back onto integer label masks:
 - **`uncomplete_ring_color`**: Display color assigned to the uncompleted ring zone. (*Default:* `"red"`)
 - **`rings_color_sequence`**: List of alternating colors assigned cyclically to successive annual rings. (*Default:* `["blue", "green", "yellow", "purple", "orange", "cyan", "brown", "pink", "gray", "lime"]`)
 
-### 5. CWT Quality Assurance & Visualization (`cwt_visualization`)
+### 4. CWT Quality Assurance & Visualization (`cwt_visualization`)
 
 Configures the interactive cell wall thickness visualization layer rendered in napari (see [CWT Quality Assurance Layer & File Lifecycle](#5-cwt-quality-assurance-layer-file-lifecycle) for full details):
 
@@ -455,7 +537,7 @@ Configures the interactive cell wall thickness visualization layer rendered in n
 - **`excluded_color`**: Outline color for filtered/excluded wall sectors. (*Default:* `"red"`)
 - **`edge_width`**: Line thickness (in pixels) for measurement circles. (*Default:* `3.0`)
 
-### 6. Measurement Defaults (`measurements`)
+### 5. Measurement Defaults (`measurements`)
 
 Contains default parameters for anatomical analysis, used to populate metadata for new samples:
 
@@ -469,7 +551,7 @@ Contains default parameters for anatomical analysis, used to populate metadata f
 - **`opposite_cwt_percentile_exception`**: Directional quantile cutoff exempting thin earlywood walls from opposite-wall ratio filtering (see [Opposite Wall Ratio Filter & Percentile Exception](#3-opposite-wall-ratio-filter)). (*Default:* `0.60`)
 - **`adjacent_cwt_ratio_limit`**: Maximum allowed ratio between adjacent wall thicknesses (see [Adjacent Wall Ratio Filter](#4-adjacent-wall-ratio-filter)). (*Default:* `3.0`)
 
-### 7. Annotated Image & Project Directory
+### 6. Annotated Image & Project Directory
 
 - **`project_directory`**: Path to the currently active project working directory. (*Default:* `null`)
 - **`annotated_image`**: Configuration for saved annotated verification images (`_annotated.jpg`):
@@ -479,7 +561,7 @@ Contains default parameters for anatomical analysis, used to populate metadata f
     - **`scale_factor`**: Scale factor for image downscaling (1.0 = original dimensions). (*Default:* `1.0`)
     - **`quality`**: JPEG quality rating (1–100). (*Default:* `75`)
 
-### 8. Metadata Field Definitions (`samples_metadata`)
+### 7. Metadata Field Definitions (`samples_metadata`)
 
 Defines the structure, validation rules, and widget types for the input forms in the plugin:
 
