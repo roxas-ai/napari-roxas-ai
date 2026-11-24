@@ -293,7 +293,7 @@ def read_cells_file(path: str) -> Tuple[np.ndarray, dict, str]:
     if cells_table_path.exists():
         df = pd.read_csv(
             cells_table_path,
-            sep=settings.get("tables.separator"),
+            sep=";",
             index_col=None,
             converters={"centroid": ast.literal_eval},  # legacy
         )
@@ -363,10 +363,10 @@ def read_rings_file(path: str) -> Tuple[np.ndarray, dict, str]:
     if rings_table_path is not None:
         expected_any = {"boundary_coordinates", "RBXY", "ring_year", "YEAR"}
 
-        # try configured separator first
+        # try standard semicolon separator first
         df = pd.read_csv(
             rings_table_path,
-            sep=settings.get("tables.separator"),
+            sep=";",
             index_col=None,
             converters={
                 "RBXY": ast.literal_eval,
