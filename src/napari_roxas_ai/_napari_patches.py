@@ -14,7 +14,11 @@ were written against, and are meant to be contributed upstream.
      change (a move/resize/vertex drag never changes them);
    - ``_update_displayed`` reuses the cached gather indices when nothing
      structural changed (only the arrays the GPU upload reads are re-gathered);
-   - a selection move does one display rebuild, not one per selected shape.
+   - a selection move does one display rebuild, not one per selected shape;
+   - layers without non-displayed dims (2D) skip the per-shape slice test;
+   - the layer extent (recomputed on every refresh) is vectorised;
+   - a polygon being drawn gets a pre-padded slot, so adding vertices does
+     not reallocate the whole layer's arrays and rebuild the z order.
 
 2. View culling (``enable_view_culling(layer)``, opt-in per layer): only the
    shapes whose bounding box meets the camera view (plus a margin) are
@@ -72,40 +76,51 @@ def _patch_shape_list() -> None:
     ShapeList = SL.ShapeList
     original_update_displayed = ShapeList._update_displayed
 
-    # The maps must follow what is gathered for display: each shape's *actual*
-    # triangle/vertex count (napari keeps padded, larger slots after edits).
-    def _update_displayed_triangles_to_shape_index(self, displayed_indices):
-        counts = np.fromiter(
-            (self.shapes[i].triangles_count for i in displayed_indices),
-            dtype=np.int64,
-            count=len(displayed_indices),
-        )
-        self._roxas_tri_counts = dict(zip(displayed_indices.tolist(), counts.tolist()))
-        self._mesh.displayed_triangles_to_shape_index = _fit(
-            np.repeat(displayed_indices, counts),
-            len(self._mesh.displayed_triangles),
-        )
+    def _build_display_gather(self, displayed: np.ndarray) -> None:
+        """Gather indices and index maps of the displayed shapes.
 
-    def _update_displayed_vertices_to_shape_num(self, displayed_indices):
-        counts = np.fromiter(
-            (
-                self.shapes[i].data_displayed.shape[0]
-                for i in displayed_indices
-            ),
+        Built from each displayed shape's *actual* triangle/vertex range, so
+        gathers and maps always agree. napari's own gather instead takes one
+        slice over consecutive shapes (which includes the padding napari keeps
+        in a shape's slot after it shrinks) and indexes ``triangles_z_order``
+        by triangle *positions* (only right when the z order is the identity).
+        """
+        disp = np.nonzero(displayed)[0]
+        tri_counts = np.fromiter(
+            (self.shapes[i].triangles_count for i in disp),
             dtype=np.int64,
-            count=len(displayed_indices),
+            count=len(disp),
         )
-        self._roxas_vert_counts = dict(zip(displayed_indices.tolist(), counts.tolist()))
-        self.displayed_vertices_to_shape_num = _fit(
-            np.repeat(displayed_indices, counts), len(self.displayed_vertices)
+        vert_counts = np.fromiter(
+            (self.shapes[i].data_displayed.shape[0] for i in disp),
+            dtype=np.int64,
+            count=len(disp),
         )
+        self._roxas_tri_counts = dict(zip(disp.tolist(), tri_counts.tolist()))
+        self._roxas_vert_counts = dict(zip(disp.tolist(), vert_counts.tolist()))
 
-    def _fit(mapping: np.ndarray, size: int) -> np.ndarray:
-        """Same length as the displayed array (napari's -1 / truncation)."""
-        out = np.full(size, -1, dtype=SL.IndexDtype)
-        n = min(size, len(mapping))
-        out[:n] = mapping[:n]
-        return out
+        # Triangles: displayed shapes in z order (drawn back to front)
+        z_order = np.asarray(self._z_order)
+        if len(z_order) != len(self.shapes):
+            z_order = np.argsort(self._z_index, kind="stable")
+        disp_z = z_order[displayed[z_order]]
+        tri_counts_by_shape = np.zeros(len(self.shapes), dtype=np.int64)
+        tri_counts_by_shape[disp] = tri_counts
+        tri_counts_z = tri_counts_by_shape[disp_z]
+        self._roxas_tri_gather = _concat_ranges(
+            self._mesh.triangles_index[disp_z], tri_counts_z
+        )
+        self._roxas_tri_map = np.repeat(disp_z, tri_counts_z).astype(
+            SL.IndexDtype
+        )
+        # Vertices: displayed shapes in index order (as napari)
+        self._roxas_vert_gather = _concat_ranges(
+            self._vertices_index[disp], vert_counts
+        )
+        self._roxas_vert_map = np.repeat(disp, vert_counts).astype(
+            SL.IndexDtype
+        )
+        self._roxas_disp = disp
 
     def _update_z_order(self):
         key = (
@@ -137,10 +152,15 @@ def _patch_shape_list() -> None:
     def _displayed_mask(self) -> np.ndarray:
         if not len(self.shapes):
             return np.zeros(0, dtype=bool)
-        slice_key = np.array([self.slice_key, self.slice_key])
-        displayed = np.all(
-            np.abs(self.slice_keys - slice_key) < 0.5, axis=(1, 2)
-        )
+        if np.size(self.slice_key) == 0:
+            # No non-displayed dims (e.g. a 2D layer): every shape is in the
+            # slice. Skips ``slice_keys``, a Python loop over all shapes.
+            displayed = np.ones(len(self.shapes), dtype=bool)
+        else:
+            slice_key = np.array([self.slice_key, self.slice_key])
+            displayed = np.all(
+                np.abs(self.slice_keys - slice_key) < 0.5, axis=(1, 2)
+            )
         box = getattr(self, "_roxas_cull_box", None)
         if box is not None and len(self._vertices):
             lo, hi = _shape_bboxes(self)
@@ -168,15 +188,7 @@ def _patch_shape_list() -> None:
         self._displayed = displayed
         structure_changed = key != getattr(self, "_roxas_display_key", None)
         if structure_changed:
-            disp = np.nonzero(displayed)[0]
-            if disp.size:
-                self._roxas_tri_gather = self._mesh.triangles_z_order[
-                    self._mesh_triangles_range_seq(disp)
-                ]
-                self._roxas_vert_gather = self._vertices_range_seq(disp)
-            else:
-                empty = np.array([], dtype=np.int64)
-                self._roxas_tri_gather = self._roxas_vert_gather = empty
+            _build_display_gather(self, displayed)
         # Contents may have changed in place: re-gather what the GPU reads
         gather = self._roxas_tri_gather
         self._mesh.displayed_triangles = self._mesh.triangles[gather]
@@ -185,10 +197,9 @@ def _patch_shape_list() -> None:
         ]
         self.displayed_vertices = self._vertices[self._roxas_vert_gather]
         if structure_changed:
-            # After the gather: the maps are sized to the displayed arrays
-            self._update_displayed_triangles_to_shape_index(disp)
-            self._update_displayed_vertices_to_shape_num(disp)
-            self.displayed_index = self._vertices_index[disp]
+            self._mesh.displayed_triangles_to_shape_index = self._roxas_tri_map
+            self.displayed_vertices_to_shape_num = self._roxas_vert_map
+            self.displayed_index = self._vertices_index[self._roxas_disp]
             self._roxas_display_key = key
 
     original_update = ShapeList.update
@@ -207,14 +218,15 @@ def _patch_shape_list() -> None:
     ShapeList._roxas_tri_counts_get = lambda self, i: getattr(self, "_roxas_tri_counts", {}).get(i)
     ShapeList._roxas_vert_counts_get = lambda self, i: getattr(self, "_roxas_vert_counts", {}).get(i)
     ShapeList.update = update
-    ShapeList._update_displayed_triangles_to_shape_index = (
-        _update_displayed_triangles_to_shape_index
-    )
-    ShapeList._update_displayed_vertices_to_shape_num = (
-        _update_displayed_vertices_to_shape_num
-    )
     ShapeList._update_z_order = SL._batch_dec(_update_z_order)
     ShapeList._update_displayed = _update_displayed
+
+
+def _concat_ranges(starts: np.ndarray, counts: np.ndarray) -> np.ndarray:
+    """Concatenation of ``arange(start, start + count)``, vectorised."""
+    total = int(counts.sum())
+    offsets = np.cumsum(counts) - counts
+    return np.repeat(starts - offsets, counts) + np.arange(total)
 
 
 def _shape_bboxes(shape_list) -> tuple[np.ndarray, np.ndarray]:
@@ -231,13 +243,57 @@ def _patch_mouse_bindings() -> None:
     from napari.layers.shapes import _shapes_mouse_bindings as MB
 
     original_move = MB._move_selected_layer
+    original_initiate = MB.initiate_polygon_draw
 
     def _move_selected_layer(layer, coordinates, vertex):
         # One display rebuild per mouse move, not one per selected shape
         with layer._data_view.batched_updates():
             return original_move(layer, coordinates, vertex)
 
+    def initiate_polygon_draw(layer, coordinates):
+        original_initiate(layer, coordinates)
+        try:
+            _pre_pad_shape(layer._data_view, layer.nshapes - 1)
+        except Exception:  # noqa: BLE001 - padding is only a speed-up
+            logger.exception("Could not pre-pad the polygon being drawn")
+
     MB._move_selected_layer = _move_selected_layer
+    MB.initiate_polygon_draw = initiate_polygon_draw
+
+
+# Slot reserved for a polygon being drawn, in vertices. Real cells have far
+# fewer; a longer (lasso) polygon still works, napari then reallocates.
+PRE_PAD_VERTICES = 64
+
+
+def _pre_pad_shape(shape_list, index: int) -> None:
+    """Reserve room in the flat arrays for the shape being drawn.
+
+    napari keeps a shape's slot when it shrinks, but reallocates *all* the
+    layer's vertex/mesh arrays (and rebuilds the z order) whenever it grows,
+    i.e. on every vertex added while drawing. Growing the shape once to a
+    large polygon, then shrinking it back, leaves a slot that the vertices
+    added afterwards fit in.
+    """
+    from napari.layers.shapes._shapes_models import Polygon
+
+    shape = shape_list.shapes[index]
+    data = np.array(shape.data, copy=True)
+    # Star with alternating radii: every corner is sharp, so the edge
+    # triangulation gets its extra (bevel) vertices/triangles everywhere,
+    # an upper bound for any real polygon with as many vertices.
+    angles = np.linspace(0, 2 * np.pi, PRE_PAD_VERTICES, endpoint=False)
+    radii = np.where(np.arange(PRE_PAD_VERTICES) % 2, 1.0, 0.5)
+    star = np.repeat(data[:1], PRE_PAD_VERTICES, axis=0).astype(float)
+    dims = list(shape.dims_displayed)
+    star[:, dims[-2]] += radii * np.sin(angles)
+    star[:, dims[-1]] += radii * np.cos(angles)
+    with shape_list.batched_updates():
+        try:
+            shape_list.edit(index, star, new_type=Polygon)
+        finally:
+            # Always back to the shape being drawn, even if growing failed
+            shape_list.edit(index, data, new_type=type(shape))
 
 
 # --------------------------------------------------------------------------- #
@@ -247,6 +303,28 @@ def _patch_mouse_bindings() -> None:
 
 def _patch_layer() -> None:
     from napari.layers import Shapes
+
+    original_extent_data = Shapes._extent_data.fget
+
+    def _extent_data(self) -> np.ndarray:
+        # Recomputed on every refresh (each mouse move while drawing); the
+        # original loops over every shape in Python.
+        shape_list = self._data_view
+        displayed = list(self._slice_input.displayed)
+        if (
+            not shape_list.shapes
+            or len(displayed) != self.ndim
+            or len(shape_list._vertices) == 0
+        ):
+            return original_extent_data(self)
+        # All dims displayed: the flat vertex array holds every coordinate
+        # (in displayed order). Slot padding repeats a shape's own vertex.
+        extent = np.empty((2, self.ndim))
+        extent[0, displayed] = shape_list._vertices.min(axis=0)
+        extent[1, displayed] = shape_list._vertices.max(axis=0)
+        return extent
+
+    Shapes._extent_data = property(_extent_data)
 
     original_update_draw = Shapes._update_draw
 
